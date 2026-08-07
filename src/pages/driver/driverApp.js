@@ -18,9 +18,11 @@ import { initThemeToggle } from '../../utils/themeToggle.js';
 import { createNotificationCenterModal } from '../../components/notificationCenterModal.js';
 import { eventLogger } from '../../utils/logger.js';
 import { driverDispatchService } from '../../services/driverDispatchService.js';
+import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 
 export function renderDriverApp(container) {
     const user = authService.getCurrentUser() || {
+        id: 'driver_1',
         firstName: 'Carlos',
         lastName: 'Mendoza',
         vehicleBrand: 'Bera',
@@ -38,15 +40,10 @@ export function renderDriverApp(container) {
         <div class="driver-app">
             <div id="driver-map" class="driver-map-bg"></div>
             
-        <div class="driver-app">
-            <div id="driver-map" class="driver-map-bg"></div>
-            
             <div class="driver-top-container">
                 <div class="driver-header glass-header">
                     <div class="driver-avatar-info" id="driver-header-btn">
                         <img id="driver-avatar" src="${driverAvatarUrl}" alt="${driverFullName}" class="driver-avatar" />
-                        <div class="driver-details">
-                            <span id="driver-name" class="driver-name">${driverFullName}</span>
                         <div class="driver-details">
                             <span id="driver-name" class="driver-name">${driverFullName}</span>
                             <div class="driver-status-text" id="driver-status-text">Desconectado</div>
@@ -110,7 +107,7 @@ export function renderDriverApp(container) {
                         box-shadow: 0 10px 25px rgba(0,0,0,0.5), 0 0 20px rgba(0,230,118,0.3);
                     ">
                         <div class="pulsing-dot" style="width:12px; height:12px; border-radius:50%; background:var(--success); box-shadow: 0 0 10px var(--success); flex-shrink:0;"></div>
-                        <span>EN LÍNEA · Buscando viajes...</span>
+                        <span>EN LÍNEA · Transmitiendo GPS en vivo...</span>
                     </div>
                 </div>
                 <div id="active-trip-container" class="active-trip-container hidden"></div>
@@ -149,34 +146,6 @@ export function renderDriverApp(container) {
             container.appendChild(modal);
         });
     }
-    
-    let continuousGpsWatchId = null;
-
-    function startContinuousGpsTracking() {
-        if ('geolocation' in navigator) {
-            continuousGpsWatchId = navigator.geolocation.watchPosition(
-                (pos) => {
-                    const { latitude, longitude, heading } = pos.coords;
-                    driverDispatchService.updateDriverLocation(user.id || 'd1', latitude, longitude, heading || 0);
-                    currentMap.setDriverLocation(latitude, longitude);
-                },
-                (err) => {
-                    // Fallback to Maracaibo default location
-                    driverDispatchService.updateDriverLocation(user.id || 'd1', 10.6427, -71.6125, 0);
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
-            );
-        } else {
-            driverDispatchService.updateDriverLocation(user.id || 'd1', 10.6427, -71.6125, 0);
-        }
-    }
-
-    function stopContinuousGpsTracking() {
-        if (continuousGpsWatchId !== null && 'geolocation' in navigator) {
-            navigator.geolocation.clearWatch(continuousGpsWatchId);
-            continuousGpsWatchId = null;
-        }
-    }
 
     function setOnline(online) {
         isOnline = online;
@@ -187,23 +156,21 @@ export function renderDriverApp(container) {
             offlineOverlay.classList.add('hidden');
             onlineOverlay.classList.remove('hidden');
             
-            // Register in DriverDispatchService and start continuous GPS streaming immediately
+            // Iniciar seguimiento GPS continuo en tiempo real con Socket.IO & PostgreSQL
+            driverGpsTracker.startTracking(user);
             driverDispatchService.registerDriver({
                 ...user,
-                id: user.id || 'd1',
+                id: user.id || 'driver_1',
                 status: 'AVAILABLE'
             });
-            startContinuousGpsTracking();
-
-            showToast('Estás EN LÍNEA. Transmitiendo GPS continuo en Maracaibo...', 'success');
         } else {
             statusText.textContent = 'Desconectado';
             statusText.style.color = 'var(--text-secondary)';
             offlineOverlay.classList.remove('hidden');
             onlineOverlay.classList.add('hidden');
             
-            driverDispatchService.updateDriverStatus(user.id || 'd1', 'OFFLINE');
-            stopContinuousGpsTracking();
+            driverGpsTracker.stopTracking();
+            driverDispatchService.updateDriverStatus(user.id || 'driver_1', 'OFFLINE');
         }
     }
 

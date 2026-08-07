@@ -1,30 +1,55 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Patch, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { DriversService } from './drivers.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DriverStatus } from '@prisma/client';
 
 @ApiTags('Drivers')
 @Controller('drivers')
 export class DriversController {
-  @Get('available')
-  @ApiOperation({ summary: 'Get available drivers in Maracaibo' })
-  findAvailable() {
-    return [
-      {
-        id: 'd1',
-        firstName: 'Carlos',
-        lastName: 'Mendoza',
-        status: 'AVAILABLE',
-        vehicleBrand: 'Bera',
-        vehicleModel: 'SBR 150',
-        vehiclePlate: 'AC3M49P',
-        rating: 4.9,
-        location: { lat: 10.6427, lng: -71.6125 }
-      }
-    ];
+  constructor(private readonly driversService: DriversService) {}
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener perfil del conductor autenticado' })
+  async getMyProfile(@Request() req: any) {
+    return this.driversService.getDriverByUserId(req.user.id);
   }
 
-  @Post('location')
-  @ApiOperation({ summary: 'Update driver real-time GPS location' })
-  updateLocation(@Body() body: { driverId: string; lat: number; lng: number; heading?: number }) {
-    return { status: 'updated', location: body };
+  @Patch('status')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Actualizar estado del conductor (AVAILABLE, OFFLINE, BUSY)' })
+  async updateStatus(@Request() req: any, @Body() body: { status: DriverStatus; socketId?: string }) {
+    return this.driversService.updateDriverStatus(req.user.id, body.status, body.socketId);
+  }
+
+  @Patch('location')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Actualizar ubicación GPS continua del conductor' })
+  async updateLocation(
+    @Request() req: any,
+    @Body() body: { latitude: number; longitude: number; heading?: number; speed?: number; batteryLevel?: number }
+  ) {
+    return this.driversService.updateDriverLocation(req.user.id, body);
+  }
+
+  @Get('nearby')
+  @ApiOperation({ summary: 'Consultar conductores disponibles cercanos en Maracaibo' })
+  @ApiQuery({ name: 'lat', required: false, type: Number })
+  @ApiQuery({ name: 'lng', required: false, type: Number })
+  @ApiQuery({ name: 'radiusKm', required: false, type: Number })
+  async getNearby(
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('radiusKm') radiusKm?: string
+  ) {
+    const parsedLat = lat ? parseFloat(lat) : undefined;
+    const parsedLng = lng ? parseFloat(lng) : undefined;
+    const parsedRadius = radiusKm ? parseFloat(radiusKm) : 10;
+
+    return this.driversService.getNearbyDrivers(parsedLat, parsedLng, parsedRadius);
   }
 }

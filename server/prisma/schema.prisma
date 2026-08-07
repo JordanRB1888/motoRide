@@ -15,8 +15,11 @@ enum Role {
 
 enum DriverStatus {
   OFFLINE
+  ONLINE
   AVAILABLE
   BUSY
+  ON_TRIP
+  SUSPENDED
 }
 
 enum TripStatus {
@@ -61,25 +64,34 @@ model User {
 }
 
 model DriverProfile {
-  id            String       @id @default(uuid())
-  userId        String       @unique
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status        DriverStatus @default(OFFLINE)
-  vehicleBrand  String       @default("Bera")
-  vehicleModel  String       @default("SBR 150")
-  vehiclePlate  String
-  vehicleColor  String       @default("Negro")
-  rating        Float        @default(5.0)
-  totalTrips    Int          @default(0)
-  licenseUrl    String?      @default("approved")
-  rcvUrl        String?      @default("approved")
-  medicalCertUrl String?     @default("approved")
-  lastLat       Float?
-  lastLng       Float?
-  lastHeading   Float?
-  lastHeartbeat DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id              String       @id @default(uuid())
+  userId          String       @unique
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          DriverStatus @default(OFFLINE)
+  vehicleBrand    String       @default("Bera")
+  vehicleModel    String       @default("SBR 150")
+  vehiclePlate    String
+  vehicleColor    String       @default("Negro")
+  vehicleYear     Int?         @default(2023)
+  rating          Float        @default(5.0)
+  totalTrips      Int          @default(0)
+  licenseNumber   String?      @default("approved")
+  licenseUrl      String?      @default("approved")
+  rcvUrl          String?      @default("approved")
+  medicalCertUrl  String?      @default("approved")
+  cedula          String?
+  latitude        Float?
+  longitude       Float?
+  heading         Float?       @default(0)
+  speed           Float?       @default(0)
+  batteryLevel    Float?
+  lastSeen        DateTime?
+  socketId        String?
+  isOnline        Boolean      @default(false)
+  isAvailable     Boolean      @default(false)
+  servicesEnabled String[]     @default(["EXPRESS"])
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   locationLogs  DriverLocationLog[]
 
