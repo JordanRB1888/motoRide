@@ -5,10 +5,10 @@ import { createRatingStars } from '../../components/ratingStars.js';
 export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancelRoute, onScheduleRide) {
   const div = document.createElement('div');
   div.className = 'fare-preview fade-in';
-  div.style.cssText = 'padding: 8px 10px 24px; max-width: 440px; margin: 0 auto;';
+  div.style.cssText = 'padding: 8px 10px 32px; max-width: 440px; margin: 0 auto;';
   
   div.innerHTML = `
-    <div class="diorama-card-3d" style="padding: 18px 16px; border-radius: 24px; background: var(--surface-card); border: 1.5px solid var(--border-gold);">
+    <div class="diorama-card-3d" style="padding: 18px 16px 28px; border-radius: 24px; background: var(--surface-card); border: 1.5px solid var(--border-gold);">
       
       <!-- Route Title Header with Cancel Button -->
       <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; margin-bottom: 16px; background: var(--surface-elevated); padding: 12px 16px; border-radius: 16px; border: 1px solid var(--border-color);">
@@ -131,10 +131,10 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
 export function renderSearchingState(onCancel) {
   const div = document.createElement('div');
   div.className = 'searching-animation fade-in';
-  div.style.cssText = 'padding: 24px 16px; text-align: center; max-width: 440px; margin: 0 auto;';
+  div.style.cssText = 'padding: 16px 12px 32px; text-align: center; max-width: 440px; margin: 0 auto;';
   
   div.innerHTML = `
-    <div class="diorama-card-3d" style="padding: 30px 20px; border-radius: 24px; background: var(--surface-card); border: 1.5px solid var(--border-gold);">
+    <div class="diorama-card-3d" style="padding: 28px 20px 28px; border-radius: 24px; background: var(--surface-card); border: 1.5px solid var(--border-gold);">
       <div class="ripple-container" style="position:relative; width: 120px; height: 120px; margin: 0 auto 20px; display:flex; align-items:center; justify-content:center;">
         <div class="ripple"></div>
         <div class="ripple delay-1"></div>

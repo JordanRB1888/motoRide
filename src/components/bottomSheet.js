@@ -33,11 +33,11 @@ export class BottomSheet {
     Object.assign(this.sheet.style, {
       position: 'fixed',
       left: '50%',
-      bottom: '68px',
+      bottom: '80px',
       width: '94%',
       maxWidth: '460px',
       height: 'auto',
-      maxHeight: 'calc(82vh - 70px)',
+      maxHeight: 'calc(85vh - 100px)',
       backgroundColor: 'var(--surface-card, #182232)',
       backdropFilter: 'blur(24px)',
       webkitBackdropFilter: 'blur(24px)',
@@ -54,7 +54,7 @@ export class BottomSheet {
     this.handle = document.createElement('div');
     this.handle.className = 'bottom-sheet-handle-area';
     Object.assign(this.handle.style, {
-      padding: '16px',
+      padding: '12px 16px 8px',
       display: 'flex',
       justifyContent: 'center',
       cursor: 'grab',
@@ -76,7 +76,7 @@ export class BottomSheet {
     Object.assign(this.content.style, {
       flex: 1,
       overflowY: 'auto',
-      padding: '0 16px 16px',
+      padding: '0 16px 28px',
       color: 'var(--text-primary, #F8FAFC)'
     });
 
