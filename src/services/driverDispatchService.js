@@ -1,4 +1,4 @@
-import { socket } from './mockSocket.js';
+import { socket } from './socketClient.js';
 import { db } from './mockDatabase.js';
 import { eventLogger } from '../utils/logger.js';
 import { calculateHaversine } from '../utils/helpers.js';

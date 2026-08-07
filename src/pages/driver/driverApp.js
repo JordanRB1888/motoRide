@@ -19,6 +19,8 @@ import { createNotificationCenterModal } from '../../components/notificationCent
 import { eventLogger } from '../../utils/logger.js';
 import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { driverGpsTracker } from '../../services/driverGpsTracker.js';
+import { notificationService } from '../../services/notificationService.js';
+import { audioEffects } from '../../utils/audioEffects.js';
 
 export function renderDriverApp(container) {
     const user = authService.getCurrentUser() || {
@@ -393,6 +395,11 @@ export function renderDriverApp(container) {
         };
 
         eventLogger.log('DRIVER', `Solicitud emergente recibida de ${passenger.name} ➔ ${trip.destination.address}`);
+
+        // Play audible ringtone alert for driver
+        try {
+            audioEffects.playRideIncoming();
+        } catch (e) {}
 
         // Trigger native device notification (Android / iOS / Desktop background banner)
         notificationService.triggerNativeNotification(
