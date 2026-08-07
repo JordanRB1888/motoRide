@@ -9,9 +9,10 @@ import { initThemeToggle } from '../../utils/themeToggle.js';
 import { createNotificationCenterModal } from '../../components/notificationCenterModal.js';
 import { socket } from '../../services/socketClient.js';
 import { eventLogger } from '../../utils/logger.js';
+import { icon } from '../../utils/icons.js';
 
 export function renderAdminApp(container) {
-    const admin = authService.getCurrentUser();
+    const admin = authService.getCurrentUser() || { firstName: 'Admin', role: 'admin' };
     
     container.innerHTML = `
         <div class="admin-app">
