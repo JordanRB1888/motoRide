@@ -438,12 +438,22 @@ export function renderPassengerApp(container) {
     const fareUSD = fareData?.totalUSD || fareData?.fareUSD || 4.50;
     const drivers = db.query('users', { role: 'driver' });
     currentDriver = drivers[0] || { id: 'd1', firstName: 'Carlos', lastName: 'Mendoza', phone: '+58 414-000-0004' };
-    currentTrip = tripEngine.createTrip(user.id, currentDriver.id, [10.6427, -71.6125], destCoords, fareUSD);
-    currentTrip.pickup = { address: 'Basílica de Chiquinquirá, Maracaibo', lat: 10.6427, lng: -71.6125 };
-    currentTrip.destination = { address: currentSelectedDestinationName || 'Vereda del Lago, Maracaibo', lat: destCoords[0], lng: destCoords[1] };
-    currentTrip.fareEUR = fareUSD;
-    currentTrip.passengerName = `${user.firstName || 'Jordan'} ${user.lastName || 'Pérez'}`.trim();
-    currentTrip.passengerAvatar = user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.firstName || 'Jordan')}`;
+    
+    // Construct trip object synchronously with valid unique ID
+    currentTrip = {
+      id: 'trip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      passengerId: user.id || 'p1',
+      driverId: currentDriver.id,
+      status: 'SEARCHING',
+      pickup: { address: 'Basílica de Chiquinquirá, Maracaibo', lat: 10.6427, lng: -71.6125 },
+      destination: { address: currentSelectedDestinationName || 'Vereda del Lago, Maracaibo', lat: destCoords[0], lng: destCoords[1] },
+      fareEUR: fareUSD,
+      passengerName: `${user.firstName || 'Jordan'} ${user.lastName || 'Pérez'}`.trim(),
+      passengerAvatar: user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.firstName || 'Jordan')}`,
+      createdAt: new Date().toISOString()
+    };
+
+    db.insert('trips', currentTrip);
 
     eventLogger.log('PASSENGER', `Solicitud de carrera enviada al DriverDispatchService [${currentTrip.id}] hacia ${currentTrip.destination.address}`);
 
@@ -562,27 +572,31 @@ export function renderPassengerApp(container) {
   // Socket Listeners for Real-Time State Sync Across Devices
   socket.on('tripStatusUpdated', (data) => {
     if (!data) return;
-    if (currentTrip && (currentTrip.id === data.tripId || data.tripId)) {
-      currentTrip.status = data.status;
+    
+    // Match active trip or set as active trip if receiving assignment
+    if (!currentTrip || currentTrip.id === data.tripId || data.status === 'EN_ROUTE') {
+      if (!currentTrip) {
+        currentTrip = { id: data.tripId, status: data.status };
+      } else {
+        currentTrip.status = data.status;
+      }
+      
       if (data.driver) {
         currentDriver = data.driver;
       }
       
       eventLogger.log('PASSENGER', `Notificación recibida: Conductor cambió estado a ➔ ${data.status}`, data);
 
-      if (data.status === 'EN_ROUTE') {
+      if (data.status === 'EN_ROUTE' || data.status === 'DRIVER_ASSIGNED') {
         showToast('⚡ ¡Conductor asignado y en camino!', 'success');
         setState('DRIVER_EN_ROUTE');
-      }
-      if (data.status === 'ARRIVED') {
+      } else if (data.status === 'ARRIVED' || data.status === 'DRIVER_ARRIVED') {
         showToast('📍 Tu moto ha llegado al punto de recogida', 'info');
         setState('DRIVER_ARRIVED');
-      }
-      if (data.status === 'IN_PROGRESS') {
+      } else if (data.status === 'IN_PROGRESS' || data.status === 'IN_TRIP') {
         showToast('🚀 En viaje hacia tu destino', 'info');
         setState('IN_TRIP');
-      }
-      if (data.status === 'COMPLETED') {
+      } else if (data.status === 'COMPLETED') {
         setState('COMPLETED');
       }
     }
