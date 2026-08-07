@@ -25,7 +25,7 @@ export class BottomSheet {
       opacity: '0',
       visibility: 'hidden',
       transition: 'opacity 0.3s ease, visibility 0.3s',
-      zIndex: 9998
+      zIndex: 8999
     });
 
     this.sheet = document.createElement('div');
@@ -44,10 +44,10 @@ export class BottomSheet {
       borderRadius: '28px',
       border: '1.5px solid var(--border-gold, #FFC107)',
       boxShadow: '0 -15px 40px rgba(0,0,0,0.8), 0 0 25px rgba(255,193,7,0.2)',
-      transform: 'translate(-50%, 120%)',
+      transform: 'translate(-50%, 200%)',
       transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
-      zIndex: 10000,
-      display: 'flex',
+      zIndex: 9000,
+      display: 'none',
       flexDirection: 'column'
     });
 

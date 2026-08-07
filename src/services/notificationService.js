@@ -1,5 +1,5 @@
 import { audioEffects } from '../utils/audioEffects.js';
-import { socket } from './mockSocket.js';
+import { socket } from './socketClient.js';
 
 class NotificationService {
     constructor() {

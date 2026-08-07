@@ -9,8 +9,8 @@ export function createNotificationCenterModal(user, onClose) {
     const overlay = document.createElement('div');
     overlay.className = 'diorama-card-3d fade-in';
     overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 9999;
-        background: rgba(10, 15, 24, 0.88); backdrop-filter: blur(20px);
+        position: fixed; inset: 0; z-index: 25000;
+        background: rgba(10, 15, 24, 0.92); backdrop-filter: blur(20px);
         display: flex; align-items: center; justify-content: center; padding: 16px;
     `;
 
@@ -23,6 +23,25 @@ export function createNotificationCenterModal(user, onClose) {
         display: flex; flex-direction: column; overflow: hidden;
         animation: dioramaLand 0.35s ease-out;
     `;
+
+    const updateHeaderBadges = () => {
+        const unreadCount = notificationService.getUnreadCount(userId);
+        const passBadge = document.querySelector('#notif-badge-passenger');
+        if (passBadge) {
+            passBadge.textContent = unreadCount;
+            passBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
+        }
+        const driverBadge = document.querySelector('#header-notif-btn-driver span');
+        if (driverBadge) {
+            driverBadge.textContent = unreadCount;
+            driverBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
+        }
+        const adminBadge = document.querySelector('#header-notif-btn-admin span');
+        if (adminBadge) {
+            adminBadge.textContent = unreadCount;
+            adminBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
+        }
+    };
 
     const render = () => {
         let notifications = notificationService.getNotifications(userId);
@@ -92,9 +111,9 @@ export function createNotificationCenterModal(user, onClose) {
             <!-- Notifications Body -->
             <div style="flex:1; padding: 16px; overflow-y: auto; display:flex; flex-direction:column; gap: 10px;">
                 ${notifications.length > 0 ? notifications.map(n => `
-                    <div style="
-                        padding: 14px; border-radius: 18px; transition: all 0.2s ease;
-                        background: ${n.read ? 'var(--surface-elevated)' : 'linear-gradient(135deg, rgba(255,193,7,0.12) 0%, rgba(255,143,0,0.06) 100%)'};
+                    <div class="notif-item-card" data-id="${n.id}" style="
+                        padding: 14px; border-radius: 18px; transition: all 0.2s ease; cursor: pointer;
+                        background: ${n.read ? 'var(--surface-elevated)' : 'linear-gradient(135deg, rgba(255,193,7,0.14) 0%, rgba(255,143,0,0.08) 100%)'};
                         border: ${n.read ? '1px solid var(--border-color)' : '1.5px solid var(--border-gold)'};
                         display:flex; gap: 12px; align-items: flex-start;
                     ">
@@ -142,10 +161,12 @@ export function createNotificationCenterModal(user, onClose) {
 
         modal.querySelector('#btn-test-sound').addEventListener('click', () => {
             audioEffects.playNotification();
+            showToast('🔊 Sonido de notificación probado exitosamente', 'success');
         });
 
         modal.querySelector('#btn-mark-read').addEventListener('click', () => {
             notificationService.markAllAsRead(userId);
+            updateHeaderBadges();
             showToast('Todas las notificaciones marcadas como leídas', 'success');
             render();
         });
@@ -154,6 +175,20 @@ export function createNotificationCenterModal(user, onClose) {
             btn.addEventListener('click', () => {
                 filterCategory = btn.dataset.cat;
                 render();
+            });
+        });
+
+        modal.querySelectorAll('.notif-item-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const notifId = card.dataset.id;
+                const list = notificationService.getNotifications(userId);
+                const item = list.find(n => n.id === notifId);
+                if (item) {
+                    item.read = true;
+                    notificationService.saveNotifications(userId, list);
+                    updateHeaderBadges();
+                    render();
+                }
             });
         });
     };
