@@ -47,7 +47,9 @@ export function renderDriverApp(container) {
                         <img id="driver-avatar" src="${driverAvatarUrl}" alt="${driverFullName}" class="driver-avatar" />
                         <div class="driver-details">
                             <span id="driver-name" class="driver-name">${driverFullName}</span>
-                            <div class="driver-status-text" id="driver-status-text">⚪ Desconectado</div>
+                        <div class="driver-details">
+                            <span id="driver-name" class="driver-name">${driverFullName}</span>
+                            <div class="driver-status-text" id="driver-status-text">Desconectado</div>
                         </div>
                     </div>
                     
@@ -55,9 +57,9 @@ export function renderDriverApp(container) {
                         <button id="header-notif-btn-driver" style="
                             background: rgba(255,193,7,0.15); border: 1.5px solid var(--accent-primary); color: var(--accent-primary);
                             width: 36px; height: 36px; border-radius: 50%; display:flex; align-items:center; justify-content:center;
-                            font-size: 1rem; cursor: pointer; position: relative; flex-shrink: 0;
+                            cursor: pointer; position: relative; flex-shrink: 0;
                         " title="Centro de Notificaciones">
-                            🔔
+                            ${icon('bell', 18)}
                             <span style="
                                 position: absolute; top: -3px; right: -3px; background: var(--danger); color: white;
                                 font-size: 0.6rem; font-weight: 900; width: 14px; height: 14px; border-radius: 50%;
@@ -76,15 +78,15 @@ export function renderDriverApp(container) {
 
                 <div class="stats-bar" id="stats-bar">
                     <div class="stat-item diorama-card-3d" id="stat-btn-trips" style="cursor:pointer;" title="Ver Perfil & Viajes">
-                        <span class="stat-label">🚀 Viajes</span>
+                        <span class="stat-label" style="display:flex; align-items:center; gap:4px;">${icon('navigation', 14)} Viajes</span>
                         <span class="stat-value" id="stat-trips">${user.totalTrips || 0}</span>
                     </div>
                     <div class="stat-item diorama-card-3d" id="stat-btn-earnings" style="cursor:pointer;" title="Ver Ganancias & Retirar">
-                        <span class="stat-label">💵 Ganancias</span>
+                        <span class="stat-label" style="display:flex; align-items:center; gap:4px;">${icon('dollarSign', 14)} Ganancias</span>
                         <span class="stat-value" id="stat-earnings">$48.50</span>
                     </div>
                     <div class="stat-item diorama-card-3d" id="stat-btn-rating" style="cursor:pointer;" title="Ver Perfil & Calificación">
-                        <span class="stat-label">⭐ Calificación</span>
+                        <span class="stat-label" style="display:flex; align-items:center; gap:4px;">${icon('star', 14)} Calificación</span>
                         <span class="stat-value" id="stat-rating">${user.rating || 5.0}</span>
                     </div>
                 </div>
@@ -94,8 +96,8 @@ export function renderDriverApp(container) {
                 <div class="offline-overlay glass-panel" id="offline-overlay" style="max-width: 440px; margin: 0 auto; padding: 24px; text-align: center;">
                     <h2 style="color:var(--text-primary); font-size:1.4rem; font-weight:800; margin-bottom:6px;">Estás Desconectado</h2>
                     <p style="color:var(--text-secondary); font-size:0.9rem;">Conéctate para empezar a recibir solicitudes de viajes cercanos en Maracaibo</p>
-                    <button class="btn btn-3d primary-btn btn-connect" id="btn-connect-overlay" style="width:100%; margin-top:16px; padding:16px; font-size:1.1rem; font-weight:900;">
-                        ⚡ CONECTARSE AHORA
+                    <button class="btn btn-3d primary-btn btn-connect" id="btn-connect-overlay" style="width:100%; margin-top:16px; padding:16px; font-size:1.05rem; font-weight:900; display:flex; align-items:center; justify-content:center; gap:8px;">
+                        ${icon('power', 20)} CONECTARSE AHORA
                     </button>
                 </div>
 
@@ -108,7 +110,7 @@ export function renderDriverApp(container) {
                         box-shadow: 0 10px 25px rgba(0,0,0,0.5), 0 0 20px rgba(0,230,118,0.3);
                     ">
                         <div class="pulsing-dot" style="width:12px; height:12px; border-radius:50%; background:var(--success); box-shadow: 0 0 10px var(--success); flex-shrink:0;"></div>
-                        <span>🟢 EN LÍNEA · Buscando viajes...</span>
+                        <span>EN LÍNEA · Buscando viajes...</span>
                     </div>
                 </div>
                 <div id="active-trip-container" class="active-trip-container hidden"></div>
@@ -180,7 +182,7 @@ export function renderDriverApp(container) {
         isOnline = online;
         toggle.checked = online;
         if (online) {
-            statusText.textContent = '🟢 En Línea';
+            statusText.textContent = 'En Línea';
             statusText.style.color = 'var(--success)';
             offlineOverlay.classList.add('hidden');
             onlineOverlay.classList.remove('hidden');
@@ -195,7 +197,7 @@ export function renderDriverApp(container) {
 
             showToast('Estás EN LÍNEA. Transmitiendo GPS continuo en Maracaibo...', 'success');
         } else {
-            statusText.textContent = '⚪ Desconectado';
+            statusText.textContent = 'Desconectado';
             statusText.style.color = 'var(--text-secondary)';
             offlineOverlay.classList.remove('hidden');
             onlineOverlay.classList.add('hidden');

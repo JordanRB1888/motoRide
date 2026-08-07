@@ -1,6 +1,7 @@
 import { notificationService } from '../services/notificationService.js';
 import { audioEffects } from '../utils/audioEffects.js';
 import { showToast } from './toast.js';
+import { icon } from '../utils/icons.js';
 
 export function createNotificationCenterModal(user, onClose) {
     const userId = user?.id || 'global';
@@ -55,8 +56,8 @@ export function createNotificationCenterModal(user, onClose) {
             <!-- Header -->
             <div style="padding: 16px 20px; background: var(--surface-elevated); border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap: 10px;">
-                    <div style="width:38px; height:38px; border-radius:50%; background:rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-primary); font-size:1.2rem;">
-                        🔔
+                    <div style="width:38px; height:38px; border-radius:50%; background:rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-primary);">
+                        ${icon('bell', 20)}
                     </div>
                     <div>
                         <strong style="display:block; color:var(--text-primary); font-size: 1.05rem;">Centro de Notificaciones</strong>
@@ -71,9 +72,11 @@ export function createNotificationCenterModal(user, onClose) {
                         color: ${isMuted ? 'var(--danger)' : 'var(--success)'};
                         border: 1px solid ${isMuted ? 'var(--danger)' : 'var(--success)'};
                     " title="Alternar Sonidos Neón">
-                        ${isMuted ? '🔇 Silenciado' : '🔊 Sonido Activado'}
+                        ${isMuted ? 'Silenciado' : 'Sonido Activado'}
                     </button>
-                    <button id="close-notif-btn" style="color:var(--text-secondary); font-size: 1.3rem; background:none; border:none; cursor:pointer;">✕</button>
+                    <button id="close-notif-btn" style="color:var(--text-secondary); background:none; border:none; cursor:pointer; display:flex; align-items:center; padding:4px;">
+                        ${icon('close', 20)}
+                    </button>
                 </div>
             </div>
 
@@ -91,21 +94,21 @@ export function createNotificationCenterModal(user, onClose) {
                     background: ${filterCategory === 'TRIP' ? 'var(--accent-secondary)' : 'var(--surface-card)'};
                     color: ${filterCategory === 'TRIP' ? '#121824' : 'var(--accent-secondary)'};
                     border: 1px solid var(--border-color);
-                ">🚀 Carreras</button>
+                ">Carreras</button>
 
                 <button class="cat-filter-btn" data-cat="FINANCE" style="
                     padding: 6px 12px; border-radius: 14px; font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer;
                     background: ${filterCategory === 'FINANCE' ? 'var(--success)' : 'var(--surface-card)'};
                     color: ${filterCategory === 'FINANCE' ? '#121824' : 'var(--success)'};
                     border: 1px solid var(--border-color);
-                ">💵 Finanzas</button>
+                ">Finanzas</button>
 
                 <button class="cat-filter-btn" data-cat="ANNOUNCEMENT" style="
                     padding: 6px 12px; border-radius: 14px; font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer;
                     background: ${filterCategory === 'ANNOUNCEMENT' ? 'var(--warning)' : 'var(--surface-card)'};
                     color: ${filterCategory === 'ANNOUNCEMENT' ? '#121824' : 'var(--warning)'};
                     border: 1px solid var(--border-color);
-                ">📢 Anuncios</button>
+                ">Anuncios</button>
             </div>
 
             <!-- Notifications Body -->
@@ -117,10 +120,12 @@ export function createNotificationCenterModal(user, onClose) {
                         border: ${n.read ? '1px solid var(--border-color)' : '1.5px solid var(--border-gold)'};
                         display:flex; gap: 12px; align-items: flex-start;
                     ">
-                        <div style="font-size: 1.5rem; line-height: 1;">${n.icon || '🔔'}</div>
+                        <div style="color:var(--accent-primary); display:flex; align-items:center; margin-top:2px;">
+                            ${n.category === 'TRIP' ? icon('navigation', 20) : n.category === 'FINANCE' ? icon('dollarSign', 20) : icon('bell', 20)}
+                        </div>
                         <div style="flex:1;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                                <strong style="color:var(--text-primary); font-size: 0.9rem;">${n.title}</strong>
+                                <strong style="color:var(--text-primary); font-size: 0.9rem;">${n.title.replace(/[^\w\s\.\,\+\-\/\:\(\)\á\é\í\ó\ú\ñ\Á\É\Í\Ó\Ú\Ñ]/gi, '')}</strong>
                                 <small style="color:var(--text-muted); font-size: 0.72rem;">${new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
                             </div>
                             <p style="color:var(--text-secondary); font-size: 0.82rem; margin:0; line-height: 1.4;">${n.message}</p>
@@ -128,7 +133,7 @@ export function createNotificationCenterModal(user, onClose) {
                     </div>
                 `).join('') : `
                     <div style="text-align:center; padding: 40px 20px; color: var(--text-muted);">
-                        <p style="font-size: 2.5rem; margin-bottom: 10px;">🔕</p>
+                        <div style="display:flex; justify-content:center; margin-bottom:10px;">${icon('bell', 36)}</div>
                         <p>No tienes notificaciones en esta categoría</p>
                     </div>
                 `}
@@ -136,11 +141,11 @@ export function createNotificationCenterModal(user, onClose) {
 
             <!-- Footer Action Bar -->
             <div style="padding: 12px 16px; background: var(--surface-elevated); border-top: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-                <button id="btn-mark-read" style="color: var(--accent-primary); font-size: 0.82rem; font-weight: 800; background:none; border:none; cursor:pointer;">
-                    ✓ Marcar todas como leídas
+                <button id="btn-mark-read" style="color: var(--accent-primary); font-size: 0.82rem; font-weight: 800; background:none; border:none; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                    ${icon('check', 16)} Marcar todas como leídas
                 </button>
-                <button id="btn-test-sound" style="color: var(--accent-secondary); font-size: 0.82rem; font-weight: 800; background:none; border:none; cursor:pointer;">
-                    🔊 Probar Sonido
+                <button id="btn-test-sound" style="color: var(--accent-secondary); font-size: 0.82rem; font-weight: 800; background:none; border:none; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                    Probar Sonido
                 </button>
             </div>
         `;

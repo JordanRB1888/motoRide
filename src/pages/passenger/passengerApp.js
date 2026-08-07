@@ -51,9 +51,9 @@ export function renderPassengerApp(container) {
           <button id="header-notif-btn-passenger" style="
             background: rgba(255,193,7,0.15); border: 1.5px solid var(--accent-primary); color: var(--accent-primary);
             width: 36px; height: 36px; border-radius: 50%; display:flex; align-items:center; justify-content:center;
-            font-size: 1.1rem; cursor: pointer; position: relative; flex-shrink: 0;
+            cursor: pointer; position: relative; flex-shrink: 0;
           " title="Centro de Notificaciones">
-            🔔
+            ${icon('bell', 18)}
             <span id="notif-badge-passenger" style="
               position: absolute; top: -3px; right: -3px; background: var(--danger); color: white;
               font-size: 0.65rem; font-weight: 900; width: 16px; height: 16px; border-radius: 50%;
@@ -73,7 +73,7 @@ export function renderPassengerApp(container) {
         box-shadow: 0 10px 30px rgba(0,0,0,0.7);
       ">
         <div style="display:flex; align-items:center; gap: 10px; flex:1; overflow:hidden;">
-          <span style="font-size: 1.2rem;">📍</span>
+          <span style="color:var(--accent-primary); display:flex;">${icon('mapPin', 20)}</span>
           <div style="flex:1; overflow:hidden;">
             <small style="color:var(--text-secondary); display:block; font-size:0.75rem;">DESTINO ACTUAL</small>
             <strong id="route-cancel-dest-name" style="color:var(--text-primary); font-size:0.9rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
@@ -86,7 +86,7 @@ export function renderPassengerApp(container) {
           color: var(--danger); font-weight: 800; font-size: 0.85rem; padding: 8px 14px;
           border-radius: 14px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; gap: 4px;
         ">
-          ✕ Cancelar Ruta
+          ${icon('close', 16)} Cancelar Ruta
         </button>
       </div>
 

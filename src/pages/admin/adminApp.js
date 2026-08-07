@@ -21,12 +21,12 @@ export function renderAdminApp(container) {
                     <div class="logo-text-full"><span class="accent-text" style="color:var(--accent-primary);">+58</span>express</div>
                 </div>
                 <nav class="admin-nav">
-                    <button class="nav-item active" data-target="dashboard"><span class="nav-icon">📊</span> <span class="nav-text">Dashboard</span></button>
-                    <button class="nav-item" data-target="fleet"><span class="nav-icon">🗺️</span> <span class="nav-text">Mapa de Flota</span></button>
-                    <button class="nav-item" data-target="users"><span class="nav-icon">👥</span> <span class="nav-text">Usuarios</span></button>
-                    <button class="nav-item" data-target="tariffs"><span class="nav-icon">💰</span> <span class="nav-text">Tarifas</span></button>
-                    <button class="nav-item" data-target="finances"><span class="nav-icon">📈</span> <span class="nav-text">Finanzas</span></button>
-                    <button class="nav-item" data-target="support"><span class="nav-icon">🎧</span> <span class="nav-text">Soporte</span></button>
+                    <button class="nav-item active" data-target="dashboard"><span class="nav-icon" style="display:inline-flex;">${icon('grid', 18)}</span> <span class="nav-text">Dashboard</span></button>
+                    <button class="nav-item" data-target="fleet"><span class="nav-icon" style="display:inline-flex;">${icon('map', 18)}</span> <span class="nav-text">Mapa de Flota</span></button>
+                    <button class="nav-item" data-target="users"><span class="nav-icon" style="display:inline-flex;">${icon('users', 18)}</span> <span class="nav-text">Usuarios</span></button>
+                    <button class="nav-item" data-target="tariffs"><span class="nav-icon" style="display:inline-flex;">${icon('dollarSign', 18)}</span> <span class="nav-text">Tarifas</span></button>
+                    <button class="nav-item" data-target="finances"><span class="nav-icon" style="display:inline-flex;">${icon('trending', 18)}</span> <span class="nav-text">Finanzas</span></button>
+                    <button class="nav-item" data-target="support"><span class="nav-icon" style="display:inline-flex;">${icon('message', 18)}</span> <span class="nav-text">Soporte</span></button>
                 </nav>
             </aside>
             <main class="admin-main">
@@ -39,9 +39,9 @@ export function renderAdminApp(container) {
                         <button id="header-notif-btn-admin" style="
                             background: rgba(255,193,7,0.15); border: 1.5px solid var(--accent-primary); color: var(--accent-primary);
                             width: 36px; height: 36px; border-radius: 50%; display:flex; align-items:center; justify-content:center;
-                            font-size: 1.1rem; cursor: pointer; position: relative;
+                            cursor: pointer; position: relative;
                         " title="Centro de Notificaciones">
-                            🔔
+                            ${icon('bell', 18)}
                             <span style="
                                 position: absolute; top: -3px; right: -3px; background: var(--danger); color: white;
                                 font-size: 0.65rem; font-weight: 900; width: 16px; height: 16px; border-radius: 50%;
@@ -49,7 +49,7 @@ export function renderAdminApp(container) {
                             ">3</span>
                         </button>
                         <div id="admin-theme-toggle-slot"></div>
-                        <span>👋 Hola, ${admin?.firstName || 'Admin'}</span>
+                        <span>Hola, ${admin?.firstName || 'Admin'}</span>
                         <button class="logout-btn" id="logout-btn">Salir</button>
                     </div>
                 </header>
@@ -102,7 +102,7 @@ export function renderAdminApp(container) {
                         <small style="color: var(--text-secondary);">Maracaibo, ${new Date().toLocaleDateString('es-VE')}</small>
                     </div>
                     <span class="badge badge-warning" style="font-size: 0.85rem; padding: 8px 14px; border: 1px solid var(--accent-primary);">
-                        🇪🇺 Tasa BCV Euro: Bs. ${bcvRate.toFixed(2)}
+                        Tasa BCV Euro: Bs. ${bcvRate.toFixed(2)}
                     </span>
                 </div>
 
@@ -122,7 +122,7 @@ export function renderAdminApp(container) {
                     </div>
                     <div class="kpi-card orange diorama-card-3d">
                         <span class="kpi-label">Calificación Promedio</span>
-                        <span class="kpi-value">4.8 ⭐</span>
+                        <span class="kpi-value" style="display:flex; align-items:center; gap:4px;">4.8 ${icon('star', 16, 'fill-star')}</span>
                     </div>
                 </div>
                 

@@ -12,7 +12,7 @@ export function initThemeToggle(containerId = null) {
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'theme-toggle-btn';
     toggleBtn.title = 'Alternar Modo Día / Noche';
-    toggleBtn.innerHTML = savedTheme === 'light' ? '☀️ Día' : '🌙 Noche';
+    toggleBtn.innerHTML = savedTheme === 'light' ? 'Modo Día' : 'Modo Noche';
 
     Object.assign(toggleBtn.style, {
         background: 'var(--surface-elevated, #1e293b)',
@@ -35,8 +35,8 @@ export function initThemeToggle(containerId = null) {
         const isLight = document.documentElement.classList.toggle('theme-light');
         const newTheme = isLight ? 'light' : 'dark';
         localStorage.setItem('58express_theme', newTheme);
-        toggleBtn.innerHTML = isLight ? '☀️ Día' : '🌙 Noche';
-        showToast(isLight ? '☀️ Modo Día activado' : '🌙 Modo Noche activado', 'info');
+        toggleBtn.innerHTML = isLight ? 'Modo Día' : 'Modo Noche';
+        showToast(isLight ? 'Modo Día activado' : 'Modo Noche activado', 'info');
     });
 
     return toggleBtn;

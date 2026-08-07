@@ -26,7 +26,11 @@ export function renderProfile(container) {
       <div class="profile-page" style="padding: 20px 16px 100px; max-width: 480px; margin: 0 auto; text-align: left;">
         <div class="page-section-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
           <h2 style="color: var(--text-primary); font-size: 1.5rem; font-weight: 800; margin: 0;">Mi Perfil Pasajero</h2>
-          <span class="badge badge-success" style="font-size: 0.8rem; padding: 6px 12px; font-weight: 800;">✓ PASAJERO VERIFICADO 🇻🇪</span>
+        <div class="page-section-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+          <h2 style="color: var(--text-primary); font-size: 1.5rem; font-weight: 800; margin: 0;">Mi Perfil Pasajero</h2>
+          <span class="badge badge-success" style="font-size: 0.8rem; padding: 6px 12px; font-weight: 800; display:inline-flex; align-items:center; gap:4px;">
+            ${icon('check', 14)} PASAJERO VERIFICADO
+          </span>
         </div>
 
         <!-- VIP Passport Card with Real Photo Upload -->
@@ -54,7 +58,7 @@ export function renderProfile(container) {
               box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; border: 1.5px solid #121824;
               display: flex; align-items: center; gap: 4px;
             " title="Subir Foto Real de Perfil">
-              📷 Foto Real
+              Foto Real
             </button>
           </div>
 
@@ -62,12 +66,12 @@ export function renderProfile(container) {
             ${user.firstName || 'Pasajero'} ${user.lastName || ''}
           </h2>
           
-          <p style="color: var(--text-secondary); font-size: 0.88rem; font-weight: 700; margin-bottom: 6px;">
-            📱 ${user.phone || '+58 412-555-0001'} ${user.cedula ? `· 🪪 ${user.cedula}` : ''}
+          <p style="color: var(--text-secondary); font-size: 0.88rem; font-weight: 700; margin-bottom: 6px; display:flex; align-items:center; justify-content:center; gap:6px;">
+            ${icon('phone', 14)} ${user.phone || '+58 412-555-0001'} ${user.cedula ? `· ${user.cedula}` : ''}
           </p>
 
-          <p style="color: var(--accent-secondary); font-size: 0.82rem; font-weight: 700; margin-bottom: 18px;">
-            📧 ${user.email || 'jordan@58express.com'} ${user.age ? `· 🎂 ${user.age} años` : ''}
+          <p style="color: var(--accent-secondary); font-size: 0.82rem; font-weight: 700; margin-bottom: 18px; display:flex; align-items:center; justify-content:center; gap:6px;">
+            ${user.email || 'jordan@58express.com'} ${user.age ? `· ${user.age} años` : ''}
           </p>
 
           <!-- Edit Info Button -->
@@ -76,7 +80,7 @@ export function renderProfile(container) {
             border: 1px solid var(--accent-secondary); color: var(--accent-secondary);
             font-weight: 800; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
           ">
-            ✏️ ${isEditing ? 'Cancelar Edición' : 'Editar Datos Personales'}
+            ${icon('edit', 16)} ${isEditing ? 'Cancelar Edición' : 'Editar Datos Personales'}
           </button>
         </div>
 
@@ -86,8 +90,8 @@ export function renderProfile(container) {
             background: var(--surface-card); border-radius: 22px; padding: 20px;
             border: 1.5px solid var(--accent-secondary); margin-bottom: 20px;
           ">
-            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 800; margin-bottom: 14px;">
-              ✏️ Modificar Información Personal
+            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 800; margin-bottom: 14px; display:flex; align-items:center; gap:6px;">
+              ${icon('edit', 16)} Modificar Información Personal
             </h4>
 
             <form id="edit-profile-form" style="display: flex; flex-direction: column; gap: 12px;">
@@ -127,9 +131,9 @@ export function renderProfile(container) {
 
               <button type="submit" id="btn-save-profile-info" class="btn btn-3d primary-btn" style="
                 width: 100%; padding: 14px; font-weight: 900; font-size: 0.95rem; margin-top: 6px;
-                background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824; cursor: pointer;
+                background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824; cursor: pointer; display:flex; align-items:center; justify-content:center; gap:6px;
               ">
-                ✓ GUARDAR DATOS ACTUALIZADOS
+                ${icon('check', 18)} GUARDAR DATOS ACTUALIZADOS
               </button>
             </form>
           </div>
