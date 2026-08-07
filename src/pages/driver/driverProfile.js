@@ -34,60 +34,87 @@ export function renderDriverProfile(container) {
     const avatarUrl = user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
 
     container.innerHTML = `
-      <div class="driver-profile-page" style="padding: 20px 16px 100px; max-width: 480px; margin: 0 auto; text-align: left;">
-        <div class="page-section-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:10px;">
-          <h2 style="color: var(--text-primary); font-size: 1.5rem; font-weight: 800; margin: 0;">Perfil Mototaxista</h2>
-          <span class="badge badge-success" style="font-size: 0.8rem; padding: 6px 12px; font-weight: 800;">✓ CUENTA HABILITADA 🇻🇪</span>
+      <div class="driver-profile-page fade-in" style="padding: 24px 16px 120px; max-width: 440px; margin: 0 auto;">
+        
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+          <div>
+            <h2 style="color: var(--text-primary); font-size: 1.4rem; font-weight: 900; margin: 0; letter-spacing: -0.5px;">Mi Perfil Conductor</h2>
+            <small style="color: var(--text-secondary); font-size: 0.8rem;">Mototaxista Oficial +58</small>
+          </div>
+          <span style="
+            font-size: 0.78rem; padding: 6px 14px; border-radius: 20px; font-weight: 800;
+            background: rgba(0, 230, 118, 0.12); color: var(--success); border: 1.5px solid var(--success);
+            display: inline-flex; align-items: center; gap: 6px;
+          ">
+            ${icon('check', 14)} Cuenta Habilitada
+          </span>
         </div>
 
-        <!-- VIP Driver Passport Card with Real Photo Upload -->
+        <!-- VIP Driver Passport Card -->
         <div class="diorama-card-3d" style="
-          background: var(--surface-card); border-radius: 26px; padding: 28px 24px; text-align: center;
-          border: 1.5px solid var(--border-gold); box-shadow: 0 15px 35px rgba(0,0,0,0.6); margin-bottom: 20px;
+          background: var(--surface-card); border-radius: 28px; padding: 28px 20px; text-align: center;
+          border: 1.5px solid var(--border-gold); box-shadow: 0 20px 45px rgba(0,0,0,0.6); margin-bottom: 20px;
           position: relative; overflow: hidden;
         ">
-          <div style="position: absolute; top: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #FFC107 0%, #00D2FF 50%, #00E676 100%);"></div>
+          <div style="position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, #FFC107 0%, #00D2FF 50%, #00E676 100%);"></div>
 
-          <!-- Avatar with Glowing Cyan Border & Photo Trigger -->
-          <div style="position: relative; display: inline-block; margin-bottom: 14px;">
+          <!-- Avatar Container -->
+          <div style="position: relative; width: 108px; height: 108px; margin: 0 auto 16px;">
             <input type="file" id="driver-photo-input" accept="image/*" style="display: none;" />
             <img src="${avatarUrl}" id="driver-avatar-img" style="
-              width: 104px; height: 104px; border-radius: 50%;
+              width: 100%; height: 100%; border-radius: 50%;
               border: 3.5px solid var(--accent-secondary);
-              box-shadow: 0 0 25px rgba(0,210,255,0.4);
+              box-shadow: 0 0 25px rgba(0,210,255,0.35);
               object-fit: cover;
             ">
             
             <button id="btn-trigger-driver-photo" style="
-              position: absolute; bottom: -4px; right: -4px;
-              background: var(--accent-secondary); color: #121824; font-size: 0.85rem;
-              padding: 6px 10px; border-radius: 16px; font-weight: 900;
+              position: absolute; bottom: 0; right: -2px;
+              background: var(--accent-secondary); color: #121824; font-size: 0.75rem;
+              padding: 5px 10px; border-radius: 14px; font-weight: 900;
               box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; border: 1.5px solid #121824;
               display: flex; align-items: center; gap: 4px;
             " title="Subir Foto Real del Conductor">
-              📷 Foto Real
+              Foto Real
             </button>
           </div>
 
-          <h2 style="color: var(--text-primary); font-size: 1.4rem; font-weight: 900; margin-bottom: 2px;">
+          <h3 style="color: var(--text-primary); font-size: 1.35rem; font-weight: 900; margin: 0 0 12px; letter-spacing: -0.3px;">
             ${driverFullName}
-          </h2>
+          </h3>
 
-          <p style="color: var(--text-secondary); font-size: 0.88rem; font-weight: 700; margin-bottom: 6px;">
-            📱 ${user.phone || '+58 414-000-0004'} ${user.cedula ? `· 🪪 ${user.cedula}` : ''} ${user.age ? `(${user.age} años)` : ''}
-          </p>
+          <!-- Details Pill Grid -->
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; background: var(--surface-elevated); padding: 14px 16px; border-radius: 18px; border: 1px solid var(--border-color);">
+            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem;">
+              <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                ${icon('phone', 14)} Teléfono
+              </span>
+              <strong style="color: var(--text-primary); font-weight: 700;">${user.phone || '+58 414-000-0004'}</strong>
+            </div>
 
-          <p style="color: var(--accent-primary); font-size: 0.95rem; font-weight: 800; margin-bottom: 16px;">
-            🏍️ ${user.vehicleBrand || 'Bera'} ${user.vehicleModel || 'BR200'} (${user.vehicleColor || 'Negro'} ${user.vehicleYear || '2023'}) · Placa: ${user.vehiclePlate || 'AC3M49P'}
-          </p>
+            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem;">
+              <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                ${icon('shield', 14)} Cédula / ID
+              </span>
+              <strong style="color: var(--text-primary); font-weight: 700;">${user.cedula || 'V-19.402.103'}</strong>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem;">
+              <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                ${icon('bike', 14)} Vehículo
+              </span>
+              <strong style="color: var(--accent-primary); font-weight: 800;">${user.vehicleBrand || 'Bera'} ${user.vehicleModel || 'BR200'} (${user.vehiclePlate || 'AC3M49P'})</strong>
+            </div>
+          </div>
 
           <!-- Edit Driver Info Button -->
           <button id="btn-toggle-edit-driver" class="btn" style="
-            padding: 8px 16px; border-radius: 14px; background: rgba(0, 210, 255, 0.15);
-            border: 1px solid var(--accent-secondary); color: var(--accent-secondary);
-            font-weight: 800; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+            width: 100%; padding: 12px; border-radius: 16px; background: rgba(0, 210, 255, 0.12);
+            border: 1.5px solid var(--accent-secondary); color: var(--accent-secondary);
+            font-weight: 800; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
           ">
-            ✏️ ${isEditing ? 'Cancelar Edición' : 'Editar Datos de Moto y Conductor'}
+            ${icon('edit', 16)} ${isEditing ? 'Cancelar Edición' : 'Editar Datos de Moto y Conductor'}
           </button>
         </div>
 
