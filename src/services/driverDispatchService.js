@@ -14,15 +14,27 @@ class DriverDispatchService {
   _initSocketListeners() {
     // Listen for driver location updates continuously
     socket.on('driverLocationUpdated', (data) => {
-      if (data && data.driverId) {
-        this.updateDriverLocation(data.driverId, data.lat, data.lng, data.heading || 0);
+      if (data && (data.driverId || data.userId)) {
+        this.updateDriverLocation(data.driverId || data.userId, data.lat || data.latitude, data.lng || data.longitude, data.heading || 0);
+      }
+    });
+
+    socket.on('driver:location_update', (data) => {
+      if (data && (data.driverId || data.userId)) {
+        this.updateDriverLocation(data.driverId || data.userId, data.lat || data.latitude, data.lng || data.longitude, data.heading || 0);
       }
     });
 
     // Listen for driver status changes
     socket.on('driverStatusChanged', (data) => {
-      if (data && data.driverId) {
-        this.updateDriverStatus(data.driverId, data.status);
+      if (data && (data.driverId || data.userId)) {
+        this.updateDriverStatus(data.driverId || data.userId, data.status);
+      }
+    });
+
+    socket.on('driver:status_change', (data) => {
+      if (data && (data.driverId || data.userId)) {
+        this.updateDriverStatus(data.driverId || data.userId, data.status);
       }
     });
   }
@@ -61,7 +73,6 @@ class DriverDispatchService {
   updateDriverLocation(driverId, lat, lng, heading = 0) {
     let driver = this.driverRegistry.get(driverId);
     if (!driver) {
-      // Find from DB if not in memory
       const dbUser = db.query('users', { id: driverId })[0];
       driver = this.registerDriver(dbUser || { id: driverId, firstName: 'Carlos', lastName: 'Mendoza' });
     }
@@ -74,7 +85,6 @@ class DriverDispatchService {
     };
     driver.lastHeartbeat = Date.now();
 
-    // Broadcast location update to all listening clients & admin
     socket.emit('driverLocationUpdated', {
       driverId,
       lat: Number(lat),
@@ -100,10 +110,9 @@ class DriverDispatchService {
    * Get all active available drivers in Maracaibo
    */
   getAvailableDrivers() {
-    const now = Date.now();
     const available = [];
     
-    // Also include drivers from local database collection
+    // Include drivers from local database collection
     const dbDrivers = db.query('users', { role: 'driver' });
     dbDrivers.forEach(dbD => {
       if (!this.driverRegistry.has(dbD.id)) {
@@ -112,8 +121,7 @@ class DriverDispatchService {
     });
 
     for (const [id, driver] of this.driverRegistry.entries()) {
-      // Driver is available if status is AVAILABLE and sent heartbeat in last 120s
-      if (driver.status === 'AVAILABLE' && (now - driver.lastHeartbeat) < 120000) {
+      if (driver.status === 'AVAILABLE' || driver.status === 'ONLINE' || driver.isAvailable || driver.isOnline) {
         available.push(driver);
       }
     }
