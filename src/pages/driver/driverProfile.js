@@ -1,0 +1,416 @@
+import { icon } from '../../utils/icons.js';
+import { authService } from '../../services/mockAuth.js';
+import { db } from '../../services/mockDatabase.js';
+import { showToast } from '../../components/toast.js';
+import { createAdminSupportChat } from '../../components/adminSupportChat.js';
+import { getBcvEuroRate, formatVes } from '../../utils/bcvRates.js';
+
+export function renderDriverProfile(container) {
+  const user = authService.getCurrentUser() || {
+    id: 'driver_1',
+    firstName: 'Carlos',
+    lastName: 'Mendoza',
+    age: 32,
+    cedula: 'V-19.402.103',
+    vehicleBrand: 'Bera',
+    vehicleModel: 'BR200',
+    vehiclePlate: 'AC3M49P',
+    vehicleColor: 'Negro',
+    vehicleYear: 2023,
+    rating: 4.8,
+    totalTrips: 342,
+    phone: '+58 414-000-0004',
+    photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos'
+  };
+
+  const bcvRate = getBcvEuroRate();
+  const balanceEUR = 48.50;
+  const formattedVES = formatVes(balanceEUR);
+
+  let isEditing = false;
+
+  const renderView = () => {
+    const driverFullName = `${user.firstName || 'Carlos'} ${user.lastName || 'Mendoza'}`;
+    const avatarUrl = user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
+
+    container.innerHTML = `
+      <div class="driver-profile-page" style="padding: 20px 16px 100px; max-width: 480px; margin: 0 auto; text-align: left;">
+        <div class="page-section-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:10px;">
+          <h2 style="color: var(--text-primary); font-size: 1.5rem; font-weight: 800; margin: 0;">Perfil Mototaxista</h2>
+          <span class="badge badge-success" style="font-size: 0.8rem; padding: 6px 12px; font-weight: 800;">✓ CUENTA HABILITADA 🇻🇪</span>
+        </div>
+
+        <!-- VIP Driver Passport Card with Real Photo Upload -->
+        <div class="diorama-card-3d" style="
+          background: var(--surface-card); border-radius: 26px; padding: 28px 24px; text-align: center;
+          border: 1.5px solid var(--border-gold); box-shadow: 0 15px 35px rgba(0,0,0,0.6); margin-bottom: 20px;
+          position: relative; overflow: hidden;
+        ">
+          <div style="position: absolute; top: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #FFC107 0%, #00D2FF 50%, #00E676 100%);"></div>
+
+          <!-- Avatar with Glowing Cyan Border & Photo Trigger -->
+          <div style="position: relative; display: inline-block; margin-bottom: 14px;">
+            <input type="file" id="driver-photo-input" accept="image/*" style="display: none;" />
+            <img src="${avatarUrl}" id="driver-avatar-img" style="
+              width: 104px; height: 104px; border-radius: 50%;
+              border: 3.5px solid var(--accent-secondary);
+              box-shadow: 0 0 25px rgba(0,210,255,0.4);
+              object-fit: cover;
+            ">
+            
+            <button id="btn-trigger-driver-photo" style="
+              position: absolute; bottom: -4px; right: -4px;
+              background: var(--accent-secondary); color: #121824; font-size: 0.85rem;
+              padding: 6px 10px; border-radius: 16px; font-weight: 900;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; border: 1.5px solid #121824;
+              display: flex; align-items: center; gap: 4px;
+            " title="Subir Foto Real del Conductor">
+              📷 Foto Real
+            </button>
+          </div>
+
+          <h2 style="color: var(--text-primary); font-size: 1.4rem; font-weight: 900; margin-bottom: 2px;">
+            ${driverFullName}
+          </h2>
+
+          <p style="color: var(--text-secondary); font-size: 0.88rem; font-weight: 700; margin-bottom: 6px;">
+            📱 ${user.phone || '+58 414-000-0004'} ${user.cedula ? `· 🪪 ${user.cedula}` : ''} ${user.age ? `(${user.age} años)` : ''}
+          </p>
+
+          <p style="color: var(--accent-primary); font-size: 0.95rem; font-weight: 800; margin-bottom: 16px;">
+            🏍️ ${user.vehicleBrand || 'Bera'} ${user.vehicleModel || 'BR200'} (${user.vehicleColor || 'Negro'} ${user.vehicleYear || '2023'}) · Placa: ${user.vehiclePlate || 'AC3M49P'}
+          </p>
+
+          <!-- Edit Driver Info Button -->
+          <button id="btn-toggle-edit-driver" class="btn" style="
+            padding: 8px 16px; border-radius: 14px; background: rgba(0, 210, 255, 0.15);
+            border: 1px solid var(--accent-secondary); color: var(--accent-secondary);
+            font-weight: 800; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          ">
+            ✏️ ${isEditing ? 'Cancelar Edición' : 'Editar Datos de Moto y Conductor'}
+          </button>
+        </div>
+
+        ${isEditing ? `
+          <!-- Inline Edit Driver Information Card -->
+          <div class="diorama-card-3d" style="
+            background: var(--surface-card); border-radius: 22px; padding: 20px;
+            border: 1.5px solid var(--accent-secondary); margin-bottom: 20px;
+          ">
+            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 800; margin-bottom: 14px;">
+              ✏️ Modificar Vehículo y Datos Personales
+            </h4>
+
+            <form id="edit-driver-form" style="display: flex; flex-direction: column; gap: 12px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                  <small style="color: var(--text-secondary); font-weight:700;">Nombre *</small>
+                  <input type="text" id="edit-drv-fname" value="${user.firstName || ''}" required style="
+                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+                    background: var(--surface-input); color: var(--text-primary); outline: none; font-size: 0.9rem; font-weight:700;
+                  " />
+                </div>
+                <div>
+                  <small style="color: var(--text-secondary); font-weight:700;">Apellido *</small>
+                  <input type="text" id="edit-drv-lname" value="${user.lastName || ''}" required style="
+                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+                    background: var(--surface-input); color: var(--text-primary); outline: none; font-size: 0.9rem; font-weight:700;
+                  " />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                  <small style="color: var(--text-secondary); font-weight:700;">Teléfono *</small>
+                  <input type="text" id="edit-drv-phone" value="${user.phone || ''}" required style="
+                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+                    background: var(--surface-input); color: var(--text-primary); outline: none; font-size: 0.9rem; font-weight:700;
+                  " />
+                </div>
+                <div>
+                  <small style="color: var(--text-secondary); font-weight:700;">Edad / Cédula</small>
+                  <input type="text" id="edit-drv-cedula" value="${user.cedula || 'V-19.402.103'}" style="
+                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+                    background: var(--surface-input); color: var(--text-primary); outline: none; font-size: 0.9rem; font-weight:700;
+                  " />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                  <small style="color: var(--text-secondary); font-weight:700;">Marca de Moto *</small>
+                  <input type="text" id="edit-drv-brand" value="${user.vehicleBrand || 'Bera'}" required placeholder="Ej: Bera, Empire, UM" style="
+                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+                    background: var(--surface-input); color: var(--text-primary); outline: none; font-size: 0.9rem; font-weight:700;
+                  " />
+                </div>
+                <div>
+                  <small style="color: var(--text-secondary); font-weight:700;">Modelo de Moto *</small>
+                  <input type="text" id="edit-drv-model" value="${user.vehicleModel || 'BR200'}" required placeholder="Ej: SBR, BR200, Owen" style="
+                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+                    background: var(--surface-input); color: var(--text-primary); outline: none; font-size: 0.9rem; font-weight:700;
+                  " />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                  <small style="color: var(--text-secondary); font-weight:700;">Placa de la Moto *</small>
+                  <input type="text" id="edit-drv-plate" value="${user.vehiclePlate || 'AC3M49P'}" required placeholder="Ej: AC3M49P" style="
+                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+                    background: var(--surface-input); color: var(--text-primary); outline: none; font-size: 0.9rem; font-weight:700;
+                  " />
+                </div>
+                <div>
+                  <small style="color: var(--text-secondary); font-weight:700;">Color de la Moto</small>
+                  <input type="text" id="edit-drv-color" value="${user.vehicleColor || 'Negro'}" placeholder="Ej: Negro, Rojo, Azul" style="
+                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+                    background: var(--surface-input); color: var(--text-primary); outline: none; font-size: 0.9rem; font-weight:700;
+                  " />
+                </div>
+              </div>
+
+              <button type="submit" id="btn-save-driver-info" class="btn btn-3d primary-btn" style="
+                width: 100%; padding: 14px; font-weight: 900; font-size: 0.95rem; margin-top: 6px;
+                background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824; cursor: pointer;
+              ">
+                ✓ GUARDAR DATOS DEL CONDUCTOR
+              </button>
+            </form>
+          </div>
+        ` : ''}
+
+        <!-- Money Withdrawal Card in EUR -->
+        <div class="diorama-card-3d" style="
+          padding: 20px; border-radius: 24px; background: var(--surface-card);
+          border: 1.5px solid var(--border-gold); margin-bottom: 20px;
+        ">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+            <div>
+              <small style="color:var(--text-secondary); display:block; font-size:0.78rem;">BALANCE DISPONIBLE EN EUROS (BCV)</small>
+              <div style="font-size: 2rem; font-weight: 900; color: var(--accent-primary); font-family: 'JetBrains Mono', monospace;">
+                €${balanceEUR.toFixed(2)} EUR
+              </div>
+              <div style="color:var(--text-secondary); font-size:0.85rem; font-weight:700;">
+                ~ ${formattedVES} (Tasa BCV Euro: Bs. ${bcvRate.toFixed(2)})
+              </div>
+            </div>
+          </div>
+
+          <button id="btn-request-withdrawal" class="btn btn-3d primary-btn" style="
+            width: 100%; padding: 16px; font-weight: 900; font-size: 1rem;
+            background: linear-gradient(135deg, #FFC107 0%, #FF8F00 100%); color: #121824;
+            border-radius: 16px; margin-top: 6px;
+          ">
+            💸 SOLICITAR RETIRO POR PAGO MÓVIL
+          </button>
+        </div>
+
+        <!-- Admin Direct Support Chat Button Card -->
+        <div class="diorama-card-3d" style="
+          padding: 20px; border-radius: 24px; background: rgba(0, 210, 255, 0.08);
+          border: 1.5px solid var(--accent-secondary); margin-bottom: 24px; text-align: center;
+        ">
+          <h4 style="color: var(--text-primary); font-size: 1.1rem; font-weight: 800; margin-bottom: 4px;">
+            💬 Atención Directa a Conductor
+          </h4>
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px;">
+            ¿Tienes alguna duda con tu liquidación o tus viajes? Chatea directamente con Administración +58express 24/7.
+          </p>
+          <button id="btn-open-admin-chat" class="btn btn-secondary-3d" style="
+            width: 100%; padding: 16px; font-weight: 800; font-size: 1rem;
+            color: var(--accent-secondary); border-color: var(--accent-secondary);
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+          ">
+            🛡️ Hablar con Soporte Administración
+          </button>
+        </div>
+
+        <!-- Only Logout Button (Cleaned as requested by user) -->
+        <div style="margin-top: 10px;">
+          <button id="driver-logout-btn" class="btn" style="
+            width: 100%; padding: 16px; font-weight: 900; font-size: 1.05rem;
+            background: rgba(255, 77, 77, 0.15); border: 2px solid var(--danger);
+            color: var(--danger); border-radius: 20px;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            box-shadow: 0 6px 15px rgba(255, 77, 77, 0.2); cursor: pointer;
+          ">
+            ${icon('logout', 20)} Cerrar Sesión / Salir
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Photo Upload Triggers
+    const driverPhotoInput = container.querySelector('#driver-photo-input');
+    const driverPhotoBtn = container.querySelector('#btn-trigger-driver-photo');
+
+    if (driverPhotoBtn && driverPhotoInput) {
+      driverPhotoBtn.addEventListener('click', () => driverPhotoInput.click());
+      driverPhotoInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            user.photoUrl = evt.target.result;
+            db.update('users', user.id, { photoUrl: evt.target.result });
+            authService.updateProfile({ photoUrl: evt.target.result });
+            showToast('¡Foto real del conductor actualizada!', 'success');
+            renderView();
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    }
+
+    // Toggle Edit Info Trigger
+    const toggleEditBtn = container.querySelector('#btn-toggle-edit-driver');
+    if (toggleEditBtn) {
+      toggleEditBtn.addEventListener('click', () => {
+        isEditing = !isEditing;
+        renderView();
+      });
+    }
+
+    // Edit Driver Form Submit
+    const editForm = container.querySelector('#edit-driver-form');
+    if (editForm) {
+      editForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const firstName = container.querySelector('#edit-drv-fname').value.trim();
+        const lastName = container.querySelector('#edit-drv-lname').value.trim();
+        const phone = container.querySelector('#edit-drv-phone').value.trim();
+        const cedula = container.querySelector('#edit-drv-cedula').value.trim();
+        const vehicleBrand = container.querySelector('#edit-drv-brand').value.trim();
+        const vehicleModel = container.querySelector('#edit-drv-model').value.trim();
+        const vehiclePlate = container.querySelector('#edit-drv-plate').value.trim();
+        const vehicleColor = container.querySelector('#edit-drv-color').value.trim();
+
+        user.firstName = firstName;
+        user.lastName = lastName;
+        user.phone = phone;
+        user.cedula = cedula;
+        user.vehicleBrand = vehicleBrand;
+        user.vehicleModel = vehicleModel;
+        user.vehiclePlate = vehiclePlate;
+        user.vehicleColor = vehicleColor;
+
+        db.update('users', user.id, { firstName, lastName, phone, cedula, vehicleBrand, vehicleModel, vehiclePlate, vehicleColor });
+        authService.updateProfile({ firstName, lastName, phone, cedula, vehicleBrand, vehicleModel, vehiclePlate, vehicleColor });
+
+        showToast('¡Datos de moto y conductor actualizados!', 'success');
+        isEditing = false;
+        renderView();
+      });
+    }
+
+    // Request Withdrawal Modal Event
+    container.querySelector('#btn-request-withdrawal').addEventListener('click', () => {
+      openWithdrawalModal(container, balanceEUR, bcvRate);
+    });
+
+    // Open Admin Chat Event
+    container.querySelector('#btn-open-admin-chat').addEventListener('click', () => {
+      const chatModal = createAdminSupportChat(user);
+      document.body.appendChild(chatModal);
+    });
+
+    // Logout Event
+    container.querySelector('#driver-logout-btn').addEventListener('click', () => {
+      authService.logout();
+      window.navigateTo('#/');
+    });
+  };
+
+  renderView();
+}
+
+function openWithdrawalModal(container, balanceEUR, bcvRate) {
+  const modalOverlay = document.createElement('div');
+  modalOverlay.style.cssText = `
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(10, 15, 24, 0.88); backdrop-filter: blur(20px);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  `;
+
+  const vesAmount = balanceEUR * bcvRate;
+
+  modalOverlay.innerHTML = `
+    <div class="diorama-card-3d glass-panel" style="
+      width: 100%; max-width: 440px; padding: 24px; border-radius: 28px;
+      background: var(--surface-card); border: 2px solid var(--accent-primary);
+      box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 35px rgba(255,193,7,0.3);
+      animation: dioramaLand 0.35s ease-out;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 18px;">
+        <h3 style="color: var(--text-primary); margin:0; font-size:1.3rem; font-weight:800;">💸 Retiro de Ganancias (Euros)</h3>
+        <button id="close-withdrawal" style="color:var(--text-secondary); font-size:1.3rem; background:none; border:none; cursor:pointer;">✕</button>
+      </div>
+
+      <div style="background: rgba(255,193,7,0.08); padding: 14px; border-radius: 16px; border: 1px solid var(--border-gold); margin-bottom: 18px;">
+        <small style="color:var(--text-secondary); display:block;">Disponible para transferir por Tasa BCV Euro (Bs. ${bcvRate.toFixed(2)}):</small>
+        <div style="color:var(--accent-primary); font-weight:900; font-size:1.5rem; font-family:'JetBrains Mono', monospace;">
+          €${balanceEUR.toFixed(2)} EUR <span style="font-size:0.9rem; font-weight:700; color:var(--text-secondary);"> (~ Bs. ${vesAmount.toLocaleString('es-VE', {minimumFractionDigits:2})})</span>
+        </div>
+      </div>
+
+      <form id="withdrawal-form" style="display:flex; flex-direction:column; gap: 14px;">
+        <div>
+          <label style="color:var(--text-secondary); font-size:0.85rem; display:block; margin-bottom:6px;">Monto a retirar (€ EUR):</label>
+          <input type="number" id="withdraw-amount" value="${balanceEUR.toFixed(2)}" max="${balanceEUR}" min="1" step="0.5" required style="
+            width:100%; padding:14px; border-radius:14px; border:1px solid var(--border-gold);
+            background:var(--surface-input); color:white; font-size:1.1rem; font-weight:700; outline:none;
+          ">
+        </div>
+
+        <div>
+          <label style="color:var(--text-secondary); font-size:0.85rem; display:block; margin-bottom:6px;">Banco de Destino (Pago Móvil):</label>
+          <select id="withdraw-bank" style="
+            width:100%; padding:14px; border-radius:14px; border:1px solid var(--border-color);
+            background:var(--surface-input); color:white; font-size:0.95rem; outline:none;
+          ">
+            <option value="0134">0134 - Banesco Banco Universal</option>
+            <option value="0102">0102 - Banco de Venezuela</option>
+            <option value="0105">0105 - Banco Mercantil</option>
+            <option value="0108">0108 - BBVA Provincial</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="color:var(--text-secondary); font-size:0.85rem; display:block; margin-bottom:6px;">Teléfono Pago Móvil:</label>
+          <input type="text" id="withdraw-phone" value="+58 414-000-0004" required style="
+            width:100%; padding:14px; border-radius:14px; border:1px solid var(--border-color);
+            background:var(--surface-input); color:white; font-size:0.95rem; outline:none;
+          ">
+        </div>
+
+        <div>
+          <label style="color:var(--text-secondary); font-size:0.85rem; display:block; margin-bottom:6px;">Cédula / RIF:</label>
+          <input type="text" id="withdraw-cedula" value="V-18920492" required style="
+            width:100%; padding:14px; border-radius:14px; border:1px solid var(--border-color);
+            background:var(--surface-input); color:white; font-size:0.95rem; outline:none;
+          ">
+        </div>
+
+        <button type="submit" class="btn btn-3d primary-btn" style="
+          width:100%; padding:16px; font-weight:900; font-size:1.1rem; margin-top:8px;
+          background: linear-gradient(135deg, #FFC107 0%, #FF8F00 100%); color:#121824;
+        ">
+          ✓ CONFIRMAR SOLICITUD DE RETIRO
+        </button>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modalOverlay);
+
+  modalOverlay.querySelector('#close-withdrawal').addEventListener('click', () => modalOverlay.remove());
+
+  modalOverlay.querySelector('#withdrawal-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const amount = modalOverlay.querySelector('#withdraw-amount').value;
+    const vesConverted = amount * bcvRate;
+    showToast(`Solicitud de retiro de €${amount} EUR (Bs. ${vesConverted.toLocaleString('es-VE', {minimumFractionDigits:2})}) enviada a Administración. Recibirás tu Pago Móvil en breve.`, 'success');
+    modalOverlay.remove();
+  });
+}

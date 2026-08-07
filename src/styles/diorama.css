@@ -1,0 +1,224 @@
+/* ============================================================
+   +58express — ISOMETRIC 3D DIORAMA STYLESHEET
+   ============================================================ */
+
+/* 3D Viewport Wrapper */
+.diorama-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  perspective: 1400px;
+  perspective-origin: 50% 40%;
+  background: radial-gradient(circle at 50% 30%, #1a2333 0%, #0a0f18 100%);
+}
+
+/* Map Plane 3D Transformation */
+.diorama-map-plane {
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), filter 0.8s ease;
+  transform-origin: center center;
+}
+
+/* Enabled 3D Isometric State */
+.diorama-map-plane.active-3d {
+  transform: rotateX(52deg) rotateZ(-28deg) scale(1.38) translateY(-4%);
+  filter: contrast(1.15) brightness(0.92) drop-shadow(0 40px 60px rgba(0,0,0,0.8));
+}
+
+/* Diorama Board Frame Shadow */
+.diorama-viewport::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.diorama-viewport.active-3d::after {
+  opacity: 1;
+}
+
+/* 2D / 3D Mode Switcher Button (Hidden for clean 2D mode) */
+.diorama-mode-btn {
+  display: none !important;
+}
+
+/* ============================================================
+   ISOMETRIC 3D MARKERS & BEACONS
+   ============================================================ */
+
+/* Upright counter-transformation for 3D markers */
+.active-3d .leaflet-marker-icon {
+  transform-style: preserve-3d;
+}
+
+/* 3D Floating Moto Marker Badge */
+.moto-3d-badge {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  transform-style: preserve-3d;
+  animation: floatMoto 3s ease-in-out infinite;
+}
+
+@keyframes floatMoto {
+  0%, 100% { transform: translateY(0px) rotateX(0deg); }
+  50% { transform: translateY(-8px) rotateX(-5deg); }
+}
+
+/* Ground Drop Shadow */
+.moto-3d-shadow {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 32px;
+  height: 12px;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  filter: blur(4px);
+  animation: shadowScale 3s ease-in-out infinite;
+}
+
+@keyframes shadowScale {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.6; }
+  50% { transform: translateX(-50%) scale(0.7); opacity: 0.3; }
+}
+
+/* Vehicle Shell */
+.moto-3d-body {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #ffab00 100%);
+  border: 3px solid #121824;
+  box-shadow: 
+    0 10px 20px rgba(0,0,0,0.5),
+    inset 0 2px 4px rgba(255,255,255,0.6),
+    inset 0 -2px 4px rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #121824;
+}
+
+.moto-3d-arrow {
+  width: 18px;
+  height: 18px;
+  fill: #121824;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
+}
+
+/* 3D Pickup Beacon Light Pillar */
+.beacon-3d-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.beacon-pillar {
+  width: 4px;
+  height: 40px;
+  background: linear-gradient(to top, rgba(0,230,118,0.8), rgba(0,230,118,0));
+  border-radius: 2px;
+  box-shadow: 0 0 15px var(--success);
+}
+
+.beacon-head {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 25px var(--success);
+  animation: pulseBeacon 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseBeacon {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 20px var(--success); }
+  50% { transform: scale(1.2); box-shadow: 0 0 35px var(--success); }
+}
+
+/* 3D Destination Flag Pillar */
+.flag-3d-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.flag-head {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 3px solid #ffffff;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 25px var(--danger);
+  font-size: 14px;
+}
+
+/* ============================================================
+   DIORAMA CARDS & TACTILE 3D UX PANELS
+   ============================================================ */
+
+/* 3D Depth Card Overlay */
+.diorama-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-xl);
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 255, 255, 0.2) inset;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+
+.diorama-card:hover {
+  border-color: var(--border-gold);
+  box-shadow: 
+    0 30px 60px rgba(0, 0, 0, 0.6),
+    0 0 20px rgba(255, 193, 7, 0.15),
+    0 1px 0 rgba(255, 255, 255, 0.3) inset;
+}
+
+/* Tactile 3D Button Press Effect */
+.btn-3d {
+  position: relative;
+  border: none;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
+  color: #121824;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  box-shadow: 
+    0 4px 0 #b38600,
+    0 10px 20px rgba(0,0,0,0.4);
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer !important;
+}
+
+.btn-3d:hover {
+  filter: brightness(1.08);
+  box-shadow: 
+    0 6px 0 #b38600,
+    0 14px 25px rgba(255,193,7,0.3);
+}
+
+.btn-3d:active {
+  transform: translateY(2px);
+  box-shadow: 
+    0 2px 0 #b38600,
+    0 4px 10px rgba(0,0,0,0.3);
+}
