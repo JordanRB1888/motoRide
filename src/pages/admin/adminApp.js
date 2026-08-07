@@ -1,4 +1,4 @@
-import { db } from '../../services/mockDatabase.js';
+import { db } from '../../services/apiService.js';
 import { authService } from '../../services/mockAuth.js';
 import { renderFleetMap } from './fleetMap.js';
 import { renderUsersManagement } from './usersManagement.js';
@@ -7,7 +7,7 @@ import { renderFinances } from './finances.js';
 import { renderAdminSupport } from './adminSupport.js';
 import { initThemeToggle } from '../../utils/themeToggle.js';
 import { createNotificationCenterModal } from '../../components/notificationCenterModal.js';
-import { socket } from '../../services/mockSocket.js';
+import { socket } from '../../services/socketClient.js';
 import { eventLogger } from '../../utils/logger.js';
 
 export function renderAdminApp(container) {

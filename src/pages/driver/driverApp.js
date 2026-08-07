@@ -1,6 +1,6 @@
 import { authService } from '../../services/mockAuth.js';
-import { db } from '../../services/mockDatabase.js';
-import { socket } from '../../services/mockSocket.js';
+import { db } from '../../services/apiService.js';
+import { socket } from '../../services/socketClient.js';
 import { tripEngine } from '../../services/mockTrip.js';
 import { MapComponent } from '../../components/mapComponent.js';
 import { icon } from '../../utils/icons.js';
