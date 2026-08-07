@@ -188,27 +188,16 @@ export function renderPassengerApp(container) {
     if (tab === 'home') {
       overlay.innerHTML = '';
       overlay.classList.remove('active');
-    } else if (tab === 'history') {
+    } else {
+      if (bottomSheet) bottomSheet.close();
       const wrapper = document.createElement('div');
       wrapper.className = 'page-overlay glass-panel active';
       overlay.innerHTML = '';
       overlay.appendChild(wrapper);
       overlay.classList.add('active');
-      renderRideHistory(wrapper);
-    } else if (tab === 'wallet') {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'page-overlay glass-panel active';
-      overlay.innerHTML = '';
-      overlay.appendChild(wrapper);
-      overlay.classList.add('active');
-      renderWallet(wrapper);
-    } else if (tab === 'profile') {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'page-overlay glass-panel active';
-      overlay.innerHTML = '';
-      overlay.appendChild(wrapper);
-      overlay.classList.add('active');
-      renderProfile(wrapper);
+      if (tab === 'history') renderRideHistory(wrapper);
+      else if (tab === 'wallet') renderWallet(wrapper);
+      else if (tab === 'profile') renderProfile(wrapper);
     }
   }
 

@@ -182,6 +182,8 @@ export class BottomSheet {
   }
 
   open() {
+    this.sheet.style.display = 'flex';
+    this.sheet.style.visibility = 'visible';
     this.overlay.style.visibility = 'visible';
     this.overlay.style.opacity = '1';
     
@@ -191,6 +193,8 @@ export class BottomSheet {
   }
 
   expand() {
+    this.sheet.style.display = 'flex';
+    this.sheet.style.visibility = 'visible';
     this.overlay.style.visibility = 'visible';
     this.overlay.style.opacity = '1';
     const lastIndex = this.options.snapPoints.length - 1;
@@ -203,10 +207,12 @@ export class BottomSheet {
 
   close() {
     this.overlay.style.opacity = '0';
-    this.sheet.style.transform = 'translate(-50%, 100%)';
+    this.sheet.style.transform = 'translate(-50%, 200%)';
     
     setTimeout(() => {
       this.overlay.style.visibility = 'hidden';
+      this.sheet.style.visibility = 'hidden';
+      this.sheet.style.display = 'none';
     }, 300);
   }
 

@@ -181,7 +181,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 2000;
+  z-index: 9990;
   background: var(--surface-primary);
   overflow-y: auto;
   padding: 16px 12px 100px 12px;
