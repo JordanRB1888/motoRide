@@ -27,20 +27,58 @@ export class MapComponent {
   _initMap() {
     if (!this.targetElement) return;
     try {
-      this.map = L.map(this.targetElement, { zoomControl: false }).setView(this.options.center, this.options.zoom);
+      this.map = L.map(this.targetElement, { zoomControl: true }).setView(this.options.center, this.options.zoom);
       
-      const tileUrl = this.options.darkMode 
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+      // Clean high-contrast OpenStreetMap / CartoDB Voyager map tile layer as shown in screenshot
+      const tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
         
       L.tileLayer(tileUrl, {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 20
       }).addTo(this.map);
+
+      this._createMapLegend();
     } catch (err) {
       console.error('[MapComponent] Map init error:', err);
     }
+  }
+
+  _createMapLegend() {
+    if (!this.targetElement) return;
+
+    // Check if legend already exists
+    if (this.targetElement.querySelector('.map-legend-bar')) return;
+
+    const legend = document.createElement('div');
+    legend.className = 'map-legend-bar';
+    legend.style.cssText = `
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 1000; background: rgba(15, 20, 32, 0.92); backdrop-filter: blur(16px);
+      border: 1.5px solid var(--border-gold, #FFC107); border-radius: 20px;
+      padding: 8px 16px; display: flex; align-items: center; gap: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6); pointer-events: auto;
+    `;
+
+    legend.innerHTML = `
+      <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
+        <span style="width:10px; height:10px; border-radius:50%; background:#00E676; box-shadow:0 0 8px #00E676;"></span>
+        Mi ubicación
+      </div>
+      <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
+        <span style="width:10px; height:10px; border-radius:50%; background:#FFC107; box-shadow:0 0 8px #FFC107;"></span>
+        Compañeros
+      </div>
+      <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
+        <span style="width:10px; height:10px; border-radius:50%; background:#FF4D4D; box-shadow:0 0 8px #FF4D4D;"></span>
+        SOS activos
+      </div>
+    `;
+
+    if (getComputedStyle(this.targetElement).position === 'static') {
+      this.targetElement.style.position = 'relative';
+    }
+    this.targetElement.appendChild(legend);
   }
 
   _createLocationButton() {

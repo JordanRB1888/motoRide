@@ -222,3 +222,55 @@
     0 2px 0 #b38600,
     0 4px 10px rgba(0,0,0,0.3);
 }
+
+/* Custom Leaflet Map Markers matching User Screenshot */
+.custom-driver-leaflet-icon {
+  background: transparent;
+  border: none;
+}
+
+.driver-marker-pulse {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 18px rgba(255, 193, 7, 0.6);
+  transition: all 0.3s ease;
+}
+
+.driver-marker-pulse.online {
+  background: radial-gradient(circle, #FFD54F 0%, #FF8F00 100%);
+  border: 2.5px solid #ffffff;
+  color: #121824;
+  font-weight: 900;
+  font-size: 0.85rem;
+  box-shadow: 0 0 20px rgba(255, 193, 7, 0.8);
+}
+
+.driver-marker-pulse.in_trip {
+  background: radial-gradient(circle, #00E676 0%, #00B0FF 100%);
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 0 20px rgba(0, 230, 118, 0.8);
+}
+
+.driver-marker-pulse.offline {
+  background: #64748b;
+  border: 2px solid #ffffff;
+  opacity: 0.7;
+}
+
+.driver-marker-pulse .pulse-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 193, 7, 0.6);
+  animation: markerPulse 2s infinite ease-out;
+}
+
+@keyframes markerPulse {
+  0% { transform: scale(0.9); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}

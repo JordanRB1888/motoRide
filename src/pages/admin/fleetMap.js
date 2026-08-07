@@ -69,7 +69,31 @@ export function renderFleetMap(container) {
             </div>
 
             <!-- Full Screen Height GPS Map Container -->
-            <div id="fleet-map" class="fleet-map-container" style="height: 620px; border-radius: 22px;"></div>
+            <div style="position: relative; border-radius: 24px; overflow: hidden; border: 1.5px solid var(--border-gold);">
+                <div id="fleet-map" class="fleet-map-container" style="height: 620px;"></div>
+                
+                <!-- Map Legend Bar as shown in user screenshot -->
+                <div class="map-legend-bar" style="
+                    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+                    z-index: 1000; background: rgba(15, 20, 32, 0.92); backdrop-filter: blur(16px);
+                    border: 1.5px solid var(--border-gold, #FFC107); border-radius: 20px;
+                    padding: 8px 16px; display: flex; align-items: center; gap: 16px;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.6); pointer-events: auto;
+                ">
+                    <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
+                        <span style="width:10px; height:10px; border-radius:50%; background:#00E676; box-shadow:0 0 8px #00E676;"></span>
+                        Mi ubicación
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
+                        <span style="width:10px; height:10px; border-radius:50%; background:#FFC107; box-shadow:0 0 8px #FFC107;"></span>
+                        Compañeros
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
+                        <span style="width:10px; height:10px; border-radius:50%; background:#FF4D4D; box-shadow:0 0 8px #FF4D4D;"></span>
+                        SOS activos
+                    </div>
+                </div>
+            </div>
         </div>
     `;
 
