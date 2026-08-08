@@ -289,7 +289,32 @@ export function renderDriverApp(container) {
     });
 
     function callPassenger(passenger) {
-        window.open(`tel:+584125550001`, '_self');
+        window.open(`tel:${passenger?.phone || '+584125550001'}`, '_self');
+    }
+
+    function tripFare(trip) {
+        return Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fareEUR ?? trip?.fare ?? 0);
+    }
+
+    function showTripRoute(trip, stage = 'PICKUP') {
+        const pickup = trip?.pickup;
+        const destination = trip?.destination;
+        if (Number.isFinite(Number(pickup?.lat)) && Number.isFinite(Number(pickup?.lng))) {
+            currentMap.setPickupMarker(Number(pickup.lat), Number(pickup.lng));
+        }
+        if (Number.isFinite(Number(destination?.lat)) && Number.isFinite(Number(destination?.lng))) {
+            currentMap.setDestinationMarker(Number(destination.lat), Number(destination.lng));
+        }
+        const driverPosition = driverGpsTracker.getLastPosition();
+        const start = stage === 'DESTINATION' ? pickup : (driverPosition && {
+            lat: driverPosition.latitude,
+            lng: driverPosition.longitude
+        });
+        const end = stage === 'DESTINATION' ? destination : pickup;
+        if (start && end && Number.isFinite(Number(start.lat)) && Number.isFinite(Number(start.lng)) && Number.isFinite(Number(end.lat)) && Number.isFinite(Number(end.lng))) {
+            currentMap.drawRoute(start, end, stage === 'DESTINATION' ? '#00E676' : '#FFC107');
+        }
+        currentMap.fitBounds();
     }
 
     function acceptRide(trip, passenger) {
@@ -331,10 +356,12 @@ export function renderDriverApp(container) {
             trip, 
             () => arrivePickup(trip, passenger),
             () => openChatWithPassenger(trip, passenger),
-            () => callPassenger(passenger)
+            () => callPassenger(passenger),
+            passenger
         );
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(enRouteView);
+        showTripRoute(trip, 'PICKUP');
     }
 
     function rejectRide(modal, trip) {
@@ -348,6 +375,7 @@ export function renderDriverApp(container) {
 
     function arrivePickup(trip, passenger) {
         eventLogger.log('DRIVER', `Conductor llegó al punto de recogida [${trip.id}]`);
+        trip.status = 'ARRIVED';
         socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'ARRIVED' });
         const waitingView = renderWaitingPassenger(
             trip, 
@@ -358,36 +386,38 @@ export function renderDriverApp(container) {
         );
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(waitingView);
+        showTripRoute(trip, 'PICKUP');
     }
 
     function startTrip(trip, passenger) {
         eventLogger.log('DRIVER', `Pasajero abordó. Viaje iniciado en progreso [${trip.id}]`);
+        trip.status = 'IN_PROGRESS';
         socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'IN_PROGRESS' });
         const inTripView = renderInTrip(
             trip, 
             () => completeTrip(trip, passenger),
             () => openChatWithPassenger(trip, passenger),
-            () => callPassenger(passenger)
+            () => callPassenger(passenger),
+            passenger
         );
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(inTripView);
+        showTripRoute(trip, 'DESTINATION');
     }
 
     function completeTrip(trip, passenger) {
         eventLogger.log('DRIVER', `Viaje completado exitosamente [${trip.id}]`);
+        trip.status = 'COMPLETED';
         socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'COMPLETED' });
         persistentChatBtn.classList.add('hidden');
         
-        if (watchPositionId !== null && navigator.geolocation) {
-            navigator.geolocation.clearWatch(watchPositionId);
-            watchPositionId = null;
-        }
-
         const ratingModal = createDriverRatingModal({
             trip,
             passengerName: passenger?.name || 'Pasajero',
             onSubmit: (res) => {
-                const earnings = { fare: trip.fare, commission: trip.fare * 0.15 };
+                socket.emit('tripRated', { tripId: trip.id, rating: res.rating, tags: res.tags, comment: res.comment, targetRole: 'passenger' });
+                const fare = tripFare(trip);
+                const earnings = { fare, commission: fare * 0.15 };
                 const summaryView = renderTripSummary(trip, earnings);
                 activeTripContainer.innerHTML = '';
                 activeTripContainer.appendChild(summaryView);
@@ -419,14 +449,21 @@ export function renderDriverApp(container) {
             destination: tripData.destination || { address: 'Vereda del Lago, Maracaibo' },
             distance: tripData.distance || 4.5,
             duration: tripData.duration || 12,
-            fare: tripData.fareEUR || tripData.fare || 4.50,
+            distanceKm: tripData.distanceKm || tripData.distance || 4.5,
+            durationMin: tripData.durationMin || tripData.duration || 12,
+            fare: tripData.pricing?.fareUSD || tripData.fareUSD || tripData.fareEUR || tripData.fare || 4.50,
+            fareUSD: tripData.pricing?.fareUSD || tripData.fareUSD || tripData.fareEUR || tripData.fare || 4.50,
+            fareVES: tripData.pricing?.fareVES || tripData.fareVES,
+            paymentMethod: tripData.paymentMethod || 'cash_usd',
+            rideType: tripData.rideType || 'MOTO',
             status: 'requested'
         };
         const passenger = {
             id: tripData.passengerId,
             name: tripData.passengerName || 'Jordan Pérez',
             rating: tripData.passengerRating || 4.9,
-            avatar: tripData.passengerAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(tripData.passengerName || 'Jordan')}`
+            avatar: tripData.passengerAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(tripData.passengerName || 'Jordan')}`,
+            phone: tripData.passengerPhone
         };
 
         eventLogger.log('DRIVER', `Solicitud emergente recibida de ${passenger.name} ➔ ${trip.destination.address}`);
@@ -515,18 +552,18 @@ export function renderDriverApp(container) {
             view = renderInTrip(currentTrip,
                 () => completeTrip(currentTrip, currentPassenger),
                 () => openChatWithPassenger(currentTrip, currentPassenger),
-                () => callPassenger(currentPassenger));
+                () => callPassenger(currentPassenger),
+                currentPassenger);
         } else {
             view = renderEnRouteToPickup(currentTrip,
                 () => arrivePickup(currentTrip, currentPassenger),
                 () => openChatWithPassenger(currentTrip, currentPassenger),
-                () => callPassenger(currentPassenger));
+                () => callPassenger(currentPassenger),
+                currentPassenger);
         }
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(view);
-        if (currentTrip.pickup?.lat && currentTrip.pickup?.lng) {
-            currentMap.setPickupMarker(currentTrip.pickup.lat, currentTrip.pickup.lng);
-        }
+        showTripRoute(currentTrip, ['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status) ? 'DESTINATION' : 'PICKUP');
     }
 
     // Auto-enable online mode by default so driver is ready immediately

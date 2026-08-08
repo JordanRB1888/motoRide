@@ -576,6 +576,7 @@ export function renderPassengerApp(container) {
         driver: currentDriver,
         onSubmit: (ratingRes) => {
           if (currentTrip) currentTrip.tipEUR = ratingRes.tipEUR;
+          socket.emit('tripRated', { tripId: currentTrip?.id, rating: ratingRes.rating, tags: ratingRes.tags, tipEUR: ratingRes.tipEUR, targetRole: 'driver' });
           
           // Open Digital Receipt Modal
           const receiptModal = createDigitalReceiptModal({

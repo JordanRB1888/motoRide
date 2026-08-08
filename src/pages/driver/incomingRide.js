@@ -17,6 +17,7 @@ export function renderIncomingRide(trip, passenger, onAccept, onReject) {
     const passName = passenger?.name || 'Jordan Pérez';
     const passRating = passenger?.rating || 4.9;
     const passAvatar = passenger?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(passName)}`;
+    const paymentLabel = ({ cash_usd: 'Efectivo USD', cash_ves: 'Efectivo Bs.', pago_movil: 'Pago Móvil', wallet: 'Wallet' })[trip?.paymentMethod] || 'Efectivo USD';
     
     // Play sound using Web Audio API
     try {
@@ -80,6 +81,7 @@ export function renderIncomingRide(trip, passenger, onAccept, onReject) {
             </div>
 
             <!-- Route Details -->
+            <div style="display:flex;justify-content:space-between;gap:10px;margin:0 0 12px;padding:10px 12px;border-radius:14px;background:var(--surface-elevated);border:1px solid var(--border-color);font-size:.82rem"><span style="color:var(--text-secondary)">${trip?.rideType === 'CAR' ? '🚘 Automóvil' : '🏍️ Moto'}</span><strong style="color:var(--accent-primary)">${paymentLabel}</strong></div>
             <div style="background: var(--surface-elevated); padding: 14px 16px; border-radius: 18px; border: 1px solid var(--border-color); text-align: left; margin-bottom: 18px; display:flex; flex-direction:column; gap:10px;">
                 <div style="display:flex; align-items:center; gap: 10px;">
                     <span style="color: var(--accent-primary); font-size: 1.1rem;">🟢</span>

@@ -816,6 +816,25 @@ io.on('connection', (socket) => {
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', message);
   });
 
+  socket.on('tripRated', (data = {}) => {
+    const trip = database.trips.find(item => item.id === data.tripId);
+    const { userId, role } = socket.data.auth;
+    if (!trip || !userCanAccessTrip(userId, role, trip) || !['driver', 'passenger'].includes(role)) return;
+    const rating = Math.max(1, Math.min(5, Number(data.rating) || 5));
+    const review = {
+      rating,
+      tags: Array.isArray(data.tags) ? data.tags.slice(0, 5) : [],
+      comment: String(data.comment || '').slice(0, 500),
+      createdAt: new Date().toISOString()
+    };
+    if (role === 'driver' && data.targetRole === 'passenger') trip.passengerReview = review;
+    if (role === 'passenger' && data.targetRole === 'driver') {
+      trip.driverReview = { ...review, tipEUR: Math.max(0, Number(data.tipEUR) || 0) };
+    }
+    persistDatabase();
+    io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripRatingUpdated', { tripId: trip.id, role, review });
+  });
+
   socket.on('disconnect', () => {
     for (const [driverId, socketId] of driverRegistry.entries()) {
       if (socketId === socket.id) {

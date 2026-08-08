@@ -21,6 +21,11 @@
   z-index: 1;
 }
 
+.driver-main-content { position:absolute; inset:0; z-index:900; pointer-events:none; }
+.active-trip-container { position:absolute; left:.6rem; right:.6rem; bottom:4.7rem; max-height:min(62vh,620px); overflow-y:auto; overscroll-behavior:contain; pointer-events:auto; scrollbar-width:none; }
+.active-trip-container::-webkit-scrollbar { display:none; }
+.active-trip-panel { padding:0 !important; }
+
 /* Floating Responsive Top Container (Prevents any overlapping of Header & Stats Bar) */
 .driver-top-container {
   position: absolute;
