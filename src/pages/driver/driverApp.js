@@ -115,6 +115,11 @@ export function renderDriverApp(container) {
                 <div id="active-trip-container" class="active-trip-container hidden"></div>
             </div>
 
+            <button id="driver-trip-panel-toggle" class="driver-trip-panel-toggle hidden" type="button" aria-expanded="true">
+                <span class="trip-toggle-icon">⌄</span>
+                <span class="trip-toggle-label">Minimizar viaje</span>
+            </button>
+
             <button id="driver-active-chat-btn" class="driver-active-chat-btn hidden" aria-label="Abrir chat de la carrera">
                 <span class="driver-chat-icon">💬</span>
                 <span class="driver-chat-label">Chat</span>
@@ -138,6 +143,7 @@ export function renderDriverApp(container) {
     let activeChat = null;
     let activeChatTripId = null;
     let unreadMessages = 0;
+    let tripPanelCollapsed = false;
     let currentMap = new MapComponent('driver-map', { is3D: true });
 
     const toggle = container.querySelector('#online-toggle');
@@ -147,6 +153,7 @@ export function renderDriverApp(container) {
     const btnConnectOverlay = container.querySelector('#btn-connect-overlay');
     const activeTripContainer = container.querySelector('#active-trip-container');
     const persistentChatBtn = container.querySelector('#driver-active-chat-btn');
+    const tripPanelToggle = container.querySelector('#driver-trip-panel-toggle');
     const chatUnreadBadge = container.querySelector('#driver-chat-unread');
     const driverHeaderBtn = container.querySelector('#driver-header-btn');
     const driverThemeSlot = container.querySelector('#driver-theme-toggle-slot');
@@ -288,6 +295,37 @@ export function renderDriverApp(container) {
         if (currentTrip && currentPassenger) openChatWithPassenger(currentTrip, currentPassenger);
     });
 
+    function setTripPanelCollapsed(collapsed) {
+        tripPanelCollapsed = Boolean(collapsed);
+        activeTripContainer.classList.toggle('trip-panel-collapsed', tripPanelCollapsed);
+        tripPanelToggle.setAttribute('aria-expanded', String(!tripPanelCollapsed));
+        tripPanelToggle.querySelector('.trip-toggle-icon').textContent = tripPanelCollapsed ? '⌃' : '⌄';
+        tripPanelToggle.querySelector('.trip-toggle-label').textContent = tripPanelCollapsed ? 'Ver información del viaje' : 'Minimizar viaje';
+    }
+
+    function showTripPanel() {
+        activeTripContainer.classList.remove('hidden');
+        tripPanelToggle.classList.remove('hidden');
+        setTripPanelCollapsed(false);
+    }
+
+    function clearCompletedTripUi() {
+        tripPanelToggle.classList.add('hidden');
+        activeTripContainer.classList.add('hidden');
+        activeTripContainer.classList.remove('trip-panel-collapsed');
+        activeTripContainer.innerHTML = '';
+        persistentChatBtn.classList.add('hidden');
+        activeChat?.close();
+        currentMap.clearRoute();
+        currentMap.clearMarkers('pickup');
+        currentMap.clearMarkers('destination');
+        currentTrip = null;
+        currentPassenger = null;
+        setOnline(true);
+    }
+
+    tripPanelToggle.addEventListener('click', () => setTripPanelCollapsed(!tripPanelCollapsed));
+
     function callPassenger(passenger) {
         window.open(`tel:${passenger?.phone || '+584125550001'}`, '_self');
     }
@@ -349,7 +387,7 @@ export function renderDriverApp(container) {
         persistentChatBtn.classList.remove('hidden');
         
         onlineOverlay.classList.add('hidden');
-        activeTripContainer.classList.remove('hidden');
+        showTripPanel();
 
         // En route
         const enRouteView = renderEnRouteToPickup(
@@ -417,19 +455,8 @@ export function renderDriverApp(container) {
             onSubmit: (res) => {
                 socket.emit('tripRated', { tripId: trip.id, rating: res.rating, tags: res.tags, comment: res.comment, targetRole: 'passenger' });
                 const fare = tripFare(trip);
-                const earnings = { fare, commission: fare * 0.15 };
-                const summaryView = renderTripSummary(trip, earnings);
-                activeTripContainer.innerHTML = '';
-                activeTripContainer.appendChild(summaryView);
-                
-                const continueBtn = summaryView.querySelector('.btn-continue');
-                if (continueBtn) {
-                    continueBtn.addEventListener('click', () => {
-                        activeTripContainer.classList.add('hidden');
-                        activeTripContainer.innerHTML = '';
-                        setOnline(true);
-                    });
-                }
+                showToast(`Viaje finalizado · Ganancia neta $${(fare * 0.85).toFixed(2)} USD`, 'success');
+                clearCompletedTripUi();
             }
         });
         container.appendChild(ratingModal);
@@ -498,8 +525,7 @@ export function renderDriverApp(container) {
             showToast('El pasajero ha cancelado la solicitud de viaje', 'info');
         }
         if (currentTrip?.id === data?.tripId) {
-            persistentChatBtn.classList.add('hidden');
-            activeChat?.close();
+            clearCompletedTripUi();
         }
     });
 
@@ -541,7 +567,7 @@ export function renderDriverApp(container) {
         };
         persistentChatBtn.classList.remove('hidden');
         onlineOverlay.classList.add('hidden');
-        activeTripContainer.classList.remove('hidden');
+        showTripPanel();
         let view;
         if (['ARRIVED'].includes(active.trip.status)) {
             view = renderWaitingPassenger(currentTrip, currentPassenger,
