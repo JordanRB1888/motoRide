@@ -111,7 +111,7 @@ export function renderDriverApp(container) {
                         box-shadow: 0 10px 25px rgba(0,0,0,0.5), 0 0 20px rgba(0,230,118,0.3);
                     ">
                         <div class="pulsing-dot" style="width:12px; height:12px; border-radius:50%; background:var(--success); box-shadow: 0 0 10px var(--success); flex-shrink:0;"></div>
-                        <span>EN LÍNEA · Transmitiendo GPS en vivo...</span>
+                        <span>En línea <b aria-hidden="true">·</b> GPS activo</span>
                     </div>
                 </div>
                 <div id="active-trip-container" class="active-trip-container hidden"></div>
