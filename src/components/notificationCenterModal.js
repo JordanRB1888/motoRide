@@ -154,6 +154,7 @@ export function createNotificationCenterModal(user, onClose) {
         overlay.appendChild(modal);
 
         modal.querySelector('#close-notif-btn').addEventListener('click', () => {
+            window.removeEventListener('58express:notifications-updated', liveUpdateHandler);
             overlay.remove();
             if (onClose) onClose();
         });
@@ -199,5 +200,9 @@ export function createNotificationCenterModal(user, onClose) {
     };
 
     render();
+    const liveUpdateHandler = event => {
+        if (event.detail?.userId === userId && overlay.isConnected) render();
+    };
+    window.addEventListener('58express:notifications-updated', liveUpdateHandler);
     return overlay;
 }

@@ -40,6 +40,7 @@ export function renderPassengerApp(container) {
   let activeChatTripId = null;
   let unreadMessages = 0;
   let selectedRideType = 'MOTO';
+  const notifiedTripEvents = new Set();
 
   const user = authService.getCurrentUser() || { id: 'p1', name: 'Pasajero' };
 
@@ -159,11 +160,57 @@ export function renderPassengerApp(container) {
   bottomSheet = new BottomSheet(sheetEl);
   const persistentChatBtn = container.querySelector('#passenger-active-chat-btn');
   const chatUnreadBadge = container.querySelector('#passenger-chat-unread');
-  persistentChatBtn.addEventListener('click', () => openChatModal());
-  mapComponent.getUserLocation().then(location => {
-    passengerLocation = location;
-    mapComponent.setUserLocation(location.lat, location.lng);
+  const notificationBadge = container.querySelector('#notif-badge-passenger');
+  const updateNotificationBadge = () => {
+    const count = notificationService.getUnreadCount(user.id || 'p1');
+    notificationBadge.textContent = count > 99 ? '99+' : String(count);
+    notificationBadge.style.display = count > 0 ? 'flex' : 'none';
+  };
+  window.addEventListener('58express:notifications-updated', event => {
+    if (event.detail?.userId === (user.id || 'p1')) updateNotificationBadge();
   });
+  updateNotificationBadge();
+  persistentChatBtn.addEventListener('click', () => openChatModal());
+  requestPassengerPermissions();
+
+  function requestPassengerPermissions() {
+    const permissionKey = `58express_permissions_prompted_${user.id || 'p1'}`;
+    if (localStorage.getItem(permissionKey) === 'yes') {
+      mapComponent.getUserLocation().then(location => {
+        passengerLocation = location;
+        mapComponent.setUserLocation(location.lat, location.lng);
+      });
+      return;
+    }
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:30000;background:rgba(8,13,22,.88);display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(16px)';
+    overlay.innerHTML = `<div style="width:100%;max-width:420px;padding:24px;border-radius:26px;background:var(--surface-card);border:2px solid var(--accent-primary);box-shadow:0 24px 60px rgba(0,0,0,.65)"><div style="font-size:2.5rem;text-align:center">📍 🔔</div><h3 style="color:var(--text-primary);text-align:center;margin:10px 0 8px">Permisos para tu seguridad</h3><p style="color:var(--text-secondary);line-height:1.5;font-size:.9rem">+58express necesita tu ubicación para buscar conductores y mostrar el recorrido en vivo. Las notificaciones te avisarán cuando acepten, lleguen, inicien o finalicen tu carrera.</p><button id="allow-passenger-permissions" style="width:100%;padding:15px;border:0;border-radius:16px;background:linear-gradient(135deg,#FFC107,#FF9800);color:#121824;font-weight:950;cursor:pointer">PERMITIR UBICACIÓN Y NOTIFICACIONES</button><button id="later-passenger-permissions" style="width:100%;padding:12px;margin-top:8px;border:0;background:none;color:var(--text-secondary);font-weight:800;cursor:pointer">Ahora no</button></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#allow-passenger-permissions').addEventListener('click', async () => {
+      localStorage.setItem(permissionKey, 'yes');
+      // Start both permission requests directly from the user's tap. Browsers
+      // require this gesture for notification permission.
+      const notificationPermission = notificationService.requestBrowserPermission();
+      const locationPermission = mapComponent.getUserLocation();
+      const [notificationGranted, location] = await Promise.all([notificationPermission, locationPermission]);
+      passengerLocation = location;
+      mapComponent.setUserLocation(location.lat, location.lng);
+      overlay.remove();
+      showToast(notificationGranted ? 'Ubicación y notificaciones activadas' : 'Ubicación activada. Puedes habilitar notificaciones en los ajustes del navegador.', notificationGranted ? 'success' : 'info');
+    });
+    overlay.querySelector('#later-passenger-permissions').addEventListener('click', () => {
+      localStorage.setItem(permissionKey, 'yes');
+      overlay.remove();
+    });
+  }
+
+  function notifyTripEvent(key, title, message) {
+    const tripId = currentTrip?.id || 'general';
+    const uniqueKey = `${tripId}:${key}`;
+    if (notifiedTripEvents.has(uniqueKey)) return;
+    notifiedTripEvents.add(uniqueKey);
+    notificationService.notify(user.id || 'p1', { title, message, category: 'TRIP', icon: '🔔' });
+  }
 
   // Floating Cancel Route Listener
   const floatingCancelBtn = container.querySelector('#floating-cancel-route-btn');
@@ -500,6 +547,7 @@ export function renderPassengerApp(container) {
     apiService.post('/trips/create', currentTrip).then((result) => {
       if (!result?.trip) driverDispatchService.dispatchTrip(currentTrip);
     });
+    notifyTripEvent('REQUESTED', 'Buscando conductor', `Solicitud enviada hacia ${currentTrip.destination.address}. Te avisaremos cuando un conductor acepte.`);
     startPassengerTracking();
   }
 
@@ -688,20 +736,25 @@ export function renderPassengerApp(container) {
         persistentChatBtn.classList.remove('hidden');
         startPassengerTracking();
         showToast('⚡ ¡Conductor asignado y en camino!', 'success');
+        notifyTripEvent('ASSIGNED', 'Conductor asignado', `${currentDriver?.firstName || 'Tu conductor'} aceptó la carrera y va hacia tu ubicación.`);
         setState('DRIVER_EN_ROUTE');
       } else if (data.status === 'ARRIVED' || data.status === 'DRIVER_ARRIVED') {
         showToast('📍 Tu moto ha llegado al punto de recogida', 'info');
+        notifyTripEvent('ARRIVED', 'Tu conductor llegó', `${currentDriver?.firstName || 'El conductor'} está esperando en el punto de recogida.`);
         setState('DRIVER_ARRIVED');
       } else if (data.status === 'IN_PROGRESS' || data.status === 'IN_TRIP') {
         showToast('🚀 En viaje hacia tu destino', 'info');
+        notifyTripEvent('STARTED', 'Viaje iniciado', `La carrera hacia ${currentTrip?.destination?.address || 'tu destino'} comenzó.`);
         setState('IN_TRIP');
       } else if (data.status === 'COMPLETED') {
         persistentChatBtn.classList.add('hidden');
         stopPassengerTracking();
+        notifyTripEvent('COMPLETED', 'Llegaste a tu destino', 'La carrera finalizó correctamente. Ya puedes valorar al conductor.');
         setState('COMPLETED');
       } else if (data.status === 'CANCELLED') {
         persistentChatBtn.classList.add('hidden');
         stopPassengerTracking();
+        notifyTripEvent('CANCELLED', 'Carrera cancelada', data.reason === 'NO_DRIVERS_AVAILABLE' ? 'No encontramos conductores disponibles.' : 'La carrera fue cancelada.');
         currentTrip = null;
         currentDriver = null;
         setState('IDLE');
@@ -740,6 +793,12 @@ export function renderPassengerApp(container) {
       unreadMessages += 1;
       chatUnreadBadge.textContent = unreadMessages > 9 ? '9+' : String(unreadMessages);
       chatUnreadBadge.classList.remove('hidden');
+      notificationService.notify(user.id || 'p1', {
+        title: `Mensaje de ${message.senderName || currentDriver?.firstName || 'tu conductor'}`,
+        message: message.text || 'Te enviaron un archivo adjunto.',
+        category: 'TRIP',
+        icon: '💬'
+      });
     }
   });
 

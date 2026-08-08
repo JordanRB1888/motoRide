@@ -10,41 +10,13 @@ class NotificationService {
         try {
             const key = `${this.prefix}${userId || 'global'}`;
             const data = localStorage.getItem(key);
-            if (data) return JSON.parse(data);
-
-            // Seed default initial notifications if empty
-            const seed = [
-                {
-                    id: 'notif_1',
-                    title: '🇻🇪 Tasa BCV Euro Actualizada',
-                    message: 'La tasa oficial del Banco Central de Venezuela se fijó en Bs. 874.50 por Euro.',
-                    category: 'ANNOUNCEMENT',
-                    icon: '🇪🇺',
-                    read: false,
-                    timestamp: new Date(Date.now() - 1000 * 60 * 25).toISOString()
-                },
-                {
-                    id: 'notif_2',
-                    title: '🛵 Moto Asignada Exitosamente',
-                    message: 'Tu servicio en Maracaibo con Carlos Mendoza (Bera AC3M49P) ha sido confirmado.',
-                    category: 'TRIP',
-                    icon: '🚀',
-                    read: false,
-                    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString()
-                },
-                {
-                    id: 'notif_3',
-                    title: '💵 Saldo Acreditado por Pago Móvil',
-                    message: 'Se acreditó un saldo equivalente a €25.00 EUR en tu Wallet.',
-                    category: 'FINANCE',
-                    icon: '💳',
-                    read: true,
-                    timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString()
-                }
-            ];
-
-            localStorage.setItem(key, JSON.stringify(seed));
-            return seed;
+            if (data) {
+                const parsed = JSON.parse(data);
+                const realNotifications = parsed.filter(item => !['notif_1', 'notif_2', 'notif_3'].includes(item.id));
+                if (realNotifications.length !== parsed.length) localStorage.setItem(key, JSON.stringify(realNotifications));
+                return realNotifications;
+            }
+            return [];
         } catch (e) {
             console.error('Error fetching notifications', e);
             return [];
@@ -56,6 +28,9 @@ class NotificationService {
             const key = `${this.prefix}${userId || 'global'}`;
             localStorage.setItem(key, JSON.stringify(list));
             socket.emit('notifications:updated', { userId, count: list.filter(n => !n.read).length });
+            window.dispatchEvent(new CustomEvent('58express:notifications-updated', {
+                detail: { userId, count: list.filter(n => !n.read).length }
+            }));
         } catch (e) {
             console.error('Error saving notifications', e);
         }
@@ -74,6 +49,7 @@ class NotificationService {
         };
 
         list.unshift(newNotif);
+        if (list.length > 100) list.length = 100;
         this.saveNotifications(userId, list);
 
         // Play audio effect
@@ -86,6 +62,12 @@ class NotificationService {
         }
 
         return newNotif;
+    }
+
+    async notify(userId, payload, nativeOptions = {}) {
+        const notification = this.addNotification(userId, payload);
+        await this.triggerNativeNotification(payload.title, payload.message, { tag: notification.id, ...nativeOptions });
+        return notification;
     }
 
     async requestBrowserPermission() {
@@ -102,9 +84,9 @@ class NotificationService {
         if ('Notification' in window && Notification.permission === 'granted') {
             try {
                 if ('serviceWorker' in navigator) {
-                    const reg = await navigator.serviceWorker.ready;
+                    const reg = await navigator.serviceWorker.getRegistration();
                     if (reg && reg.showNotification) {
-                        reg.showNotification(title, {
+                        await reg.showNotification(title, {
                             body: message,
                             icon: '/app-logo.png',
                             badge: '/app-logo.png',

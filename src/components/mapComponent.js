@@ -411,7 +411,7 @@ export class MapComponent {
   getUserLocation() {
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
-        resolve({ lat: 10.4806, lng: -66.9036 });
+        resolve({ lat: 10.6427, lng: -71.6125 });
         return;
       }
       
@@ -422,7 +422,7 @@ export class MapComponent {
             lng: position.coords.longitude
           });
         },
-        () => resolve({ lat: 10.4806, lng: -66.9036 }),
+        () => resolve({ lat: 10.6427, lng: -71.6125 }),
         { enableHighAccuracy: true, timeout: 5000 }
       );
     });
