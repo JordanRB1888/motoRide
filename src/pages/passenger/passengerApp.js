@@ -39,6 +39,7 @@ export function renderPassengerApp(container) {
   let activeChat = null;
   let activeChatTripId = null;
   let unreadMessages = 0;
+  let selectedRideType = 'MOTO';
 
   const user = authService.getCurrentUser() || { id: 'p1', name: 'Pasajero' };
 
@@ -372,7 +373,7 @@ export function renderPassengerApp(container) {
     // Calculate real dynamic distance immediately based on exact destination coordinates
     const calcDistKm = helpers.getHaversineDistanceKm(pickup[0], pickup[1], lat, lon);
     const calcDurMin = Math.max(4, Math.round(calcDistKm * 2.2));
-    const initialFare = fareCalculator.calculateFare(calcDistKm, calcDurMin);
+    const initialFare = fareCalculator.calculateFare(calcDistKm, calcDurMin, selectedRideType);
 
     showFarePreview(currentSelectedDestinationName, { distanceKm: calcDistKm, durationMin: calcDurMin }, initialFare, [lat, lon]);
 
@@ -380,7 +381,7 @@ export function renderPassengerApp(container) {
     mapComponent.drawRoute(pickup, [lat, lon]).then(routeInfo => {
       const realDistKm = routeInfo?.distanceKm || (routeInfo?.distance ? (routeInfo.distance / 1000) : calcDistKm);
       const realDurMin = routeInfo?.durationMin || (routeInfo?.duration ? (routeInfo.duration / 60) : calcDurMin);
-      const realFare = fareCalculator.calculateFare(realDistKm, realDurMin);
+      const realFare = fareCalculator.calculateFare(realDistKm, realDurMin, selectedRideType);
       showFarePreview(currentSelectedDestinationName, { distanceKm: realDistKm, durationMin: realDurMin }, realFare, [lat, lon]);
     }).catch(err => console.warn('Map route draw info:', err));
   }
@@ -403,7 +404,8 @@ export function renderPassengerApp(container) {
 
   function showFarePreview(destName, routeInfo, fareData, destCoords) {
     setState('FARE_PREVIEW');
-    const fareUSDVal = Number(fareData?.fareUSD ?? fareData?.totalUSD ?? 4.50);
+    const pricedFare = fareCalculator.calculateFare(Number(routeInfo?.distanceKm || 0), Number(routeInfo?.durationMin || 0), selectedRideType);
+    const fareUSDVal = Number(pricedFare?.fareUSD ?? fareData?.fareUSD ?? fareData?.totalUSD ?? 4.50);
     const fareVESVal = fareUSDVal * 874.50;
     
     const distKmStr = routeInfo?.distanceKm ? routeInfo.distanceKm.toFixed(1) + ' km' : ((routeInfo?.distance || 4800) / 1000).toFixed(1) + ' km';
@@ -415,7 +417,8 @@ export function renderPassengerApp(container) {
         distance: distKmStr,
         duration: durMinStr,
         fareUSD: fareUSDVal.toFixed(2),
-        fareVES: fareVESVal.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        fareVES: fareVESVal.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        rideType: selectedRideType
       }, 
       () => requestRide(destCoords, {
         fareUSD: fareUSDVal,
@@ -423,11 +426,16 @@ export function renderPassengerApp(container) {
         distanceKm: Number(routeInfo?.distanceKm || 0),
         durationMin: Number(routeInfo?.durationMin || 0),
         paymentMethod: selectedPaymentMethod,
-        exchangeRateType: 'BCV'
+        exchangeRateType: 'BCV',
+        rideType: selectedRideType
       }),
       () => openPaymentModal(destName, routeInfo, fareData, destCoords),
       () => cancelRouteAndSelectNew(),
-      () => openScheduleModal(destName, fareUSDVal)
+      () => openScheduleModal(destName, fareUSDVal),
+      (rideType) => {
+        selectedRideType = rideType === 'CAR' ? 'CAR' : 'MOTO';
+        showFarePreview(destName, routeInfo, fareData, destCoords);
+      }
     );
     
     bottomSheet.setContent(content);
@@ -456,7 +464,7 @@ export function renderPassengerApp(container) {
 
   function requestRide(destCoords, fareData) {
     setState('SEARCHING');
-    bottomSheet.setContent(renderSearchingState(() => cancelSearch()));
+    bottomSheet.setContent(renderSearchingState(() => cancelSearch(), fareData?.rideType));
     showToast('📡 Transmitiendo solicitud de mototaxi en tiempo real...', 'info');
     
     const fareUSD = fareData?.totalUSD || fareData?.fareUSD || 4.50;
@@ -476,6 +484,7 @@ export function renderPassengerApp(container) {
       durationMin: fareData?.durationMin,
       paymentMethod: fareData?.paymentMethod || selectedPaymentMethod,
       exchangeRateType: fareData?.exchangeRateType || 'BCV',
+      rideType: fareData?.rideType === 'CAR' ? 'CAR' : 'MOTO',
       passengerName: `${user.firstName || 'Jordan'} ${user.lastName || 'Pérez'}`.trim(),
       passengerAvatar: user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.firstName || 'Jordan')}`,
       createdAt: new Date().toISOString()
@@ -663,6 +672,14 @@ export function renderPassengerApp(container) {
         persistentChatBtn.classList.add('hidden');
         stopPassengerTracking();
         setState('COMPLETED');
+      } else if (data.status === 'CANCELLED') {
+        persistentChatBtn.classList.add('hidden');
+        stopPassengerTracking();
+        currentTrip = null;
+        currentDriver = null;
+        setState('IDLE');
+        bottomSheet.collapse();
+        showToast(data.reason === 'NO_DRIVERS_AVAILABLE' ? 'No hay conductores disponibles en este momento' : 'La carrera fue cancelada', 'warning');
       }
     }
   });
@@ -703,6 +720,7 @@ export function renderPassengerApp(container) {
     const active = await apiService.get('/trips/active/me');
     if (!active?.trip || active.trip.passengerId !== user.id) return;
     currentTrip = active.trip;
+    selectedRideType = currentTrip.rideType === 'CAR' ? 'CAR' : 'MOTO';
     currentDriver = active.driver || active.trip.driver;
     if (currentDriver) {
       persistentChatBtn.classList.remove('hidden');
@@ -712,7 +730,7 @@ export function renderPassengerApp(container) {
       else setState('DRIVER_EN_ROUTE');
     } else {
       setState('SEARCHING');
-      bottomSheet.setContent(renderSearchingState(() => cancelSearch()));
+      bottomSheet.setContent(renderSearchingState(() => cancelSearch(), selectedRideType));
     }
     if (currentTrip.pickup?.lat && currentTrip.pickup?.lng) {
       passengerLocation = { lat: currentTrip.pickup.lat, lng: currentTrip.pickup.lng };

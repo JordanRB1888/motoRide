@@ -7,7 +7,11 @@ const DEFAULT_PRICING = {
   rateKm: 0.30,
   rateMin: 0.05,
   surge: 1.0,
-  bcvRate: 874.50
+  bcvRate: 874.50,
+  vehicleTypes: {
+    MOTO: { minFare: 2.50, baseFare: 1.50, rateKm: 0.45, rateMin: 0.04 },
+    CAR: { minFare: 3.50, baseFare: 2.50, rateKm: 0.70, rateMin: 0.06 }
+  }
 };
 
 export const fareCalculator = {
@@ -53,23 +57,26 @@ export const fareCalculator = {
 
   calculateFare(distanceKm, durationMin, rideType = 'MOTO') {
     const config = this.getPricingConfig();
+    const normalizedType = rideType === 'CAR' ? 'CAR' : 'MOTO';
+    const vehicleConfig = { ...DEFAULT_PRICING.vehicleTypes[normalizedType], ...(config.vehicleTypes?.[normalizedType] || {}) };
     
-    const distanceCost = distanceKm * config.rateKm;
-    const timeCost = durationMin * config.rateMin;
-    let subtotal = config.baseFare + distanceCost + timeCost;
+    const distanceCost = distanceKm * vehicleConfig.rateKm;
+    const timeCost = durationMin * vehicleConfig.rateMin;
+    let subtotal = vehicleConfig.baseFare + distanceCost + timeCost;
     
     // Apply surge multiplier
     subtotal = subtotal * config.surge;
     
     // Check min fare
-    const finalFareUSD = Math.max(config.minFare, subtotal);
+    const finalFareUSD = Math.max(vehicleConfig.minFare, subtotal);
     const finalFareVES = finalFareUSD * config.bcvRate;
 
     return {
       fareUSD: Number(finalFareUSD.toFixed(2)),
       fareVES: Number(finalFareVES.toFixed(2)),
+      rideType: normalizedType,
       breakdown: {
-        baseFare: config.baseFare,
+        baseFare: vehicleConfig.baseFare,
         distanceCost: Number(distanceCost.toFixed(2)),
         timeCost: Number(timeCost.toFixed(2)),
         surge: config.surge

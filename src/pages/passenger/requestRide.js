@@ -2,7 +2,7 @@ import { icon } from '../../utils/icons.js';
 import { createStatusBadge } from '../../components/statusBadge.js';
 import { createRatingStars } from '../../components/ratingStars.js';
 
-export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancelRoute, onScheduleRide) {
+export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancelRoute, onScheduleRide, onRideTypeChange) {
   const div = document.createElement('div');
   div.className = 'fare-preview fade-in';
   div.style.cssText = 'padding: 8px 10px 32px; max-width: 440px; margin: 0 auto;';
@@ -32,6 +32,11 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
         </button>
       </div>
       
+      <div class="ride-type-selector" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
+        <button type="button" class="ride-type-option" data-ride-type="MOTO" style="padding:13px 10px; border-radius:16px; border:1.5px solid ${fareData.rideType === 'MOTO' ? 'var(--accent-primary)' : 'var(--border-color)'}; background:${fareData.rideType === 'MOTO' ? 'rgba(255,193,7,.16)' : 'var(--surface-elevated)'}; color:var(--text-primary); font-weight:850; cursor:pointer;">🏍️ Moto<br><small style="color:var(--text-secondary);">Rápida y económica</small></button>
+        <button type="button" class="ride-type-option" data-ride-type="CAR" style="padding:13px 10px; border-radius:16px; border:1.5px solid ${fareData.rideType === 'CAR' ? 'var(--accent-primary)' : 'var(--border-color)'}; background:${fareData.rideType === 'CAR' ? 'rgba(255,193,7,.16)' : 'var(--surface-elevated)'}; color:var(--text-primary); font-weight:850; cursor:pointer;">🚘 Automóvil<br><small style="color:var(--text-secondary);">Más comodidad</small></button>
+      </div>
+
       <!-- Fare and Distance Stats -->
       <div style="display:flex; justify-content:space-between; align-items:center; background: rgba(255, 193, 7, 0.06); padding: 16px; border-radius: 20px; border: 1px solid rgba(255,193,7,0.25); margin-bottom: 16px;">
         <div>
@@ -111,6 +116,7 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
   `;
 
   div.querySelector('.confirm-ride-btn').addEventListener('click', onConfirm);
+  div.querySelectorAll('.ride-type-option').forEach(button => button.addEventListener('click', () => onRideTypeChange?.(button.dataset.rideType)));
   div.querySelector('#payment-selector-btn').addEventListener('click', onChangePayment);
 
   const schBtn = div.querySelector('.schedule-ride-btn');
@@ -128,7 +134,7 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
   return div;
 }
 
-export function renderSearchingState(onCancel) {
+export function renderSearchingState(onCancel, rideType = 'MOTO') {
   const div = document.createElement('div');
   div.className = 'searching-animation fade-in';
   div.style.cssText = 'padding: 16px 12px 32px; text-align: center; max-width: 440px; margin: 0 auto;';
@@ -140,12 +146,12 @@ export function renderSearchingState(onCancel) {
         <div class="ripple delay-1"></div>
         <div class="ripple delay-2"></div>
         <div style="color: var(--accent-primary); position:relative; z-index:2; animation: bounce 1s infinite alternate;">
-          ${icon('bike', 48)}
+          ${icon(rideType === 'CAR' ? 'car' : 'bike', 48)}
         </div>
       </div>
       
-      <h3 style="color: var(--text-primary); font-size: 1.3rem; font-weight: 800; margin-bottom: 6px;">Buscando moto en Maracaibo...</h3>
-      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 24px;">Conectando con mototaxistas cercanos en tiempo real</p>
+      <h3 style="color: var(--text-primary); font-size: 1.3rem; font-weight: 800; margin-bottom: 6px;">Buscando ${rideType === 'CAR' ? 'automóvil' : 'moto'} en Maracaibo...</h3>
+      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 24px;">Conectando con conductores cercanos en tiempo real</p>
       
       <button class="btn btn-danger btn-outline cancel-btn" style="
         width: 100%; padding: 14px; border-radius: 14px; font-weight: 800; font-size:0.95rem;

@@ -20,3 +20,13 @@ test('la tarifa conserva instantánea USD, VES y recargos', () => {
   assert.equal(fare.fareVES, fare.fareUSD * 150);
   assert.ok(fare.fareUSD >= 2.5);
 });
+
+test('el automóvil usa una tarifa mayor que la moto para la misma ruta', () => {
+  const route = { distanceKm: 6, durationMin: 15, requestedAt: '2026-08-08T14:00:00-04:00' };
+  const moto = calculateFare({ ...route, rideType: 'MOTO' });
+  const car = calculateFare({ ...route, rideType: 'CAR' });
+  assert.equal(moto.rideType, 'MOTO');
+  assert.equal(car.rideType, 'CAR');
+  assert.ok(car.fareUSD > moto.fareUSD);
+  assert.ok(car.fareUSD >= 3.5);
+});

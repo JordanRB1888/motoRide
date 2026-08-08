@@ -67,6 +67,7 @@ const initialDatabase = {
       phone: '+58 414-000-0004',
       email: 'conductor@58express.com',
       vehicleBrand: 'Bera',
+      vehicleType: 'MOTO',
       vehicleModel: 'SBR 150',
       vehiclePlate: 'AC3M49P',
       vehicleColor: 'Negro',
@@ -252,7 +253,8 @@ app.post('/api/pricing/estimate', requireAuth, (req, res) => {
     distanceKm,
     durationMin,
     requestedAt: req.body.requestedAt || new Date(),
-    exchangeRateType: req.body.exchangeRateType || 'BCV'
+    exchangeRateType: req.body.exchangeRateType || 'BCV',
+    rideType: req.body.rideType || 'MOTO'
   }, pricingConfig));
 });
 
@@ -272,7 +274,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   const {
     email, phone, password, role = 'passenger', firstName, lastName,
-    vehicleBrand, vehicleModel, vehiclePlate, vehicleColor, vehicleYear,
+    vehicleType = 'MOTO', vehicleBrand, vehicleModel, vehiclePlate, vehicleColor, vehicleYear,
     licenseNumber, documents, photoUrl
   } = req.body;
   if (!email || !password || password.length < 6 || !['passenger', 'driver'].includes(role)) {
@@ -296,7 +298,7 @@ app.post('/api/auth/register', async (req, res) => {
     status: role === 'driver' ? 'OFFLINE' : undefined,
     isVerified: role === 'passenger',
     ...(role === 'driver' ? {
-      vehicleBrand, vehicleModel, vehiclePlate, vehicleColor, vehicleYear,
+      vehicleType: vehicleType === 'CAR' ? 'CAR' : 'MOTO', vehicleBrand, vehicleModel, vehiclePlate, vehicleColor, vehicleYear,
       licenseNumber, documents, photoUrl
     } : {})
   };
@@ -308,7 +310,7 @@ app.post('/api/auth/register', async (req, res) => {
 app.get('/api/auth/me', requireAuth, (req, res) => res.json(publicUser(req.user)));
 
 app.patch('/api/auth/me', requireAuth, (req, res) => {
-  const allowed = ['firstName', 'lastName', 'phone', 'photoUrl', 'cedula', 'vehicleBrand', 'vehicleModel', 'vehiclePlate', 'vehicleColor'];
+  const allowed = ['firstName', 'lastName', 'phone', 'photoUrl', 'cedula', 'vehicleType', 'vehicleBrand', 'vehicleModel', 'vehiclePlate', 'vehicleColor'];
   for (const key of allowed) if (key in req.body) req.user[key] = req.body[key];
   persistDatabase();
   res.json(publicUser(req.user));
@@ -381,7 +383,7 @@ app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (r
 });
 
 app.post('/api/admin/drivers', requireAuth, requireRole('admin'), async (req, res) => {
-  const { email, phone, firstName, lastName, vehicleBrand, vehicleModel, vehiclePlate } = req.body;
+  const { email, phone, firstName, lastName, vehicleType = 'MOTO', vehicleBrand, vehicleModel, vehiclePlate } = req.body;
   if (!email || !phone || !firstName || !vehiclePlate) return res.status(400).json({ error: 'INVALID_DRIVER' });
   if (database.users.some(user => user.email?.toLowerCase() === email.toLowerCase() || user.phone === phone)) {
     return res.status(409).json({ error: 'USER_EXISTS' });
@@ -390,7 +392,7 @@ app.post('/api/admin/drivers', requireAuth, requireRole('admin'), async (req, re
   const driver = {
     id: `driver_${Date.now()}`,
     role: 'driver', firstName, lastName, email: email.toLowerCase(), phone,
-    vehicleBrand, vehicleModel, vehiclePlate,
+    vehicleType: vehicleType === 'CAR' ? 'CAR' : 'MOTO', vehicleBrand, vehicleModel, vehiclePlate,
     passwordHash: await bcrypt.hash(temporaryPassword, 12),
     status: 'OFFLINE', isVerified: true, rating: 5, totalTrips: 0,
     documents: Object.fromEntries(
@@ -411,7 +413,7 @@ app.get('/api/trips/active/me', requireAuth, (req, res) => {
   const now = Date.now();
   const trip = database.trips.findLast(item =>
     activeStatuses.includes(item.status) &&
-    now - new Date(item.createdAt || 0).getTime() < 12 * 60 * 60 * 1000 &&
+    now - new Date(item.createdAt || 0).getTime() < (item.status === 'SEARCHING' ? 3 * 60 * 1000 : 12 * 60 * 60 * 1000) &&
     (item.passengerId === req.user.id || item.driverId === req.user.id)
   );
   if (!trip) return res.status(204).end();
@@ -438,6 +440,7 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   const existing = requestedId && database.trips.find(item => item.id === requestedId && item.passengerId === req.user.id);
   if (existing) return res.json({ status: 'existing', trip: existing });
   const trip = { ...req.body };
+  trip.rideType = trip.rideType === 'CAR' ? 'CAR' : 'MOTO';
   trip.passengerId = req.user.id;
   trip.id = trip.id || 'trip_' + Date.now();
   trip.status = TRIP_STATUS.SEARCHING;
@@ -448,7 +451,8 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
     trip.pricing = calculateFare({
       distanceKm: Number(trip.distanceKm),
       durationMin: Number(trip.durationMin),
-      exchangeRateType: trip.exchangeRateType || 'BCV'
+      exchangeRateType: trip.exchangeRateType || 'BCV',
+      rideType: trip.rideType
     }, pricingConfig);
     trip.fareUSD = trip.pricing.fareUSD;
     trip.fareVES = trip.pricing.fareVES;
@@ -500,6 +504,7 @@ function dispatchTripToDrivers(trip) {
       u.role === 'driver' &&
       u.status === 'AVAILABLE' &&
       driverRegistry.has(u.id) &&
+      (u.vehicleType || 'MOTO') === (trip.rideType || 'MOTO') &&
       !(trip.excludedDriverIds || []).includes(u.id) &&
       Number.isFinite(u.location?.lat) &&
       Number.isFinite(u.location?.lng)
@@ -521,9 +526,16 @@ function dispatchTripToDrivers(trip) {
     session.index += 1;
     const candidate = session.candidates[session.index];
     if (!candidate) {
+      transitionTrip(trip, TRIP_STATUS.CANCELLED, { actorRole: 'system', reason: 'NO_DRIVERS_AVAILABLE' });
+      persistDatabase();
       dispatchSessions.delete(trip.id);
       dispatchTimers.delete(trip.id);
       io.to(`user:${trip.passengerId}`).to('admins').emit('dispatch:no_drivers', { tripId: trip.id });
+      io.to(`user:${trip.passengerId}`).to('admins').emit('tripStatusUpdated', {
+        tripId: trip.id,
+        status: TRIP_STATUS.CANCELLED,
+        reason: 'NO_DRIVERS_AVAILABLE'
+      });
       return;
     }
     session.currentDriverId = candidate.driver.id;

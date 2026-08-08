@@ -19,6 +19,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
         phone: '',
         email: '',
         password: '',
+        vehicleType: 'MOTO',
         vehicleBrand: 'Bera',
         vehicleModel: 'BR200',
         vehiclePlate: '',
@@ -97,10 +98,17 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
 
                 ${currentStep === 2 ? `
                     <div style="display:flex; flex-direction:column; gap: 14px;">
-                        <h4 style="color:var(--text-primary); font-size:1rem; font-weight:800; margin:0;">2. Datos de la Moto</h4>
+                        <h4 style="color:var(--text-primary); font-size:1rem; font-weight:800; margin:0;">2. Datos del Vehículo</h4>
+                        <div>
+                            <small style="color:var(--text-secondary);">Tipo de vehículo *</small>
+                            <select id="reg-vehicle-type" style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;">
+                                <option value="MOTO" ${formData.vehicleType === 'MOTO' ? 'selected' : ''}>Moto</option>
+                                <option value="CAR" ${formData.vehicleType === 'CAR' ? 'selected' : ''}>Automóvil</option>
+                            </select>
+                        </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                             <div>
-                                <small style="color:var(--text-secondary);">Marca de la Moto *</small>
+                                <small style="color:var(--text-secondary);">Marca del vehículo *</small>
                                 <select id="reg-brand" style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;">
                                     <option value="Bera" ${formData.vehicleBrand === 'Bera' ? 'selected' : ''}>Bera</option>
                                     <option value="Empire Keeway" ${formData.vehicleBrand === 'Empire Keeway' ? 'selected' : ''}>Empire Keeway</option>
@@ -108,6 +116,12 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
                                     <option value="Yamaha" ${formData.vehicleBrand === 'Yamaha' ? 'selected' : ''}>Yamaha</option>
                                     <option value="UM" ${formData.vehicleBrand === 'UM' ? 'selected' : ''}>UM</option>
                                     <option value="Suzuki" ${formData.vehicleBrand === 'Suzuki' ? 'selected' : ''}>Suzuki</option>
+                                    <option value="Toyota" ${formData.vehicleBrand === 'Toyota' ? 'selected' : ''}>Toyota</option>
+                                    <option value="Chevrolet" ${formData.vehicleBrand === 'Chevrolet' ? 'selected' : ''}>Chevrolet</option>
+                                    <option value="Ford" ${formData.vehicleBrand === 'Ford' ? 'selected' : ''}>Ford</option>
+                                    <option value="Hyundai" ${formData.vehicleBrand === 'Hyundai' ? 'selected' : ''}>Hyundai</option>
+                                    <option value="Kia" ${formData.vehicleBrand === 'Kia' ? 'selected' : ''}>Kia</option>
+                                    <option value="Nissan" ${formData.vehicleBrand === 'Nissan' ? 'selected' : ''}>Nissan</option>
                                 </select>
                             </div>
                             <div>
@@ -118,7 +132,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
 
                         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
                             <div>
-                                <small style="color:var(--text-secondary);">Placa de la Moto *</small>
+                                <small style="color:var(--text-secondary);">Placa del vehículo *</small>
                                 <input type="text" id="reg-plate" value="${formData.vehiclePlate}" placeholder="Ej: AC9M11P" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
                             </div>
                             <div>
@@ -247,6 +261,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
                 return false;
             }
         } else if (currentStep === 2) {
+            formData.vehicleType = modal.querySelector('#reg-vehicle-type').value === 'CAR' ? 'CAR' : 'MOTO';
             formData.vehicleBrand = modal.querySelector('#reg-brand').value;
             formData.vehicleModel = modal.querySelector('#reg-model').value.trim();
             formData.vehiclePlate = modal.querySelector('#reg-plate').value.trim();
@@ -255,7 +270,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
             formData.licenseNumber = modal.querySelector('#reg-licno').value.trim();
 
             if (!formData.vehicleModel || !formData.vehiclePlate || !formData.licenseNumber) {
-                showToast('Por favor completa todos los datos de la moto y licencia', 'error');
+                showToast('Por favor completa todos los datos del vehículo y licencia', 'error');
                 return false;
             }
         }
@@ -270,6 +285,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
             lastName: formData.lastName,
             email: formData.email,
             phone: formData.phone,
+            vehicleType: formData.vehicleType,
             vehicleBrand: formData.vehicleBrand,
             vehicleModel: formData.vehicleModel,
             vehiclePlate: formData.vehiclePlate,
