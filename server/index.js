@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 4000;
 const serverDir = path.dirname(fileURLToPath(import.meta.url));
 const dataFile = process.env.DATA_FILE || path.join(serverDir, 'data', 'plus58express.sqlite');
 const jwtSecret = process.env.JWT_SECRET || 'plus58express-development-secret';
-const pricingConfig = {
+let pricingConfig = {
   ...DEFAULT_PRICING,
   bcvRate: Number(process.env.BCV_RATE || 0),
   parallelRate: Number(process.env.PARALLEL_RATE || 0)
@@ -97,7 +97,9 @@ const initialDatabase = {
   ],
   trips: [],
   notifications: [],
-  messages: []
+  messages: [],
+  supportMessages: [],
+  settings: []
 };
 
 fs.mkdirSync(path.dirname(dataFile), { recursive: true });
@@ -109,6 +111,8 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS trips (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS supportMessages (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
 `);
 
 function loadCollection(table) {
@@ -119,8 +123,13 @@ const database = {
   users: loadCollection('users'),
   trips: loadCollection('trips'),
   notifications: loadCollection('notifications'),
-  messages: loadCollection('messages')
+  messages: loadCollection('messages'),
+  supportMessages: loadCollection('supportMessages'),
+  settings: loadCollection('settings')
 };
+
+const storedPricing = database.settings.find(item => item.id === 'pricing');
+if (storedPricing?.value) pricingConfig = { ...pricingConfig, ...storedPricing.value };
 
 function ensureSeedCredentials() {
   const defaults = {
@@ -152,7 +161,7 @@ function ensureSeedCredentials() {
 function persistDatabase() {
   try {
     sqlite.exec('BEGIN IMMEDIATE');
-    for (const table of ['users', 'trips', 'notifications', 'messages']) {
+    for (const table of ['users', 'trips', 'notifications', 'messages', 'supportMessages', 'settings']) {
       sqlite.exec(`DELETE FROM ${table}`);
       const insert = sqlite.prepare(`INSERT INTO ${table} (id, payload) VALUES (?, ?)`);
       for (const item of database[table]) insert.run(item.id, JSON.stringify(item));
@@ -318,6 +327,133 @@ app.patch('/api/auth/me', requireAuth, (req, res) => {
 
 app.get('/api/users', requireAuth, requireRole('admin'), (req, res) => {
   res.json(database.users.map(publicUser));
+});
+
+app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const activeStatuses = ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'];
+  const completedToday = database.trips.filter(trip => trip.status === 'COMPLETED' && String(trip.completedAt || trip.closedAt || trip.updatedAt || '').startsWith(today));
+  const grossToday = completedToday.reduce((sum, trip) => sum + Number(trip.fareUSD || trip.fareEUR || trip.pricing?.fareUSD || 0), 0);
+  const drivers = database.users.filter(user => user.role === 'driver');
+  const ratings = database.trips.flatMap(trip => [trip.driverRating, trip.passengerRating]).filter(Number.isFinite);
+  res.json({
+    activeTrips: database.trips.filter(trip => activeStatuses.includes(trip.status)).length,
+    completedToday: completedToday.length,
+    grossToday: Math.round(grossToday * 100) / 100,
+    commissionToday: Math.round(grossToday * Number(pricingConfig.commissionRate || 0.15) * 100) / 100,
+    drivers: {
+      total: drivers.length,
+      available: drivers.filter(driver => ['AVAILABLE', 'ONLINE'].includes(driver.status)).length,
+      busy: drivers.filter(driver => ['BUSY', 'IN_TRIP'].includes(driver.status)).length,
+      offline: drivers.filter(driver => !['AVAILABLE', 'ONLINE', 'BUSY', 'IN_TRIP'].includes(driver.status)).length
+    },
+    averageRating: ratings.length ? Math.round(ratings.reduce((a, b) => a + b, 0) / ratings.length * 10) / 10 : null,
+    bcvRate: Number(pricingConfig.bcvRate || 0)
+  });
+});
+
+app.get('/api/drivers/nearby', requireAuth, requireRole('admin'), (req, res) => {
+  res.json(database.users.filter(user => user.role === 'driver').map(driver => ({
+    ...publicUser(driver),
+    ...(driver.location || {}),
+    driverId: driver.id,
+    driverName: `${driver.firstName || ''} ${driver.lastName || ''}`.trim()
+  })));
+});
+
+app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), (req, res) => {
+  const numberFields = ['nightMultiplier', 'peakMultiplier', 'bcvRate', 'parallelRate', 'commissionRate'];
+  const next = structuredClone(pricingConfig);
+  for (const key of numberFields) if (req.body[key] !== undefined) next[key] = Number(req.body[key]);
+  for (const type of ['MOTO', 'CAR']) {
+    if (!req.body.vehicleTypes?.[type]) continue;
+    next.vehicleTypes[type] = { ...next.vehicleTypes[type] };
+    for (const [key, value] of Object.entries(req.body.vehicleTypes[type])) next.vehicleTypes[type][key] = Number(value);
+  }
+  if (!Number.isFinite(next.bcvRate) || next.bcvRate < 0 || !Number.isFinite(next.commissionRate) || next.commissionRate < 0 || next.commissionRate > 1) {
+    return res.status(400).json({ error: 'INVALID_PRICING' });
+  }
+  pricingConfig = next;
+  const record = database.settings.find(item => item.id === 'pricing');
+  if (record) record.value = next;
+  else database.settings.push({ id: 'pricing', value: next });
+  persistDatabase();
+  io.to('admins').emit('admin:pricing_updated', next);
+  res.json(next);
+});
+
+app.get('/api/admin/finance', requireAuth, requireRole('admin'), (req, res) => {
+  const commissionRate = Number(pricingConfig.commissionRate || 0.15);
+  const transactions = database.trips.filter(trip => trip.status === 'COMPLETED').map(trip => {
+    const gross = Number(trip.fareUSD || trip.fareEUR || trip.pricing?.fareUSD || 0);
+    const commission = Math.round(gross * commissionRate * 100) / 100;
+    const driver = database.users.find(user => user.id === trip.driverId);
+    const passenger = database.users.find(user => user.id === trip.passengerId);
+    return { id: trip.id, date: trip.completedAt || trip.closedAt || trip.updatedAt, gross, commission, driverNet: Math.round((gross - commission) * 100) / 100, payoutStatus: trip.payoutStatus || 'PENDING', paymentMethod: trip.paymentMethod || 'EFECTIVO', driver: publicUser(driver), passenger: publicUser(passenger) };
+  }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  res.json({
+    bcvRate: Number(pricingConfig.bcvRate || 0), commissionRate, transactions,
+    summary: {
+      gross: transactions.reduce((s, t) => s + t.gross, 0),
+      commission: transactions.reduce((s, t) => s + t.commission, 0),
+      pending: transactions.filter(t => t.payoutStatus === 'PENDING').reduce((s, t) => s + t.driverNet, 0),
+      paid: transactions.filter(t => t.payoutStatus === 'PAID').reduce((s, t) => s + t.driverNet, 0)
+    }
+  });
+});
+
+app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), (req, res) => {
+  const trip = database.trips.find(item => item.id === req.params.id && item.status === 'COMPLETED');
+  if (!trip) return res.status(404).json({ error: 'COMPLETED_TRIP_NOT_FOUND' });
+  if (!['PAID', 'REJECTED', 'PENDING'].includes(req.body.status)) return res.status(400).json({ error: 'INVALID_PAYOUT_STATUS' });
+  trip.payoutStatus = req.body.status;
+  trip.payoutUpdatedAt = new Date().toISOString();
+  trip.payoutReference = req.body.reference || null;
+  persistDatabase();
+  const event = { tripId: trip.id, status: trip.payoutStatus, reference: trip.payoutReference };
+  io.to(`user:${trip.driverId}`).to('admins').emit('finance:payout_updated', event);
+  io.to(`user:${trip.driverId}`).emit('platform:notification', { title: trip.payoutStatus === 'PAID' ? 'Liquidación aprobada' : 'Liquidación actualizada', message: `El pago del viaje #${trip.id.slice(-6)} figura como ${trip.payoutStatus}.`, category: 'FINANCE', icon: '💵' });
+  res.json(event);
+});
+
+app.get('/api/support/threads', requireAuth, (req, res) => {
+  const messages = req.user.role === 'admin' ? database.supportMessages : database.supportMessages.filter(message => message.conversationUserId === req.user.id);
+  const grouped = new Map();
+  for (const message of messages) {
+    const id = message.conversationUserId;
+    if (!grouped.has(id)) grouped.set(id, []);
+    grouped.get(id).push(message);
+  }
+  res.json([...grouped].map(([userId, items]) => ({ user: publicUser(database.users.find(user => user.id === userId)), messages: items.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)), unread: items.filter(item => !item.read && item.senderRole !== req.user.role).length })));
+});
+
+app.post('/api/support/messages', requireAuth, (req, res) => {
+  const conversationUserId = req.user.role === 'admin' ? req.body.recipientId : req.user.id;
+  const target = database.users.find(user => user.id === conversationUserId && user.role !== 'admin');
+  if (!target || (!req.body.text?.trim() && !req.body.image)) return res.status(400).json({ error: 'INVALID_SUPPORT_MESSAGE' });
+  const message = { id: `support_${crypto.randomUUID()}`, conversationUserId, senderId: req.user.id, senderRole: req.user.role, text: String(req.body.text || '').trim(), image: req.body.image || null, createdAt: new Date().toISOString(), read: false };
+  database.supportMessages.push(message);
+  persistDatabase();
+  io.to('admins').to(`user:${conversationUserId}`).emit('support:message', { ...message, user: publicUser(target) });
+  res.status(201).json(message);
+});
+
+app.patch('/api/support/threads/:userId/read', requireAuth, requireRole('admin'), (req, res) => {
+  database.supportMessages.forEach(message => { if (message.conversationUserId === req.params.userId && message.senderRole !== 'admin') message.read = true; });
+  persistDatabase();
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), (req, res) => {
+  const role = ['all', 'driver', 'passenger'].includes(req.body.role) ? req.body.role : 'all';
+  if (!req.body.title?.trim() || !req.body.message?.trim()) return res.status(400).json({ error: 'INVALID_BROADCAST' });
+  const notification = { id: `notification_${crypto.randomUUID()}`, title: req.body.title.trim(), message: req.body.message.trim(), category: 'ANNOUNCEMENT', icon: '📢', targetRole: role, createdAt: new Date().toISOString() };
+  database.notifications.push(notification);
+  persistDatabase();
+  if (role === 'all') io.to('drivers').to('passengers').emit('platform:notification', notification);
+  else io.to(`${role}s`).emit('platform:notification', notification);
+  io.to('admins').emit('admin:broadcast_sent', notification);
+  res.status(201).json(notification);
 });
 
 app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (req, res) => {

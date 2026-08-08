@@ -2,6 +2,7 @@ import { icon } from '../../utils/icons.js';
 import { authService } from '../../services/mockAuth.js';
 import { db } from '../../services/mockDatabase.js';
 import { showToast } from '../../components/toast.js';
+import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 
 export function renderProfile(container) {
   const user = authService.getCurrentUser() || {
@@ -177,6 +178,8 @@ export function renderProfile(container) {
           </div>
         ` : ''}
 
+        <button id="passenger-support-btn" class="btn" style="width:100%;padding:14px;margin-bottom:12px;border-radius:18px;background:rgba(0,210,255,.12);border:1.5px solid var(--accent-secondary);color:var(--accent-secondary);font-weight:800;cursor:pointer">💬 Hablar con Soporte +58express</button>
+
         <!-- Clean Logout Button -->
         <div>
           <button id="profile-logout-btn" class="btn" style="
@@ -246,6 +249,8 @@ export function renderProfile(container) {
         renderView();
       });
     }
+
+    container.querySelector('#passenger-support-btn')?.addEventListener('click', () => document.body.appendChild(createAdminSupportChat(user)));
 
     // Logout Event
     container.querySelector('#profile-logout-btn').addEventListener('click', () => {

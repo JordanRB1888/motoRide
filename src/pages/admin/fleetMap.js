@@ -146,8 +146,9 @@ export function renderFleetMap(container) {
 
         function renderDriverMarker(d) {
             const status = (d.status || (d.isAvailable ? 'AVAILABLE' : d.isOnline ? 'ONLINE' : 'OFFLINE')).toUpperCase();
-            const lat = d.lat || d.latitude || 10.6427;
-            const lng = d.lng || d.longitude || -71.6125;
+            const lat = Number(d.lat ?? d.latitude);
+            const lng = Number(d.lng ?? d.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
             const heading = d.heading || 0;
             const speed = d.speed || 0;
             const battery = d.batteryLevel !== undefined && d.batteryLevel !== null ? `${d.batteryLevel}%` : 'N/A';
@@ -252,6 +253,17 @@ export function renderFleetMap(container) {
             }
         });
 
+        container.querySelector('#status-filter')?.addEventListener('change', event => {
+            const selected = event.target.value;
+            driversMap.forEach((driver, id) => {
+                const status = String(driver.status || 'OFFLINE').toUpperCase();
+                const visible = selected === 'all' || status === selected || (selected === 'IN_TRIP' && status === 'BUSY');
+                const marker = markers[id];
+                if (!marker) return;
+                if (visible && !map.hasLayer(marker)) marker.addTo(map);
+                if (!visible && map.hasLayer(marker)) marker.removeFrom(map);
+            });
+        });
+
     }, 150);
 }
-

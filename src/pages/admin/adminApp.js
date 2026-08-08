@@ -7,248 +7,36 @@ import { renderFinances } from './finances.js';
 import { renderAdminSupport } from './adminSupport.js';
 import { initThemeToggle } from '../../utils/themeToggle.js';
 import { createNotificationCenterModal } from '../../components/notificationCenterModal.js';
+import { notificationService } from '../../services/notificationService.js';
 import { socket } from '../../services/socketClient.js';
-import { eventLogger } from '../../utils/logger.js';
 import { icon } from '../../utils/icons.js';
 
 export function renderAdminApp(container) {
-    const admin = authService.getCurrentUser() || { firstName: 'Admin', role: 'admin' };
-    
-    container.innerHTML = `
-        <div class="admin-app">
-            <aside class="admin-sidebar" id="sidebar">
-                <div class="admin-logo">
-                    <img src="/logo.jpg" alt="Logo" style="width:32px; height:32px; border-radius:8px; border:1.5px solid var(--accent-primary); flex-shrink:0;">
-                    <div class="logo-text-full"><span class="accent-text" style="color:var(--accent-primary);">+58</span>express</div>
-                </div>
-                <nav class="admin-nav">
-                    <button class="nav-item active" data-target="dashboard"><span class="nav-icon" style="display:inline-flex;">${icon('grid', 18)}</span> <span class="nav-text">Dashboard</span></button>
-                    <button class="nav-item" data-target="fleet"><span class="nav-icon" style="display:inline-flex;">${icon('map', 18)}</span> <span class="nav-text">Mapa de Flota</span></button>
-                    <button class="nav-item" data-target="users"><span class="nav-icon" style="display:inline-flex;">${icon('users', 18)}</span> <span class="nav-text">Usuarios</span></button>
-                    <button class="nav-item" data-target="tariffs"><span class="nav-icon" style="display:inline-flex;">${icon('dollarSign', 18)}</span> <span class="nav-text">Tarifas</span></button>
-                    <button class="nav-item" data-target="finances"><span class="nav-icon" style="display:inline-flex;">${icon('trending', 18)}</span> <span class="nav-text">Finanzas</span></button>
-                    <button class="nav-item" data-target="support"><span class="nav-icon" style="display:inline-flex;">${icon('message', 18)}</span> <span class="nav-text">Soporte</span></button>
-                </nav>
-            </aside>
-            <main class="admin-main">
-                <header class="admin-header">
-                    <div class="header-left">
-                        <button class="mobile-menu-btn" id="menu-btn">☰</button>
-                        <h2 id="page-title">Dashboard</h2>
-                    </div>
-                    <div class="header-right" style="display:flex; align-items:center; gap:10px;">
-                        <button id="header-notif-btn-admin" style="
-                            background: rgba(255,193,7,0.15); border: 1.5px solid var(--accent-primary); color: var(--accent-primary);
-                            width: 36px; height: 36px; border-radius: 50%; display:flex; align-items:center; justify-content:center;
-                            cursor: pointer; position: relative;
-                        " title="Centro de Notificaciones">
-                            ${icon('bell', 18)}
-                            <span style="
-                                position: absolute; top: -3px; right: -3px; background: var(--danger); color: white;
-                                font-size: 0.65rem; font-weight: 900; width: 16px; height: 16px; border-radius: 50%;
-                                display: flex; align-items: center; justify-content: center; border: 1.5px solid #121824;
-                            ">3</span>
-                        </button>
-                        <div id="admin-theme-toggle-slot"></div>
-                        <span>Hola, ${admin?.firstName || 'Admin'}</span>
-                        <button class="logout-btn" id="logout-btn">Salir</button>
-                    </div>
-                </header>
-                <div class="admin-content" id="admin-content">
-                    <!-- Content injected here -->
-                </div>
-            </main>
-        </div>
-    `;
+  const admin = authService.getCurrentUser() || { id:'admin_1', firstName:'Admin', role:'admin' };
+  let overview = null;
+  const nav = [['dashboard','grid','Dashboard'],['fleet','map','Mapa de Flota'],['users','users','Usuarios'],['tariffs','dollarSign','Tarifas'],['finances','trending','Finanzas'],['support','message','Soporte']];
+  container.innerHTML = `<div class="admin-app"><aside class="admin-sidebar" id="sidebar"><div class="admin-logo"><img src="/logo.jpg" alt="+58express" style="width:32px;height:32px;border-radius:8px"><div class="logo-text-full"><span class="accent-text">+58</span>express</div></div><nav class="admin-nav">${nav.map(([id,ic,label],index)=>`<button class="nav-item ${index?'':'active'}" data-target="${id}"><span class="nav-icon">${icon(ic,18)}</span><span class="nav-text">${label}</span></button>`).join('')}</nav></aside><main class="admin-main"><header class="admin-header"><div class="header-left"><button class="mobile-menu-btn" id="menu-btn">☰</button><h2 id="page-title">Dashboard</h2></div><div class="header-right" style="display:flex;align-items:center;gap:10px"><button id="admin-bell" title="Notificaciones" style="position:relative;width:38px;height:38px;border-radius:50%;border:1px solid var(--accent-primary);background:transparent;color:var(--accent-primary)">${icon('bell',18)}<span id="admin-badge" style="position:absolute;right:-4px;top:-4px;background:var(--danger);color:white;border-radius:10px;padding:1px 5px;font-size:.65rem"></span></button><div id="theme"></div><span>Hola, ${admin.firstName}</span><button class="logout-btn" id="logout">Salir</button></div></header><div class="admin-content" id="admin-content"></div></main></div>`;
+  container.querySelector('#theme').appendChild(initThemeToggle());
+  const content = container.querySelector('#admin-content');
+  const title = container.querySelector('#page-title');
+  const updateBadge = () => { const count=notificationService.getUnreadCount(admin.id||'admin_1');const badge=container.querySelector('#admin-badge');badge.textContent=count>99?'99+':count;badge.style.display=count?'block':'none'; };
+  updateBadge(); window.addEventListener('58express:notifications-updated',updateBadge);
+  container.querySelector('#admin-bell').onclick=()=>container.appendChild(createNotificationCenterModal(admin));
+  container.querySelector('#menu-btn').onclick=()=>container.querySelector('#sidebar').classList.toggle('collapsed');
+  container.querySelector('#logout').onclick=()=>{authService.logout();window.navigateTo('#/');};
 
-    const adminThemeSlot = container.querySelector('#admin-theme-toggle-slot');
-    if (adminThemeSlot) adminThemeSlot.appendChild(initThemeToggle());
-
-    const adminNotifBtn = container.querySelector('#header-notif-btn-admin');
-    if (adminNotifBtn) {
-        adminNotifBtn.addEventListener('click', () => {
-            const modal = createNotificationCenterModal(admin);
-            container.appendChild(modal);
-        });
-    }
-
-    const contentArea = container.querySelector('#admin-content');
-    const pageTitle = container.querySelector('#page-title');
-    const navItems = container.querySelectorAll('.nav-item');
-    const sidebar = container.querySelector('#sidebar');
-    
-    container.querySelector('#menu-btn').addEventListener('click', () => {
-        sidebar.classList.toggle('collapsed');
-    });
-
-    container.querySelector('#logout-btn').addEventListener('click', () => {
-        authService.logout();
-        window.navigateTo('#/');
-    });
-
-    function renderDashboard() {
-        const allTrips = db.getCollection('trips') || [];
-        const allUsers = db.getCollection('users') || [];
-        const activeTrips = allTrips.filter(t => ['SEARCHING','DRIVER_ASSIGNED','DRIVER_EN_ROUTE','DRIVER_ARRIVED','IN_TRIP'].includes(t.status)).length;
-        const onlineDrivers = allUsers.filter(u => u.role === 'driver' && (u.status === 'ONLINE' || u.status === 'IN_TRIP')).length;
-        const dayIncomeEUR = 245.50;
-        const bcvRate = 874.50;
-        const dayIncomeVES = dayIncomeEUR * bcvRate;
-        
-        contentArea.innerHTML = `
-            <div class="dashboard-view">
-                <div style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                    <div>
-                        <h3 style="margin: 0; color: var(--text-primary); font-weight: 800;">Panel de Control Administrativo</h3>
-                        <small style="color: var(--text-secondary);">Maracaibo, ${new Date().toLocaleDateString('es-VE')}</small>
-                    </div>
-                    <span class="badge badge-warning" style="font-size: 0.85rem; padding: 8px 14px; border: 1px solid var(--accent-primary);">
-                        Tasa BCV Euro: Bs. ${bcvRate.toFixed(2)}
-                    </span>
-                </div>
-
-                <div class="kpi-grid">
-                    <div class="kpi-card cyan diorama-card-3d">
-                        <span class="kpi-label">Viajes Activos</span>
-                        <span class="kpi-value">${activeTrips}</span>
-                    </div>
-                    <div class="kpi-card green diorama-card-3d">
-                        <span class="kpi-label">Conductores Activos</span>
-                        <span class="kpi-value">${onlineDrivers}</span>
-                    </div>
-                    <div class="kpi-card yellow diorama-card-3d">
-                        <span class="kpi-label">Ingresos del Día (€ EUR)</span>
-                        <span class="kpi-value">€${dayIncomeEUR.toFixed(2)}</span>
-                        <small style="color:var(--text-secondary); margin-top:4px;">~ Bs. ${dayIncomeVES.toLocaleString('es-VE', {minimumFractionDigits:2})}</small>
-                    </div>
-                    <div class="kpi-card orange diorama-card-3d">
-                        <span class="kpi-label">Calificación Promedio</span>
-                        <span class="kpi-value" style="display:flex; align-items:center; gap:4px;">4.8 ${icon('star', 16, 'fill-star')}</span>
-                    </div>
-                </div>
-                
-                <h4 style="color: var(--text-primary); font-weight: 800; margin-bottom: 14px;">Últimos Viajes Registrados</h4>
-                <div class="data-table-container diorama-card-3d">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Pasajero</th>
-                                <th>Conductor</th>
-                                <th>Origen → Destino</th>
-                                <th>Tarifa (€ EUR)</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${allTrips.slice(0, 10).map(t => `
-                                <tr>
-                                    <td>#${(t.id || '').substring(0, 5)}</td>
-                                    <td>${t.passengerId || 'N/A'}</td>
-                                    <td>${t.driverId || 'N/A'}</td>
-                                    <td>${t.origin?.address || 'N/A'} → ${t.destination?.address || 'N/A'}</td>
-                                    <td>€${t.fareEUR || t.fareUSD || '4.50'}</td>
-                                    <td><span class="badge badge-${(t.status || '').toLowerCase()}">${t.status || 'COMPLETADO'}</span></td>
-                                </tr>
-                            `).join('') || `
-                                <tr>
-                                    <td>#TR-001</td>
-                                    <td>Jordan Pérez</td>
-                                    <td>Carlos Mendoza</td>
-                                    <td>Basílica de Chiquinquirá → Sambil Maracaibo</td>
-                                    <td style="color:var(--accent-primary); font-weight:800;">€4.50 EUR</td>
-                                    <td><span class="badge badge-success">COMPLETADO</span></td>
-                                </tr>
-                                <tr>
-                                    <td>#TR-002</td>
-                                    <td>Valentina Rojas</td>
-                                    <td>María González</td>
-                                    <td>Vereda del Lago → Calle 72 5 de Julio</td>
-                                    <td style="color:var(--accent-primary); font-weight:800;">€3.20 EUR</td>
-                                    <td><span class="badge badge-warning">EN RUTA</span></td>
-                                </tr>
-                            `}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    function switchTab(target) {
-        navItems.forEach(btn => btn.classList.remove('active'));
-        const activeNavBtn = container.querySelector(`[data-target="${target}"]`);
-        if (activeNavBtn) activeNavBtn.classList.add('active');
-        
-        contentArea.innerHTML = '';
-        if (window.innerWidth <= 768) sidebar.classList.remove('open');
-
-        switch(target) {
-            case 'dashboard':
-                pageTitle.textContent = 'Dashboard';
-                renderDashboard();
-                break;
-            case 'fleet':
-                pageTitle.textContent = 'Mapa de Flota';
-                renderFleetMap(contentArea);
-                break;
-            case 'users':
-                pageTitle.textContent = 'Gestión de Usuarios';
-                renderUsersManagement(contentArea);
-                break;
-            case 'tariffs':
-                pageTitle.textContent = 'Configuración de Tarifas';
-                renderTariffsConfig(contentArea);
-                break;
-            case 'finances':
-                pageTitle.textContent = 'Finanzas';
-                renderFinances(contentArea);
-                break;
-            case 'support':
-                pageTitle.textContent = 'Centro de Soporte';
-                renderAdminSupport(contentArea);
-                break;
-        }
-    }
-
-    navItems.forEach(btn => {
-        btn.addEventListener('click', () => switchTab(btn.dataset.target));
-    });
-
-    // Real-Time Socket Subscription for Admin Live Feed
-    socket.on('rideRequested', (data) => {
-        if (data?.id && !db.findById('trips', data.id)) {
-            db.insert('trips', { ...data, status: data.status || 'SEARCHING' });
-        }
-        eventLogger.log('ADMIN', `Panel Admin detectó nueva solicitud de viaje en Maracaibo [${data?.id}]`);
-        const activeNav = container.querySelector('.nav-item.active');
-        if (activeNav && activeNav.dataset.target === 'dashboard') {
-            renderDashboard();
-        }
-    });
-
-    socket.on('tripStatusUpdated', (data) => {
-        if (data?.tripId) {
-            db.update('trips', data.tripId, {
-                status: data.status,
-                driverId: data.driver?.id,
-                driver: data.driver
-            });
-        }
-        eventLogger.log('ADMIN', `Panel Admin detectó actualización de estado de viaje ➔ ${data?.status}`, data);
-        const activeNav = container.querySelector('.nav-item.active');
-        if (activeNav && activeNav.dataset.target === 'dashboard') {
-            renderDashboard();
-        }
-    });
-
-    // Init
-    renderDashboard();
-
-    Promise.all([apiService.get('/users'), apiService.get('/trips')]).then(([users, trips]) => {
-        if (Array.isArray(users)) db.setCollection('users', users);
-        if (Array.isArray(trips)) db.setCollection('trips', trips);
-        const activeNav = container.querySelector('.nav-item.active');
-        if (activeNav?.dataset.target === 'dashboard') renderDashboard();
-    });
+  const dashboard = () => {
+    const trips=db.getCollection('trips')||[], users=db.getCollection('users')||[];
+    const active=overview?.activeTrips??trips.filter(t=>['SEARCHING','DRIVER_ASSIGNED','EN_ROUTE','ARRIVED','IN_PROGRESS','IN_TRIP'].includes(t.status)).length;
+    const drivers=overview?overview.drivers.available+overview.drivers.busy:users.filter(u=>u.role==='driver'&&['AVAILABLE','ONLINE','BUSY','IN_TRIP'].includes(u.status)).length;
+    const gross=Number(overview?.grossToday||0),bcv=Number(overview?.bcvRate||0);
+    content.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0">Operación en tiempo real</h2><small style="color:var(--text-secondary)">Maracaibo · ${new Date().toLocaleString('es-VE')}</small></div><span class="badge badge-warning">BCV Bs. ${bcv.toFixed(2)}</span></div><div class="kpi-grid" style="margin:20px 0"><div class="kpi-card cyan"><span class="kpi-label">Viajes activos</span><b class="kpi-value">${active}</b></div><div class="kpi-card green"><span class="kpi-label">Conductores activos</span><b class="kpi-value">${drivers}</b></div><div class="kpi-card yellow"><span class="kpi-label">Facturación hoy</span><b class="kpi-value">$${gross.toFixed(2)}</b><small>Bs. ${(gross*bcv).toFixed(2)}</small></div><div class="kpi-card orange"><span class="kpi-label">Calificación</span><b class="kpi-value">${overview?.averageRating??'—'}</b></div></div><div class="data-table-container"><table class="data-table"><thead><tr><th>Viaje</th><th>Pasajero</th><th>Conductor</th><th>Ruta</th><th>Tarifa</th><th>Estado</th></tr></thead><tbody>${trips.slice().reverse().slice(0,12).map(t=>`<tr><td>#${t.id.slice(-7)}</td><td>${users.find(u=>u.id===t.passengerId)?.firstName||t.passengerId}</td><td>${users.find(u=>u.id===t.driverId)?.firstName||'Sin asignar'}</td><td>${t.pickup?.address||'Origen'} → ${t.destination?.address||'Destino'}</td><td>$${Number(t.fareUSD||t.fareEUR||t.pricing?.fareUSD||0).toFixed(2)}</td><td><span class="badge">${t.status}</span></td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center">No hay viajes registrados.</td></tr>'}</tbody></table></div>`;
+  };
+  const renderers={dashboard, fleet:()=>renderFleetMap(content), users:()=>renderUsersManagement(content), tariffs:()=>renderTariffsConfig(content), finances:()=>renderFinances(content), support:()=>renderAdminSupport(content)};
+  const switchTab=id=>{container.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.target===id));title.textContent=nav.find(item=>item[0]===id)?.[2]||id;content.innerHTML='';renderers[id]?.();};
+  container.querySelectorAll('.nav-item').forEach(button=>button.onclick=()=>switchTab(button.dataset.target));
+  const refresh=async()=>{const [users,trips,stats]=await Promise.all([apiService.get('/users'),apiService.get('/trips'),apiService.get('/admin/overview')]);if(Array.isArray(users))db.setCollection('users',users);if(Array.isArray(trips))db.setCollection('trips',trips);overview=stats;if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();};
+  socket.on('rideRequested',data=>{notificationService.notify(admin.id||'admin_1',{title:'Nueva solicitud de viaje',message:`Solicitud #${data?.id?.slice(-6)||''}`,category:'TRIP',icon:'🏍️'});refresh();});
+  socket.on('tripStatusUpdated',refresh); socket.on('admin:driver_updated',refresh); socket.on('finance:payout_updated',refresh);
+  dashboard();refresh();
 }

@@ -4,6 +4,18 @@ import { socket } from './socketClient.js';
 class NotificationService {
     constructor() {
         this.prefix = '58express_notifications_';
+        socket.on('platform:notification', (payload = {}) => {
+            let session = null;
+            try { session = JSON.parse(localStorage.getItem('58express_session') || 'null'); } catch {}
+            const user = session?.user;
+            if (!user?.id || (payload.targetRole && payload.targetRole !== 'all' && payload.targetRole !== user.role)) return;
+            this.notify(user.id, {
+                title: payload.title || 'Aviso de +58express',
+                message: payload.message || '',
+                category: payload.category || 'SYSTEM',
+                icon: payload.icon || '🔔'
+            });
+        });
     }
 
     getNotifications(userId) {
