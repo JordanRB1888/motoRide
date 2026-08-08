@@ -387,7 +387,7 @@ html.theme-light .passenger-app{--mobility-panel:rgba(255,255,255,.95);--mobilit
 .passenger-app:after{background:linear-gradient(180deg,rgba(2,9,20,.18),transparent 43%,rgba(2,9,20,.68));z-index:2}
 .passenger-mobile-header{top:max(10px,env(safe-area-inset-top));left:10px;right:10px;height:66px;padding:0 10px;border:0;border-radius:0;background:linear-gradient(180deg,rgba(2,9,20,.98),rgba(2,9,20,.89));box-shadow:0 12px 28px rgba(0,0,0,.3)}
 .passenger-profile-shortcut{left:12px;width:42px;height:42px;background:#101927;border:1px solid rgba(255,196,0,.5);color:var(--pwa-yellow)}
-.passenger-brand-lockup{width:150px;height:52px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.passenger-brand-lockup{width:150px;height:52px;display:flex;align-items:center;justify-content:center;overflow:visible}
 .passenger-brand-lockup img{display:block;width:100%;max-width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 3px 10px rgba(255,196,0,.13))}
 .passenger-header-actions{right:10px}.passenger-header-icon{background:transparent;border-color:rgba(148,163,184,.22)}
 .passenger-header-actions #passenger-support-shortcut{display:none}
