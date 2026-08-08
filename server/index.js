@@ -499,6 +499,7 @@ function dispatchTripToDrivers(trip) {
     .filter(u =>
       u.role === 'driver' &&
       u.status === 'AVAILABLE' &&
+      driverRegistry.has(u.id) &&
       !(trip.excludedDriverIds || []).includes(u.id) &&
       Number.isFinite(u.location?.lat) &&
       Number.isFinite(u.location?.lng)
