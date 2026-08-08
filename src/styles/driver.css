@@ -413,3 +413,14 @@ html.theme-light .driver-app{--cockpit:rgba(255,255,255,.95);--cockpit-line:rgba
 .offline-overlay{bottom:82px!important;border-color:rgba(255,196,0,.3);background:linear-gradient(160deg,rgba(7,17,30,.99),rgba(3,11,21,.99))}.btn-connect{background:linear-gradient(135deg,#ffd329,#ffb300)!important;color:#06101c!important}
 @media(max-width:360px){.driver-top-container{left:7px;right:7px}.driver-brand-lockup{width:105px}.stats-bar{height:70px}.online-overlay{width:72%!important}}
 @media(min-width:700px){.driver-header{height:72px;padding-top:17px}.driver-brand-lockup{height:46px}.driver-top-container{top:8px!important}.stats-bar{height:80px}.online-overlay{top:221px!important}}
+
+/* Header collision guard: avatar | brand | controls */
+.driver-header{display:grid!important;grid-template-columns:43px minmax(78px,1fr) auto!important;align-items:center!important;column-gap:7px!important}
+.driver-avatar-info{grid-column:1!important;width:43px!important;max-width:43px!important;margin:0!important}
+.driver-brand-lockup{position:static!important;grid-column:2!important;justify-self:center!important;left:auto!important;top:auto!important;transform:none!important;width:98px!important;max-width:98px!important;height:45px!important;overflow:hidden!important}
+.driver-brand-lockup img{width:170%!important;max-width:none!important;height:auto!important;display:block!important}
+.driver-header-actions{position:static!important;grid-column:3!important;justify-self:end!important;margin:0!important;gap:4px!important;min-width:0!important}
+#header-notif-btn-driver,.driver-header-actions .theme-toggle-btn{width:35px!important;height:35px!important;flex:0 0 35px!important}
+.driver-header-actions .online-toggle-container{display:flex!important;align-items:center!important;flex:0 0 auto!important}
+.driver-header-actions .online-toggle-switch{width:43px!important;height:26px!important}
+@media(max-width:365px){.driver-header{grid-template-columns:39px minmax(66px,1fr) auto!important;column-gap:4px!important;padding-inline:7px!important}.driver-avatar-info{width:39px!important}.driver-avatar{width:37px!important;height:37px!important}.driver-brand-lockup{width:80px!important;max-width:80px!important}.driver-brand-lockup img{width:175%!important}#header-notif-btn-driver,.driver-header-actions .theme-toggle-btn{width:32px!important;height:32px!important;flex-basis:32px!important}.driver-header-actions .online-toggle-switch{width:39px!important}}
