@@ -53,7 +53,7 @@ export function renderPassengerApp(container) {
         <button class="passenger-profile-shortcut" type="button" aria-label="Abrir perfil">
           <span>${(user.firstName || user.name || 'P').charAt(0)}</span>
         </button>
-        <div class="passenger-brand-lockup"><strong><b>+58</b>express</strong><small>Muévete por Maracaibo</small></div>
+        <div class="passenger-brand-lockup"><img src="/brand-logo-v2.png" alt="+58 Express"></div>
         <div class="passenger-header-actions">
           <button id="passenger-support-shortcut" class="passenger-header-icon" type="button" aria-label="Abrir soporte">${icon('message', 18)}</button>
           <button id="header-notif-btn-passenger" class="passenger-header-icon" type="button" title="Centro de Notificaciones">
@@ -66,10 +66,24 @@ export function renderPassengerApp(container) {
       
       <!-- Top Search Bar -->
       <div class="top-search-bar" id="top-search-bar">
+        <span class="passenger-dock-handle" aria-hidden="true"></span>
         <span class="passenger-search-title">¿A dónde vamos?</span>
         <div class="search-input-wrapper">
           <div class="search-icon">${icon('search')}</div>
-          <input type="text" id="destination-input" placeholder="¿A dónde vas en Maracaibo?" readonly>
+          <input type="text" id="destination-input" placeholder="Ingresa tu destino" readonly>
+        </div>
+        <div class="passenger-quick-places" aria-label="Destinos frecuentes">
+          <button type="button" class="quick-place">${icon('home', 16)}<span><b>Casa</b><small>Ir</small></span></button>
+          <button type="button" class="quick-place">${icon('briefcase', 16)}<span><b>Trabajo</b><small>Ir</small></span></button>
+          <button type="button" class="quick-place">${icon('mapPin', 16)}<span><b>Centro Sambil</b><small>Ir</small></span></button>
+        </div>
+        <div class="passenger-vehicle-selector" aria-label="Tipo de servicio">
+          <button type="button" class="vehicle-choice active" data-vehicle="MOTO"><span class="vehicle-art">🏍️</span><span><b>Moto</b><small>1 pasajero</small><em>Desde $1.50</em></span></button>
+          <button type="button" class="vehicle-choice" data-vehicle="CAR"><span class="vehicle-art">🚙</span><span><b>Auto</b><small>1–4 pasajeros</small><em>Desde $2.50</em></span></button>
+        </div>
+        <div class="passenger-dock-actions">
+          <button type="button" id="passenger-security-btn">${icon('shield', 19)} Seguridad</button>
+          <button type="button" id="passenger-dock-chat-btn">${icon('message', 19)} Chat</button>
         </div>
       </div>
 
@@ -274,6 +288,22 @@ export function renderPassengerApp(container) {
   const searchInput = container.querySelector('#destination-input');
   searchInputWrapper.addEventListener('click', openSearchSheet);
   searchInput.addEventListener('click', openSearchSheet);
+
+  container.querySelectorAll('.quick-place').forEach(button => button.addEventListener('click', openSearchSheet));
+  container.querySelectorAll('.vehicle-choice').forEach(button => {
+    button.addEventListener('click', () => {
+      selectedRideType = button.dataset.vehicle || 'MOTO';
+      container.querySelectorAll('.vehicle-choice').forEach(item => item.classList.toggle('active', item === button));
+    });
+  });
+  container.querySelector('#passenger-security-btn')?.addEventListener('click', () => {
+    if (currentTrip) openSosModal();
+    else showToast('El centro de seguridad estará disponible durante tu viaje', 'info');
+  });
+  container.querySelector('#passenger-dock-chat-btn')?.addEventListener('click', () => {
+    if (currentTrip && currentDriver) openChatModal();
+    else document.body.appendChild(createAdminSupportChat(user));
+  });
 
   const menuBtn = container.querySelector('.menu-btn');
   if (menuBtn) menuBtn.addEventListener('click', openProfileMenu);

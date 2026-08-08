@@ -13,7 +13,7 @@ export function renderLanding(container) {
             <div class="landing-card glass-panel" style="max-width: 460px;">
                 <div class="landing-header">
                     <div style="width: 96px; height: 96px; margin: 0 auto 16px; border-radius: 26px; overflow: hidden; border: 2.5px solid var(--accent-primary); box-shadow: 0 15px 35px rgba(255,193,7,0.35); background: #0A0F18;">
-                        <img src="/logo.jpg" alt="+58express Logo" style="width:100%; height:100%; object-fit:cover; display:block;">
+                        <img src="/app-icon-v2.png" alt="+58 Express" style="width:100%; height:100%; object-fit:cover; display:block;">
                     </div>
                     <h1 class="logo-text" style="font-size: 2.2rem; font-weight: 900; margin-bottom: 4px; letter-spacing: -0.5px;">
                         <span class="accent-text" style="color:var(--accent-primary);">+58</span>express

@@ -29,7 +29,7 @@ export function createDigitalReceiptModal({ trip, driver, passenger, onClose }) 
         <!-- Header -->
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px dashed var(--border-color); padding-bottom: 16px; margin-bottom: 16px;">
             <div style="display:flex; align-items:center; gap: 10px;">
-                <img src="/logo.jpg" style="width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--accent-primary);" />
+                <img src="/app-icon-v2.png" style="width: 38px; height: 38px; object-fit:cover; border-radius: 10px; border: 1px solid var(--accent-primary);" />
                 <div>
                     <h3 style="color: var(--text-primary); font-size: 1.1rem; font-weight: 900; margin: 0;">+58express Maracaibo</h3>
                     <small style="color: var(--text-secondary); font-size: 0.78rem;">Comprobante Digital de Viaje</small>

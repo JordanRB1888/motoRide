@@ -1,19 +1,19 @@
 {
-  "name": "+58express — Tu Moto al Instante 🇻🇪",
-  "short_name": "+58express",
-  "description": "Aplicación oficial de mototaxi y servicio express en Maracaibo, Venezuela",
+  "name": "+58 Express — Movilidad en Maracaibo",
+  "short_name": "+58 Express",
+  "description": "Aplicación de motos y automóviles en Maracaibo, Venezuela",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0A0F18",
-  "theme_color": "#FFC107",
+  "background_color": "#020914",
+  "theme_color": "#FFC400",
   "lang": "es-VE",
   "categories": ["travel", "transportation"],
   "icons": [
     {
-      "src": "/logo.jpg",
-      "sizes": "2048x2048",
-      "type": "image/jpeg",
+      "src": "/app-icon-v2.png",
+      "sizes": "1536x1536",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

@@ -14,7 +14,7 @@ export function createBrandLogo({ size = 80, showText = true } = {}) {
             display: flex; align-items: center; justify-content: center; overflow: hidden;
             position: relative; flex-shrink: 0;
         ">
-            <img src="/app-logo.png" alt="+58express Logo" style="width: 100%; height: 100%; object-fit: cover; border-radius: 18px;" />
+            <img src="/app-icon-v2.png" alt="+58 Express" style="width: 100%; height: 100%; object-fit: cover; border-radius: 18px;" />
         </div>
         ${showText ? `
             <div style="text-align: left;">

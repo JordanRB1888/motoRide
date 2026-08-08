@@ -100,7 +100,7 @@ class NotificationService {
                     if (reg && reg.showNotification) {
                         await reg.showNotification(title, {
                             body: message,
-                            icon: '/logo.jpg',
+                            icon: '/app-icon-v2.png',
                             badge: '/notification-moto-badge.svg',
                             vibrate: [300, 100, 300],
                             ...options
@@ -110,7 +110,7 @@ class NotificationService {
                 }
                 new Notification(title, {
                     body: message,
-                    icon: '/logo.jpg',
+                    icon: '/app-icon-v2.png',
                     badge: '/notification-moto-badge.svg',
                     ...options
                 });

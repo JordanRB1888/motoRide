@@ -1,8 +1,9 @@
-const CACHE_NAME = '58express-pwa-v5';
+const CACHE_NAME = '58express-pwa-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/logo.jpg',
+  '/app-icon-v2.png',
+  '/brand-logo-v2.png',
   '/notification-moto-badge.svg',
   '/manifest.json'
 ];
@@ -77,7 +78,7 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body || 'Entra a la app para aceptar el viaje.',
-    icon: '/logo.jpg',
+    icon: '/app-icon-v2.png',
     badge: '/notification-moto-badge.svg',
     vibrate: [300, 100, 300, 100, 300],
     data: { url: '/#/driver' },
