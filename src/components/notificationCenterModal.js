@@ -8,201 +8,137 @@ export function createNotificationCenterModal(user, onClose) {
     let filterCategory = 'ALL';
 
     const overlay = document.createElement('div');
-    overlay.className = 'diorama-card-3d fade-in';
-    overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 25000;
-        background: rgba(10, 15, 24, 0.92); backdrop-filter: blur(20px);
-        display: flex; align-items: center; justify-content: center; padding: 16px;
-    `;
+    overlay.className = 'notification-center-overlay fade-in';
 
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-        width: 100%; max-width: 460px; height: 600px; max-height: 88vh;
-        background: var(--surface-card); border-radius: 28px;
-        border: 2px solid var(--accent-primary);
-        box-shadow: 0 30px 70px rgba(0,0,0,0.8), 0 0 35px rgba(255,193,7,0.3);
-        display: flex; flex-direction: column; overflow: hidden;
-        animation: dioramaLand 0.35s ease-out;
-    `;
+    const modal = document.createElement('section');
+    modal.className = 'notification-center-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Centro de Notificaciones');
 
     const updateHeaderBadges = () => {
         const unreadCount = notificationService.getUnreadCount(userId);
-        const passBadge = document.querySelector('#notif-badge-passenger');
-        if (passBadge) {
-            passBadge.textContent = unreadCount;
-            passBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
-        }
-        const driverBadge = document.querySelector('#header-notif-btn-driver span');
-        if (driverBadge) {
-            driverBadge.textContent = unreadCount;
-            driverBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
-        }
-        const adminBadge = document.querySelector('#header-notif-btn-admin span');
-        if (adminBadge) {
-            adminBadge.textContent = unreadCount;
-            adminBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
-        }
+        ['#notif-badge-passenger', '#header-notif-btn-driver span', '#header-notif-btn-admin span'].forEach(selector => {
+            const badge = document.querySelector(selector);
+            if (!badge) return;
+            badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+            badge.style.display = unreadCount > 0 ? 'flex' : 'none';
+        });
+    };
+
+    const closeModal = () => {
+        window.removeEventListener('58express:notifications-updated', liveUpdateHandler);
+        overlay.remove();
+        onClose?.();
     };
 
     const render = () => {
         let notifications = notificationService.getNotifications(userId);
-        if (filterCategory !== 'ALL') {
-            notifications = notifications.filter(n => n.category === filterCategory);
-        }
+        if (filterCategory !== 'ALL') notifications = notifications.filter(item => item.category === filterCategory);
 
         const isMuted = audioEffects.isMuted();
+        const unreadCount = notificationService.getUnreadCount(userId);
 
         modal.innerHTML = `
-            <!-- Header -->
-            <div style="padding: 16px 20px; background: var(--surface-elevated); border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-                <div style="display:flex; align-items:center; gap: 10px;">
-                    <div style="width:38px; height:38px; border-radius:50%; background:rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-primary);">
-                        ${icon('bell', 20)}
-                    </div>
-                    <div>
-                        <strong style="display:block; color:var(--text-primary); font-size: 1.05rem;">Centro de Notificaciones</strong>
-                        <small style="color:var(--text-secondary); font-size: 0.78rem;">Avisos, alertas de carreras y finanzas</small>
+            <header class="notification-center-header">
+                <div class="notification-center-heading">
+                    <div class="notification-center-bell">${icon('bell', 21)}</div>
+                    <div class="notification-center-title">
+                        <strong>Centro de Notificaciones</strong>
+                        <small>Avisos, alertas de carreras y finanzas</small>
                     </div>
                 </div>
-                
-                <div style="display:flex; align-items:center; gap: 8px;">
-                    <button id="btn-toggle-sound" style="
-                        padding: 6px 12px; border-radius: 14px; font-size: 0.78rem; font-weight: 800; cursor: pointer;
-                        background: ${isMuted ? 'rgba(255,77,77,0.15)' : 'rgba(0,230,118,0.15)'};
-                        color: ${isMuted ? 'var(--danger)' : 'var(--success)'};
-                        border: 1px solid ${isMuted ? 'var(--danger)' : 'var(--success)'};
-                    " title="Alternar Sonidos Neón">
-                        ${isMuted ? 'Silenciado' : 'Sonido Activado'}
+                <div class="notification-center-actions">
+                    <button id="btn-toggle-sound" class="notification-sound-toggle ${isMuted ? 'muted' : ''}" title="Alternar sonidos">
+                        ${icon(isMuted ? 'volumeX' : 'volume2', 15)}
+                        <span>${isMuted ? 'Silenciado' : 'Sonido activado'}</span>
                     </button>
-                    <button id="close-notif-btn" style="color:var(--text-secondary); background:none; border:none; cursor:pointer; display:flex; align-items:center; padding:4px;">
-                        ${icon('close', 20)}
-                    </button>
+                    <button id="close-notif-btn" class="notification-close" aria-label="Cerrar">${icon('close', 20)}</button>
                 </div>
-            </div>
+                ${unreadCount > 0 ? `<div class="notification-unread-summary"><strong>${unreadCount}</strong><span>${unreadCount === 1 ? 'nueva' : 'nuevas'}</span></div>` : ''}
+            </header>
 
-            <!-- Category Filter Bar -->
-            <div style="padding: 10px 16px; background: rgba(255,193,7,0.04); display:flex; gap: 6px; overflow-x:auto; border-bottom: 1px solid var(--border-color);">
-                <button class="cat-filter-btn" data-cat="ALL" style="
-                    padding: 6px 12px; border-radius: 14px; font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer;
-                    background: ${filterCategory === 'ALL' ? 'var(--accent-primary)' : 'var(--surface-card)'};
-                    color: ${filterCategory === 'ALL' ? '#121824' : 'var(--text-primary)'};
-                    border: 1px solid var(--border-color);
-                ">Todas</button>
+            <nav class="notification-category-tabs" aria-label="Filtrar notificaciones">
+                <button class="cat-filter-btn ${filterCategory === 'ALL' ? 'active' : ''}" data-cat="ALL">${icon('grid', 14)} Todas</button>
+                <button class="cat-filter-btn trip ${filterCategory === 'TRIP' ? 'active' : ''}" data-cat="TRIP">${icon('navigation', 14)} Carreras</button>
+                <button class="cat-filter-btn finance ${filterCategory === 'FINANCE' ? 'active' : ''}" data-cat="FINANCE">${icon('dollarSign', 14)} Finanzas</button>
+                <button class="cat-filter-btn announcement ${filterCategory === 'ANNOUNCEMENT' ? 'active' : ''}" data-cat="ANNOUNCEMENT">${icon('bell', 14)} Anuncios</button>
+            </nav>
 
-                <button class="cat-filter-btn" data-cat="TRIP" style="
-                    padding: 6px 12px; border-radius: 14px; font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer;
-                    background: ${filterCategory === 'TRIP' ? 'var(--accent-secondary)' : 'var(--surface-card)'};
-                    color: ${filterCategory === 'TRIP' ? '#121824' : 'var(--accent-secondary)'};
-                    border: 1px solid var(--border-color);
-                ">Carreras</button>
-
-                <button class="cat-filter-btn" data-cat="FINANCE" style="
-                    padding: 6px 12px; border-radius: 14px; font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer;
-                    background: ${filterCategory === 'FINANCE' ? 'var(--success)' : 'var(--surface-card)'};
-                    color: ${filterCategory === 'FINANCE' ? '#121824' : 'var(--success)'};
-                    border: 1px solid var(--border-color);
-                ">Finanzas</button>
-
-                <button class="cat-filter-btn" data-cat="ANNOUNCEMENT" style="
-                    padding: 6px 12px; border-radius: 14px; font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer;
-                    background: ${filterCategory === 'ANNOUNCEMENT' ? 'var(--warning)' : 'var(--surface-card)'};
-                    color: ${filterCategory === 'ANNOUNCEMENT' ? '#121824' : 'var(--warning)'};
-                    border: 1px solid var(--border-color);
-                ">Anuncios</button>
-            </div>
-
-            <!-- Notifications Body -->
-            <div style="flex:1; padding: 16px; overflow-y: auto; display:flex; flex-direction:column; gap: 10px;">
-                ${notifications.length > 0 ? notifications.map(n => `
-                    <div class="notif-item-card" data-id="${n.id}" style="
-                        padding: 14px; border-radius: 18px; transition: all 0.2s ease; cursor: pointer;
-                        background: ${n.read ? 'var(--surface-elevated)' : 'linear-gradient(135deg, rgba(255,193,7,0.14) 0%, rgba(255,143,0,0.08) 100%)'};
-                        border: ${n.read ? '1px solid var(--border-color)' : '1.5px solid var(--border-gold)'};
-                        display:flex; gap: 12px; align-items: flex-start;
-                    ">
-                        <div style="color:var(--accent-primary); display:flex; align-items:center; margin-top:2px;">
-                            ${n.category === 'TRIP' ? icon('navigation', 20) : n.category === 'FINANCE' ? icon('dollarSign', 20) : icon('bell', 20)}
+            <div class="notification-list">
+                ${notifications.length ? notifications.map(item => `
+                    <article class="notif-item-card ${item.read ? 'is-read' : 'is-unread'} ${String(item.category || '').toLowerCase()}" data-id="${item.id}">
+                        <div class="notification-item-icon">
+                            ${item.category === 'TRIP' ? icon('navigation', 20) : item.category === 'FINANCE' ? icon('dollarSign', 20) : icon('bell', 20)}
                         </div>
-                        <div style="flex:1;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                                <strong style="color:var(--text-primary); font-size: 0.9rem;">${n.title.replace(/[^\w\s\.\,\+\-\/\:\(\)\á\é\í\ó\ú\ñ\Á\É\Í\Ó\Ú\Ñ]/gi, '')}</strong>
-                                <small style="color:var(--text-muted); font-size: 0.72rem;">${new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+                        <div class="notification-item-copy">
+                            <div class="notification-item-heading">
+                                <strong>${item.title.replace(/[^\w\s.,+\-/:()áéíóúñÁÉÍÓÚÑ]/gi, '')}</strong>
+                                <time>${new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
                             </div>
-                            <p style="color:var(--text-secondary); font-size: 0.82rem; margin:0; line-height: 1.4;">${n.message}</p>
+                            <p>${item.message}</p>
                         </div>
-                    </div>
+                        ${item.read ? '' : '<span class="notification-new-dot" aria-label="No leída"></span>'}
+                        <span class="notification-chevron" aria-hidden="true">›</span>
+                    </article>
                 `).join('') : `
-                    <div style="text-align:center; padding: 40px 20px; color: var(--text-muted);">
-                        <div style="display:flex; justify-content:center; margin-bottom:10px;">${icon('bell', 36)}</div>
+                    <div class="notification-empty">
+                        ${icon('bell', 36)}
                         <p>No tienes notificaciones en esta categoría</p>
                     </div>
                 `}
             </div>
 
-            <!-- Footer Action Bar -->
-            <div style="padding: 12px 16px; background: var(--surface-elevated); border-top: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-                <button id="btn-mark-read" style="color: var(--accent-primary); font-size: 0.82rem; font-weight: 800; background:none; border:none; cursor:pointer; display:flex; align-items:center; gap:4px;">
-                    ${icon('check', 16)} Marcar todas como leídas
-                </button>
-                <button id="btn-test-sound" style="color: var(--accent-secondary); font-size: 0.82rem; font-weight: 800; background:none; border:none; cursor:pointer; display:flex; align-items:center; gap:4px;">
-                    Probar Sonido
-                </button>
-            </div>
+            <footer class="notification-center-footer">
+                <button id="btn-mark-read">${icon('check', 16)} Marcar todas como leídas</button>
+                <button id="btn-test-sound">${icon('volume2', 16)} Probar sonido</button>
+            </footer>
         `;
 
-        overlay.innerHTML = '';
-        overlay.appendChild(modal);
-
-        modal.querySelector('#close-notif-btn').addEventListener('click', () => {
-            window.removeEventListener('58express:notifications-updated', liveUpdateHandler);
-            overlay.remove();
-            if (onClose) onClose();
-        });
-
+        modal.querySelector('#close-notif-btn').addEventListener('click', closeModal);
         modal.querySelector('#btn-toggle-sound').addEventListener('click', () => {
             const muted = audioEffects.toggleMute();
-            showToast(muted ? '🔇 Sonidos desactivados' : '🔊 Sonidos neón activados', 'info');
+            showToast(muted ? 'Sonidos desactivados' : 'Sonidos activados', 'info');
             render();
         });
-
         modal.querySelector('#btn-test-sound').addEventListener('click', () => {
             audioEffects.playNotification();
-            showToast('🔊 Sonido de notificación probado exitosamente', 'success');
+            showToast('Sonido de notificación probado exitosamente', 'success');
         });
-
         modal.querySelector('#btn-mark-read').addEventListener('click', () => {
             notificationService.markAllAsRead(userId);
             updateHeaderBadges();
             showToast('Todas las notificaciones marcadas como leídas', 'success');
             render();
         });
-
-        modal.querySelectorAll('.cat-filter-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                filterCategory = btn.dataset.cat;
+        modal.querySelectorAll('.cat-filter-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                filterCategory = button.dataset.cat;
                 render();
             });
         });
-
         modal.querySelectorAll('.notif-item-card').forEach(card => {
             card.addEventListener('click', () => {
-                const notifId = card.dataset.id;
                 const list = notificationService.getNotifications(userId);
-                const item = list.find(n => n.id === notifId);
-                if (item) {
-                    item.read = true;
-                    notificationService.saveNotifications(userId, list);
-                    updateHeaderBadges();
-                    render();
-                }
+                const item = list.find(notification => notification.id === card.dataset.id);
+                if (!item) return;
+                item.read = true;
+                notificationService.saveNotifications(userId, list);
+                updateHeaderBadges();
+                render();
             });
         });
     };
 
-    render();
     const liveUpdateHandler = event => {
         if (event.detail?.userId === userId && overlay.isConnected) render();
     };
+
+    overlay.addEventListener('click', event => {
+        if (event.target === overlay) closeModal();
+    });
+    overlay.appendChild(modal);
+    render();
     window.addEventListener('58express:notifications-updated', liveUpdateHandler);
     return overlay;
 }
