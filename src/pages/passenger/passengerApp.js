@@ -53,7 +53,7 @@ export function renderPassengerApp(container) {
         <button class="passenger-profile-shortcut" type="button" aria-label="Abrir perfil">
           <span>${(user.firstName || user.name || 'P').charAt(0)}</span>
         </button>
-        <div class="passenger-brand-lockup"><img src="/brand-logo-v2.png" alt="+58 Express"></div>
+        <div class="passenger-brand-lockup"><img src="/app-icon-v2.png" alt="+58 Express"></div>
         <div class="passenger-header-actions">
           <button id="passenger-support-shortcut" class="passenger-header-icon" type="button" aria-label="Abrir soporte">${icon('message', 18)}</button>
           <button id="header-notif-btn-passenger" class="passenger-header-icon" type="button" title="Centro de Notificaciones">
