@@ -1,91 +1,64 @@
 import { showToast } from '../../components/toast.js';
-import { getBcvEuroRate, eurToVes, formatVes, formatEur } from '../../utils/bcvRates.js';
+import { getBcvEuroRate, formatVes } from '../../utils/bcvRates.js';
+import { authService } from '../../services/mockAuth.js';
+import { db } from '../../services/apiService.js';
+import { icon } from '../../utils/icons.js';
 
 export function renderEarnings() {
-    const container = document.createElement('div');
-    container.className = 'earnings-page';
-    container.style.cssText = 'padding: 20px 16px 100px; max-width: 480px; margin: 0 auto;';
-    
-    const bcvRate = getBcvEuroRate();
-    const netEarningsEUR = 48.50;
-    const formattedVES = formatVes(netEarningsEUR);
+  const container = document.createElement('div');
+  container.className = 'earnings-page earnings-premium';
+  const user = authService.getCurrentUser() || {};
+  const bcvRate = getBcvEuroRate();
+  const completedTrips = db.getCollection('trips').filter(trip =>
+    trip.status === 'COMPLETED' && (!user.id || !trip.driverId || trip.driverId === user.id)
+  );
+  const netEarningsEUR = Number(user.walletBalance ?? 48.50);
+  const tripCount = completedTrips.length || Number(user.totalTripsToday || 12);
+  const formattedVES = formatVes(netEarningsEUR);
+  const weekly = [24.30, 31.20, 42.10, 48.50, 35.80, 27.40, 18.90];
+  const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const max = 60;
+  const recent = completedTrips.slice(-3).reverse().map((trip, index) => ({
+    amount: Number(trip.fareEUR || trip.fareUSD || [4.30, 3.80, 4.20][index]),
+    time: new Date(trip.completedAt || trip.updatedAt || Date.now() - index * 37 * 60000)
+  }));
+  while (recent.length < 3) {
+    const index = recent.length;
+    recent.push({ amount: [4.30, 3.80, 4.20][index], time: new Date(Date.now() - index * 37 * 60000) });
+  }
 
-    container.innerHTML = `
-        <div class="page-section-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:10px;">
-            <h2 style="color: var(--text-primary); font-size: 1.4rem; font-weight: 800; margin: 0;">Ganancias Mototaxista</h2>
-            <span class="badge badge-warning" style="font-size: 0.8rem; padding: 6px 12px; border: 1px solid var(--accent-primary);">
-                🇪🇺 Tasa BCV Euro: Bs. ${bcvRate.toFixed(2)}
-            </span>
-        </div>
-        
-        <!-- Gold Balance Card -->
-        <div class="diorama-card-3d" style="
-            background: linear-gradient(135deg, #FFC107 0%, #FF8F00 100%);
-            border-radius: 24px; padding: 24px; color: #121824;
-            box-shadow: 0 15px 35px rgba(255, 193, 7, 0.35); margin-bottom: 24px;
-        ">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-                <span style="font-weight: 900; font-size: 0.85rem;">BALANCE ACUMULADO HOY</span>
-                <span style="background: rgba(18,24,36,0.15); padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">12 VIAJES</span>
-            </div>
+  container.innerHTML = `
+    <header class="earnings-title"><h2>Ganancias Mototaxista</h2><span>€ Tasa BCV Euro: Bs. ${bcvRate.toFixed(2)}</span></header>
+    <section class="earnings-balance-card">
+      <div class="earnings-balance-meta"><strong>BALANCE ACUMULADO HOY</strong><span>${tripCount} VIAJES</span></div>
+      <div class="earnings-amount">€${netEarningsEUR.toFixed(2)} <small>EUR</small></div>
+      <div class="earnings-ves">~ ${formattedVES}</div>
+      <button id="btn-payout-driver">⚡ Solicitar liquidación por Pago Móvil</button>
+    </section>
+    <section class="earnings-chart-card">
+      <div class="earnings-card-title"><span>${icon('barChart', 19)}</span><div><strong>Historial de Ganancias en Euros</strong><small>Esta semana</small></div><button title="Información">${icon('info', 18)}</button></div>
+      <div class="earnings-chart" aria-label="Ganancias semanales">
+        <div class="chart-grid"><i></i><i></i><i></i><i></i></div>
+        ${weekly.map((value, index) => `<div class="chart-column ${index === 3 ? 'active' : ''}"><span>€${value.toFixed(1)}</span><div style="height:${Math.round(value / max * 100)}%"></div><small>${days[index]}</small></div>`).join('')}
+      </div>
+    </section>
+    <section class="earnings-summary-card">
+      <div class="earnings-card-title compact"><span>${icon('trending', 19)}</span><strong>Resumen de actividad</strong></div>
+      <div class="earnings-summary-grid">
+        <div><span>🏍️</span><small>Viajes realizados</small><strong>${tripCount}</strong></div>
+        <div><span>${icon('wallet', 18)}</span><small>Ganancia en EUR</small><strong>€${netEarningsEUR.toFixed(2)}</strong></div>
+        <div><span>${icon('dollarSign', 18)}</span><small>Equivalente en Bs.</small><strong>${formattedVES.replace('Bs. ', '')}</strong></div>
+      </div>
+    </section>
+    <section class="earnings-activity-card">
+      <div class="earnings-card-title compact"><span>${icon('clock', 19)}</span><strong>Actividad reciente</strong><button>Ver todas ${icon('chevronRight', 15)}</button></div>
+      <div class="earnings-activity-list">
+        ${recent.map(item => `<div class="earning-row"><span class="earning-bike">🏍️</span><div><strong>Cobro por viaje</strong><small>Hoy, ${item.time.toLocaleTimeString('es-VE', { hour:'numeric', minute:'2-digit' })}</small></div><div class="earning-row-amount"><strong>€${item.amount.toFixed(2)}</strong><small>~ ${formatVes(item.amount)}</small></div><span class="earning-status">Completado</span></div>`).join('')}
+      </div>
+    </section>`;
 
-            <div style="font-size: 2.6rem; font-weight: 900; font-family: 'JetBrains Mono', monospace; line-height: 1; margin-bottom: 4px;">
-                €${netEarningsEUR.toFixed(2)} <span style="font-size: 1.1rem;">EUR</span>
-            </div>
-            <div style="font-size: 1.05rem; font-weight: 800; opacity: 0.9; margin-bottom: 20px;">
-                ~ ${formattedVES}
-            </div>
-
-            <button id="btn-payout-driver" class="btn" style="
-                width: 100%; padding: 14px; background: #121824; color: #FFC107;
-                border: none; border-radius: 16px; font-weight: 900; font-size: 0.95rem; cursor: pointer;
-            ">
-                ⚡ Solicitar Liquidación por Pago Móvil
-            </button>
-        </div>
-
-        <!-- Weekly Activity Bar Chart -->
-        <div class="diorama-card-3d" style="padding: 20px; border-radius: 20px; background: var(--surface-card); border: 1px solid var(--border-color); margin-bottom: 24px;">
-            <h3 style="color:var(--text-primary); font-size: 1rem; font-weight: 800; margin-bottom: 16px;">
-                📊 Historial de Ganancias en Euros (Semana)
-            </h3>
-            
-            <div style="display: flex; justify-content: space-between; align-items: flex-end; height: 120px; padding-top: 10px;">
-                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;">
-                    <div style="width: 24px; height: 50%; background: var(--accent-secondary); border-radius: 6px;"></div>
-                    <span style="color:var(--text-muted); font-size:0.75rem; font-weight:600;">Lun</span>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;">
-                    <div style="width: 24px; height: 70%; background: var(--accent-secondary); border-radius: 6px;"></div>
-                    <span style="color:var(--text-muted); font-size:0.75rem; font-weight:600;">Mar</span>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;">
-                    <div style="width: 24px; height: 40%; background: var(--accent-secondary); border-radius: 6px;"></div>
-                    <span style="color:var(--text-muted); font-size:0.75rem; font-weight:600;">Mié</span>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;">
-                    <div style="width: 24px; height: 85%; background: var(--accent-primary); border-radius: 6px; box-shadow: 0 0 10px rgba(255,193,7,0.4);"></div>
-                    <span style="color:var(--accent-primary); font-size:0.75rem; font-weight:800;">Jue</span>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;">
-                    <div style="width: 24px; height: 95%; background: var(--success); border-radius: 6px;"></div>
-                    <span style="color:var(--text-muted); font-size:0.75rem; font-weight:600;">Vie</span>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;">
-                    <div style="width: 24px; height: 100%; background: var(--success); border-radius: 6px;"></div>
-                    <span style="color:var(--text-muted); font-size:0.75rem; font-weight:600;">Sáb</span>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;">
-                    <div style="width: 24px; height: 75%; background: var(--accent-secondary); border-radius: 6px;"></div>
-                    <span style="color:var(--text-muted); font-size:0.75rem; font-weight:600;">Dom</span>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    container.querySelector('#btn-payout-driver').addEventListener('click', () => {
-        showToast(`Solicitud de liquidación Pago Móvil procesada (€${netEarningsEUR.toFixed(2)} EUR / ${formattedVES})`, 'success');
-    });
-
-    return container;
+  container.querySelector('#btn-payout-driver').addEventListener('click', () => {
+    showToast(`Solicitud de liquidación procesada (€${netEarningsEUR.toFixed(2)} / ${formattedVES})`, 'success');
+  });
+  return container;
 }
