@@ -14,7 +14,7 @@ export function renderLanding(container) {
 
             <main class="landing-card landing-card-premium glass-panel">
                 <header class="landing-header">
-                    <div class="landing-brand-icon"><img src="/app-icon-v2.png" alt="+58 Express"></div>
+                    <div class="landing-brand-icon"><img src="/app-icon-brand-192.png" alt="+58 Express"></div>
                     <h1 class="logo-text"><span class="accent-text">+58</span>express</h1>
                     <p class="tagline">Tu moto, al instante 🇻🇪</p>
                     <div class="landing-location-line"><span></span>${icon('mapPin', 14)} Muévete por Maracaibo<span></span></div>
