@@ -91,6 +91,7 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
 
         container.innerHTML = messages.map(msg => {
             const isMe = msg.senderId === currentUser.id;
+            const imageSrc = safeImageSrc(msg.image);
             return `
                 <div class="chat-bubble-row ${isMe ? 'sent' : 'received'}" style="margin-bottom: 10px;">
                     <div class="chat-bubble" style="
@@ -98,9 +99,9 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
                         color: ${isMe ? '#121824' : 'var(--text-primary)'};
                         padding: 10px 14px; border-radius: 16px; max-width: 85%;
                     ">
-                        ${msg.image ? `
+                        ${imageSrc ? `
                             <div style="margin-bottom: 8px; border-radius: 12px; overflow: hidden; border: 1.5px solid rgba(255,255,255,0.3);">
-                                <img src="${msg.image}" style="width: 100%; max-height: 200px; object-fit: cover; display: block;" />
+                                <img src="${escapeHtml(imageSrc)}" alt="Comprobante adjunto" loading="lazy" style="width: 100%; max-height: 200px; object-fit: contain; display: block; background:#111827;" />
                             </div>
                         ` : ''}
                         <p class="msg-text" style="margin: 0; font-weight: 600; font-size: 0.9rem;">${escapeHtml(msg.text || '')}</p>
@@ -117,6 +118,24 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
 
     function escapeHtml(str) {
         return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function safeImageSrc(value) {
+        if (typeof value !== 'string') return '';
+        if (value.startsWith('data:image/svg+xml;utf8,<svg')) {
+            const svg = value.slice('data:image/svg+xml;utf8,'.length).replace(/%23/g, '#');
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        }
+        if (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value)) return value;
+        if (/^data:image\/svg\+xml(;charset=utf-8)?,/i.test(value)) return value;
+        if (/^https:\/\//i.test(value)) return value;
+        return '';
+    }
+
+    function createSampleReceipt() {
+        const reference = Math.floor(100000 + Math.random() * 900000);
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><rect width="600" height="300" fill="#182232" rx="30"/><text x="40" y="70" fill="#00E676" font-size="28" font-weight="bold">✓ PAGO MÓVIL EXITOSO</text><text x="40" y="130" fill="#FFFFFF" font-size="24">Banco: Banesco (0134)</text><text x="40" y="175" fill="#FFC107" font-size="28" font-weight="bold">Monto: Bs. 3.935,25</text><text x="40" y="225" fill="#94A3B8" font-size="22">Ref: #${reference}</text><text x="40" y="265" fill="#94A3B8" font-size="20">+58express Maracaibo</text></svg>`;
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     }
 
     function sendMessage(text, imageDataUrl = null) {
@@ -161,8 +180,7 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         chip.addEventListener('click', () => {
             const text = chip.dataset.text;
             if (text.includes('Comprobante')) {
-                // Generate a realistic Pago Móvil receipt SVG Data URL sample
-                const sampleReceiptSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150" viewBox="0 0 300 150"><rect width="300" height="150" fill="%23182232" rx="15"/><text x="20" y="35" fill="%2300E676" font-size="14" font-weight="bold">✓ PAGO MÓVIL EXITOSO</text><text x="20" y="65" fill="%23FFFFFF" font-size="12">Banco: Banesco (0134)</text><text x="20" y="85" fill="%23FFC107" font-size="14" font-weight="bold">Monto: Bs. 3,935.25</text><text x="20" y="110" fill="%2394A3B8" font-size="11">Ref: %23${Math.floor(100000 + Math.random()*900000)}</text><text x="20" y="130" fill="%2394A3B8" font-size="10">+58express Maracaibo</text></svg>`;
+                const sampleReceiptSvg = createSampleReceipt();
                 sendMessage('🧾 Adjunto Comprobante de Pago Móvil en Bs. VES (Tasa BCV)', sampleReceiptSvg);
             } else {
                 sendMessage(text);
