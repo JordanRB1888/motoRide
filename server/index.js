@@ -324,6 +324,24 @@ app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (re
   res.json(publicUser(driver));
 });
 
+app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) => {
+  const trip = database.trips.find(item => item.id === req.params.id);
+  if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
+  const allowedStatuses = ['CANCELLED', 'COMPLETED'];
+  if (!allowedStatuses.includes(req.body.status)) return res.status(400).json({ error: 'INVALID_STATUS' });
+  trip.status = req.body.status;
+  trip.closedAt = new Date().toISOString();
+  tripLocks.delete(trip.id);
+  const driver = database.users.find(user => user.id === trip.driverId);
+  if (driver) driver.status = 'AVAILABLE';
+  persistDatabase();
+  io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
+    tripId: trip.id,
+    status: trip.status
+  });
+  res.json(trip);
+});
+
 app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const index = database.users.findIndex(user => user.id === req.params.id && user.role === 'driver');
   if (index < 0) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
@@ -362,8 +380,10 @@ app.get('/api/trips', requireAuth, requireRole('admin'), (req, res) => {
 
 app.get('/api/trips/active/me', requireAuth, (req, res) => {
   const activeStatuses = ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'];
+  const now = Date.now();
   const trip = database.trips.findLast(item =>
     activeStatuses.includes(item.status) &&
+    now - new Date(item.createdAt || 0).getTime() < 12 * 60 * 60 * 1000 &&
     (item.passengerId === req.user.id || item.driverId === req.user.id)
   );
   if (!trip) return res.status(204).end();
@@ -638,6 +658,10 @@ io.on('connection', (socket) => {
     if (!allowSocketRole(socket, 'driver')) return;
     const { tripId, status, driver } = data;
     const trip = database.trips.find(t => t.id === tripId);
+    if (!trip || trip.driverId !== socket.data.auth.userId) {
+      socket.emit('authorization:error', { error: 'FORBIDDEN', tripId });
+      return;
+    }
     if (trip) {
       trip.status = status;
       if (status === 'COMPLETED' || status === 'CANCELLED') {
