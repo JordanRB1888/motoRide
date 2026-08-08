@@ -384,7 +384,12 @@ function dispatchTripToDrivers(trip) {
 
   // Find available online drivers
   const availableDrivers = database.users
-    .filter(u => u.role === 'driver' && u.status === 'AVAILABLE')
+    .filter(u =>
+      u.role === 'driver' &&
+      u.status === 'AVAILABLE' &&
+      Number.isFinite(u.location?.lat) &&
+      Number.isFinite(u.location?.lng)
+    )
     .map(d => {
       const dist = calculateDistance(pickupLat, pickupLng, d.location.lat, d.location.lng);
       return { driver: d, dist };
@@ -517,7 +522,15 @@ io.on('connection', (socket) => {
   // Driver Atomic Ride Acceptance Event
   socket.on('rideAccepted', (data) => {
     if (!allowSocketRole(socket, 'driver')) return;
-    const { tripId, driver } = data;
+    const { tripId } = data;
+    const authenticatedDriver = database.users.find(user =>
+      user.id === socket.data.auth.userId && user.role === 'driver'
+    );
+    if (!authenticatedDriver?.isVerified) {
+      socket.emit('rideAcceptanceFailed', { tripId, reason: 'DRIVER_NOT_APPROVED' });
+      return;
+    }
+    const driver = publicUser(authenticatedDriver);
 
     // Atomic Lock Check
     if (tripLocks.get(tripId)) {
