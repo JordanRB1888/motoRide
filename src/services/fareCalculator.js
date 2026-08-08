@@ -23,7 +23,7 @@ export const fareCalculator = {
   async calculateRoute(originLat, originLng, destLat, destLng) {
     try {
       // OSRM coordinates are in lng,lat format
-      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=full&geometries=geojson`);
+      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=full&geometries=geojson&steps=true`);
       const data = await response.json();
       
       if (data.code !== 'Ok' || !data.routes || !data.routes.length) {

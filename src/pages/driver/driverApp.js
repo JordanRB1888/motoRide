@@ -144,7 +144,7 @@ export function renderDriverApp(container) {
     let activeChatTripId = null;
     let unreadMessages = 0;
     let tripPanelCollapsed = false;
-    let currentMap = new MapComponent('driver-map', { is3D: true });
+    let currentMap = new MapComponent('driver-map', { is3D: true, navigation: true });
 
     const toggle = container.querySelector('#online-toggle');
     const statusText = container.querySelector('#driver-status-text');
@@ -543,6 +543,11 @@ export function renderDriverApp(container) {
         const lat = Number(location.lat ?? location.latitude);
         const lng = Number(location.lng ?? location.longitude);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        if (['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status)) {
+            // The passenger is already onboard. Keep the destination route;
+            // redrawing toward pickup here used to erase navigation.
+            return;
+        }
         currentTrip.pickup = { ...(currentTrip.pickup || {}), lat, lng };
         currentMap.setPickupMarker(lat, lng);
         const driverPosition = driverGpsTracker.getLastPosition();

@@ -35,6 +35,7 @@ export function initThemeToggle(containerId = null) {
         const isLight = document.documentElement.classList.toggle('theme-light');
         const newTheme = isLight ? 'light' : 'dark';
         localStorage.setItem('58express_theme', newTheme);
+        window.dispatchEvent(new CustomEvent('58express:theme-change', { detail: { theme: newTheme } }));
         toggleBtn.innerHTML = isLight ? 'Modo Día' : 'Modo Noche';
         showToast(isLight ? 'Modo Día activado' : 'Modo Noche activado', 'info');
     });

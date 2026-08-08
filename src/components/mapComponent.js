@@ -18,10 +18,13 @@ export class MapComponent {
     this.userMarker = null;
     this.pickupMarker = null;
     this.destinationMarker = null;
+    this.tileLayer = null;
     this.is3DActive = false;
     
     this._initMap();
     this._createLocationButton();
+    this._themeHandler = event => this.setMapTheme(event.detail?.theme);
+    window.addEventListener('58express:theme-change', this._themeHandler);
   }
 
   _initMap() {
@@ -29,10 +32,7 @@ export class MapComponent {
     try {
       this.map = L.map(this.targetElement, { zoomControl: true }).setView(this.options.center, this.options.zoom);
       
-      // Clean high-contrast OpenStreetMap / CartoDB Voyager map tile layer as shown in screenshot
-      const tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-        
-      L.tileLayer(tileUrl, {
+      this.tileLayer = L.tileLayer(this._tileUrlForTheme(localStorage.getItem('58express_theme') || 'light'), {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 20
@@ -42,6 +42,23 @@ export class MapComponent {
     } catch (err) {
       console.error('[MapComponent] Map init error:', err);
     }
+  }
+
+  _tileUrlForTheme(theme) {
+    return theme === 'dark'
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  }
+
+  setMapTheme(theme = 'light') {
+    if (!this.map) return;
+    if (this.tileLayer) this.map.removeLayer(this.tileLayer);
+    this.tileLayer = L.tileLayer(this._tileUrlForTheme(theme), {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(this.map);
+    this.tileLayer.bringToBack();
   }
 
   _createMapLegend() {
@@ -326,13 +343,13 @@ export class MapComponent {
         const latlngs = routeInfo.geometry.coordinates.map(c => [c[1], c[0]]);
         this.routeLayer = L.polyline(latlngs, {
           color: color,
-          weight: 6,
-          opacity: 0.9,
-          dashArray: '12, 12',
+          weight: 8,
+          opacity: 1,
           lineCap: 'round'
         }).addTo(this.map);
 
         this.fitBounds();
+        this._showNavigationBanner(routeInfo, { lat: destLat, lng: destLng });
         return routeInfo;
       }
     } catch (e) {
@@ -342,12 +359,26 @@ export class MapComponent {
     const fallbackCoords = [[pickupLat, pickupLng], [destLat, destLng]];
     this.routeLayer = L.polyline(fallbackCoords, {
       color: color,
-      weight: 6,
-      opacity: 0.9,
-      dashArray: '12, 12'
+      weight: 8,
+      opacity: 1
     }).addTo(this.map);
     
     return { distance: 3500, duration: 420 };
+  }
+
+  _showNavigationBanner(routeInfo, destination) {
+    if (!this.options.navigation || !this.targetElement) return;
+    let banner = this.targetElement.querySelector('.driver-navigation-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'driver-navigation-banner';
+      banner.style.cssText = 'position:absolute;top:145px;left:12px;right:12px;z-index:950;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;background:rgba(12,19,31,.94);color:white;border:1px solid rgba(0,230,118,.55);box-shadow:0 10px 28px rgba(0,0,0,.45);pointer-events:auto';
+      this.targetElement.appendChild(banner);
+    }
+    const distance = Number(routeInfo?.distanceKm || 0).toFixed(1);
+    const duration = Math.max(1, Math.round(Number(routeInfo?.durationMin || 0)));
+    const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}&travelmode=driving`;
+    banner.innerHTML = `<div style="font-size:1.7rem">⬆</div><div style="min-width:0;flex:1"><strong style="display:block;font-size:.92rem">Continúa por la ruta marcada</strong><small style="color:#a7f3d0">${distance} km · ${duration} min hasta el destino</small></div><a href="${googleUrl}" target="_blank" rel="noopener" style="padding:8px 10px;border-radius:12px;background:#00E676;color:#101722;text-decoration:none;font-size:.75rem;font-weight:900">NAVEGAR</a>`;
   }
 
   clearRoute() {
@@ -355,6 +386,7 @@ export class MapComponent {
       this.map.removeLayer(this.routeLayer);
       this.routeLayer = null;
     }
+    this.targetElement?.querySelector('.driver-navigation-banner')?.remove();
   }
 
   fitBounds() {

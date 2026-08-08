@@ -537,6 +537,27 @@ export function renderPassengerApp(container) {
     cancelRouteAndSelectNew();
   }
 
+  function resetCompletedPassengerRide() {
+    persistentChatBtn.classList.add('hidden');
+    chatUnreadBadge.classList.add('hidden');
+    activeChat?.destroy();
+    activeChat = null;
+    activeChatTripId = null;
+    unreadMessages = 0;
+    stopPassengerTracking();
+    mapComponent.clearRoute();
+    mapComponent.clearMarkers('pickup');
+    mapComponent.clearMarkers('destination');
+    const routeCancelBar = container.querySelector('#route-cancel-bar');
+    if (routeCancelBar) routeCancelBar.style.display = 'none';
+    bottomSheet.setContent('');
+    bottomSheet.collapse();
+    currentTrip = null;
+    currentDriver = null;
+    currentSelectedDestinationName = '';
+    setState('IDLE');
+  }
+
   function setState(state) {
     currentState = state;
     const topSearchBar = container.querySelector('#top-search-bar');
@@ -575,13 +596,16 @@ export function renderPassengerApp(container) {
         trip: currentTrip,
         driver: currentDriver,
         onSubmit: (ratingRes) => {
-          if (currentTrip) currentTrip.tipEUR = ratingRes.tipEUR;
-          socket.emit('tripRated', { tripId: currentTrip?.id, rating: ratingRes.rating, tags: ratingRes.tags, tipEUR: ratingRes.tipEUR, targetRole: 'driver' });
+          const completedTrip = currentTrip;
+          const completedDriver = currentDriver;
+          if (completedTrip) completedTrip.tipEUR = ratingRes.tipEUR;
+          socket.emit('tripRated', { tripId: completedTrip?.id, rating: ratingRes.rating, tags: ratingRes.tags, tipEUR: ratingRes.tipEUR, targetRole: 'driver' });
+          resetCompletedPassengerRide();
           
           // Open Digital Receipt Modal
           const receiptModal = createDigitalReceiptModal({
-            trip: currentTrip,
-            driver: currentDriver,
+            trip: completedTrip,
+            driver: completedDriver,
             passenger: user,
             onClose: () => {
               setState('IDLE');
