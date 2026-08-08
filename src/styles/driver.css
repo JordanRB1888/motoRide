@@ -289,6 +289,7 @@ input:checked + .online-toggle-slider:before {
   border: 1px solid var(--border-gold);
   text-align: center;
   box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+  pointer-events: auto;
 }
 
 .btn-connect {
@@ -299,6 +300,8 @@ input:checked + .online-toggle-slider:before {
   font-weight: 900;
   color: #121824 !important;
   background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%) !important;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 /* Leaflet Attribution Shift Fix */

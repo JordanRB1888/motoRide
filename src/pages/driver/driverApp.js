@@ -222,7 +222,13 @@ export function renderDriverApp(container) {
     }
 
     toggle.addEventListener('change', (e) => setOnline(e.target.checked));
-    btnConnectOverlay.addEventListener('click', () => setOnline(true));
+    if (btnConnectOverlay) {
+        btnConnectOverlay.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setOnline(true);
+        });
+    }
     if (driverHeaderBtn) driverHeaderBtn.addEventListener('click', () => switchTab('perfil'));
 
 
