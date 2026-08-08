@@ -128,8 +128,12 @@ class DriverDispatchService {
   dispatchTrip(tripData, maxRadiusKm = 5.0) {
     if (!tripData || !tripData.id) return;
 
-    const pickupLat = tripData.pickup?.lat || 10.6427;
-    const pickupLng = tripData.pickup?.lng || -71.6125;
+    const pickupLat = Number(tripData.pickup?.lat);
+    const pickupLng = Number(tripData.pickup?.lng);
+    if (!Number.isFinite(pickupLat) || !Number.isFinite(pickupLng)) {
+      eventLogger.warn('SYSTEM', `Viaje [${tripData.id}] rechazado: falta la ubicación GPS real del pasajero.`);
+      return;
+    }
 
     eventLogger.log('SYSTEM', `⚡ Iniciando algoritmo de despacho para Viaje ID [${tripData.id}] desde (${pickupLat}, ${pickupLng})`);
 
@@ -140,14 +144,15 @@ class DriverDispatchService {
 
     // Calculate exact distance to each candidate driver
     const candidates = availableDrivers.map(driver => {
-      const dLat = driver.location?.lat || 10.6427;
-      const dLng = driver.location?.lng || -71.6125;
+      const dLat = Number(driver.location?.lat);
+      const dLng = Number(driver.location?.lng);
+      if (!Number.isFinite(dLat) || !Number.isFinite(dLng)) return null;
       const distKm = calculateHaversine(pickupLat, pickupLng, dLat, dLng, 1.0);
       return {
         driver,
         distKm
       };
-    }).filter(c => c.distKm <= maxRadiusKm)
+    }).filter(c => c && c.distKm <= maxRadiusKm)
       .sort((a, b) => a.distKm - b.distKm); // Sort closest first
 
     eventLogger.log('SYSTEM', `🎯 Conductores evaluados en radio de ${maxRadiusKm}km: ${candidates.length} encontrados`, candidates);

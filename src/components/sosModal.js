@@ -8,6 +8,9 @@ export function createSosModal({ trip, currentUser, location }) {
 
     let countdown = 10;
     let timerId = null;
+    const emergencyLocation = Number.isFinite(Number(location?.lat)) && Number.isFinite(Number(location?.lng))
+        ? { lat: Number(location.lat), lng: Number(location.lng) }
+        : null;
 
     modal.innerHTML = `
         <div class="sos-modal-content glass-panel border-danger">
@@ -78,7 +81,8 @@ export function createSosModal({ trip, currentUser, location }) {
                 phone: currentUser.phone,
                 role: currentUser.role
             },
-            location: location || { lat: 10.4806, lng: -66.9036 },
+            location: emergencyLocation,
+            locationUnavailable: !emergencyLocation,
             timestamp: new Date().toISOString()
         });
     }
@@ -94,7 +98,10 @@ export function createSosModal({ trip, currentUser, location }) {
     });
 
     modal.querySelector('#btn-share-whatsapp').addEventListener('click', () => {
-        const text = `🚨 ¡EMERGENCIA SOS! Necesito ayuda. Estoy en viaje con +58express. Mi ubicación aproximada: https://maps.google.com/?q=${location?.lat || 10.4806},${location?.lng || -66.9036}`;
+        const locationText = emergencyLocation
+            ? `Mi ubicación: https://maps.google.com/?q=${emergencyLocation.lat},${emergencyLocation.lng}`
+            : 'No fue posible obtener mi GPS. Revisa mi viaje activo en +58express.';
+        const text = `🚨 ¡EMERGENCIA SOS! Necesito ayuda. Estoy en viaje con +58express. ${locationText}`;
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
     });
 

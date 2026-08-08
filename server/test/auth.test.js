@@ -67,6 +67,20 @@ test('registro, login y sesión JWT funcionan sin exponer contraseña', async (t
 
   const forbidden = await fetch(`${api}/users`, { headers: { authorization: `Bearer ${created.token}` } });
   assert.equal(forbidden.status, 403);
+
+  const tripWithoutRealOrigin = await fetch(`${api}/trips/create`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${created.token}` },
+    body: JSON.stringify({
+      id: 'trip_without_gps',
+      pickup: { address: 'Mi ubicación actual' },
+      destination: { address: 'Destino', lat: 10.65, lng: -71.60 },
+      distanceKm: 4,
+      durationMin: 10
+    })
+  });
+  assert.equal(tripWithoutRealOrigin.status, 400);
+  assert.equal((await tripWithoutRealOrigin.json()).error, 'VALID_GPS_COORDINATES_REQUIRED');
 });
 
 test('no permite registrar correos duplicados', async (t) => {

@@ -36,7 +36,10 @@ export function renderPassengerApp(container) {
   let searchTimeout = null;
   let lastRouteRefreshAt = 0;
   let passengerWatchId = null;
-  let passengerLocation = { lat: 10.6427, lng: -71.6125 };
+  let passengerLocation = null;
+  let passengerLocationUpdatedAt = 0;
+  let selectedPickupLocation = null;
+  let destinationSelectionId = 0;
   let activeChat = null;
   let activeChatTripId = null;
   let unreadMessages = 0;
@@ -218,12 +221,38 @@ export function renderPassengerApp(container) {
   persistentChatBtn.addEventListener('click', () => openChatModal());
   requestPassengerPermissions();
 
+  function setPassengerLocation(location) {
+    const lat = Number(location?.lat);
+    const lng = Number(location?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || location?.isFallback) return null;
+    const isFirstLocation = !passengerLocation;
+    passengerLocation = {
+      lat,
+      lng,
+      accuracy: Number(location?.accuracy) || null
+    };
+    passengerLocationUpdatedAt = Number(location?.capturedAt) || Date.now();
+    mapComponent.setUserLocation(lat, lng);
+    if (isFirstLocation) mapComponent.centerOn(lat, lng, 15);
+    return passengerLocation;
+  }
+
+  async function getPassengerOrigin() {
+    try {
+      const location = await mapComponent.getUserLocation({ allowFallback: false });
+      return setPassengerLocation(location);
+    } catch (error) {
+      const cachedLocationIsFresh = passengerLocation && (Date.now() - passengerLocationUpdatedAt) < 60000;
+      if (cachedLocationIsFresh) return passengerLocation;
+      throw error;
+    }
+  }
+
   function requestPassengerPermissions() {
     const permissionKey = `58express_permissions_prompted_${user.id || 'p1'}`;
     if (localStorage.getItem(permissionKey) === 'yes') {
-      mapComponent.getUserLocation().then(location => {
-        passengerLocation = location;
-        mapComponent.setUserLocation(location.lat, location.lng);
+      getPassengerOrigin().catch(() => {
+        showToast('Activa la ubicación precisa para calcular tu ruta desde donde estás.', 'info');
       });
       return;
     }
@@ -236,12 +265,15 @@ export function renderPassengerApp(container) {
       // Start both permission requests directly from the user's tap. Browsers
       // require this gesture for notification permission.
       const notificationPermission = notificationService.requestBrowserPermission();
-      const locationPermission = mapComponent.getUserLocation();
+      const locationPermission = mapComponent.getUserLocation({ allowFallback: false }).catch(() => null);
       const [notificationGranted, location] = await Promise.all([notificationPermission, locationPermission]);
-      passengerLocation = location;
-      mapComponent.setUserLocation(location.lat, location.lng);
+      if (location) setPassengerLocation(location);
       overlay.remove();
-      showToast(notificationGranted ? 'Ubicación y notificaciones activadas' : 'Ubicación activada. Puedes habilitar notificaciones en los ajustes del navegador.', notificationGranted ? 'success' : 'info');
+      if (!location) {
+        showToast('No se obtuvo tu GPS. Activa la ubicación precisa antes de solicitar una carrera.', 'error');
+      } else {
+        showToast(notificationGranted ? 'Ubicación y notificaciones activadas' : 'Ubicación activada. Puedes habilitar notificaciones en los ajustes del navegador.', notificationGranted ? 'success' : 'info');
+      }
     });
     overlay.querySelector('#later-passenger-permissions').addEventListener('click', () => {
       localStorage.setItem(permissionKey, 'yes');
@@ -454,11 +486,28 @@ export function renderPassengerApp(container) {
 
   let currentSelectedDestinationName = 'Vereda del Lago, Maracaibo';
 
-  function selectDestination(place) {
+  async function selectDestination(place) {
+    const selectionId = ++destinationSelectionId;
     currentSelectedDestinationName = place.display_name || 'Punto de Destino en Maracaibo';
-    const lat = parseFloat(place.lat) || 10.6658;
-    const lon = parseFloat(place.lon) || -71.5975;
-    const pickup = [10.6427, -71.6125]; // Maracaibo Basílica default
+    const lat = Number.parseFloat(place.lat);
+    const lon = Number.parseFloat(place.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      showToast('No pudimos identificar las coordenadas de ese destino.', 'error');
+      return;
+    }
+
+    showToast('Obteniendo tu ubicación actual para calcular la ruta...', 'info');
+    let origin;
+    try {
+      origin = await getPassengerOrigin();
+    } catch (error) {
+      showToast('No se puede calcular la carrera sin tu ubicación real. Activa el GPS y el permiso de ubicación precisa.', 'error');
+      return;
+    }
+    if (selectionId !== destinationSelectionId || !origin) return;
+
+    selectedPickupLocation = { ...origin };
+    const pickup = [selectedPickupLocation.lat, selectedPickupLocation.lng];
     
     // Show top floating route cancel bar
     const routeCancelBar = container.querySelector('#route-cancel-bar');
@@ -468,6 +517,9 @@ export function renderPassengerApp(container) {
       routeCancelBar.style.display = 'flex';
     }
 
+    mapComponent.clearRoute();
+    mapComponent.clearMarkers('destination');
+    mapComponent.setUserLocation(selectedPickupLocation.lat, selectedPickupLocation.lng);
     mapComponent.addMarker([lat, lon], 'destination');
 
     // Calculate real dynamic distance immediately based on exact destination coordinates
@@ -479,6 +531,7 @@ export function renderPassengerApp(container) {
 
     // Draw route asynchronously on map & update precise OSRM fare
     mapComponent.drawRoute(pickup, [lat, lon]).then(routeInfo => {
+      if (selectionId !== destinationSelectionId) return;
       const realDistKm = routeInfo?.distanceKm || (routeInfo?.distance ? (routeInfo.distance / 1000) : calcDistKm);
       const realDurMin = routeInfo?.durationMin || (routeInfo?.duration ? (routeInfo.duration / 60) : calcDurMin);
       const realFare = fareCalculator.calculateFare(realDistKm, realDurMin, selectedRideType);
@@ -564,6 +617,11 @@ export function renderPassengerApp(container) {
   }
 
   function requestRide(destCoords, fareData) {
+    const pickupLocation = selectedPickupLocation || passengerLocation;
+    if (!pickupLocation) {
+      showToast('Necesitamos obtener tu ubicación real antes de solicitar la carrera.', 'error');
+      return;
+    }
     setState('SEARCHING');
     bottomSheet.setContent(renderSearchingState(() => cancelSearch(), fareData?.rideType));
     showPassengerTripToggle(true);
@@ -580,7 +638,7 @@ export function renderPassengerApp(container) {
       passengerId: user.id || 'p1',
       driverId: null,
       status: 'SEARCHING',
-      pickup: { address: 'Mi ubicación actual', lat: passengerLocation.lat, lng: passengerLocation.lng },
+      pickup: { address: 'Mi ubicación actual', lat: pickupLocation.lat, lng: pickupLocation.lng, accuracy: pickupLocation.accuracy || null },
       destination: { address: currentSelectedDestinationName || 'Vereda del Lago, Maracaibo', lat: destCoords[0], lng: destCoords[1] },
       fareEUR: fareUSD,
       distanceKm: fareData?.distanceKm,
@@ -617,6 +675,8 @@ export function renderPassengerApp(container) {
 
     currentTrip = null;
     currentDriver = null;
+    selectedPickupLocation = null;
+    destinationSelectionId += 1;
     persistentChatBtn.classList.add('hidden');
     hidePassengerTripToggle();
     stopPassengerTracking();
@@ -660,6 +720,8 @@ export function renderPassengerApp(container) {
     bottomSheet.collapse();
     currentTrip = null;
     currentDriver = null;
+    selectedPickupLocation = null;
+    destinationSelectionId += 1;
     currentSelectedDestinationName = '';
     stopTripStatusPolling();
     setState('IDLE');
@@ -776,8 +838,12 @@ export function renderPassengerApp(container) {
   function startPassengerTracking() {
     if (passengerWatchId !== null || !navigator.geolocation) return;
     passengerWatchId = navigator.geolocation.watchPosition(position => {
-      passengerLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
-      mapComponent.setUserLocation(passengerLocation.lat, passengerLocation.lng);
+      setPassengerLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        capturedAt: position.timestamp
+      });
       socket.emit('passenger:location_update', {
         tripId: currentTrip?.id,
         latitude: passengerLocation.lat,
@@ -792,11 +858,17 @@ export function renderPassengerApp(container) {
     passengerWatchId = null;
   }
 
-  function openSosModal() {
+  async function openSosModal() {
+    let sosLocation = passengerLocation || currentTrip?.pickup || null;
+    try {
+      sosLocation = await getPassengerOrigin();
+    } catch (error) {
+      // The last verified trip pickup is safer than inventing coordinates.
+    }
     const sos = createSosModal({
       trip: currentTrip,
       currentUser: user,
-      location: { lat: 10.6427, lng: -71.6125 }
+      location: sosLocation
     });
     container.appendChild(sos.element);
     sos.open();
@@ -948,8 +1020,8 @@ export function renderPassengerApp(container) {
       setState('IDLE');
     }
     if (currentTrip.pickup?.lat && currentTrip.pickup?.lng) {
-      passengerLocation = { lat: currentTrip.pickup.lat, lng: currentTrip.pickup.lng };
-      mapComponent.setUserLocation(passengerLocation.lat, passengerLocation.lng);
+      setPassengerLocation({ lat: currentTrip.pickup.lat, lng: currentTrip.pickup.lng, capturedAt: Date.now() });
+      selectedPickupLocation = { ...passengerLocation };
     }
   }
 

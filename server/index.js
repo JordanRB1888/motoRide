@@ -223,6 +223,18 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c * 1.35; // Urban road factor
 }
 
+function normalizeLocation(location) {
+  if (location?.lat === null || location?.lat === undefined || location?.lng === null || location?.lng === undefined || String(location.lat).trim() === '' || String(location.lng).trim() === '') {
+    return null;
+  }
+  const lat = Number(location?.lat);
+  const lng = Number(location?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return null;
+  }
+  return { ...location, lat, lng };
+}
+
 function userCanAccessTrip(userId, role, trip) {
   return role === 'admin' || trip?.passengerId === userId || trip?.driverId === userId;
 }
@@ -599,6 +611,13 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   const existing = requestedId && database.trips.find(item => item.id === requestedId && item.passengerId === req.user.id);
   if (existing) return res.json({ status: 'existing', trip: existing });
   const trip = { ...req.body };
+  const pickup = normalizeLocation(trip.pickup);
+  const destination = normalizeLocation(trip.destination);
+  if (!pickup || !destination) {
+    return res.status(400).json({ error: 'VALID_GPS_COORDINATES_REQUIRED' });
+  }
+  trip.pickup = pickup;
+  trip.destination = destination;
   trip.rideType = trip.rideType === 'CAR' ? 'CAR' : 'MOTO';
   trip.passengerId = req.user.id;
   trip.driverId = null;
@@ -656,8 +675,13 @@ app.patch('/api/drivers/location', requireAuth, requireRole('driver'), (req, res
 });
 
 function dispatchTripToDrivers(trip) {
-  const pickupLat = trip.pickup?.lat || 10.6427;
-  const pickupLng = trip.pickup?.lng || -71.6125;
+  const pickup = normalizeLocation(trip.pickup);
+  if (!pickup) {
+    console.error(`[+58express Dispatcher] Trip [${trip.id}] rejected: invalid pickup GPS`);
+    return;
+  }
+  const pickupLat = pickup.lat;
+  const pickupLng = pickup.lng;
 
   // Find available online drivers
   const availableDrivers = database.users
@@ -822,6 +846,14 @@ io.on('connection', (socket) => {
   // Passenger Ride Request Event
   socket.on('rideRequested', (tripData) => {
     if (!allowSocketRole(socket, 'passenger')) return;
+    const pickup = normalizeLocation(tripData?.pickup);
+    const destination = normalizeLocation(tripData?.destination);
+    if (!pickup || !destination) {
+      socket.emit('rideRequestFailed', { tripId: tripData?.id, reason: 'VALID_GPS_COORDINATES_REQUIRED' });
+      return;
+    }
+    tripData.pickup = pickup;
+    tripData.destination = destination;
     tripData.passengerId = socket.data.auth.userId;
     console.log(`[+58express Socket.IO] Passenger requested ride [${tripData.id}]`);
     const existing = database.trips.find(t => t.id === tripData.id);

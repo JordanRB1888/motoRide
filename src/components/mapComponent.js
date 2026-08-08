@@ -130,11 +130,14 @@ export class MapComponent {
       e.stopPropagation();
       this.locateBtn.style.transform = 'scale(0.85)';
       setTimeout(() => this.locateBtn.style.transform = 'scale(1)', 150);
-
-      const loc = await this.getUserLocation();
-      this.centerOn(loc.lat, loc.lng, 15);
-      this.setUserLocation(loc.lat, loc.lng);
-      showToast('🎯 Ubicación centrada en tu GPS', 'info');
+      try {
+        const loc = await this.getUserLocation({ allowFallback: false });
+        this.centerOn(loc.lat, loc.lng, 15);
+        this.setUserLocation(loc.lat, loc.lng);
+        showToast('🎯 Ubicación centrada en tu GPS', 'info');
+      } catch (error) {
+        showToast('No se pudo obtener tu GPS. Revisa el permiso de ubicación precisa.', 'error');
+      }
     });
 
     if (getComputedStyle(this.targetElement).position === 'static') {
@@ -408,10 +411,11 @@ export class MapComponent {
     }
   }
 
-  getUserLocation() {
-    return new Promise((resolve) => {
+  getUserLocation({ allowFallback = false } = {}) {
+    return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        resolve({ lat: 10.6427, lng: -71.6125 });
+        if (allowFallback) resolve({ lat: 10.6427, lng: -71.6125, isFallback: true });
+        else reject(new Error('La geolocalización no está disponible en este dispositivo'));
         return;
       }
       
@@ -419,11 +423,17 @@ export class MapComponent {
         (position) => {
           resolve({
             lat: position.coords.latitude,
-            lng: position.coords.longitude
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            capturedAt: position.timestamp || Date.now(),
+            isFallback: false
           });
         },
-        () => resolve({ lat: 10.6427, lng: -71.6125 }),
-        { enableHighAccuracy: true, timeout: 5000 }
+        (error) => {
+          if (allowFallback) resolve({ lat: 10.6427, lng: -71.6125, isFallback: true, error });
+          else reject(error);
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
       );
     });
   }
