@@ -250,20 +250,35 @@ export function renderPassengerApp(container) {
   }
 
   async function getPassengerOrigin() {
-    if (passengerLocationRequestPromise) return passengerLocationRequestPromise;
-    passengerLocationRequestPromise = (async () => {
-      try {
-        const location = await mapComponent.getUserLocation({ allowFallback: false });
-        return setPassengerLocation(location);
-      } catch (error) {
-        const cachedLocationIsFresh = passengerLocation && (Date.now() - passengerLocationUpdatedAt) < 60000;
-        if (cachedLocationIsFresh) return passengerLocation;
-        throw error;
-      }
-    })().finally(() => {
-      passengerLocationRequestPromise = null;
+    if (!passengerLocationRequestPromise) {
+      const nativeLocationRequest = (async () => {
+        try {
+          const location = await mapComponent.getUserLocation({ allowFallback: false });
+          return setPassengerLocation(location);
+        } catch (error) {
+          const cachedLocationIsFresh = passengerLocation && (Date.now() - passengerLocationUpdatedAt) < 60000;
+          if (cachedLocationIsFresh) return passengerLocation;
+          throw error;
+        }
+      })();
+      passengerLocationRequestPromise = nativeLocationRequest.finally(() => {
+        passengerLocationRequestPromise = null;
+      });
+    }
+
+    let timeoutId;
+    const appTimeout = new Promise((resolve, reject) => {
+      timeoutId = window.setTimeout(() => {
+        const error = new Error('GPS confirmation timed out');
+        error.code = 'APP_GPS_TIMEOUT';
+        reject(error);
+      }, 8000);
     });
-    return passengerLocationRequestPromise;
+    try {
+      return await Promise.race([passengerLocationRequestPromise, appTimeout]);
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   }
 
   async function getGeolocationPermissionState() {
