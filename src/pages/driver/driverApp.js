@@ -50,6 +50,8 @@ export function renderDriverApp(container) {
                             <div class="driver-status-text" id="driver-status-text">Desconectado</div>
                         </div>
                     </div>
+
+                    <div class="driver-brand-lockup" aria-label="+58express"><strong><b>+58</b>express</strong><small>Conductor</small></div>
                     
                     <div class="driver-header-actions">
                         <button id="header-notif-btn-driver" style="

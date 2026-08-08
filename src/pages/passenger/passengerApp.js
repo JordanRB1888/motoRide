@@ -47,6 +47,13 @@ export function renderPassengerApp(container) {
   container.innerHTML = `
     <div class="passenger-app">
       <div id="map-container" class="map-background"></div>
+
+      <header class="passenger-mobile-header">
+        <button class="passenger-profile-shortcut" type="button" aria-label="Abrir perfil">
+          <span>${(user.firstName || user.name || 'P').charAt(0)}</span>
+        </button>
+        <div class="passenger-brand-lockup"><strong><b>+58</b>express</strong><small>Muévete por Maracaibo</small></div>
+      </header>
       
       <!-- Top Search Bar -->
       <div class="top-search-bar" id="top-search-bar">
@@ -136,6 +143,7 @@ export function renderPassengerApp(container) {
   if (themeSlot) {
     themeSlot.appendChild(initThemeToggle());
   }
+  container.querySelector('.passenger-profile-shortcut')?.addEventListener('click', () => handleNavigation('profile'));
 
   // Top Schedule Ride Button Listener
   const topScheduleBtn = container.querySelector('#top-schedule-ride-btn');
