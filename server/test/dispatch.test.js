@@ -89,6 +89,38 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   assert.equal(adminSawRequest, true);
   assert.equal(update.driver.id, 'd1');
 
+  const locationPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('No llegó el GPS del conductor')), 5000);
+    passenger.on('driverLocationUpdated', location => {
+      if (location.tripId === 'test_trip' && location.driverId === 'd1') {
+        clearTimeout(timeout);
+        resolve(location);
+      }
+    });
+  });
+  driver.emit('driver:location_update', { latitude: 10.643, longitude: -71.613, heading: 45 });
+  const location = await locationPromise;
+  assert.equal(location.lat, 10.643);
+
+  const chatPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('No llegó el mensaje al conductor')), 5000);
+    driver.on('chat:message', message => {
+      if (message.tripId === 'test_trip' && message.text === 'Voy saliendo') {
+        clearTimeout(timeout);
+        resolve(message);
+      }
+    });
+  });
+  passenger.emit('chat:send_message', { tripId: 'test_trip', text: 'Voy saliendo' });
+  const message = await chatPromise;
+  assert.equal(message.senderId, 'p1');
+
+  const historyResponse = await fetch(`${url}/api/trips/test_trip/messages`, {
+    headers: { authorization: `Bearer ${passengerToken}` }
+  });
+  assert.equal(historyResponse.status, 200);
+  assert.equal((await historyResponse.json()).length, 1);
+
   const persistedDb = new DatabaseSync(dataFile, { readOnly: true });
   const persisted = JSON.parse(persistedDb.prepare('SELECT payload FROM trips WHERE id = ?').get('test_trip').payload);
   persistedDb.close();

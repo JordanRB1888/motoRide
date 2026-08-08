@@ -255,7 +255,7 @@ export function renderDriverApp(container) {
             tripId: trip.id,
             currentUser: user,
             recipientUser: {
-                id: 'passenger_1',
+                id: passenger.id || trip.passengerId,
                 firstName: passenger.name || 'Pasajero',
                 photoUrl: passenger.avatar
             }
@@ -386,6 +386,7 @@ export function renderDriverApp(container) {
 
         const trip = {
             id: tripData.id || ('trip_' + Date.now()),
+            passengerId: tripData.passengerId,
             pickup: tripData.pickup || { address: 'Basílica de Chiquinquirá, Maracaibo' },
             destination: tripData.destination || { address: 'Vereda del Lago, Maracaibo' },
             distance: tripData.distance || 4.5,
@@ -394,6 +395,7 @@ export function renderDriverApp(container) {
             status: 'requested'
         };
         const passenger = {
+            id: tripData.passengerId,
             name: tripData.passengerName || 'Jordan Pérez',
             rating: tripData.passengerRating || 4.9,
             avatar: tripData.passengerAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(tripData.passengerName || 'Jordan')}`

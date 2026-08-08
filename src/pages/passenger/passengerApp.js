@@ -33,6 +33,7 @@ export function renderPassengerApp(container) {
   let currentTrip = null;
   let currentDriver = null;
   let searchTimeout = null;
+  let lastRouteRefreshAt = 0;
 
   const user = authService.getCurrentUser() || { id: 'p1', name: 'Pasajero' };
 
@@ -612,8 +613,24 @@ export function renderPassengerApp(container) {
 
   // Track Driver's Real-Time GPS Location Stream
   socket.on('driverLocationUpdated', (locData) => {
-    if (locData && locData.lat && locData.lng) {
-      mapComponent.addDriverMarker(locData.driverId || 'active_driver', locData.lat, locData.lng, locData.heading || 0);
+    if (!currentTrip || !currentDriver || locData?.tripId !== currentTrip.id) return;
+    if (locData.driverId !== currentDriver.id) return;
+    const lat = Number(locData.lat ?? locData.latitude);
+    const lng = Number(locData.lng ?? locData.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    mapComponent.addDriverMarker(currentDriver.id, lat, lng, locData.heading || 0, currentDriver);
+    if (currentTrip.pickup?.lat && currentTrip.pickup?.lng) {
+      mapComponent.setPickupMarker(currentTrip.pickup.lat, currentTrip.pickup.lng);
+      const now = Date.now();
+      if (now - lastRouteRefreshAt > 10000) {
+        lastRouteRefreshAt = now;
+        mapComponent.drawRoute(
+          { lat, lng },
+          currentTrip.pickup,
+          '#FFC107'
+        );
+      }
     }
   });
 

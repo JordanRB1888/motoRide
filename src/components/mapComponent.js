@@ -175,6 +175,10 @@ export class MapComponent {
 
   addDriverMarker(id, lat, lng, heading = 0, info = {}) {
     if (!this.map) return null;
+    if (this.markers.has(id)) {
+      this.updateDriverMarker(id, lat, lng, heading);
+      return this.markers.get(id);
+    }
     
     const svgIcon = L.divIcon({
       className: 'driver-3d-marker',

@@ -1,5 +1,6 @@
 import { icon } from '../utils/icons.js';
 import { socket } from '../services/socketClient.js';
+import { apiService } from '../services/apiService.js';
 import { formatTime } from '../utils/helpers.js';
 
 export function createChatModal({ tripId, currentUser, recipientUser }) {
@@ -194,11 +195,22 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
 
     socket.on('chat:message', socketHandler);
 
+    async function loadServerHistory() {
+        const serverMessages = await apiService.get(`/trips/${encodeURIComponent(tripId)}/messages`);
+        if (!Array.isArray(serverMessages)) return;
+        const byId = new Map(messages.map(message => [message.id, message]));
+        serverMessages.forEach(message => byId.set(message.id, message));
+        messages = [...byId.values()].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        saveMessages();
+        renderMessages();
+    }
+
     return {
         element: modal,
         open() {
             modal.classList.remove('hidden');
             renderMessages();
+            loadServerHistory();
             input.focus();
         },
         close() {

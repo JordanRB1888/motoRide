@@ -88,7 +88,8 @@ const initialDatabase = {
     }
   ],
   trips: [],
-  notifications: []
+  notifications: [],
+  messages: []
 };
 
 fs.mkdirSync(path.dirname(dataFile), { recursive: true });
@@ -99,6 +100,7 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS trips (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
 `);
 
 function loadCollection(table) {
@@ -108,7 +110,8 @@ function loadCollection(table) {
 const database = {
   users: loadCollection('users'),
   trips: loadCollection('trips'),
-  notifications: loadCollection('notifications')
+  notifications: loadCollection('notifications'),
+  messages: loadCollection('messages')
 };
 
 function ensureSeedCredentials() {
@@ -141,7 +144,7 @@ function ensureSeedCredentials() {
 function persistDatabase() {
   try {
     sqlite.exec('BEGIN IMMEDIATE');
-    for (const table of ['users', 'trips', 'notifications']) {
+    for (const table of ['users', 'trips', 'notifications', 'messages']) {
       sqlite.exec(`DELETE FROM ${table}`);
       const insert = sqlite.prepare(`INSERT INTO ${table} (id, payload) VALUES (?, ?)`);
       for (const item of database[table]) insert.run(item.id, JSON.stringify(item));
@@ -200,6 +203,28 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c * 1.35; // Urban road factor
+}
+
+function userCanAccessTrip(userId, role, trip) {
+  return role === 'admin' || trip?.passengerId === userId || trip?.driverId === userId;
+}
+
+function emitDriverLocation(driverId, location) {
+  const payload = { ...location, driverId, userId: driverId };
+  const activeTrip = database.trips.find(trip =>
+    trip.driverId === driverId &&
+    ['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(trip.status)
+  );
+  io.to('admins').to(`user:${driverId}`).emit('driverLocationUpdated', {
+    ...payload,
+    tripId: activeTrip?.id || null
+  });
+  if (activeTrip) {
+    io.to(`user:${activeTrip.passengerId}`).emit('driverLocationUpdated', {
+      ...payload,
+      tripId: activeTrip.id
+    });
+  }
 }
 
 // REST Endpoints
@@ -335,6 +360,15 @@ app.get('/api/trips', requireAuth, requireRole('admin'), (req, res) => {
   res.json(database.trips);
 });
 
+app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
+  const trip = database.trips.find(item => item.id === req.params.id);
+  if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
+  if (!userCanAccessTrip(req.user.id, req.user.role, trip)) {
+    return res.status(403).json({ error: 'FORBIDDEN' });
+  }
+  res.json(database.messages.filter(message => message.tripId === trip.id));
+});
+
 app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) => {
   const trip = req.body;
   trip.passengerId = req.user.id;
@@ -373,7 +407,7 @@ app.patch('/api/drivers/location', requireAuth, requireRole('driver'), (req, res
   };
   persistDatabase();
   const payload = { ...driver.location, driverId, userId: driverId };
-  io.emit('driverLocationUpdated', payload);
+  emitDriverLocation(driverId, payload);
   io.emit('admin:driver_location', payload);
   res.json(driver);
 });
@@ -454,8 +488,7 @@ io.on('connection', (socket) => {
       driver.status = driver.status || 'AVAILABLE';
       persistDatabase();
     }
-    // Broadcast to passengers and admin
-    io.emit('driverLocationUpdated', { driverId, lat, lng, heading: heading || 0 });
+    emitDriverLocation(driverId, { lat, lng, heading: heading || 0, updatedAt: Date.now() });
   });
 
   socket.on('driver:location_update', (data) => {
@@ -470,7 +503,7 @@ io.on('connection', (socket) => {
       persistDatabase();
     }
     const payload = { ...data, driverId, lat, lng };
-    io.emit('driverLocationUpdated', payload);
+    emitDriverLocation(driverId, payload);
     io.emit('admin:driver_location', payload);
   });
 
@@ -595,6 +628,32 @@ io.on('connection', (socket) => {
 
     console.log(`[+58express Socket.IO] Ride [${tripId}] cancelled by passenger`);
     io.emit('rideCancelled', { tripId });
+  });
+
+  socket.on('chat:send_message', (data = {}) => {
+    const trip = database.trips.find(item => item.id === data.tripId);
+    const { userId, role } = socket.data.auth;
+    if (!trip || !userCanAccessTrip(userId, role, trip) || role === 'admin') {
+      socket.emit('chat:error', { error: 'FORBIDDEN', tripId: data.tripId });
+      return;
+    }
+    const text = String(data.text || '').trim().slice(0, 1000);
+    const image = typeof data.image === 'string' && data.image.length <= 1_000_000 ? data.image : null;
+    if (!text && !image) return;
+    const sender = database.users.find(user => user.id === userId);
+    const message = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      tripId: trip.id,
+      senderId: userId,
+      senderName: sender?.firstName || 'Usuario',
+      recipientId: role === 'driver' ? trip.passengerId : trip.driverId,
+      text,
+      image,
+      timestamp: new Date().toISOString()
+    };
+    database.messages.push(message);
+    persistDatabase();
+    io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', message);
   });
 
   socket.on('disconnect', () => {
