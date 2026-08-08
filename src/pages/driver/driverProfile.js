@@ -5,7 +5,7 @@ import { showToast } from '../../components/toast.js';
 import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 import { getBcvEuroRate, formatVes } from '../../utils/bcvRates.js';
 
-export function renderDriverProfile(container) {
+export function renderDriverProfile(container, options = {}) {
   const user = authService.getCurrentUser() || {
     id: 'driver_1',
     firstName: 'Carlos',
@@ -233,6 +233,12 @@ export function renderDriverProfile(container) {
           </button>
         </div>
 
+        <div class="driver-profile-documents-card">
+          <span>${icon('shield', 25)}</span>
+          <div><strong>Mis documentos</strong><small>Envía o actualiza cédula, licencia, RCV y documentos del vehículo.</small></div>
+          <button id="btn-open-driver-documents">Gestionar ${icon('chevronRight', 17)}</button>
+        </div>
+
         <!-- Admin Direct Support Chat Button Card -->
         <div class="diorama-card-3d" style="
           padding: 20px; border-radius: 24px; background: rgba(0, 210, 255, 0.08);
@@ -341,6 +347,8 @@ export function renderDriverProfile(container) {
       const chatModal = createAdminSupportChat(user);
       document.body.appendChild(chatModal);
     });
+
+    container.querySelector('#btn-open-driver-documents')?.addEventListener('click', () => options.onOpenDocuments?.());
 
     // Logout Event
     container.querySelector('#driver-logout-btn').addEventListener('click', () => {

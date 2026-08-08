@@ -8,6 +8,7 @@ import { renderIncomingRide } from './incomingRide.js';
 import { renderEnRouteToPickup, renderWaitingPassenger, renderInTrip, renderTripSummary } from './activeTrip.js';
 import { renderEarnings } from './earnings.js';
 import { renderDocuments } from './documents.js';
+import { renderDriverTrips } from './driverTrips.js';
 import { renderDriverProfile } from './driverProfile.js';
 import { renderScheduledRides } from './scheduledRides.js';
 import { createChatModal } from '../../components/chatModal.js';
@@ -130,7 +131,7 @@ export function renderDriverApp(container) {
             <div class="driver-nav-tabs">
                 <button class="nav-tab active" data-tab="inicio">${icon('home')} <span>Inicio</span></button>
                 <button class="nav-tab" data-tab="ganancias">${icon('wallet')} <span>Ganancias</span></button>
-                <button class="nav-tab" data-tab="documentos">${icon('shield')} <span>Documentos</span></button>
+                <button class="nav-tab" data-tab="viajes">${icon('history')} <span>Viajes</span></button>
                 <button class="nav-tab" data-tab="perfil">${icon('user')} <span>Perfil</span></button>
             </div>
             
@@ -250,7 +251,7 @@ export function renderDriverApp(container) {
         overlay.classList.add('active');
         overlay.style.display = 'block';
         overlay.innerHTML = '';
-        renderDriverProfile(overlay);
+        renderDriverProfile(overlay, { onOpenDocuments: () => switchTab('documentos') });
     }
 
     function switchTab(tabName) {
@@ -283,6 +284,12 @@ export function renderDriverApp(container) {
             pageOverlay.style.display = 'block';
             pageOverlay.innerHTML = '';
             pageOverlay.appendChild(renderDocuments());
+        } else if (tabName === 'viajes') {
+            pageOverlay.classList.remove('hidden');
+            pageOverlay.classList.add('active');
+            pageOverlay.style.display = 'block';
+            pageOverlay.innerHTML = '';
+            pageOverlay.appendChild(renderDriverTrips());
         } else if (tabName === 'perfil') {
             openDriverProfileModal();
         }
