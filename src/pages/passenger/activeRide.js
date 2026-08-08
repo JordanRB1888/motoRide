@@ -2,7 +2,7 @@ import { icon } from '../../utils/icons.js';
 import { createRatingStars } from '../../components/ratingStars.js';
 import { showToast } from '../../components/toast.js';
 
-export function renderActiveRide(trip, driver, onSOS) {
+export function renderActiveRide(trip, driver, onSOS, onChat, onMinimize) {
   const div = document.createElement('div');
   div.className = 'active-ride fade-in';
   div.style.cssText = 'padding: 16px; max-width: 440px; margin: 0 auto;';
@@ -10,13 +10,14 @@ export function renderActiveRide(trip, driver, onSOS) {
   div.innerHTML = `
     <div class="diorama-card-3d" style="padding: 20px; border-radius: 24px; background: var(--surface-card); border: 2px solid var(--success);">
       
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px;">
+      <div class="passenger-trip-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px;">
         <span style="color:var(--success); font-weight:800; font-size:0.9rem; display:flex; align-items:center; gap:6px;">
           🟢 VIAJE EN PROGRESO
         </span>
-        <span style="color:var(--text-secondary); font-size:0.82rem; font-weight:700; font-family:'JetBrains Mono', monospace;">
-          ⏱️ ETA ~10 MIN
-        </span>
+        <div class="passenger-trip-card-actions">
+          <button class="trip-card-chat-btn" type="button">${icon('message', 16)} Chat</button>
+          <button class="trip-card-minimize-btn" type="button" aria-label="Minimizar información del viaje">⌄</button>
+        </div>
       </div>
 
       <!-- Animated Progress Bar -->
@@ -47,6 +48,8 @@ export function renderActiveRide(trip, driver, onSOS) {
   `;
 
   div.querySelector('.sos-btn').addEventListener('click', onSOS);
+  div.querySelector('.trip-card-chat-btn').addEventListener('click', onChat);
+  div.querySelector('.trip-card-minimize-btn').addEventListener('click', onMinimize);
 
   return div;
 }

@@ -562,6 +562,29 @@ app.get('/api/trips/active/me', requireAuth, (req, res) => {
   });
 });
 
+app.get('/api/trips/pending-review/me', requireAuth, requireRole('passenger'), (req, res) => {
+  const reviewWindowMs = 2 * 60 * 60 * 1000;
+  const trip = database.trips.findLast(item =>
+    item.passengerId === req.user.id &&
+    item.status === TRIP_STATUS.COMPLETED &&
+    !item.driverReview &&
+    Date.now() - new Date(item.closedAt || item.updatedAt || item.createdAt || 0).getTime() < reviewWindowMs
+  );
+  if (!trip) return res.status(204).end();
+  const passenger = database.users.find(user => user.id === trip.passengerId);
+  const driver = database.users.find(user => user.id === trip.driverId);
+  res.json({ trip, passenger: publicUser(passenger), driver: publicUser(driver) });
+});
+
+app.get('/api/trips/:id', requireAuth, (req, res) => {
+  const trip = database.trips.find(item => item.id === req.params.id);
+  if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
+  if (!userCanAccessTrip(req.user.id, req.user.role, trip)) return res.status(403).json({ error: 'FORBIDDEN' });
+  const passenger = database.users.find(user => user.id === trip.passengerId);
+  const driver = database.users.find(user => user.id === trip.driverId);
+  res.json({ trip, passenger: publicUser(passenger), driver: publicUser(driver) });
+});
+
 app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id);
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });

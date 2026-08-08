@@ -164,8 +164,10 @@ export class BottomSheet {
   setContent(html) {
     const isFarePreview = html instanceof HTMLElement && html.classList.contains('fare-preview-premium');
     const isDestinationSearch = typeof html === 'string' && html.includes('class="search-sheet"');
+    const isActiveTrip = html instanceof HTMLElement && (html.classList.contains('driver-card') || html.classList.contains('active-ride'));
     this.sheet.classList.toggle('fare-preview-sheet', isFarePreview);
     this.sheet.classList.toggle('destination-search-sheet', isDestinationSearch);
+    this.sheet.classList.toggle('passenger-active-trip-sheet', isActiveTrip);
     this.overlay.classList.toggle('fare-preview-overlay', isFarePreview);
     this.overlay.classList.toggle('destination-search-overlay', isDestinationSearch);
     if (typeof html === 'string') {
@@ -183,7 +185,7 @@ export class BottomSheet {
     const vh = this.options.snapPoints[index];
     const translateY = 100 - vh;
     
-    this.sheet.style.transform = this.sheet.classList.contains('fare-preview-sheet') || this.sheet.classList.contains('destination-search-sheet')
+    this.sheet.style.transform = this.sheet.classList.contains('fare-preview-sheet') || this.sheet.classList.contains('destination-search-sheet') || this.sheet.classList.contains('passenger-active-trip-sheet')
       ? 'translate(-50%, 0)'
       : `translate(-50%, ${translateY}vh)`;
     this._notifyStateChange();

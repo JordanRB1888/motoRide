@@ -140,8 +140,48 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   assert.equal(historyResponse.status, 200);
   assert.equal((await historyResponse.json()).length, 1);
 
+  const completedPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('No llegó la finalización al pasajero')), 5000);
+    passenger.on('tripStatusUpdated', update => {
+      if (update.tripId === 'test_trip' && update.status === 'COMPLETED') {
+        clearTimeout(timeout);
+        resolve(update);
+      }
+    });
+  });
+  driver.emit('tripStatusUpdated', { tripId: 'test_trip', status: 'ARRIVED' });
+  await new Promise(resolve => setTimeout(resolve, 80));
+  driver.emit('tripStatusUpdated', { tripId: 'test_trip', status: 'IN_PROGRESS' });
+  await new Promise(resolve => setTimeout(resolve, 80));
+  driver.emit('tripStatusUpdated', { tripId: 'test_trip', status: 'COMPLETED' });
+  await completedPromise;
+
+  const pendingReviewResponse = await fetch(`${url}/api/trips/pending-review/me`, {
+    headers: { authorization: `Bearer ${passengerToken}` }
+  });
+  assert.equal(pendingReviewResponse.status, 200);
+  assert.equal((await pendingReviewResponse.json()).trip.id, 'test_trip');
+
+  const ratingPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('No se registró la calificación del pasajero')), 5000);
+    passenger.on('tripRatingUpdated', update => {
+      if (update.tripId === 'test_trip' && update.role === 'passenger') {
+        clearTimeout(timeout);
+        resolve(update);
+      }
+    });
+  });
+  passenger.emit('tripRated', { tripId: 'test_trip', rating: 5, tags: ['Manejo seguro'], tipEUR: 1, targetRole: 'driver' });
+  await ratingPromise;
+  const noPendingReviewResponse = await fetch(`${url}/api/trips/pending-review/me`, {
+    headers: { authorization: `Bearer ${passengerToken}` }
+  });
+  assert.equal(noPendingReviewResponse.status, 204);
+
   const persistedDb = new DatabaseSync(dataFile, { readOnly: true });
   const persisted = JSON.parse(persistedDb.prepare('SELECT payload FROM trips WHERE id = ?').get('test_trip').payload);
   persistedDb.close();
-  assert.equal(persisted.status, 'DRIVER_ASSIGNED');
+  assert.equal(persisted.status, 'COMPLETED');
+  assert.equal(persisted.driverReview.rating, 5);
+  assert.equal(persisted.driverReview.tipEUR, 1);
 });

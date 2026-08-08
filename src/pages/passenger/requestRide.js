@@ -232,14 +232,14 @@ export function renderSearchingState(onCancel, rideType = 'MOTO') {
   return div;
 }
 
-export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip) {
+export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onMinimize) {
   const div = document.createElement('div');
   div.className = 'driver-card fade-in';
   div.style.cssText = 'padding: 16px; max-width: 440px; margin: 0 auto;';
   
   div.innerHTML = `
     <div class="diorama-card-3d" style="padding: 20px; border-radius: 24px; background: var(--surface-card); border: 2px solid var(--accent-secondary);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
+      <div class="passenger-trip-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
         <div style="display:flex; align-items:center; gap: 12px;">
           <img src="${driver.photoUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (driver.firstName || 'Driver')}" 
                style="width: 56px; height: 56px; border-radius: 50%; border: 3px solid var(--accent-secondary); box-shadow: 0 0 15px rgba(0,210,255,0.4);">
@@ -250,8 +250,8 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip) {
             </div>
           </div>
         </div>
-        <div style="background: rgba(0,230,118,0.15); border: 1px solid var(--success); color: var(--success); padding: 8px 14px; border-radius: 16px; font-weight: 800; font-size: 0.85rem; display:flex; align-items:center; gap:6px;">
-          ${icon('clock', 14)} En Camino
+        <div class="passenger-trip-card-actions">
+          <button class="trip-card-minimize-btn" type="button" aria-label="Minimizar información del viaje">⌄</button>
         </div>
       </div>
       
@@ -288,6 +288,7 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip) {
 
   div.querySelector('.call-btn').addEventListener('click', onCall);
   div.querySelector('.chat-btn').addEventListener('click', onChat);
+  div.querySelector('.trip-card-minimize-btn').addEventListener('click', onMinimize);
   
   const cancelBtn = div.querySelector('.cancel-driver-trip-btn');
   if (cancelBtn) {

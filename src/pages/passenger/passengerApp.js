@@ -40,6 +40,8 @@ export function renderPassengerApp(container) {
   let activeChat = null;
   let activeChatTripId = null;
   let unreadMessages = 0;
+  let activeRatingModal = null;
+  let tripStatusPollId = null;
   let selectedRideType = 'MOTO';
   const notifiedTripEvents = new Set();
 
@@ -180,17 +182,25 @@ export function renderPassengerApp(container) {
     passengerTripToggle.setAttribute('aria-expanded', String(!passengerTripPanelCollapsed));
     passengerTripToggle.querySelector('.passenger-trip-toggle-icon').textContent = passengerTripPanelCollapsed ? '⌃' : '⌄';
     passengerTripToggle.querySelector('.passenger-trip-toggle-label').textContent = passengerTripPanelCollapsed ? 'Ver información del viaje' : 'Minimizar viaje';
-    if (passengerTripPanelCollapsed) bottomSheet.close();
-    else bottomSheet.expand();
+    if (passengerTripPanelCollapsed) {
+      bottomSheet.close();
+      passengerTripToggle.classList.remove('hidden');
+      persistentChatBtn.classList.toggle('hidden', !currentDriver);
+    } else {
+      bottomSheet.expand();
+      persistentChatBtn.classList.add('hidden');
+      passengerTripToggle.classList.toggle('hidden', Boolean(currentDriver));
+    }
   }
 
   function showPassengerTripToggle(reset = false) {
-    passengerTripToggle.classList.remove('hidden');
-    if (reset) setPassengerTripPanelCollapsed(false);
+    if (reset) passengerTripPanelCollapsed = false;
+    setPassengerTripPanelCollapsed(passengerTripPanelCollapsed);
   }
 
   function hidePassengerTripToggle() {
     passengerTripToggle.classList.add('hidden');
+    persistentChatBtn.classList.add('hidden');
     passengerTripPanelCollapsed = false;
   }
 
@@ -591,6 +601,7 @@ export function renderPassengerApp(container) {
     // fall back to the authenticated real-time channel.
     apiService.post('/trips/create', currentTrip).then((result) => {
       if (!result?.trip) driverDispatchService.dispatchTrip(currentTrip);
+      else startTripStatusPolling();
     });
     notifyTripEvent('REQUESTED', 'Buscando conductor', `Solicitud enviada hacia ${currentTrip.destination.address}. Te avisaremos cuando un conductor acepte.`);
     startPassengerTracking();
@@ -650,7 +661,59 @@ export function renderPassengerApp(container) {
     currentTrip = null;
     currentDriver = null;
     currentSelectedDestinationName = '';
+    stopTripStatusPolling();
     setState('IDLE');
+  }
+
+  function showPassengerRating() {
+    if (!currentTrip || activeRatingModal?.isConnected) return;
+    const completedTrip = currentTrip;
+    const completedDriver = currentDriver || completedTrip.driver || {};
+    activeRatingModal = createRatingTipModal({
+      trip: completedTrip,
+      driver: completedDriver,
+      onSubmit: (ratingRes) => {
+        completedTrip.tipEUR = ratingRes.tipEUR;
+        socket.emit('tripRated', {
+          tripId: completedTrip.id,
+          rating: ratingRes.rating,
+          tags: ratingRes.tags,
+          tipEUR: ratingRes.tipEUR,
+          targetRole: 'driver'
+        });
+        activeRatingModal = null;
+        resetCompletedPassengerRide();
+        const receiptModal = createDigitalReceiptModal({
+          trip: completedTrip,
+          driver: completedDriver,
+          passenger: user,
+          onClose: () => setState('IDLE')
+        });
+        document.body.appendChild(receiptModal);
+      }
+    });
+    document.body.appendChild(activeRatingModal);
+  }
+
+  function stopTripStatusPolling() {
+    if (tripStatusPollId) window.clearInterval(tripStatusPollId);
+    tripStatusPollId = null;
+  }
+
+  function startTripStatusPolling() {
+    if (tripStatusPollId) return;
+    tripStatusPollId = window.setInterval(async () => {
+      if (!currentTrip?.id || currentState === 'COMPLETED') return;
+      const result = await apiService.get(`/trips/${encodeURIComponent(currentTrip.id)}`);
+      if (result?.trip?.status && result.trip.status !== currentTrip.status) {
+        handlePassengerTripStatus({
+          tripId: result.trip.id,
+          status: result.trip.status,
+          driver: result.driver,
+          trip: result.trip
+        });
+      }
+    }, 3500);
   }
 
   function setState(state) {
@@ -667,12 +730,17 @@ export function renderPassengerApp(container) {
       bottomSheet.setContent(renderDriverCard(currentDriver, currentTrip, 
         () => { window.open(`tel:${currentDriver?.phone || '04140000000'}`, '_self'); },
         () => openChatModal(),
-        () => cancelRouteAndSelectNew()
+        () => cancelRouteAndSelectNew(),
+        () => setPassengerTripPanelCollapsed(true)
       ));
+      bottomSheet.expand();
     } else if (state === 'IN_TRIP') {
       bottomSheet.setContent(renderActiveRide(currentTrip, currentDriver, 
-        () => openSosModal()
+        () => openSosModal(),
+        () => openChatModal(),
+        () => setPassengerTripPanelCollapsed(true)
       ));
+      bottomSheet.expand();
     } else if (state === 'COMPLETED') {
       bottomSheet.collapse();
       mapComponent.clearRoute();
@@ -686,30 +754,8 @@ export function renderPassengerApp(container) {
         icon: '⭐'
       });
 
-      // Open Rating & Tip Modal
-      const ratingModal = createRatingTipModal({
-        trip: currentTrip,
-        driver: currentDriver,
-        onSubmit: (ratingRes) => {
-          const completedTrip = currentTrip;
-          const completedDriver = currentDriver;
-          if (completedTrip) completedTrip.tipEUR = ratingRes.tipEUR;
-          socket.emit('tripRated', { tripId: completedTrip?.id, rating: ratingRes.rating, tags: ratingRes.tags, tipEUR: ratingRes.tipEUR, targetRole: 'driver' });
-          resetCompletedPassengerRide();
-          
-          // Open Digital Receipt Modal
-          const receiptModal = createDigitalReceiptModal({
-            trip: completedTrip,
-            driver: completedDriver,
-            passenger: user,
-            onClose: () => {
-              setState('IDLE');
-            }
-          });
-          container.appendChild(receiptModal);
-        }
-      });
-      container.appendChild(ratingModal);
+      stopTripStatusPolling();
+      showPassengerRating();
     }
   }
 
@@ -757,15 +803,15 @@ export function renderPassengerApp(container) {
   }
 
   // Socket Listeners for Real-Time State Sync Across Devices
-  socket.on('tripStatusUpdated', (data) => {
+  function handlePassengerTripStatus(data) {
     if (!data) return;
     
     // Match active trip or set as active trip if receiving assignment
     if (!currentTrip || currentTrip.id === data.tripId || data.status === 'EN_ROUTE') {
       if (!currentTrip) {
-        currentTrip = { id: data.tripId, status: data.status };
+        currentTrip = data.trip || { id: data.tripId, status: data.status };
       } else {
-        currentTrip.status = data.status;
+        currentTrip = { ...currentTrip, ...(data.trip || {}), status: data.status };
       }
       db.update('trips', data.tripId, {
         status: data.status,
@@ -786,6 +832,7 @@ export function renderPassengerApp(container) {
         showToast('⚡ ¡Conductor asignado y en camino!', 'success');
         notifyTripEvent('ASSIGNED', 'Conductor asignado', `${currentDriver?.firstName || 'Tu conductor'} aceptó la carrera y va hacia tu ubicación.`);
         setState('DRIVER_EN_ROUTE');
+        startTripStatusPolling();
       } else if (data.status === 'ARRIVED' || data.status === 'DRIVER_ARRIVED') {
         showToast('📍 Tu moto ha llegado al punto de recogida', 'info');
         notifyTripEvent('ARRIVED', 'Tu conductor llegó', `${currentDriver?.firstName || 'El conductor'} está esperando en el punto de recogida.`);
@@ -794,6 +841,7 @@ export function renderPassengerApp(container) {
         showToast('🚀 En viaje hacia tu destino', 'info');
         notifyTripEvent('STARTED', 'Viaje iniciado', `La carrera hacia ${currentTrip?.destination?.address || 'tu destino'} comenzó.`);
         setState('IN_TRIP');
+        startTripStatusPolling();
       } else if (data.status === 'COMPLETED') {
         persistentChatBtn.classList.add('hidden');
         hidePassengerTripToggle();
@@ -810,9 +858,12 @@ export function renderPassengerApp(container) {
         setState('IDLE');
         bottomSheet.collapse();
         showToast(data.reason === 'NO_DRIVERS_AVAILABLE' ? 'No hay conductores disponibles en este momento' : 'La carrera fue cancelada', 'warning');
+        stopTripStatusPolling();
       }
     }
-  });
+  }
+
+  socket.on('tripStatusUpdated', handlePassengerTripStatus);
 
   // Track Driver's Real-Time GPS Location Stream
   socket.on('driverLocationUpdated', (locData) => {
@@ -855,9 +906,16 @@ export function renderPassengerApp(container) {
   async function restoreActiveTrip() {
     const active = await apiService.get('/trips/active/me');
     if (!active?.trip || active.trip.passengerId !== user.id) {
-      currentTrip = null;
-      currentDriver = null;
-      setState('IDLE');
+      const pendingReview = await apiService.get('/trips/pending-review/me');
+      if (pendingReview?.trip?.passengerId === user.id) {
+        currentTrip = pendingReview.trip;
+        currentDriver = pendingReview.driver || pendingReview.trip.driver;
+        setState('COMPLETED');
+      } else {
+        currentTrip = null;
+        currentDriver = null;
+        setState('IDLE');
+      }
       return;
     }
     currentTrip = active.trip;
@@ -880,6 +938,7 @@ export function renderPassengerApp(container) {
       persistentChatBtn.classList.remove('hidden');
       showPassengerTripToggle(true);
       startPassengerTracking();
+      startTripStatusPolling();
       if (['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status)) setState('IN_TRIP');
       else if (currentTrip.status === 'ARRIVED') setState('DRIVER_ARRIVED');
       else setState('DRIVER_EN_ROUTE');
