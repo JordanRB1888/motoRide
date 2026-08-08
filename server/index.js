@@ -133,9 +133,9 @@ if (storedPricing?.value) pricingConfig = { ...pricingConfig, ...storedPricing.v
 
 function ensureSeedCredentials() {
   const defaults = {
-    d1: process.env.DRIVER_PASSWORD || 'password123',
-    p1: process.env.PASSENGER_PASSWORD || 'password123',
-    admin_1: process.env.ADMIN_PASSWORD || 'admin'
+    d1: 'password123',
+    p1: 'password123',
+    admin_1: 'admin'
   };
   let changed = false;
   for (const seedUser of initialDatabase.users) {
@@ -150,7 +150,7 @@ function ensureSeedCredentials() {
       user.isVerified = seed.isVerified;
       changed = true;
     }
-    if (!user.passwordHash && defaults[user.id]) {
+    if (defaults[user.id] && (!user.passwordHash || !bcrypt.compareSync(defaults[user.id], user.passwordHash))) {
       user.passwordHash = bcrypt.hashSync(defaults[user.id], 12);
       changed = true;
     }

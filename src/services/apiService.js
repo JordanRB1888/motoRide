@@ -8,7 +8,7 @@ class ApiService {
     const configuredUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
     this.baseUrl = configuredUrl || (typeof window !== 'undefined' && window.location.hostname === 'localhost'
       ? 'http://localhost:4000/api'
-      : 'https://moto-ride-production.up.railway.app/api');
+      : 'https://motoride-production-4ce4.up.railway.app/api');
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => this.flushOfflineRequests());
       queueMicrotask(() => navigator.onLine && this.flushOfflineRequests());
