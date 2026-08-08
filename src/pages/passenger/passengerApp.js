@@ -25,6 +25,7 @@ import { notificationService } from '../../services/notificationService.js';
 import { audioEffects } from '../../utils/audioEffects.js';
 import { eventLogger } from '../../utils/logger.js';
 import { driverDispatchService } from '../../services/driverDispatchService.js';
+import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 
 export function renderPassengerApp(container) {
   let currentState = 'IDLE';
@@ -53,29 +54,22 @@ export function renderPassengerApp(container) {
           <span>${(user.firstName || user.name || 'P').charAt(0)}</span>
         </button>
         <div class="passenger-brand-lockup"><strong><b>+58</b>express</strong><small>Muévete por Maracaibo</small></div>
+        <div class="passenger-header-actions">
+          <button id="passenger-support-shortcut" class="passenger-header-icon" type="button" aria-label="Abrir soporte">${icon('message', 18)}</button>
+          <button id="header-notif-btn-passenger" class="passenger-header-icon" type="button" title="Centro de Notificaciones">
+            ${icon('bell', 18)}
+            <span id="notif-badge-passenger">0</span>
+          </button>
+          <div id="header-theme-toggle-slot"></div>
+        </div>
       </header>
       
       <!-- Top Search Bar -->
       <div class="top-search-bar" id="top-search-bar">
-        <button class="menu-btn">${icon('menu')}</button>
+        <span class="passenger-search-title">¿A dónde vamos?</span>
         <div class="search-input-wrapper">
           <div class="search-icon">${icon('search')}</div>
           <input type="text" id="destination-input" placeholder="¿A dónde vas en Maracaibo?" readonly>
-        </div>
-        <div class="user-avatar-actions" style="display:flex; align-items:center; gap:8px;">
-          <button id="header-notif-btn-passenger" style="
-            background: rgba(255,193,7,0.15); border: 1.5px solid var(--accent-primary); color: var(--accent-primary);
-            width: 36px; height: 36px; border-radius: 50%; display:flex; align-items:center; justify-content:center;
-            cursor: pointer; position: relative; flex-shrink: 0;
-          " title="Centro de Notificaciones">
-            ${icon('bell', 18)}
-            <span id="notif-badge-passenger" style="
-              position: absolute; top: -3px; right: -3px; background: var(--danger); color: white;
-              font-size: 0.65rem; font-weight: 900; width: 16px; height: 16px; border-radius: 50%;
-              display: flex; align-items: center; justify-content: center; border: 1.5px solid #121824;
-            ">3</span>
-          </button>
-          <div id="header-theme-toggle-slot"></div>
         </div>
       </div>
 
@@ -144,6 +138,7 @@ export function renderPassengerApp(container) {
     themeSlot.appendChild(initThemeToggle());
   }
   container.querySelector('.passenger-profile-shortcut')?.addEventListener('click', () => handleNavigation('profile'));
+  container.querySelector('#passenger-support-shortcut')?.addEventListener('click', () => document.body.appendChild(createAdminSupportChat(user)));
 
   // Top Schedule Ride Button Listener
   const topScheduleBtn = container.querySelector('#top-schedule-ride-btn');
