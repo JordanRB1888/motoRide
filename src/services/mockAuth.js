@@ -27,6 +27,7 @@ export const authService = {
   },
 
   logout() {
+    socketClient.clearAuthentication();
     localStorage.removeItem('58express_session');
     return { success: true };
   },

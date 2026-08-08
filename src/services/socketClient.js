@@ -50,8 +50,16 @@ class RealSocketClient {
       ? (configuredSocketUrl || (window.location.hostname === 'localhost' ? 'http://localhost:4000' : 'https://moto-ride-production.up.railway.app'))
       : 'http://localhost:4000';
 
+    let savedToken = null;
+    try {
+      const savedSession = JSON.parse(localStorage.getItem('58express_session') || 'null');
+      savedToken = savedSession?.token || null;
+    } catch {}
+
     try {
       this.socket = io(serverUrl, {
+        auth: savedToken ? { token: savedToken } : {},
+        autoConnect: Boolean(savedToken),
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 5,
@@ -156,7 +164,7 @@ class RealSocketClient {
   }
 
   connect() {
-    if (this.socket && !this.socket.connected) this.socket.connect();
+    if (this.socket && !this.socket.connected && this.socket.auth?.token) this.socket.connect();
     return this.socket;
   }
 
@@ -165,6 +173,12 @@ class RealSocketClient {
     this.socket.auth = { token };
     if (this.socket.connected) this.socket.disconnect();
     this.socket.connect();
+  }
+
+  clearAuthentication() {
+    if (!this.socket) return;
+    this.socket.disconnect();
+    this.socket.auth = {};
   }
 }
 

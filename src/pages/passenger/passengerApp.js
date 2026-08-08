@@ -3,7 +3,7 @@ import { BottomSheet } from '../../components/bottomSheet.js';
 import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import * as helpers from '../../utils/helpers.js';
-import { db } from '../../services/apiService.js';
+import { apiService, db } from '../../services/apiService.js';
 import { authService } from '../../services/mockAuth.js';
 import { tripEngine } from '../../services/mockTrip.js';
 import { socket } from '../../services/socketClient.js';
@@ -457,8 +457,11 @@ export function renderPassengerApp(container) {
 
     eventLogger.log('PASSENGER', `Solicitud de carrera enviada al DriverDispatchService [${currentTrip.id}] hacia ${currentTrip.destination.address}`);
 
-    // Dispatch via DriverDispatchService (calculates proximity, sorts drivers, & sets 15s batch timers)
-    driverDispatchService.dispatchTrip(currentTrip);
+    // Persist and dispatch through the backend. If REST is temporarily unavailable,
+    // fall back to the authenticated real-time channel.
+    apiService.post('/trips/create', currentTrip).then((result) => {
+      if (!result?.trip) driverDispatchService.dispatchTrip(currentTrip);
+    });
   }
 
   function cancelRouteAndSelectNew() {
