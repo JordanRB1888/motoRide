@@ -34,7 +34,7 @@ export function renderDriverProfile(container, options = {}) {
     const avatarUrl = user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
 
     container.innerHTML = `
-      <div class="driver-profile-page fade-in" style="padding: 24px 16px 120px; max-width: 440px; margin: 0 auto;">
+      <div class="driver-profile-page driver-profile-premium fade-in" style="padding: 24px 16px 120px; max-width: 440px; margin: 0 auto;">
         
         <!-- Header -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
@@ -52,7 +52,7 @@ export function renderDriverProfile(container, options = {}) {
         </div>
 
         <!-- VIP Driver Passport Card -->
-        <div class="diorama-card-3d" style="
+        <div class="diorama-card-3d driver-profile-identity-card" style="
           background: var(--surface-card); border-radius: 28px; padding: 28px 20px; text-align: center;
           border: 1.5px solid var(--border-gold); box-shadow: 0 20px 45px rgba(0,0,0,0.6); margin-bottom: 20px;
           position: relative; overflow: hidden;
@@ -60,7 +60,7 @@ export function renderDriverProfile(container, options = {}) {
           <div style="position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, #FFC107 0%, #00D2FF 50%, #00E676 100%);"></div>
 
           <!-- Avatar Container -->
-          <div style="position: relative; width: 108px; height: 108px; margin: 0 auto 16px;">
+          <div class="driver-profile-avatar-wrap" style="position: relative; width: 108px; height: 108px; margin: 0 auto 16px;">
             <input type="file" id="driver-photo-input" accept="image/*" style="display: none;" />
             <img src="${avatarUrl}" id="driver-avatar-img" style="
               width: 100%; height: 100%; border-radius: 50%;
@@ -85,7 +85,7 @@ export function renderDriverProfile(container, options = {}) {
           </h3>
 
           <!-- Details Pill Grid -->
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; background: var(--surface-elevated); padding: 14px 16px; border-radius: 18px; border: 1px solid var(--border-color);">
+          <div class="driver-profile-details" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; background: var(--surface-elevated); padding: 14px 16px; border-radius: 18px; border: 1px solid var(--border-color);">
             <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem;">
               <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
                 ${icon('phone', 14)} Teléfono
@@ -116,6 +116,11 @@ export function renderDriverProfile(container, options = {}) {
           ">
             ${icon('edit', 16)} ${isEditing ? 'Cancelar Edición' : 'Editar Datos de Moto y Conductor'}
           </button>
+        </div>
+
+        <div class="driver-profile-stats">
+          <div><span>${icon('starFilled', 24)}</span><strong>${Number(user.rating || 4.9).toFixed(1)}</strong><small>Calificación promedio</small></div>
+          <div><span>${icon('history', 24)}</span><strong>${Number(user.totalTrips || 0)}</strong><small>Viajes completados</small></div>
         </div>
 
         ${isEditing ? `
@@ -208,7 +213,7 @@ export function renderDriverProfile(container, options = {}) {
         ` : ''}
 
         <!-- Money Withdrawal Card in EUR -->
-        <div class="diorama-card-3d" style="
+        <div class="diorama-card-3d driver-profile-balance-card" style="
           padding: 20px; border-radius: 24px; background: var(--surface-card);
           border: 1.5px solid var(--border-gold); margin-bottom: 20px;
         ">
@@ -240,28 +245,28 @@ export function renderDriverProfile(container, options = {}) {
         </div>
 
         <!-- Admin Direct Support Chat Button Card -->
-        <div class="diorama-card-3d" style="
+        <div class="diorama-card-3d driver-profile-support-card" style="
           padding: 20px; border-radius: 24px; background: rgba(0, 210, 255, 0.08);
           border: 1.5px solid var(--accent-secondary); margin-bottom: 24px; text-align: center;
         ">
           <h4 style="color: var(--text-primary); font-size: 1.1rem; font-weight: 800; margin-bottom: 4px;">
-            💬 Atención Directa a Conductor
+            💬 Atención directa con Administración
           </h4>
           <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px;">
-            ¿Tienes alguna duda con tu liquidación o tus viajes? Chatea directamente con Administración +58express 24/7.
+            ¿Tienes alguna duda con tu liquidación, documentos o viajes? Comunícate directamente con Administración +58 Express 24/7.
           </p>
           <button id="btn-open-admin-chat" class="btn btn-secondary-3d" style="
             width: 100%; padding: 16px; font-weight: 800; font-size: 1rem;
             color: var(--accent-secondary); border-color: var(--accent-secondary);
             display: flex; align-items: center; justify-content: center; gap: 10px;
           ">
-            🛡️ Hablar con Soporte Administración
+            🛡️ Hablar con Administración
           </button>
         </div>
 
         <!-- Only Logout Button (Cleaned as requested by user) -->
         <div style="margin-top: 10px;">
-          <button id="driver-logout-btn" class="btn" style="
+          <button id="driver-logout-btn" class="btn driver-profile-logout" style="
             width: 100%; padding: 16px; font-weight: 900; font-size: 1.05rem;
             background: rgba(255, 77, 77, 0.15); border: 2px solid var(--danger);
             color: var(--danger); border-radius: 20px;
