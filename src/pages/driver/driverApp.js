@@ -357,6 +357,7 @@ export function renderDriverApp(container) {
     }
 
     tripPanelToggle.addEventListener('click', () => setTripPanelCollapsed(!tripPanelCollapsed));
+    document.addEventListener('58express:toggle-driver-trip-panel', () => setTripPanelCollapsed(!tripPanelCollapsed));
 
     function callPassenger(passenger) {
         window.open(`tel:${passenger?.phone || '+584125550001'}`, '_self');

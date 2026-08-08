@@ -1,124 +1,69 @@
 import { showToast } from './toast.js';
-import { db } from '../services/mockDatabase.js';
+import { icon } from '../utils/icons.js';
 
-export function createDriverRatingModal({ trip, passengerName = 'Jordan Pérez', onSubmit }) {
+export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas', onSubmit }) {
     const overlay = document.createElement('div');
-    overlay.className = 'diorama-card-3d fade-in';
-    overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 9999;
-        background: rgba(10, 15, 24, 0.92); backdrop-filter: blur(24px);
-        display: flex; align-items: center; justify-content: center; padding: 16px;
-    `;
+    overlay.className = 'driver-rating-overlay fade-in';
+    const modal = document.createElement('section');
+    modal.className = 'driver-rating-premium';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
 
     let selectedRating = 5;
     let selectedTags = [];
+    let commentDraft = '';
+    const tags = ['Puntual', 'Amable y respetuoso', 'Buena comunicación', 'Pago rápido y exacto', 'Excelente pasajero'];
+    const labels = ['', 'Debe mejorar', 'Regular', 'Bien', 'Muy bien', 'Excelente'];
+    const fare = Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fare ?? 0).toFixed(2);
+    const payment = ({ cash_usd: 'Efectivo USD', cash_ves: 'Efectivo Bs.', pago_movil: 'Pago móvil', wallet: 'Wallet' })[trip?.paymentMethod] || 'Efectivo USD';
+    const avatar = trip?.passengerAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(passengerName)}`;
 
-    const tags = [
-        "Pasajero Puntual ⏱️",
-        "Amable y Respetuoso 😊",
-        "Buena Comunicación 💬",
-        "Pago Rápido y Exacto 💵",
-        "Excelente Cliente 🌟"
-    ];
-
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-        width: 100%; max-width: 440px; background: var(--surface-card); border-radius: 28px;
-        border: 2px solid var(--accent-secondary); padding: 24px; text-align: center;
-        box-shadow: 0 30px 70px rgba(0,0,0,0.8);
-        animation: dioramaLand 0.35s ease-out;
-    `;
+    const finish = payload => {
+        overlay.remove();
+        onSubmit?.(payload);
+    };
 
     const render = () => {
         modal.innerHTML = `
-            <div style="display:flex; justify-content:center; margin-bottom:12px;">
-                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(passengerName)}&background=00D2FF&color=121824&size=128&bold=true" 
-                     style="width: 72px; height: 72px; border-radius: 50%; border: 3px solid var(--accent-secondary); box-shadow: 0 0 20px rgba(0,210,255,0.4);" />
+            <header class="rating-success-header">
+                <div class="rating-brand">+58 <span>EXPRESS</span></div>
+                <div class="rating-completed">${icon('check', 18)} Viaje completado</div>
+                <small>$${fare} · ${payment}</small>
+            </header>
+            <div class="rating-passenger-avatar"><img src="${avatar}" alt="${passengerName}"></div>
+            <h2>${passengerName}</h2>
+            <p>Califica tu experiencia con el pasajero</p>
+            <div class="driver-rating-stars" id="star-bar-driver">
+                ${[1,2,3,4,5].map(star => `<button class="star-btn-driver ${star <= selectedRating ? 'selected' : ''}" data-star="${star}" aria-label="${star} estrellas">★</button>`).join('')}
             </div>
-
-            <h3 style="color: var(--text-primary); font-size: 1.3rem; font-weight: 900; margin-bottom: 4px;">
-                ¿Cómo fue la experiencia con ${passengerName}?
-            </h3>
-            <small style="color: var(--text-secondary); font-size: 0.85rem; display:block; margin-bottom: 16px;">
-                Califica el comportamiento del cliente para mantener la comunidad segura 🇻🇪
-            </small>
-
-            <!-- Star Rating Bar -->
-            <div style="display:flex; justify-content:center; gap: 10px; margin-bottom: 20px;" id="star-bar-driver">
-                ${[1, 2, 3, 4, 5].map(star => `
-                    <span class="star-btn-driver" data-star="${star}" style="
-                        font-size: 2.2rem; cursor: pointer; transition: transform 0.15s ease;
-                        color: ${star <= selectedRating ? '#00D2FF' : '#475569'};
-                        filter: ${star <= selectedRating ? 'drop-shadow(0 0 8px rgba(0,210,255,0.6))' : 'none'};
-                    ">
-                        ★
-                    </span>
-                `).join('')}
+            <strong class="rating-label">${labels[selectedRating]}</strong>
+            <h3>¿Qué describe mejor a este pasajero?</h3>
+            <div class="driver-rating-tags">
+                ${tags.map(tag => `<button class="tag-driver-btn ${selectedTags.includes(tag) ? 'selected' : ''}" data-tag="${tag}">${tag}</button>`).join('')}
             </div>
-
-            <!-- Review Tags -->
-            <div style="display:flex; flex-wrap:wrap; gap: 8px; justify-content:center; margin-bottom: 22px;">
-                ${tags.map(tag => {
-                    const isSelected = selectedTags.includes(tag);
-                    return `
-                        <button class="tag-driver-btn" data-tag="${tag}" style="
-                            padding: 8px 14px; border-radius: 16px; font-size: 0.8rem; font-weight: 700; cursor: pointer;
-                            background: ${isSelected ? 'var(--accent-secondary)' : 'var(--surface-elevated)'};
-                            color: ${isSelected ? '#121824' : 'var(--text-primary)'};
-                            border: 1px solid ${isSelected ? 'var(--accent-secondary)' : 'var(--border-color)'};
-                        ">
-                            ${tag}
-                        </button>
-                    `;
-                }).join('')}
-            </div>
-
-            <!-- Comment Input -->
-            <div style="margin-bottom: 22px;">
-                <input type="text" id="driver-rating-comment" placeholder="Comentario opcional sobre el pasajero..." style="
-                    width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border-color);
-                    background: var(--surface-input); color: white; outline: none; font-size: 0.88rem;
-                " />
-            </div>
-
-            <!-- Submit Button -->
-            <button id="submit-driver-rating-btn" class="btn btn-3d primary-btn" style="
-                width: 100%; padding: 16px; font-size: 1.05rem; font-weight: 900;
-                background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824;
-                border-radius: 18px; letter-spacing: 0.5px;
-            ">
-                ✓ ENVIAR CALIFICACIÓN AL PASAJERO
-            </button>
+            <textarea id="driver-rating-comment" rows="3" placeholder="Comentario opcional sobre el pasajero">${commentDraft}</textarea>
+            <button id="submit-driver-rating-btn" class="driver-rating-submit">Enviar calificación</button>
+            <button id="skip-driver-rating-btn" class="driver-rating-skip">Omitir por ahora</button>
+            <small class="rating-safety-note">${icon('shield', 15)} Tu opinión ayuda a mantener una comunidad segura</small>
         `;
 
-        // Star bar click listeners
-        modal.querySelectorAll('.star-btn-driver').forEach(btn => {
-            btn.addEventListener('click', () => {
-                selectedRating = parseInt(btn.dataset.star, 10);
-                render();
-            });
-        });
-
-        // Tag click listeners
-        modal.querySelectorAll('.tag-driver-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tag = btn.dataset.tag;
-                if (selectedTags.includes(tag)) {
-                    selectedTags = selectedTags.filter(t => t !== tag);
-                } else {
-                    selectedTags.push(tag);
-                }
-                render();
-            });
-        });
-
-        // Submit
+        modal.querySelectorAll('.star-btn-driver').forEach(button => button.addEventListener('click', () => {
+            commentDraft = modal.querySelector('#driver-rating-comment').value;
+            selectedRating = Number(button.dataset.star);
+            render();
+        }));
+        modal.querySelectorAll('.tag-driver-btn').forEach(button => button.addEventListener('click', () => {
+            commentDraft = modal.querySelector('#driver-rating-comment').value;
+            const tag = button.dataset.tag;
+            selectedTags = selectedTags.includes(tag) ? selectedTags.filter(item => item !== tag) : [...selectedTags, tag];
+            render();
+        }));
         modal.querySelector('#submit-driver-rating-btn').addEventListener('click', () => {
-            const comment = modal.querySelector('#driver-rating-comment')?.value || '';
-            showToast(`¡Gracias! Calificación de ${selectedRating} ⭐ registrada para ${passengerName}`, 'success');
-            overlay.remove();
-            if (onSubmit) onSubmit({ rating: selectedRating, tags: selectedTags, comment });
+            const comment = modal.querySelector('#driver-rating-comment').value.trim();
+            showToast(`Calificación de ${selectedRating} estrellas registrada`, 'success');
+            finish({ rating: selectedRating, tags: selectedTags, comment });
         });
+        modal.querySelector('#skip-driver-rating-btn').addEventListener('click', () => finish({ rating: null, tags: [], comment: '' }));
     };
 
     overlay.appendChild(modal);
