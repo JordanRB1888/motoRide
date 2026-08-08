@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { DatabaseSync } from 'node:sqlite';
+import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
+import { transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
 
 const app = express();
 app.use(cors());
@@ -25,6 +27,11 @@ const PORT = process.env.PORT || 4000;
 const serverDir = path.dirname(fileURLToPath(import.meta.url));
 const dataFile = process.env.DATA_FILE || path.join(serverDir, 'data', 'plus58express.sqlite');
 const jwtSecret = process.env.JWT_SECRET || 'plus58express-development-secret';
+const pricingConfig = {
+  ...DEFAULT_PRICING,
+  bcvRate: Number(process.env.BCV_RATE || 0),
+  parallelRate: Number(process.env.PARALLEL_RATE || 0)
+};
 
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
@@ -192,6 +199,7 @@ function requireRole(role) {
 const driverRegistry = new Map();
 const tripLocks = new Map();
 const dispatchTimers = new Map();
+const dispatchSessions = new Map();
 
 // Calculate distance using Haversine formula
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -230,6 +238,22 @@ function emitDriverLocation(driverId, location) {
 // REST Endpoints
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: '+58express Real Backend Server Active 🇻🇪', timestamp: Date.now() });
+});
+
+app.get('/api/pricing/config', requireAuth, (req, res) => res.json(pricingConfig));
+
+app.post('/api/pricing/estimate', requireAuth, (req, res) => {
+  const distanceKm = Number(req.body.distanceKm);
+  const durationMin = Number(req.body.durationMin);
+  if (!Number.isFinite(distanceKm) || !Number.isFinite(durationMin)) {
+    return res.status(400).json({ error: 'INVALID_ROUTE_METRICS' });
+  }
+  res.json(calculateFare({
+    distanceKm,
+    durationMin,
+    requestedAt: req.body.requestedAt || new Date(),
+    exchangeRateType: req.body.exchangeRateType || 'BCV'
+  }, pricingConfig));
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -329,7 +353,11 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) 
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
   const allowedStatuses = ['CANCELLED', 'COMPLETED'];
   if (!allowedStatuses.includes(req.body.status)) return res.status(400).json({ error: 'INVALID_STATUS' });
-  trip.status = req.body.status;
+  try {
+    transitionTrip(trip, req.body.status, { actorId: req.user.id, actorRole: 'admin' });
+  } catch (error) {
+    return res.status(409).json({ error: error.code });
+  }
   trip.closedAt = new Date().toISOString();
   tripLocks.delete(trip.id);
   const driver = database.users.find(user => user.id === trip.driverId);
@@ -406,11 +434,25 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
 });
 
 app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) => {
-  const trip = req.body;
+  const requestedId = req.body.id || req.headers['idempotency-key'];
+  const existing = requestedId && database.trips.find(item => item.id === requestedId && item.passengerId === req.user.id);
+  if (existing) return res.json({ status: 'existing', trip: existing });
+  const trip = { ...req.body };
   trip.passengerId = req.user.id;
   trip.id = trip.id || 'trip_' + Date.now();
-  trip.status = 'SEARCHING';
+  trip.status = TRIP_STATUS.SEARCHING;
   trip.createdAt = new Date().toISOString();
+  trip.updatedAt = trip.createdAt;
+  trip.statusHistory = [{ status: trip.status, at: trip.createdAt, actorId: req.user.id }];
+  if (Number.isFinite(Number(trip.distanceKm)) && Number.isFinite(Number(trip.durationMin))) {
+    trip.pricing = calculateFare({
+      distanceKm: Number(trip.distanceKm),
+      durationMin: Number(trip.durationMin),
+      exchangeRateType: trip.exchangeRateType || 'BCV'
+    }, pricingConfig);
+    trip.fareUSD = trip.pricing.fareUSD;
+    trip.fareVES = trip.pricing.fareVES;
+  }
   database.trips.push(trip);
   persistDatabase();
   
@@ -457,6 +499,7 @@ function dispatchTripToDrivers(trip) {
     .filter(u =>
       u.role === 'driver' &&
       u.status === 'AVAILABLE' &&
+      !(trip.excludedDriverIds || []).includes(u.id) &&
       Number.isFinite(u.location?.lat) &&
       Number.isFinite(u.location?.lng)
     )
@@ -464,25 +507,40 @@ function dispatchTripToDrivers(trip) {
       const dist = calculateDistance(pickupLat, pickupLng, d.location.lat, d.location.lng);
       return { driver: d, dist };
     })
+    .filter(candidate => candidate.dist <= Number(process.env.MAX_DISPATCH_RADIUS_KM || 15))
     .sort((a, b) => a.dist - b.dist);
 
   console.log(`[+58express Dispatcher] Dispatching trip [${trip.id}] to ${availableDrivers.length} online drivers`);
 
-  // Emit Socket.IO event to driver room
-  io.to('drivers').to('admins').emit('rideRequested', {
-    ...trip,
-    candidatesCount: availableDrivers.length
-  });
+  const session = { tripId: trip.id, candidates: availableDrivers, index: -1, currentDriverId: null };
+  dispatchSessions.set(trip.id, session);
 
-  // Set 15s batch timeout
-  if (dispatchTimers.has(trip.id)) clearTimeout(dispatchTimers.get(trip.id));
-  const timer = setTimeout(() => {
-    if (!tripLocks.get(trip.id)) {
-      console.log(`[+58express Dispatcher] Batch 1 timeout for trip [${trip.id}]. Expanding search...`);
-      io.to('drivers').to('admins').emit('rideRequested', trip);
+  const offerNext = () => {
+    if (tripLocks.get(trip.id) || trip.status !== TRIP_STATUS.SEARCHING) return;
+    session.index += 1;
+    const candidate = session.candidates[session.index];
+    if (!candidate) {
+      dispatchSessions.delete(trip.id);
+      dispatchTimers.delete(trip.id);
+      io.to(`user:${trip.passengerId}`).to('admins').emit('dispatch:no_drivers', { tripId: trip.id });
+      return;
     }
-  }, 15000);
-  dispatchTimers.set(trip.id, timer);
+    session.currentDriverId = candidate.driver.id;
+    const socketId = driverRegistry.get(candidate.driver.id) || candidate.driver.socketId;
+    const offer = {
+      ...trip,
+      offeredDriverId: candidate.driver.id,
+      distanceToPickupKm: Math.round(candidate.dist * 100) / 100,
+      candidatesCount: session.candidates.length,
+      offerExpiresAt: Date.now() + 15000
+    };
+    if (socketId) io.to(socketId).emit('rideRequested', offer);
+    io.to('admins').emit('rideRequested', offer);
+    const timer = setTimeout(offerNext, 15000);
+    dispatchTimers.set(trip.id, timer);
+  };
+
+  offerNext();
 }
 
 // Socket.IO Server Setup
@@ -618,6 +676,11 @@ io.on('connection', (socket) => {
       return;
     }
     const driver = publicUser(authenticatedDriver);
+    const dispatchSession = dispatchSessions.get(tripId);
+    if (dispatchSession && dispatchSession.currentDriverId !== driver.id) {
+      socket.emit('rideAcceptanceFailed', { tripId, reason: 'NOT_CURRENT_OFFER' });
+      return;
+    }
 
     // Atomic Lock Check
     if (tripLocks.get(tripId)) {
@@ -630,11 +693,12 @@ io.on('connection', (socket) => {
       clearTimeout(dispatchTimers.get(tripId));
       dispatchTimers.delete(tripId);
     }
+    dispatchSessions.delete(tripId);
 
     // Update trip and driver status
     const trip = database.trips.find(t => t.id === tripId);
     if (trip) {
-      trip.status = 'DRIVER_ASSIGNED';
+      transitionTrip(trip, TRIP_STATUS.DRIVER_ASSIGNED, { actorId: driver.id, actorRole: 'driver' });
       trip.driver = driver;
       trip.driverId = driver?.id;
       persistDatabase();
@@ -653,6 +717,18 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('rideRejected', ({ tripId } = {}) => {
+    if (!allowSocketRole(socket, 'driver')) return;
+    const session = dispatchSessions.get(tripId);
+    if (!session || session.currentDriverId !== socket.data.auth.userId) return;
+    if (dispatchTimers.has(tripId)) clearTimeout(dispatchTimers.get(tripId));
+    const trip = database.trips.find(item => item.id === tripId);
+    if (trip) {
+      trip.excludedDriverIds = [...(trip.excludedDriverIds || []), socket.data.auth.userId];
+      dispatchTripToDrivers(trip);
+    }
+  });
+
   // Trip Status Transition Event ('ARRIVED', 'IN_PROGRESS', 'COMPLETED')
   socket.on('tripStatusUpdated', (data) => {
     if (!allowSocketRole(socket, 'driver')) return;
@@ -663,7 +739,12 @@ io.on('connection', (socket) => {
       return;
     }
     if (trip) {
-      trip.status = status;
+      try {
+        transitionTrip(trip, status, { actorId: socket.data.auth.userId, actorRole: 'driver' });
+      } catch (error) {
+        socket.emit('tripStatusRejected', { tripId, status, error: error.code });
+        return;
+      }
       if (status === 'COMPLETED' || status === 'CANCELLED') {
         const assignedDriver = database.users.find(user => user.id === trip.driverId);
         if (assignedDriver) assignedDriver.status = 'AVAILABLE';
@@ -679,13 +760,14 @@ io.on('connection', (socket) => {
     if (!allowSocketRole(socket, 'passenger')) return;
     const { tripId } = data;
     tripLocks.delete(tripId);
+    dispatchSessions.delete(tripId);
     if (dispatchTimers.has(tripId)) {
       clearTimeout(dispatchTimers.get(tripId));
       dispatchTimers.delete(tripId);
     }
     const trip = database.trips.find(t => t.id === tripId);
     if (trip) {
-      trip.status = 'CANCELLED';
+      transitionTrip(trip, TRIP_STATUS.CANCELLED, { actorId: socket.data.auth.userId, actorRole: 'passenger' });
       persistDatabase();
     }
 

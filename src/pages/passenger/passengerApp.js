@@ -417,7 +417,14 @@ export function renderPassengerApp(container) {
         fareUSD: fareUSDVal.toFixed(2),
         fareVES: fareVESVal.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       }, 
-      () => requestRide(destCoords, { fareUSD: fareUSDVal, fareVES: fareVESVal }), 
+      () => requestRide(destCoords, {
+        fareUSD: fareUSDVal,
+        fareVES: fareVESVal,
+        distanceKm: Number(routeInfo?.distanceKm || 0),
+        durationMin: Number(routeInfo?.durationMin || 0),
+        paymentMethod: selectedPaymentMethod,
+        exchangeRateType: 'BCV'
+      }),
       () => openPaymentModal(destName, routeInfo, fareData, destCoords),
       () => cancelRouteAndSelectNew(),
       () => openScheduleModal(destName, fareUSDVal)
@@ -465,6 +472,10 @@ export function renderPassengerApp(container) {
       pickup: { address: 'Mi ubicación actual', lat: passengerLocation.lat, lng: passengerLocation.lng },
       destination: { address: currentSelectedDestinationName || 'Vereda del Lago, Maracaibo', lat: destCoords[0], lng: destCoords[1] },
       fareEUR: fareUSD,
+      distanceKm: fareData?.distanceKm,
+      durationMin: fareData?.durationMin,
+      paymentMethod: fareData?.paymentMethod || selectedPaymentMethod,
+      exchangeRateType: fareData?.exchangeRateType || 'BCV',
       passengerName: `${user.firstName || 'Jordan'} ${user.lastName || 'Pérez'}`.trim(),
       passengerAvatar: user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.firstName || 'Jordan')}`,
       createdAt: new Date().toISOString()

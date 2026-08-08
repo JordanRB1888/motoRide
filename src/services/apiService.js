@@ -1,6 +1,7 @@
 import { syncInsertSupabase, syncUpdateSupabase } from './supabaseClient.js';
 import { eventLogger } from '../utils/logger.js';
 import { db as localDatabase } from './mockDatabase.js';
+import { offlineRequestQueue } from './offlineRequestQueue.js';
 
 class ApiService {
   constructor() {
@@ -8,6 +9,10 @@ class ApiService {
     this.baseUrl = configuredUrl || (typeof window !== 'undefined' && window.location.hostname === 'localhost'
       ? 'http://localhost:4000/api'
       : 'https://moto-ride-production.up.railway.app/api');
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => this.flushOfflineRequests());
+      queueMicrotask(() => navigator.onLine && this.flushOfflineRequests());
+    }
   }
 
   getAuthHeaders() {
@@ -37,10 +42,38 @@ class ApiService {
         body: JSON.stringify(data)
       });
       if (res.ok) return await res.json();
+      if (endpoint === '/trips/create' && res.status >= 500) this.queueOfflineTrip(endpoint, data);
     } catch (err) {
       eventLogger.warn(`API POST ${endpoint} note:`, err);
+      if (endpoint === '/trips/create') {
+        this.queueOfflineTrip(endpoint, data);
+        return { queued: true, trip: data };
+      }
     }
     return null;
+  }
+
+  queueOfflineTrip(endpoint, data) {
+    offlineRequestQueue.enqueue({
+      endpoint,
+      data,
+      idempotencyKey: data.id || crypto.randomUUID()
+    });
+  }
+
+  async flushOfflineRequests() {
+    return offlineRequestQueue.flush(async request => {
+      const res = await fetch(`${this.baseUrl}${request.endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': request.idempotencyKey,
+          ...this.getAuthHeaders()
+        },
+        body: JSON.stringify(request.data)
+      });
+      return res.ok;
+    });
   }
 
   async patch(endpoint, data) {
