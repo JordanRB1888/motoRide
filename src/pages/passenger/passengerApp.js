@@ -540,11 +540,11 @@ export function renderPassengerApp(container) {
   function setState(state) {
     currentState = state;
     const topSearchBar = container.querySelector('#top-search-bar');
+    // The destination bar is a permanent navigation control. Hiding it during
+    // asynchronous trip restoration caused it to flash and disappear.
+    if (topSearchBar) topSearchBar.style.display = 'flex';
     if (state === 'IDLE' || state === 'SELECTING_DESTINATION') {
-      if (topSearchBar) topSearchBar.style.display = 'flex';
       renderActiveDrivers();
-    } else {
-      if (topSearchBar) topSearchBar.style.display = 'none';
     }
 
     if (state === 'DRIVER_ASSIGNED' || state === 'DRIVER_EN_ROUTE' || state === 'DRIVER_ARRIVED') {
@@ -747,6 +747,7 @@ export function renderPassengerApp(container) {
       if (['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status)) setState('IN_TRIP');
       else if (currentTrip.status === 'ARRIVED') setState('DRIVER_ARRIVED');
       else setState('DRIVER_EN_ROUTE');
+      bottomSheet.expand();
     } else {
       currentTrip = null;
       setState('IDLE');
