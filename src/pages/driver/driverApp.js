@@ -51,7 +51,7 @@ export function renderDriverApp(container) {
                         </div>
                     </div>
 
-                    <div class="driver-brand-lockup" aria-label="+58 Express"><img src="/brand-logo-v2.png" alt="+58 Express"></div>
+                    <div class="driver-brand-lockup" aria-label="+58 Express"><img src="/brand-logo-header.png" alt="+58 Express"></div>
                     
                     <div class="driver-header-actions">
                         <button id="header-notif-btn-driver" style="

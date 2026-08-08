@@ -1,9 +1,10 @@
-const CACHE_NAME = '58express-pwa-v7';
+const CACHE_NAME = '58express-pwa-v8';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/app-icon-v2.png',
   '/brand-logo-v2.png',
+  '/brand-logo-header.png',
   '/notification-pin-v2.png',
   '/notification-moto-badge.svg',
   '/manifest.json'
