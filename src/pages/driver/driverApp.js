@@ -20,7 +20,6 @@ import { eventLogger } from '../../utils/logger.js';
 import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 import { notificationService } from '../../services/notificationService.js';
-import { audioEffects } from '../../utils/audioEffects.js';
 
 export function renderDriverApp(container) {
     const user = authService.getCurrentUser() || {
@@ -144,6 +143,7 @@ export function renderDriverApp(container) {
     let activeChatTripId = null;
     let unreadMessages = 0;
     let tripPanelCollapsed = false;
+    const notifiedDriverEvents = new Set();
     let currentMap = new MapComponent('driver-map', { is3D: true, navigation: true });
 
     const toggle = container.querySelector('#online-toggle');
@@ -162,6 +162,23 @@ export function renderDriverApp(container) {
     }
 
     const driverNotifBtn = container.querySelector('#header-notif-btn-driver');
+    const driverNotifBadge = driverNotifBtn?.querySelector('span');
+    const updateDriverNotificationBadge = () => {
+        const count = notificationService.getUnreadCount(user.id || 'd1');
+        if (!driverNotifBadge) return;
+        driverNotifBadge.textContent = count > 99 ? '99+' : String(count);
+        driverNotifBadge.style.display = count > 0 ? 'flex' : 'none';
+    };
+    const notifyDriver = (key, title, message, category = 'TRIP', tripId = currentTrip?.id) => {
+        const uniqueKey = `${tripId || 'general'}:${key}`;
+        if (notifiedDriverEvents.has(uniqueKey)) return;
+        notifiedDriverEvents.add(uniqueKey);
+        notificationService.notify(user.id || 'd1', { title, message, category, icon: category === 'FINANCE' ? '💵' : '🏍️' });
+    };
+    window.addEventListener('58express:notifications-updated', event => {
+        if (event.detail?.userId === (user.id || 'd1')) updateDriverNotificationBadge();
+    });
+    updateDriverNotificationBadge();
     if (driverNotifBtn) {
         driverNotifBtn.addEventListener('click', () => {
             const modal = createNotificationCenterModal(user);
@@ -384,6 +401,7 @@ export function renderDriverApp(container) {
         if (modal) modal.remove();
         currentTrip = trip;
         currentPassenger = passenger;
+        notifyDriver('ACCEPTED', 'Carrera aceptada', `Vas a recoger a ${passenger?.name || 'el pasajero'} en ${trip.pickup?.address || 'su ubicación'}.`, 'TRIP', trip.id);
         persistentChatBtn.classList.remove('hidden');
         
         onlineOverlay.classList.add('hidden');
@@ -414,6 +432,7 @@ export function renderDriverApp(container) {
     function arrivePickup(trip, passenger) {
         eventLogger.log('DRIVER', `Conductor llegó al punto de recogida [${trip.id}]`);
         trip.status = 'ARRIVED';
+        notifyDriver('ARRIVED', 'Llegaste al punto de recogida', `Avisamos a ${passenger?.name || 'el pasajero'} que ya estás esperando.`, 'TRIP', trip.id);
         socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'ARRIVED' });
         const waitingView = renderWaitingPassenger(
             trip, 
@@ -430,6 +449,7 @@ export function renderDriverApp(container) {
     function startTrip(trip, passenger) {
         eventLogger.log('DRIVER', `Pasajero abordó. Viaje iniciado en progreso [${trip.id}]`);
         trip.status = 'IN_PROGRESS';
+        notifyDriver('STARTED', 'Viaje iniciado', `Navega hacia ${trip.destination?.address || 'el destino indicado'}.`, 'TRIP', trip.id);
         socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'IN_PROGRESS' });
         const inTripView = renderInTrip(
             trip, 
@@ -446,6 +466,7 @@ export function renderDriverApp(container) {
     function completeTrip(trip, passenger) {
         eventLogger.log('DRIVER', `Viaje completado exitosamente [${trip.id}]`);
         trip.status = 'COMPLETED';
+        notifyDriver('COMPLETED', 'Viaje completado', `La carrera finalizó. Tarifa: $${tripFare(trip).toFixed(2)} USD.`, 'TRIP', trip.id);
         socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'COMPLETED' });
         persistentChatBtn.classList.add('hidden');
         
@@ -455,6 +476,7 @@ export function renderDriverApp(container) {
             onSubmit: (res) => {
                 socket.emit('tripRated', { tripId: trip.id, rating: res.rating, tags: res.tags, comment: res.comment, targetRole: 'passenger' });
                 const fare = tripFare(trip);
+                notifyDriver('EARNINGS', 'Ganancia registrada', `Se acreditaron $${(fare * 0.85).toFixed(2)} USD netos por la carrera.`, 'FINANCE', trip.id);
                 showToast(`Viaje finalizado · Ganancia neta $${(fare * 0.85).toFixed(2)} USD`, 'success');
                 clearCompletedTripUi();
             }
@@ -495,17 +517,7 @@ export function renderDriverApp(container) {
 
         eventLogger.log('DRIVER', `Solicitud emergente recibida de ${passenger.name} ➔ ${trip.destination.address}`);
 
-        // Play audible ringtone alert for driver
-        try {
-            audioEffects.playRideIncoming();
-        } catch (e) {}
-
-        // Trigger native device notification (Android / iOS / Desktop background banner)
-        notificationService.triggerNativeNotification(
-            '⚡ ¡NUEVA SOLICITUD DE VIAJE EN MARACAIBO!',
-            `Pasajero: ${passenger.name} · Destino: ${trip.destination.address}`,
-            { tag: 'incoming-ride-' + trip.id }
-        );
+        notifyDriver('REQUESTED', 'Nueva solicitud de carrera', `${passenger.name} solicita un viaje hacia ${trip.destination.address}.`, 'TRIP', trip.id);
 
         // Avoid duplicate modal if already visible on body
         if (document.querySelector('.incoming-ride-modal')) return;
@@ -525,6 +537,7 @@ export function renderDriverApp(container) {
             showToast('El pasajero ha cancelado la solicitud de viaje', 'info');
         }
         if (currentTrip?.id === data?.tripId) {
+            notifyDriver('CANCELLED', 'Carrera cancelada', 'El pasajero canceló la carrera activa.', 'TRIP', data.tripId);
             clearCompletedTripUi();
         }
     });
@@ -535,6 +548,12 @@ export function renderDriverApp(container) {
             unreadMessages += 1;
             chatUnreadBadge.textContent = unreadMessages > 9 ? '9+' : String(unreadMessages);
             chatUnreadBadge.classList.remove('hidden');
+            notificationService.notify(user.id || 'd1', {
+                title: `Mensaje de ${message.senderName || currentPassenger?.name || 'tu pasajero'}`,
+                message: message.text || 'El pasajero envió un archivo adjunto.',
+                category: 'TRIP',
+                icon: '💬'
+            });
         }
     });
 
