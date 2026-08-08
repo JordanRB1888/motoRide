@@ -1,12 +1,15 @@
-const CACHE_NAME = '58express-pwa-v9';
+const CACHE_NAME = '58express-pwa-v10-brand-icon';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/app-icon-v2.png',
+  '/app-icon-brand-192.png',
+  '/app-icon-brand-512.png',
+  '/apple-touch-icon-brand-180.png',
+  '/favicon-brand-48.png',
   '/brand-logo-v2.png',
   '/brand-logo-header.png',
-  '/notification-pin-v2.png',
-  '/notification-moto-badge.svg',
+  '/notification-icon-brand-192.png',
+  '/notification-badge-brand-96.png',
   '/manifest.json'
 ];
 
@@ -80,8 +83,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body || 'Entra a la app para aceptar el viaje.',
-    icon: '/notification-pin-v2.png',
-    badge: '/notification-pin-v2.png',
+    icon: data.icon || '/notification-icon-brand-192.png',
+    badge: data.badge || '/notification-badge-brand-96.png',
     vibrate: [300, 100, 300, 100, 300],
     data: { url: '/#/driver' },
     actions: [
