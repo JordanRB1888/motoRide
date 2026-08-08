@@ -259,7 +259,12 @@ function emitDriverLocation(driverId, location) {
 
 // REST Endpoints
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: '+58express Real Backend Server Active 🇻🇪', timestamp: Date.now() });
+  res.json({
+    status: 'ok',
+    message: '+58express Real Backend Server Active 🇻🇪',
+    features: { livePassengerGpsOrigin: true },
+    timestamp: Date.now()
+  });
 });
 
 app.get('/api/pricing/config', requireAuth, (req, res) => res.json(pricingConfig));
