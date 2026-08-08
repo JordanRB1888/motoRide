@@ -470,3 +470,9 @@ html.theme-light .driver-app{--cockpit:rgba(255,255,255,.95);--cockpit-line:rgba
 .driver-app .leaflet-control-zoom{margin-top:181px!important}
 @media(max-width:390px){.driver-app .stats-bar{height:62px!important;padding-block:5px!important}.driver-app .stat-item{gap:4px!important}.driver-app .stat-label{font-size:.52rem!important}.driver-app .stat-value{font-size:.93rem!important}.driver-app .online-overlay{top:calc(max(12px,env(safe-area-inset-top)) + 140px)!important}.driver-app .leaflet-control-zoom{margin-top:168px!important}}
 @media(min-width:700px){.driver-app .online-overlay{top:184px!important}.driver-app .leaflet-control-zoom{margin-top:210px!important}}
+
+/* Expose the online/GPS pill below the compact metrics strip */
+.driver-app .stats-bar{transform:translateY(-6px)!important}
+.driver-app .online-overlay{top:calc(max(12px,env(safe-area-inset-top)) + 160px)!important}
+@media(max-width:390px){.driver-app .stats-bar{transform:translateY(-5px)!important}.driver-app .online-overlay{top:calc(max(12px,env(safe-area-inset-top)) + 145px)!important}}
+@media(min-width:700px){.driver-app .stats-bar{transform:translateY(-7px)!important}.driver-app .online-overlay{top:196px!important}}
