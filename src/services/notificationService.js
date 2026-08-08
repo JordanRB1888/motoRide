@@ -88,8 +88,8 @@ class NotificationService {
                     if (reg && reg.showNotification) {
                         await reg.showNotification(title, {
                             body: message,
-                            icon: '/app-logo.png',
-                            badge: '/app-logo.png',
+                            icon: '/logo.jpg',
+                            badge: '/notification-moto-badge.svg',
                             vibrate: [300, 100, 300],
                             ...options
                         });
@@ -98,7 +98,8 @@ class NotificationService {
                 }
                 new Notification(title, {
                     body: message,
-                    icon: '/app-logo.png',
+                    icon: '/logo.jpg',
+                    badge: '/notification-moto-badge.svg',
                     ...options
                 });
             } catch (e) {

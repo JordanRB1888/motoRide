@@ -348,4 +348,25 @@
   box-shadow: 0 12px 30px rgba(0,0,0,.5), 0 0 22px rgba(255,193,7,.25);
 }
 .passenger-active-chat-btn.hidden, .passenger-chat-unread.hidden { display: none !important; }
+.passenger-trip-panel-toggle {
+  position: fixed;
+  right: 18px;
+  bottom: calc(138px + env(safe-area-inset-bottom));
+  z-index: 11001;
+  min-height: 44px;
+  max-width: 220px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(0,210,255,.6);
+  border-radius: 16px;
+  background: rgba(18,24,36,.96);
+  color: var(--accent-secondary);
+  font-weight: 900;
+  box-shadow: 0 10px 26px rgba(0,0,0,.5);
+}
+.passenger-trip-panel-toggle.hidden { display:none !important; }
+.passenger-trip-toggle-icon { font-size:1.1rem; }
+.passenger-trip-toggle-label { font-size:.8rem; white-space:nowrap; }
 .passenger-chat-unread { position: absolute; top: -7px; right: -5px; min-width: 20px; height: 20px; padding: 0 4px; display: grid; place-items: center; border-radius: 999px; background: var(--danger); color: white; border: 2px solid #121824; font-size: .66rem; }

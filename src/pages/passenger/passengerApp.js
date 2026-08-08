@@ -120,6 +120,10 @@ export function renderPassengerApp(container) {
       
       <div id="bottom-sheet-container"></div>
       <div id="overlay-container"></div>
+      <button id="passenger-trip-panel-toggle" class="passenger-trip-panel-toggle hidden" type="button" aria-expanded="true">
+        <span class="passenger-trip-toggle-icon">⌄</span>
+        <span class="passenger-trip-toggle-label">Minimizar viaje</span>
+      </button>
       <button id="passenger-active-chat-btn" class="passenger-active-chat-btn hidden" aria-label="Abrir chat de la carrera">
         <span>💬</span><span>Chat</span>
         <span id="passenger-chat-unread" class="passenger-chat-unread hidden">0</span>
@@ -159,7 +163,30 @@ export function renderPassengerApp(container) {
   const sheetEl = container.querySelector('#bottom-sheet-container');
   bottomSheet = new BottomSheet(sheetEl);
   const persistentChatBtn = container.querySelector('#passenger-active-chat-btn');
+  const passengerTripToggle = container.querySelector('#passenger-trip-panel-toggle');
   const chatUnreadBadge = container.querySelector('#passenger-chat-unread');
+  let passengerTripPanelCollapsed = false;
+
+  function setPassengerTripPanelCollapsed(collapsed) {
+    passengerTripPanelCollapsed = Boolean(collapsed);
+    passengerTripToggle.setAttribute('aria-expanded', String(!passengerTripPanelCollapsed));
+    passengerTripToggle.querySelector('.passenger-trip-toggle-icon').textContent = passengerTripPanelCollapsed ? '⌃' : '⌄';
+    passengerTripToggle.querySelector('.passenger-trip-toggle-label').textContent = passengerTripPanelCollapsed ? 'Ver información del viaje' : 'Minimizar viaje';
+    if (passengerTripPanelCollapsed) bottomSheet.close();
+    else bottomSheet.expand();
+  }
+
+  function showPassengerTripToggle(reset = false) {
+    passengerTripToggle.classList.remove('hidden');
+    if (reset) setPassengerTripPanelCollapsed(false);
+  }
+
+  function hidePassengerTripToggle() {
+    passengerTripToggle.classList.add('hidden');
+    passengerTripPanelCollapsed = false;
+  }
+
+  passengerTripToggle.addEventListener('click', () => setPassengerTripPanelCollapsed(!passengerTripPanelCollapsed));
   const notificationBadge = container.querySelector('#notif-badge-passenger');
   const updateNotificationBadge = () => {
     const count = notificationService.getUnreadCount(user.id || 'p1');
@@ -512,6 +539,7 @@ export function renderPassengerApp(container) {
   function requestRide(destCoords, fareData) {
     setState('SEARCHING');
     bottomSheet.setContent(renderSearchingState(() => cancelSearch(), fareData?.rideType));
+    showPassengerTripToggle(true);
     showToast('📡 Transmitiendo solicitud de mototaxi en tiempo real...', 'info');
     
     const fareUSD = fareData?.totalUSD || fareData?.fareUSD || 4.50;
@@ -562,6 +590,7 @@ export function renderPassengerApp(container) {
     currentTrip = null;
     currentDriver = null;
     persistentChatBtn.classList.add('hidden');
+    hidePassengerTripToggle();
     stopPassengerTracking();
 
     // Hide top route cancel bar
@@ -587,6 +616,7 @@ export function renderPassengerApp(container) {
 
   function resetCompletedPassengerRide() {
     persistentChatBtn.classList.add('hidden');
+    hidePassengerTripToggle();
     chatUnreadBadge.classList.add('hidden');
     activeChat?.destroy();
     activeChat = null;
@@ -734,6 +764,7 @@ export function renderPassengerApp(container) {
 
       if (data.status === 'EN_ROUTE' || data.status === 'DRIVER_ASSIGNED') {
         persistentChatBtn.classList.remove('hidden');
+        showPassengerTripToggle();
         startPassengerTracking();
         showToast('⚡ ¡Conductor asignado y en camino!', 'success');
         notifyTripEvent('ASSIGNED', 'Conductor asignado', `${currentDriver?.firstName || 'Tu conductor'} aceptó la carrera y va hacia tu ubicación.`);
@@ -748,11 +779,13 @@ export function renderPassengerApp(container) {
         setState('IN_TRIP');
       } else if (data.status === 'COMPLETED') {
         persistentChatBtn.classList.add('hidden');
+        hidePassengerTripToggle();
         stopPassengerTracking();
         notifyTripEvent('COMPLETED', 'Llegaste a tu destino', 'La carrera finalizó correctamente. Ya puedes valorar al conductor.');
         setState('COMPLETED');
       } else if (data.status === 'CANCELLED') {
         persistentChatBtn.classList.add('hidden');
+        hidePassengerTripToggle();
         stopPassengerTracking();
         notifyTripEvent('CANCELLED', 'Carrera cancelada', data.reason === 'NO_DRIVERS_AVAILABLE' ? 'No encontramos conductores disponibles.' : 'La carrera fue cancelada.');
         currentTrip = null;
@@ -823,10 +856,12 @@ export function renderPassengerApp(container) {
         return;
       }
       currentDriver = null;
+      showPassengerTripToggle(true);
       setState('SEARCHING');
       bottomSheet.setContent(renderSearchingState(() => cancelSearch(), selectedRideType));
     } else if (currentDriver) {
       persistentChatBtn.classList.remove('hidden');
+      showPassengerTripToggle(true);
       startPassengerTracking();
       if (['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status)) setState('IN_TRIP');
       else if (currentTrip.status === 'ARRIVED') setState('DRIVER_ARRIVED');
