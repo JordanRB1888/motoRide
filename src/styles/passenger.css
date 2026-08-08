@@ -610,3 +610,86 @@ body>.bottom-sheet.fare-preview-sheet .bottom-sheet-content{padding:0!important;
 .confirm-ride-btn{height:49px;display:flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:14px;background:linear-gradient(135deg,#ffd42a,#ffb300);color:#07101c;font-weight:950;font-size:.82rem;box-shadow:0 10px 24px rgba(255,179,0,.18)}.fare-secondary-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.fare-secondary-actions button{height:39px;border-radius:12px;background:transparent;font-size:.67rem;font-weight:800}.schedule-ride-btn{display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid rgba(255,196,0,.32);color:#ffc400}.btn-cancel-route-full{border:1px solid rgba(255,80,98,.35);color:#ff6576}
 .payment-modal-open{overflow:hidden}.payment-modal-overlay{position:fixed;inset:0;z-index:30000;display:flex;align-items:flex-end;justify-content:center;padding:12px;background:rgba(0,5,12,.72);backdrop-filter:blur(8px);opacity:0;visibility:hidden;transition:.22s}.payment-modal-overlay.open{opacity:1;visibility:visible}.payment-modal{width:100%;max-width:430px;max-height:min(680px,82vh);padding:9px 14px calc(16px + env(safe-area-inset-bottom));overflow:auto;border:1px solid rgba(255,196,0,.48);border-radius:24px;background:linear-gradient(165deg,#0a1726,#030b15);box-shadow:0 -22px 70px rgba(0,0,0,.7);transform:translateY(105%);transition:transform .25s ease}.payment-modal-overlay.open .payment-modal{transform:translateY(0)}.payment-modal-handle{width:44px;height:4px;margin:0 auto 9px;border-radius:99px;background:#45566a}.payment-modal header{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}.payment-modal header small{color:#ffc400;font-size:.58rem;font-weight:900;letter-spacing:.1em}.payment-modal h2{margin:2px 0 0;color:#fff;font-size:1.13rem}.payment-close{width:36px;height:36px;display:grid;place-items:center;border:1px solid rgba(148,163,184,.24);border-radius:11px;background:#0c1828;color:#a5b2c2}.payment-methods{display:grid;gap:7px}.payment-method{min-width:0;min-height:56px;padding:8px 11px;display:grid;grid-template-columns:36px minmax(0,1fr) 21px;align-items:center;gap:9px;text-align:left;border:1px solid rgba(148,163,184,.2);border-radius:14px;background:#0c1828;color:#fff}.payment-method.active{border-color:#ffc400;background:linear-gradient(145deg,rgba(255,196,0,.13),rgba(255,196,0,.025))}.payment-method-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:rgba(255,196,0,.09);color:#ffc400}.payment-method strong,.payment-method small{display:block}.payment-method strong{font-size:.78rem}.payment-method small{margin-top:2px;color:#8191a5;font-size:.6rem}.payment-method i{width:18px;height:18px;border:2px solid #65768a;border-radius:50%}.payment-method.active i{border:5px solid #ffc400}.payment-confirm{width:100%;height:48px;margin-top:11px;border:0;border-radius:14px;background:linear-gradient(135deg,#ffd42a,#ffb300);color:#06101b;font-weight:950}.payment-topup{width:100%;height:38px;margin-top:6px;border:0;background:transparent;color:#ffc400;font-size:.7rem;font-weight:800}
 @media(min-width:700px){body>.bottom-sheet.fare-preview-sheet{position:absolute!important}.payment-modal-overlay{padding-bottom:24px}}
+
+/* Floating wave-shaped passenger header */
+.passenger-mobile-header{
+  top:max(8px,env(safe-area-inset-top))!important;
+  left:8px!important;
+  right:8px!important;
+  height:72px!important;
+  padding:0 12px 7px!important;
+  isolation:isolate;
+  overflow:visible;
+  border:1px solid rgba(255,196,0,.2)!important;
+  border-radius:30px 30px 42px 42px/28px 28px 22px 22px!important;
+  background:linear-gradient(160deg,rgba(5,16,29,.985),rgba(1,8,17,.97))!important;
+  box-shadow:0 17px 34px rgba(0,0,0,.43),inset 0 1px 0 rgba(255,255,255,.06)!important;
+  backdrop-filter:blur(22px) saturate(1.15)!important;
+  -webkit-backdrop-filter:blur(22px) saturate(1.15)!important;
+}
+.passenger-mobile-header:before{
+  content:"";
+  position:absolute;
+  z-index:0;
+  left:18px;
+  right:18px;
+  bottom:-1px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,196,0,.55),transparent);
+  pointer-events:none;
+}
+.passenger-mobile-header:after{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  left:50%;
+  bottom:-12px;
+  width:142px;
+  height:25px;
+  transform:translateX(-50%);
+  border:1px solid rgba(255,196,0,.16);
+  border-top:0;
+  border-radius:0 0 72px 72px/0 0 25px 25px;
+  background:linear-gradient(180deg,rgba(2,10,20,.97),rgba(2,9,18,.93));
+  box-shadow:0 13px 24px rgba(0,0,0,.28);
+  pointer-events:none;
+}
+.passenger-mobile-header>*{z-index:1}
+.passenger-profile-shortcut{
+  left:11px!important;
+  width:44px!important;
+  height:44px!important;
+  border:1px solid rgba(255,196,0,.72)!important;
+  box-shadow:0 6px 17px rgba(0,0,0,.35),0 0 0 4px rgba(255,196,0,.035)!important;
+}
+.passenger-header-actions{right:10px!important;gap:7px!important}
+.passenger-header-icon,
+.passenger-header-actions .theme-toggle-btn{
+  width:38px!important;
+  height:38px!important;
+  border-radius:50%!important;
+  background:rgba(14,26,41,.9)!important;
+  border:1px solid rgba(148,163,184,.23)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.04)!important;
+}
+.passenger-header-actions .theme-toggle-btn{border-color:rgba(255,196,0,.55)!important}
+.passenger-brand-lockup{height:49px!important}
+.passenger-app .leaflet-control-zoom{margin-top:104px!important}
+.theme-light .passenger-mobile-header{background:linear-gradient(160deg,rgba(255,255,255,.98),rgba(238,243,248,.96))!important;box-shadow:0 15px 32px rgba(15,23,42,.18),inset 0 1px #fff!important}
+.theme-light .passenger-mobile-header:after{background:linear-gradient(180deg,rgba(241,246,250,.98),rgba(231,238,245,.96))}
+
+@media(max-width:360px){
+  .passenger-mobile-header{left:5px!important;right:5px!important;padding-inline:8px!important}
+  .passenger-mobile-header:after{width:116px}
+  .passenger-brand-lockup{width:120px!important}
+  .passenger-header-actions{right:7px!important;gap:4px!important}
+  .passenger-header-icon,.passenger-header-actions .theme-toggle-btn{width:35px!important;height:35px!important}
+}
+
+@media(min-width:700px){
+  .passenger-mobile-header{top:9px!important;height:78px!important;padding-top:15px!important;padding-bottom:5px!important}
+  .passenger-mobile-header:after{bottom:-13px;width:150px}
+  .passenger-profile-shortcut{top:26px!important}
+  .passenger-header-actions{top:29px!important}
+  .passenger-app .leaflet-control-zoom{margin-top:108px!important}
+}
