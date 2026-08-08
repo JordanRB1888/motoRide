@@ -318,23 +318,23 @@ export function renderPassengerApp(container) {
   function openSearchSheet() {
     setState('SELECTING_DESTINATION');
     const content = `
-      <div class="search-sheet" style="padding: 12px 16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h3 style="font-size:1.15rem; font-weight:700; color:var(--text-primary); margin:0;">¿A dónde quieres ir en Maracaibo?</h3>
-          <button id="close-search-sheet-btn" style="color:var(--text-secondary); font-size:1.2rem; cursor:pointer; padding:4px;">✕</button>
+      <div class="search-sheet">
+        <div class="search-sheet-header">
+          <h3>¿A dónde quieres ir en Maracaibo?</h3>
+          <button id="close-search-sheet-btn" class="search-sheet-close" type="button" aria-label="Cerrar búsqueda">✕</button>
         </div>
 
-        <div style="position:relative; margin-bottom:20px;">
-          <div style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--accent-primary);">
+        <div class="search-sheet-input">
+          <div class="search-sheet-input-icon">
             ${icon('search', 20)}
           </div>
-          <input type="text" id="live-search-input" placeholder="Buscar en Maracaibo (ej: Basílica, Sambil, Vereda)..." autocomplete="off" 
-                 style="width: 100%; padding: 14px 14px 14px 44px; border-radius: 28px; border: 1.5px solid var(--border-gold); background: var(--surface-input); color: white; font-size:0.95rem; outline:none; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+          <input type="text" id="live-search-input" placeholder="Buscar en Maracaibo (ej: Basílica, Sambil, Vereda)..." autocomplete="off">
         </div>
 
-        <ul class="search-results" id="search-results"></ul>
+        <div class="search-sheet-scroll">
+          <ul class="search-results" id="search-results"></ul>
 
-        <div class="recent-places" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="recent-places" style="display:flex; flex-direction:column; gap:12px;">
           <div class="place-item preset-place" data-name="Basílica de Nuestra Señora de Chiquinquirá, Maracaibo" data-lat="10.6427" data-lon="-71.6125" 
                style="display:flex; align-items:center; gap:14px; padding:12px 16px; background:var(--surface-elevated); border-radius:16px; border:1px solid var(--border-color); cursor:pointer; transition:all 0.2s ease;">
             <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-primary); flex-shrink:0;">
@@ -381,6 +381,7 @@ export function renderPassengerApp(container) {
               <span style="color:var(--text-secondary); font-size:0.82rem;">Sector Tierra Negra, Maracaibo</span>
             </div>
             <span style="color:var(--warning); font-size:1.1rem;">➔</span>
+          </div>
           </div>
         </div>
       </div>
