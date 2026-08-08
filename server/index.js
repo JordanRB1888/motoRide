@@ -211,7 +211,7 @@ function userCanAccessTrip(userId, role, trip) {
 
 function emitDriverLocation(driverId, location) {
   const payload = { ...location, driverId, userId: driverId };
-  const activeTrip = database.trips.find(trip =>
+  const activeTrip = database.trips.findLast(trip =>
     trip.driverId === driverId &&
     ['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(trip.status)
   );
@@ -606,6 +606,11 @@ io.on('connection', (socket) => {
     const trip = database.trips.find(t => t.id === tripId);
     if (trip) {
       trip.status = status;
+      if (status === 'COMPLETED' || status === 'CANCELLED') {
+        const assignedDriver = database.users.find(user => user.id === trip.driverId);
+        if (assignedDriver) assignedDriver.status = 'AVAILABLE';
+        tripLocks.delete(tripId);
+      }
       persistDatabase();
     }
     io.to(`user:${trip?.passengerId}`).to('drivers').to('admins').emit('tripStatusUpdated', data);
