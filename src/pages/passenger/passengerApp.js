@@ -70,6 +70,12 @@ export function renderPassengerApp(container) {
           <div id="header-theme-toggle-slot"></div>
         </div>
       </header>
+
+      <div id="manual-pickup-banner" class="manual-pickup-banner hidden" role="status">
+        <span class="manual-pickup-icon">${icon('mapPin', 20)}</span>
+        <div><strong>Marca tu punto de recogida</strong><small>Toca en el mapa el lugar exacto donde estás</small></div>
+        <button id="cancel-manual-pickup" type="button" aria-label="Cancelar selección manual">${icon('close', 16)}</button>
+      </div>
       
       <!-- Top Search Bar -->
       <div class="top-search-bar" id="top-search-bar">
@@ -180,6 +186,7 @@ export function renderPassengerApp(container) {
   const persistentChatBtn = container.querySelector('#passenger-active-chat-btn');
   const passengerTripToggle = container.querySelector('#passenger-trip-panel-toggle');
   const chatUnreadBadge = container.querySelector('#passenger-chat-unread');
+  const manualPickupBanner = container.querySelector('#manual-pickup-banner');
   let passengerTripPanelCollapsed = false;
 
   function setPassengerTripPanelCollapsed(collapsed) {
@@ -221,6 +228,7 @@ export function renderPassengerApp(container) {
   });
   updateNotificationBadge();
   persistentChatBtn.addEventListener('click', () => openChatModal());
+  container.querySelector('#cancel-manual-pickup')?.addEventListener('click', cancelManualPickupSelection);
   requestPassengerPermissions();
   watchPassengerLocationPermission();
 
@@ -232,7 +240,8 @@ export function renderPassengerApp(container) {
     passengerLocation = {
       lat,
       lng,
-      accuracy: Number(location?.accuracy) || null
+      accuracy: Number(location?.accuracy) || null,
+      source: location?.source === 'manual' ? 'manual' : 'gps'
     };
     passengerLocationUpdatedAt = Number(location?.capturedAt) || Date.now();
     mapComponent.setUserLocation(lat, lng);
@@ -272,7 +281,50 @@ export function renderPassengerApp(container) {
     if (permissionState !== 'granted') return;
     const destination = pendingDestinationAfterPermission;
     pendingDestinationAfterPermission = null;
+    hideManualPickupBanner();
     selectDestination(destination);
+  }
+
+  function showManualPickupBanner() {
+    manualPickupBanner?.classList.remove('hidden');
+  }
+
+  function hideManualPickupBanner() {
+    manualPickupBanner?.classList.add('hidden');
+  }
+
+  function beginManualPickupSelection(place) {
+    pendingDestinationAfterPermission = { ...place };
+    setState('SELECTING_PICKUP');
+    mapComponent.clearRoute();
+    mapComponent.clearMarkers('destination');
+    mapComponent.addMarker([Number(place.lat), Number(place.lon)], 'destination');
+    bottomSheet.collapse();
+    showManualPickupBanner();
+    showToast('Toca el mapa exactamente donde quieres que llegue el conductor.', 'warning', 6500);
+  }
+
+  function cancelManualPickupSelection() {
+    pendingDestinationAfterPermission = null;
+    hideManualPickupBanner();
+    mapComponent.clearMarkers('destination');
+    setState('IDLE');
+  }
+
+  function confirmManualPickup(latlng) {
+    const destination = pendingDestinationAfterPermission;
+    if (!destination) return;
+    const manualOrigin = setPassengerLocation({
+      lat: latlng.lat,
+      lng: latlng.lng,
+      capturedAt: Date.now(),
+      source: 'manual'
+    });
+    if (!manualOrigin) return;
+    pendingDestinationAfterPermission = null;
+    hideManualPickupBanner();
+    showToast('Punto de recogida confirmado.', 'success');
+    selectDestination(destination, { originOverride: manualOrigin });
   }
 
   async function watchPassengerLocationPermission() {
@@ -340,6 +392,10 @@ export function renderPassengerApp(container) {
 
   // Direct Map Click Listener to pick destination on map
   mapComponent.onMapClick((latlng) => {
+    if (currentState === 'SELECTING_PICKUP') {
+      confirmManualPickup(latlng);
+      return;
+    }
     if (currentState === 'IDLE' || currentState === 'SELECTING_DESTINATION' || currentState === 'FARE_PREVIEW') {
       selectDestination({
         display_name: 'Punto de Destino en Maracaibo',
@@ -529,7 +585,7 @@ export function renderPassengerApp(container) {
 
   let currentSelectedDestinationName = 'Vereda del Lago, Maracaibo';
 
-  async function selectDestination(place) {
+  async function selectDestination(place, { originOverride = null } = {}) {
     const selectionId = ++destinationSelectionId;
     currentSelectedDestinationName = place.display_name || 'Punto de Destino en Maracaibo';
     const lat = Number.parseFloat(place.lat);
@@ -539,21 +595,23 @@ export function renderPassengerApp(container) {
       return;
     }
 
-    showToast('Obteniendo tu ubicación actual para calcular la ruta...', 'info');
-    let origin;
-    try {
-      origin = await getPassengerOrigin();
-    } catch (error) {
-      const permissionState = await getGeolocationPermissionState();
-      if (permissionState === 'prompt') {
-        pendingDestinationAfterPermission = { ...place };
-        showToast('Selecciona “Seguir permitiendo”, pulsa “Listo” y continuaremos automáticamente.', 'info', 6500);
-      } else if (permissionState === 'denied') {
-        showToast('La ubicación está bloqueada. En “Administrar”, permite el acceso y vuelve a intentarlo.', 'error', 6500);
-      } else {
-        showToast('No fue posible obtener tu GPS. Verifica que la ubicación precisa esté encendida y vuelve a intentarlo.', 'error');
+    let origin = originOverride;
+    if (!origin) {
+      showToast('Obteniendo tu ubicación actual para calcular la ruta...', 'info');
+      try {
+        origin = await getPassengerOrigin();
+      } catch (error) {
+        const permissionState = await getGeolocationPermissionState();
+        if (permissionState === 'prompt') {
+          showToast('Puedes pulsar “Listo” para usar el GPS o marcar tu recogida directamente en el mapa.', 'info', 6500);
+        } else if (permissionState === 'denied') {
+          showToast('El GPS está bloqueado. Marca manualmente dónde debe recogerte el conductor.', 'warning', 6500);
+        } else {
+          showToast('No recibimos señal GPS. Marca manualmente tu punto de recogida.', 'warning', 6500);
+        }
+        beginManualPickupSelection(place);
+        return;
       }
-      return;
     }
     if (selectionId !== destinationSelectionId || !origin) return;
 
@@ -689,7 +747,13 @@ export function renderPassengerApp(container) {
       passengerId: user.id || 'p1',
       driverId: null,
       status: 'SEARCHING',
-      pickup: { address: 'Mi ubicación actual', lat: pickupLocation.lat, lng: pickupLocation.lng, accuracy: pickupLocation.accuracy || null },
+      pickup: {
+        address: pickupLocation.source === 'manual' ? 'Punto de recogida marcado' : 'Mi ubicación actual',
+        lat: pickupLocation.lat,
+        lng: pickupLocation.lng,
+        accuracy: pickupLocation.accuracy || null,
+        source: pickupLocation.source || 'gps'
+      },
       destination: { address: currentSelectedDestinationName || 'Vereda del Lago, Maracaibo', lat: destCoords[0], lng: destCoords[1] },
       fareEUR: fareUSD,
       distanceKm: fareData?.distanceKm,
@@ -728,6 +792,7 @@ export function renderPassengerApp(container) {
     currentDriver = null;
     selectedPickupLocation = null;
     pendingDestinationAfterPermission = null;
+    hideManualPickupBanner();
     destinationSelectionId += 1;
     persistentChatBtn.classList.add('hidden');
     hidePassengerTripToggle();
@@ -774,6 +839,7 @@ export function renderPassengerApp(container) {
     currentDriver = null;
     selectedPickupLocation = null;
     pendingDestinationAfterPermission = null;
+    hideManualPickupBanner();
     destinationSelectionId += 1;
     currentSelectedDestinationName = '';
     stopTripStatusPolling();
