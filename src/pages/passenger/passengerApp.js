@@ -482,12 +482,12 @@ export function renderPassengerApp(container) {
       onSelect: (method) => {
         selectedPaymentMethod = method;
         showToast(`Método de pago: ${method.toUpperCase().replace('_', ' ')} seleccionado`, 'success');
+        showFarePreview(destName, routeInfo, fareData, destCoords);
       },
       onTopUp: () => {
         handleNavigation('wallet');
       }
     });
-    container.appendChild(modal.element);
     modal.open();
   }
 
@@ -507,7 +507,8 @@ export function renderPassengerApp(container) {
         duration: durMinStr,
         fareUSD: fareUSDVal.toFixed(2),
         fareVES: fareVESVal.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        rideType: selectedRideType
+        rideType: selectedRideType,
+        paymentMethod: selectedPaymentMethod
       }, 
       () => requestRide(destCoords, {
         fareUSD: fareUSDVal,

@@ -3,6 +3,70 @@ import { createStatusBadge } from '../../components/statusBadge.js';
 import { createRatingStars } from '../../components/ratingStars.js';
 
 export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancelRoute, onScheduleRide, onRideTypeChange) {
+  const methodLabels = {
+    wallet: 'Billetera Express',
+    pago_movil: 'Pago Móvil',
+    zelle: 'Zelle',
+    zinli: 'Zinli',
+    efectivo: 'Efectivo'
+  };
+  const div = document.createElement('div');
+  div.className = 'fare-preview fare-preview-premium fade-in';
+  div.innerHTML = `
+    <section class="fare-confirm-card">
+      <header class="fare-confirm-header">
+        <div><small>CONFIRMAR VIAJE</small><strong>Tu +58 Express</strong></div>
+        <button type="button" class="fare-preview-collapse" aria-expanded="true" aria-label="Minimizar confirmación">${icon('chevronDown', 19)}</button>
+      </header>
+      <div class="fare-preview-body">
+        <div class="fare-destination-row">
+          <span class="fare-pin">${icon('mapPin', 19)}</span>
+          <div><small>DESTINO SELECCIONADO</small><strong>${fareData.destination}</strong></div>
+          <button type="button" class="btn-cancel-route-icon" aria-label="Cambiar destino">${icon('close', 16)}</button>
+        </div>
+        <div class="ride-type-selector">
+          <button type="button" class="ride-type-option ${fareData.rideType === 'MOTO' ? 'active' : ''}" data-ride-type="MOTO">
+            <span>🏍️</span><div><strong>Moto</strong><small>Rápida y económica</small></div>
+          </button>
+          <button type="button" class="ride-type-option ${fareData.rideType === 'CAR' ? 'active' : ''}" data-ride-type="CAR">
+            <span>🚘</span><div><strong>Automóvil</strong><small>Más comodidad</small></div>
+          </button>
+        </div>
+        <div class="fare-summary-grid">
+          <div class="fare-total"><small>Tarifa estimada</small><strong>$${fareData.fareUSD}</strong><span>USD · ~ Bs. ${fareData.fareVES}</span></div>
+          <div class="fare-metric"><small>Distancia</small><strong>${fareData.distance}</strong></div>
+          <div class="fare-metric"><small>Tiempo</small><strong>${fareData.duration}</strong></div>
+        </div>
+        <button type="button" id="payment-selector-btn" class="fare-payment-selector">
+          <span class="payment-leading">${icon('banknote', 19)}</span>
+          <span><small>Método de pago</small><strong>${methodLabels[fareData.paymentMethod] || 'Efectivo'}</strong></span>
+          ${icon('chevronDown', 18)}
+        </button>
+        <button type="button" class="confirm-ride-btn">${icon('navigation', 19)} Solicitar viaje ahora</button>
+        <div class="fare-secondary-actions">
+          <button type="button" class="schedule-ride-btn">${icon('calendar', 16)} Programar</button>
+          <button type="button" class="btn-cancel-route-full">Cancelar viaje</button>
+        </div>
+      </div>
+    </section>`;
+
+  const body = div.querySelector('.fare-preview-body');
+  const collapseButton = div.querySelector('.fare-preview-collapse');
+  collapseButton.addEventListener('click', () => {
+    const collapsed = div.classList.toggle('is-collapsed');
+    collapseButton.setAttribute('aria-expanded', String(!collapsed));
+    collapseButton.innerHTML = icon(collapsed ? 'chevronUp' : 'chevronDown', 19);
+  });
+  div.querySelector('.confirm-ride-btn').addEventListener('click', onConfirm);
+  div.querySelectorAll('.ride-type-option').forEach(button => button.addEventListener('click', () => onRideTypeChange?.(button.dataset.rideType)));
+  div.querySelector('#payment-selector-btn').addEventListener('click', onChangePayment);
+  div.querySelector('.schedule-ride-btn').addEventListener('click', () => onScheduleRide?.());
+  div.querySelector('.btn-cancel-route-icon').addEventListener('click', () => onCancelRoute?.());
+  div.querySelector('.btn-cancel-route-full').addEventListener('click', () => onCancelRoute?.());
+  return div;
+}
+
+function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelRoute, onScheduleRide, onRideTypeChange) {
   const div = document.createElement('div');
   div.className = 'fare-preview fade-in';
   div.style.cssText = 'padding: 8px 10px 32px; max-width: 440px; margin: 0 auto;';

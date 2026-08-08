@@ -162,6 +162,9 @@ export class BottomSheet {
   }
 
   setContent(html) {
+    const isFarePreview = html instanceof HTMLElement && html.classList.contains('fare-preview-premium');
+    this.sheet.classList.toggle('fare-preview-sheet', isFarePreview);
+    this.overlay.classList.toggle('fare-preview-overlay', isFarePreview);
     if (typeof html === 'string') {
       this.content.innerHTML = html;
     } else if (html instanceof HTMLElement) {
@@ -177,7 +180,9 @@ export class BottomSheet {
     const vh = this.options.snapPoints[index];
     const translateY = 100 - vh;
     
-    this.sheet.style.transform = `translate(-50%, ${translateY}vh)`;
+    this.sheet.style.transform = this.sheet.classList.contains('fare-preview-sheet')
+      ? 'translate(-50%, 0)'
+      : `translate(-50%, ${translateY}vh)`;
     this._notifyStateChange();
   }
 
