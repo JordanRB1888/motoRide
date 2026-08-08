@@ -475,8 +475,63 @@ export function renderDriverApp(container) {
         }
     });
 
+    socket.on('passengerLocationUpdated', (location) => {
+        if (!currentTrip || location?.tripId !== currentTrip.id) return;
+        const lat = Number(location.lat ?? location.latitude);
+        const lng = Number(location.lng ?? location.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        currentTrip.pickup = { ...(currentTrip.pickup || {}), lat, lng };
+        currentMap.setPickupMarker(lat, lng);
+        const driverPosition = driverGpsTracker.getLastPosition();
+        if (driverPosition?.latitude && driverPosition?.longitude) {
+            currentMap.drawRoute(
+                { lat: driverPosition.latitude, lng: driverPosition.longitude },
+                { lat, lng },
+                '#FFC107'
+            );
+        }
+    });
+
+    async function restoreActiveTrip() {
+        const active = await apiService.get('/trips/active/me');
+        if (!active?.trip || active.trip.driverId !== user.id) return;
+        currentTrip = active.trip;
+        currentPassenger = {
+            id: active.passenger?.id || active.trip.passengerId,
+            name: `${active.passenger?.firstName || 'Pasajero'} ${active.passenger?.lastName || ''}`.trim(),
+            avatar: active.passenger?.photoUrl,
+            rating: active.passenger?.rating || 5
+        };
+        persistentChatBtn.classList.remove('hidden');
+        onlineOverlay.classList.add('hidden');
+        activeTripContainer.classList.remove('hidden');
+        let view;
+        if (['ARRIVED'].includes(active.trip.status)) {
+            view = renderWaitingPassenger(currentTrip, currentPassenger,
+                () => startTrip(currentTrip, currentPassenger),
+                () => openChatWithPassenger(currentTrip, currentPassenger),
+                () => callPassenger(currentPassenger));
+        } else if (['IN_PROGRESS', 'IN_TRIP'].includes(active.trip.status)) {
+            view = renderInTrip(currentTrip,
+                () => completeTrip(currentTrip, currentPassenger),
+                () => openChatWithPassenger(currentTrip, currentPassenger),
+                () => callPassenger(currentPassenger));
+        } else {
+            view = renderEnRouteToPickup(currentTrip,
+                () => arrivePickup(currentTrip, currentPassenger),
+                () => openChatWithPassenger(currentTrip, currentPassenger),
+                () => callPassenger(currentPassenger));
+        }
+        activeTripContainer.innerHTML = '';
+        activeTripContainer.appendChild(view);
+        if (currentTrip.pickup?.lat && currentTrip.pickup?.lng) {
+            currentMap.setPickupMarker(currentTrip.pickup.lat, currentTrip.pickup.lng);
+        }
+    }
+
     // Auto-enable online mode by default so driver is ready immediately
     setOnline(true);
+    restoreActiveTrip();
 
     // Tab Navigation
     const tabs = container.querySelectorAll('.nav-tab');

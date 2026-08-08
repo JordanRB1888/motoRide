@@ -102,6 +102,25 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   const location = await locationPromise;
   assert.equal(location.lat, 10.643);
 
+  const passengerLocationPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('No llegó el GPS del pasajero')), 5000);
+    driver.on('passengerLocationUpdated', location => {
+      if (location.tripId === 'test_trip') {
+        clearTimeout(timeout);
+        resolve(location);
+      }
+    });
+  });
+  passenger.emit('passenger:location_update', { latitude: 10.644, longitude: -71.614 });
+  const passengerLocation = await passengerLocationPromise;
+  assert.equal(passengerLocation.passengerId, 'p1');
+
+  const activeResponse = await fetch(`${url}/api/trips/active/me`, {
+    headers: { authorization: `Bearer ${passengerToken}` }
+  });
+  assert.equal(activeResponse.status, 200);
+  assert.equal((await activeResponse.json()).trip.id, 'test_trip');
+
   const chatPromise = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('No llegó el mensaje al conductor')), 5000);
     driver.on('chat:message', message => {

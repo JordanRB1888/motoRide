@@ -360,6 +360,22 @@ app.get('/api/trips', requireAuth, requireRole('admin'), (req, res) => {
   res.json(database.trips);
 });
 
+app.get('/api/trips/active/me', requireAuth, (req, res) => {
+  const activeStatuses = ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'];
+  const trip = database.trips.findLast(item =>
+    activeStatuses.includes(item.status) &&
+    (item.passengerId === req.user.id || item.driverId === req.user.id)
+  );
+  if (!trip) return res.status(204).end();
+  const passenger = database.users.find(user => user.id === trip.passengerId);
+  const driver = database.users.find(user => user.id === trip.driverId);
+  res.json({
+    trip,
+    passenger: publicUser(passenger),
+    driver: publicUser(driver)
+  });
+});
+
 app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id);
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
@@ -505,6 +521,24 @@ io.on('connection', (socket) => {
     const payload = { ...data, driverId, lat, lng };
     emitDriverLocation(driverId, payload);
     io.emit('admin:driver_location', payload);
+  });
+
+  socket.on('passenger:location_update', (data = {}) => {
+    if (!allowSocketRole(socket, 'passenger')) return;
+    const passengerId = socket.data.auth.userId;
+    const trip = database.trips.findLast(item =>
+      item.passengerId === passengerId &&
+      ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(item.status)
+    );
+    if (!trip) return;
+    const lat = Number(data.latitude ?? data.lat);
+    const lng = Number(data.longitude ?? data.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    trip.pickup = { ...(trip.pickup || {}), lat, lng };
+    trip.passengerLocation = { lat, lng, heading: Number(data.heading || 0), updatedAt: Date.now() };
+    persistDatabase();
+    const payload = { ...trip.passengerLocation, passengerId, tripId: trip.id };
+    io.to(`user:${trip.driverId}`).to('admins').emit('passengerLocationUpdated', payload);
   });
 
   // Driver Status Toggle Event ('AVAILABLE' | 'BUSY' | 'OFFLINE')

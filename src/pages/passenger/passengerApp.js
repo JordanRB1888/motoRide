@@ -34,6 +34,11 @@ export function renderPassengerApp(container) {
   let currentDriver = null;
   let searchTimeout = null;
   let lastRouteRefreshAt = 0;
+  let passengerWatchId = null;
+  let passengerLocation = { lat: 10.6427, lng: -71.6125 };
+  let activeChat = null;
+  let activeChatTripId = null;
+  let unreadMessages = 0;
 
   const user = authService.getCurrentUser() || { id: 'p1', name: 'Pasajero' };
 
@@ -113,6 +118,10 @@ export function renderPassengerApp(container) {
       
       <div id="bottom-sheet-container"></div>
       <div id="overlay-container"></div>
+      <button id="passenger-active-chat-btn" class="passenger-active-chat-btn hidden" aria-label="Abrir chat de la carrera">
+        <span>💬</span><span>Chat</span>
+        <span id="passenger-chat-unread" class="passenger-chat-unread hidden">0</span>
+      </button>
     </div>
   `;
 
@@ -147,6 +156,13 @@ export function renderPassengerApp(container) {
   // Initialize Bottom Sheet
   const sheetEl = container.querySelector('#bottom-sheet-container');
   bottomSheet = new BottomSheet(sheetEl);
+  const persistentChatBtn = container.querySelector('#passenger-active-chat-btn');
+  const chatUnreadBadge = container.querySelector('#passenger-chat-unread');
+  persistentChatBtn.addEventListener('click', () => openChatModal());
+  mapComponent.getUserLocation().then(location => {
+    passengerLocation = location;
+    mapComponent.setUserLocation(location.lat, location.lng);
+  });
 
   // Floating Cancel Route Listener
   const floatingCancelBtn = container.querySelector('#floating-cancel-route-btn');
@@ -446,7 +462,7 @@ export function renderPassengerApp(container) {
       passengerId: user.id || 'p1',
       driverId: currentDriver.id,
       status: 'SEARCHING',
-      pickup: { address: 'Basílica de Chiquinquirá, Maracaibo', lat: 10.6427, lng: -71.6125 },
+      pickup: { address: 'Mi ubicación actual', lat: passengerLocation.lat, lng: passengerLocation.lng },
       destination: { address: currentSelectedDestinationName || 'Vereda del Lago, Maracaibo', lat: destCoords[0], lng: destCoords[1] },
       fareEUR: fareUSD,
       passengerName: `${user.firstName || 'Jordan'} ${user.lastName || 'Pérez'}`.trim(),
@@ -463,6 +479,7 @@ export function renderPassengerApp(container) {
     apiService.post('/trips/create', currentTrip).then((result) => {
       if (!result?.trip) driverDispatchService.dispatchTrip(currentTrip);
     });
+    startPassengerTracking();
   }
 
   function cancelRouteAndSelectNew() {
@@ -475,6 +492,8 @@ export function renderPassengerApp(container) {
 
     currentTrip = null;
     currentDriver = null;
+    persistentChatBtn.classList.add('hidden');
+    stopPassengerTracking();
 
     // Hide top route cancel bar
     const routeCancelBar = container.querySelector('#route-cancel-bar');
@@ -554,13 +573,35 @@ export function renderPassengerApp(container) {
 
   function openChatModal() {
     if (!currentTrip || !currentDriver) return;
-    const chat = createChatModal({
-      tripId: currentTrip.id,
-      currentUser: user,
-      recipientUser: currentDriver
-    });
-    container.appendChild(chat.element);
-    chat.open();
+    if (!activeChat || activeChatTripId !== currentTrip.id) {
+      activeChat?.destroy();
+      activeChat = createChatModal({ tripId: currentTrip.id, currentUser: user, recipientUser: currentDriver });
+      activeChatTripId = currentTrip.id;
+      document.body.appendChild(activeChat.element);
+    }
+    unreadMessages = 0;
+    chatUnreadBadge.textContent = '0';
+    chatUnreadBadge.classList.add('hidden');
+    activeChat.open();
+  }
+
+  function startPassengerTracking() {
+    if (passengerWatchId !== null || !navigator.geolocation) return;
+    passengerWatchId = navigator.geolocation.watchPosition(position => {
+      passengerLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+      mapComponent.setUserLocation(passengerLocation.lat, passengerLocation.lng);
+      socket.emit('passenger:location_update', {
+        tripId: currentTrip?.id,
+        latitude: passengerLocation.lat,
+        longitude: passengerLocation.lng,
+        heading: position.coords.heading || 0
+      });
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 });
+  }
+
+  function stopPassengerTracking() {
+    if (passengerWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(passengerWatchId);
+    passengerWatchId = null;
   }
 
   function openSosModal() {
@@ -597,6 +638,8 @@ export function renderPassengerApp(container) {
       eventLogger.log('PASSENGER', `Notificación recibida: Conductor cambió estado a ➔ ${data.status}`, data);
 
       if (data.status === 'EN_ROUTE' || data.status === 'DRIVER_ASSIGNED') {
+        persistentChatBtn.classList.remove('hidden');
+        startPassengerTracking();
         showToast('⚡ ¡Conductor asignado y en camino!', 'success');
         setState('DRIVER_EN_ROUTE');
       } else if (data.status === 'ARRIVED' || data.status === 'DRIVER_ARRIVED') {
@@ -606,6 +649,8 @@ export function renderPassengerApp(container) {
         showToast('🚀 En viaje hacia tu destino', 'info');
         setState('IN_TRIP');
       } else if (data.status === 'COMPLETED') {
+        persistentChatBtn.classList.add('hidden');
+        stopPassengerTracking();
         setState('COMPLETED');
       }
     }
@@ -634,6 +679,36 @@ export function renderPassengerApp(container) {
     }
   });
 
+  socket.on('chat:message', message => {
+    if (message?.tripId !== currentTrip?.id || message.senderId === user.id) return;
+    if (!activeChat?.isOpen()) {
+      unreadMessages += 1;
+      chatUnreadBadge.textContent = unreadMessages > 9 ? '9+' : String(unreadMessages);
+      chatUnreadBadge.classList.remove('hidden');
+    }
+  });
+
+  async function restoreActiveTrip() {
+    const active = await apiService.get('/trips/active/me');
+    if (!active?.trip || active.trip.passengerId !== user.id) return;
+    currentTrip = active.trip;
+    currentDriver = active.driver || active.trip.driver;
+    if (currentDriver) {
+      persistentChatBtn.classList.remove('hidden');
+      startPassengerTracking();
+      if (['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status)) setState('IN_TRIP');
+      else if (currentTrip.status === 'ARRIVED') setState('DRIVER_ARRIVED');
+      else setState('DRIVER_EN_ROUTE');
+    } else {
+      setState('SEARCHING');
+      bottomSheet.setContent(renderSearchingState(() => cancelSearch()));
+    }
+    if (currentTrip.pickup?.lat && currentTrip.pickup?.lng) {
+      passengerLocation = { lat: currentTrip.pickup.lat, lng: currentTrip.pickup.lng };
+      mapComponent.setUserLocation(passengerLocation.lat, passengerLocation.lng);
+    }
+  }
+
   function renderActiveDrivers() {
     mapComponent.clearMarkers();
     const activeDrivers = db.query('users', { role: 'driver' });
@@ -645,4 +720,5 @@ export function renderPassengerApp(container) {
   }
 
   renderActiveDrivers();
+  restoreActiveTrip();
 }
