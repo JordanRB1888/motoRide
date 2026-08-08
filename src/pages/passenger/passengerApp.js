@@ -38,8 +38,10 @@ export function renderPassengerApp(container) {
   let passengerWatchId = null;
   let passengerLocation = null;
   let passengerLocationUpdatedAt = 0;
+  let passengerLocationRequestPromise = null;
   let selectedPickupLocation = null;
   let destinationSelectionId = 0;
+  let pendingDestinationAfterPermission = null;
   let activeChat = null;
   let activeChatTripId = null;
   let unreadMessages = 0;
@@ -220,6 +222,7 @@ export function renderPassengerApp(container) {
   updateNotificationBadge();
   persistentChatBtn.addEventListener('click', () => openChatModal());
   requestPassengerPermissions();
+  watchPassengerLocationPermission();
 
   function setPassengerLocation(location) {
     const lat = Number(location?.lat);
@@ -238,22 +241,60 @@ export function renderPassengerApp(container) {
   }
 
   async function getPassengerOrigin() {
+    if (passengerLocationRequestPromise) return passengerLocationRequestPromise;
+    passengerLocationRequestPromise = (async () => {
+      try {
+        const location = await mapComponent.getUserLocation({ allowFallback: false });
+        return setPassengerLocation(location);
+      } catch (error) {
+        const cachedLocationIsFresh = passengerLocation && (Date.now() - passengerLocationUpdatedAt) < 60000;
+        if (cachedLocationIsFresh) return passengerLocation;
+        throw error;
+      }
+    })().finally(() => {
+      passengerLocationRequestPromise = null;
+    });
+    return passengerLocationRequestPromise;
+  }
+
+  async function getGeolocationPermissionState() {
+    if (!navigator.permissions?.query) return 'unknown';
     try {
-      const location = await mapComponent.getUserLocation({ allowFallback: false });
-      return setPassengerLocation(location);
-    } catch (error) {
-      const cachedLocationIsFresh = passengerLocation && (Date.now() - passengerLocationUpdatedAt) < 60000;
-      if (cachedLocationIsFresh) return passengerLocation;
-      throw error;
+      return (await navigator.permissions.query({ name: 'geolocation' })).state;
+    } catch {
+      return 'unknown';
     }
   }
 
-  function requestPassengerPermissions() {
+  async function retryPendingDestinationAfterPermission() {
+    if (!pendingDestinationAfterPermission) return;
+    const permissionState = await getGeolocationPermissionState();
+    if (permissionState !== 'granted') return;
+    const destination = pendingDestinationAfterPermission;
+    pendingDestinationAfterPermission = null;
+    selectDestination(destination);
+  }
+
+  async function watchPassengerLocationPermission() {
+    if (!navigator.permissions?.query) return;
+    try {
+      const status = await navigator.permissions.query({ name: 'geolocation' });
+      status.addEventListener?.('change', retryPendingDestinationAfterPermission);
+      window.addEventListener('focus', retryPendingDestinationAfterPermission);
+    } catch {
+      // Safari and some installed PWAs do not expose the Permissions API.
+    }
+  }
+
+  async function requestPassengerPermissions() {
     const permissionKey = `58express_permissions_prompted_${user.id || 'p1'}`;
     if (localStorage.getItem(permissionKey) === 'yes') {
-      getPassengerOrigin().catch(() => {
-        showToast('Activa la ubicación precisa para calcular tu ruta desde donde estás.', 'info');
-      });
+      const permissionState = await getGeolocationPermissionState();
+      if (permissionState === 'granted') {
+        getPassengerOrigin().catch(() => {
+          showToast('No fue posible actualizar tu ubicación. Verifica que el GPS esté encendido.', 'info');
+        });
+      }
       return;
     }
     const overlay = document.createElement('div');
@@ -265,12 +306,14 @@ export function renderPassengerApp(container) {
       // Start both permission requests directly from the user's tap. Browsers
       // require this gesture for notification permission.
       const notificationPermission = notificationService.requestBrowserPermission();
-      const locationPermission = mapComponent.getUserLocation({ allowFallback: false }).catch(() => null);
+      const locationPermission = getPassengerOrigin().catch(() => null);
       const [notificationGranted, location] = await Promise.all([notificationPermission, locationPermission]);
-      if (location) setPassengerLocation(location);
       overlay.remove();
       if (!location) {
-        showToast('No se obtuvo tu GPS. Activa la ubicación precisa antes de solicitar una carrera.', 'error');
+        const permissionState = await getGeolocationPermissionState();
+        showToast(permissionState === 'prompt'
+          ? 'Confirma “Seguir permitiendo” y pulsa “Listo” para activar tu ubicación.'
+          : 'No se obtuvo tu GPS. Activa la ubicación precisa antes de solicitar una carrera.', permissionState === 'prompt' ? 'info' : 'error');
       } else {
         showToast(notificationGranted ? 'Ubicación y notificaciones activadas' : 'Ubicación activada. Puedes habilitar notificaciones en los ajustes del navegador.', notificationGranted ? 'success' : 'info');
       }
@@ -501,7 +544,15 @@ export function renderPassengerApp(container) {
     try {
       origin = await getPassengerOrigin();
     } catch (error) {
-      showToast('No se puede calcular la carrera sin tu ubicación real. Activa el GPS y el permiso de ubicación precisa.', 'error');
+      const permissionState = await getGeolocationPermissionState();
+      if (permissionState === 'prompt') {
+        pendingDestinationAfterPermission = { ...place };
+        showToast('Selecciona “Seguir permitiendo”, pulsa “Listo” y continuaremos automáticamente.', 'info', 6500);
+      } else if (permissionState === 'denied') {
+        showToast('La ubicación está bloqueada. En “Administrar”, permite el acceso y vuelve a intentarlo.', 'error', 6500);
+      } else {
+        showToast('No fue posible obtener tu GPS. Verifica que la ubicación precisa esté encendida y vuelve a intentarlo.', 'error');
+      }
       return;
     }
     if (selectionId !== destinationSelectionId || !origin) return;
@@ -676,6 +727,7 @@ export function renderPassengerApp(container) {
     currentTrip = null;
     currentDriver = null;
     selectedPickupLocation = null;
+    pendingDestinationAfterPermission = null;
     destinationSelectionId += 1;
     persistentChatBtn.classList.add('hidden');
     hidePassengerTripToggle();
@@ -721,6 +773,7 @@ export function renderPassengerApp(container) {
     currentTrip = null;
     currentDriver = null;
     selectedPickupLocation = null;
+    pendingDestinationAfterPermission = null;
     destinationSelectionId += 1;
     currentSelectedDestinationName = '';
     stopTripStatusPolling();
