@@ -115,6 +115,12 @@ export function renderDriverApp(container) {
                 <div id="active-trip-container" class="active-trip-container hidden"></div>
             </div>
 
+            <button id="driver-active-chat-btn" class="driver-active-chat-btn hidden" aria-label="Abrir chat de la carrera">
+                <span class="driver-chat-icon">💬</span>
+                <span class="driver-chat-label">Chat</span>
+                <span id="driver-chat-unread" class="driver-chat-unread hidden">0</span>
+            </button>
+
             <div class="driver-nav-tabs">
                 <button class="nav-tab active" data-tab="inicio">${icon('home')} <span>Inicio</span></button>
                 <button class="nav-tab" data-tab="ganancias">${icon('wallet')} <span>Ganancias</span></button>
@@ -127,6 +133,11 @@ export function renderDriverApp(container) {
     `;
 
     let isOnline = false;
+    let currentTrip = null;
+    let currentPassenger = null;
+    let activeChat = null;
+    let activeChatTripId = null;
+    let unreadMessages = 0;
     let currentMap = new MapComponent('driver-map', { is3D: true });
 
     const toggle = container.querySelector('#online-toggle');
@@ -135,6 +146,8 @@ export function renderDriverApp(container) {
     const onlineOverlay = container.querySelector('#online-overlay');
     const btnConnectOverlay = container.querySelector('#btn-connect-overlay');
     const activeTripContainer = container.querySelector('#active-trip-container');
+    const persistentChatBtn = container.querySelector('#driver-active-chat-btn');
+    const chatUnreadBadge = container.querySelector('#driver-chat-unread');
     const driverHeaderBtn = container.querySelector('#driver-header-btn');
     const driverThemeSlot = container.querySelector('#driver-theme-toggle-slot');
     if (driverThemeSlot) {
@@ -251,18 +264,29 @@ export function renderDriverApp(container) {
 
 
     function openChatWithPassenger(trip, passenger) {
-        const chat = createChatModal({
-            tripId: trip.id,
-            currentUser: user,
-            recipientUser: {
-                id: passenger.id || trip.passengerId,
-                firstName: passenger.name || 'Pasajero',
-                photoUrl: passenger.avatar
-            }
-        });
-        container.appendChild(chat.element);
-        chat.open();
+        if (!activeChat || activeChatTripId !== trip.id) {
+            activeChat?.destroy();
+            activeChat = createChatModal({
+                tripId: trip.id,
+                currentUser: user,
+                recipientUser: {
+                    id: passenger.id || trip.passengerId,
+                    firstName: passenger.name || 'Pasajero',
+                    photoUrl: passenger.avatar
+                }
+            });
+            document.body.appendChild(activeChat.element);
+            activeChatTripId = trip.id;
+        }
+        unreadMessages = 0;
+        chatUnreadBadge.textContent = '0';
+        chatUnreadBadge.classList.add('hidden');
+        activeChat.open();
     }
+
+    persistentChatBtn.addEventListener('click', () => {
+        if (currentTrip && currentPassenger) openChatWithPassenger(currentTrip, currentPassenger);
+    });
 
     function callPassenger(passenger) {
         window.open(`tel:+584125550001`, '_self');
@@ -295,6 +319,9 @@ export function renderDriverApp(container) {
         }
 
         if (modal) modal.remove();
+        currentTrip = trip;
+        currentPassenger = passenger;
+        persistentChatBtn.classList.remove('hidden');
         
         onlineOverlay.classList.add('hidden');
         activeTripContainer.classList.remove('hidden');
@@ -349,6 +376,7 @@ export function renderDriverApp(container) {
     function completeTrip(trip, passenger) {
         eventLogger.log('DRIVER', `Viaje completado exitosamente [${trip.id}]`);
         socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'COMPLETED' });
+        persistentChatBtn.classList.add('hidden');
         
         if (watchPositionId !== null && navigator.geolocation) {
             navigator.geolocation.clearWatch(watchPositionId);
@@ -431,6 +459,19 @@ export function renderDriverApp(container) {
         if (modal) {
             modal.remove();
             showToast('El pasajero ha cancelado la solicitud de viaje', 'info');
+        }
+        if (currentTrip?.id === data?.tripId) {
+            persistentChatBtn.classList.add('hidden');
+            activeChat?.close();
+        }
+    });
+
+    socket.on('chat:message', (message) => {
+        if (message?.tripId !== currentTrip?.id || message.senderId === user.id) return;
+        if (!activeChat?.isOpen()) {
+            unreadMessages += 1;
+            chatUnreadBadge.textContent = unreadMessages > 9 ? '9+' : String(unreadMessages);
+            chatUnreadBadge.classList.remove('hidden');
         }
     });
 

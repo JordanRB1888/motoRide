@@ -333,3 +333,27 @@ input:checked + .online-toggle-slider:before {
     max-width: 460px !important;
   }
 }
+.driver-active-chat-btn {
+  position: fixed;
+  right: 18px;
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  z-index: 11000;
+  height: 52px;
+  min-width: 112px;
+  padding: 0 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(255,193,7,.5);
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffd54f, #ffab00);
+  color: #121824;
+  font-weight: 900;
+  box-shadow: 0 12px 30px rgba(0,0,0,.5), 0 0 22px rgba(255,193,7,.25);
+}
+.driver-active-chat-btn.hidden { display: none !important; }
+.driver-chat-icon { font-size: 1.15rem; }
+.driver-chat-label { font-size: .84rem; }
+.driver-chat-unread { position: absolute; top: -7px; right: -5px; min-width: 20px; height: 20px; padding: 0 4px; display: grid; place-items: center; border-radius: 999px; background: var(--danger); color: white; border: 2px solid #121824; font-size: .66rem; }
+.driver-chat-unread.hidden { display: none !important; }

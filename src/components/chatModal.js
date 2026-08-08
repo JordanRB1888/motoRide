@@ -17,6 +17,8 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
 
     const modal = document.createElement('div');
     modal.className = 'chat-modal-overlay hidden';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
 
     const isDriver = currentUser.role === 'driver';
     const quickReplies = isDriver ? [
@@ -182,6 +184,10 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         modal.classList.add('hidden');
     });
 
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) modal.classList.add('hidden');
+    });
+
     // Socket listener for incoming message
     const socketHandler = (incomingMsg) => {
         if (incomingMsg.tripId === tripId && incomingMsg.senderId !== currentUser.id) {
@@ -215,6 +221,9 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         },
         close() {
             modal.classList.add('hidden');
+        },
+        isOpen() {
+            return !modal.classList.contains('hidden');
         },
         destroy() {
             socket.off('chat:message', socketHandler);
