@@ -468,14 +468,15 @@ export function renderPassengerApp(container) {
     showToast('📡 Transmitiendo solicitud de mototaxi en tiempo real...', 'info');
     
     const fareUSD = fareData?.totalUSD || fareData?.fareUSD || 4.50;
-    const drivers = db.query('users', { role: 'driver' });
-    currentDriver = drivers[0] || { id: 'd1', firstName: 'Carlos', lastName: 'Mendoza', phone: '+58 414-000-0004' };
+    // A driver is assigned only after the backend matching flow accepts the ride.
+    // Preselecting a mock driver made SEARCHING rides look accepted after refresh.
+    currentDriver = null;
     
     // Construct trip object synchronously with valid unique ID
     currentTrip = {
       id: 'trip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       passengerId: user.id || 'p1',
-      driverId: currentDriver.id,
+      driverId: null,
       status: 'SEARCHING',
       pickup: { address: 'Mi ubicación actual', lat: passengerLocation.lat, lng: passengerLocation.lng },
       destination: { address: currentSelectedDestinationName || 'Vereda del Lago, Maracaibo', lat: destCoords[0], lng: destCoords[1] },
@@ -538,11 +539,12 @@ export function renderPassengerApp(container) {
 
   function setState(state) {
     currentState = state;
-    if (state === 'IDLE') {
-      container.querySelector('#top-search-bar').style.display = 'flex';
+    const topSearchBar = container.querySelector('#top-search-bar');
+    if (state === 'IDLE' || state === 'SELECTING_DESTINATION') {
+      if (topSearchBar) topSearchBar.style.display = 'flex';
       renderActiveDrivers();
     } else {
-      container.querySelector('#top-search-bar').style.display = 'none';
+      if (topSearchBar) topSearchBar.style.display = 'none';
     }
 
     if (state === 'DRIVER_ASSIGNED' || state === 'DRIVER_EN_ROUTE' || state === 'DRIVER_ARRIVED') {
@@ -693,7 +695,7 @@ export function renderPassengerApp(container) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
     mapComponent.addDriverMarker(currentDriver.id, lat, lng, locData.heading || 0, currentDriver);
-    if (currentTrip.pickup?.lat && currentTrip.pickup?.lng) {
+    if (currentTrip?.pickup?.lat && currentTrip?.pickup?.lng) {
       mapComponent.setPickupMarker(currentTrip.pickup.lat, currentTrip.pickup.lng);
       const now = Date.now();
       if (now - lastRouteRefreshAt > 10000) {
@@ -718,19 +720,36 @@ export function renderPassengerApp(container) {
 
   async function restoreActiveTrip() {
     const active = await apiService.get('/trips/active/me');
-    if (!active?.trip || active.trip.passengerId !== user.id) return;
+    if (!active?.trip || active.trip.passengerId !== user.id) {
+      currentTrip = null;
+      currentDriver = null;
+      setState('IDLE');
+      return;
+    }
     currentTrip = active.trip;
     selectedRideType = currentTrip.rideType === 'CAR' ? 'CAR' : 'MOTO';
     currentDriver = active.driver || active.trip.driver;
-    if (currentDriver) {
+    if (currentTrip.status === 'SEARCHING') {
+      const searchAge = Date.now() - new Date(currentTrip.createdAt || 0).getTime();
+      if (!Number.isFinite(searchAge) || searchAge > 3 * 60 * 1000) {
+        driverDispatchService.cancelTrip(currentTrip.id);
+        currentTrip = null;
+        currentDriver = null;
+        setState('IDLE');
+        return;
+      }
+      currentDriver = null;
+      setState('SEARCHING');
+      bottomSheet.setContent(renderSearchingState(() => cancelSearch(), selectedRideType));
+    } else if (currentDriver) {
       persistentChatBtn.classList.remove('hidden');
       startPassengerTracking();
       if (['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status)) setState('IN_TRIP');
       else if (currentTrip.status === 'ARRIVED') setState('DRIVER_ARRIVED');
       else setState('DRIVER_EN_ROUTE');
     } else {
-      setState('SEARCHING');
-      bottomSheet.setContent(renderSearchingState(() => cancelSearch(), selectedRideType));
+      currentTrip = null;
+      setState('IDLE');
     }
     if (currentTrip.pickup?.lat && currentTrip.pickup?.lng) {
       passengerLocation = { lat: currentTrip.pickup.lat, lng: currentTrip.pickup.lng };

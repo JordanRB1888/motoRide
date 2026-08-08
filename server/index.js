@@ -442,6 +442,8 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   const trip = { ...req.body };
   trip.rideType = trip.rideType === 'CAR' ? 'CAR' : 'MOTO';
   trip.passengerId = req.user.id;
+  trip.driverId = null;
+  delete trip.driver;
   trip.id = trip.id || 'trip_' + Date.now();
   trip.status = TRIP_STATUS.SEARCHING;
   trip.createdAt = new Date().toISOString();
