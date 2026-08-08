@@ -1,5 +1,4 @@
 import { authService } from '../services/mockAuth.js';
-import { db } from '../services/mockDatabase.js';
 import { showToast } from './toast.js';
 
 export function createDriverRegistrationModal({ onClose, onSuccess }) {
@@ -243,7 +242,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
             formData.phone = modal.querySelector('#reg-phone').value.trim();
             formData.password = modal.querySelector('#reg-pass').value.trim();
 
-            if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone) {
+            if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone || formData.password.length < 6) {
                 showToast('Por favor completa todos los datos personales obligatorios', 'error');
                 return false;
             }
@@ -263,7 +262,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
         return true;
     }
 
-    function submitRegistration() {
+    async function submitRegistration() {
         const newDriver = {
             id: 'driver_' + Date.now(),
             role: 'driver',
@@ -279,31 +278,34 @@ export function createDriverRegistrationModal({ onClose, onSuccess }) {
             licenseNumber: formData.licenseNumber,
             photoUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(formData.firstName)}`,
             status: 'OFFLINE',
-            isVerified: true,
+            isVerified: false,
             rating: 5.0,
             totalTrips: 0,
-            documents: formData.documents
+            documents: formData.documents,
+            password: formData.password
         };
 
-        db.insert('users', newDriver);
-
-        // Auto login & instant confirmation
-        authService.login(newDriver.email, 'password123', 'driver');
+        const registration = await authService.register(newDriver, 'driver');
+        if (!registration.success) {
+            showToast('No se pudo registrar: el correo o teléfono ya existe', 'error');
+            return;
+        }
+        Object.assign(newDriver, registration.user);
 
         // Show pending confirmation overlay
         modal.innerHTML = `
             <div style="text-align:center; padding: 20px 10px;">
                 <div style="font-size: 3.5rem; margin-bottom: 12px;">✅</div>
                 <h3 style="color: var(--text-primary); font-size: 1.4rem; font-weight: 900; margin-bottom: 8px;">
-                    ¡Registro Exitoso como Conductor!
+                    ¡Solicitud de conductor recibida!
                 </h3>
                 <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; margin-bottom: 20px;">
-                    Bienvenido <strong>${formData.firstName} ${formData.lastName}</strong>. Tu moto <strong>${formData.vehicleBrand} (${formData.vehiclePlate})</strong> y tus documentos han sido verificados.
+                    Bienvenido <strong>${formData.firstName} ${formData.lastName}</strong>. La administración revisará tu moto <strong>${formData.vehicleBrand} (${formData.vehiclePlate})</strong> y tus documentos.
                 </p>
 
                 <div style="background: rgba(0,230,118,0.12); padding: 14px; border-radius: 16px; border: 1.5px solid var(--success); margin-bottom: 24px; text-align: left;">
                     <strong style="color: var(--success); font-size: 0.88rem; display:block; margin-bottom: 4px;">ESTADO DE TU CUENTA:</strong>
-                    <span style="color: var(--text-primary); font-size: 0.85rem;">🟢 Aprobado · Listo para conectarte y recibir viajes</span>
+                    <span style="color: var(--text-primary); font-size: 0.85rem;">🟡 Pendiente de revisión administrativa</span>
                 </div>
 
                 <button id="close-success-reg-btn" class="btn btn-3d primary-btn" style="

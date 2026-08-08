@@ -15,13 +15,13 @@ class DriverDispatchService {
     // Listen for driver location updates continuously
     socket.on('driverLocationUpdated', (data) => {
       if (data && (data.driverId || data.userId)) {
-        this.updateDriverLocation(data.driverId || data.userId, data.lat || data.latitude, data.lng || data.longitude, data.heading || 0);
+        this.updateDriverLocation(data.driverId || data.userId, data.lat ?? data.latitude, data.lng ?? data.longitude, data.heading || 0);
       }
     });
 
     socket.on('driver:location_update', (data) => {
       if (data && (data.driverId || data.userId)) {
-        this.updateDriverLocation(data.driverId || data.userId, data.lat || data.latitude, data.lng || data.longitude, data.heading || 0);
+        this.updateDriverLocation(data.driverId || data.userId, data.lat ?? data.latitude, data.lng ?? data.longitude, data.heading || 0);
       }
     });
 
@@ -85,13 +85,7 @@ class DriverDispatchService {
     };
     driver.lastHeartbeat = Date.now();
 
-    socket.emit('driverLocationUpdated', {
-      driverId,
-      lat: Number(lat),
-      lng: Number(lng),
-      heading: Number(heading),
-      driverName: `${driver.firstName} ${driver.lastName}`.trim()
-    });
+    return driver;
   }
 
   /**
@@ -223,9 +217,8 @@ class DriverDispatchService {
     eventLogger.log('SYSTEM', `🔒 Bloqueo atómico exitoso. Viaje [${tripId}] asignado a ${driverData?.firstName || 'Carlos'} (${driverData?.vehiclePlate || 'AC3M49P'})`);
 
     // Broadcast confirmation across Sockets & Cloud KV
-    socket.emit('tripStatusUpdated', {
+    socket.emit('rideAccepted', {
       tripId,
-      status: 'EN_ROUTE',
       driver: driverData
     });
 

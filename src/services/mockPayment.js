@@ -1,5 +1,5 @@
 import { db } from './mockDatabase.js';
-import { socket } from './mockSocket.js';
+import { socket } from './socketClient.js';
 import { fareCalculator } from './fareCalculator.js';
 
 class MockPayment {

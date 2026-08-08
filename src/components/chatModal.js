@@ -1,5 +1,5 @@
 import { icon } from '../utils/icons.js';
-import { socket } from '../services/mockSocket.js';
+import { socket } from '../services/socketClient.js';
 import { formatTime } from '../utils/helpers.js';
 
 export function createChatModal({ tripId, currentUser, recipientUser }) {

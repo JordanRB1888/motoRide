@@ -1,4 +1,4 @@
-import { db } from '../../services/apiService.js';
+import { db, apiService } from '../../services/apiService.js';
 import { authService } from '../../services/mockAuth.js';
 import { renderFleetMap } from './fleetMap.js';
 import { renderUsersManagement } from './usersManagement.js';
@@ -217,6 +217,9 @@ export function renderAdminApp(container) {
 
     // Real-Time Socket Subscription for Admin Live Feed
     socket.on('rideRequested', (data) => {
+        if (data?.id && !db.findById('trips', data.id)) {
+            db.insert('trips', { ...data, status: data.status || 'SEARCHING' });
+        }
         eventLogger.log('ADMIN', `Panel Admin detectó nueva solicitud de viaje en Maracaibo [${data?.id}]`);
         const activeNav = container.querySelector('.nav-item.active');
         if (activeNav && activeNav.dataset.target === 'dashboard') {
@@ -225,6 +228,13 @@ export function renderAdminApp(container) {
     });
 
     socket.on('tripStatusUpdated', (data) => {
+        if (data?.tripId) {
+            db.update('trips', data.tripId, {
+                status: data.status,
+                driverId: data.driver?.id,
+                driver: data.driver
+            });
+        }
         eventLogger.log('ADMIN', `Panel Admin detectó actualización de estado de viaje ➔ ${data?.status}`, data);
         const activeNav = container.querySelector('.nav-item.active');
         if (activeNav && activeNav.dataset.target === 'dashboard') {
@@ -234,4 +244,11 @@ export function renderAdminApp(container) {
 
     // Init
     renderDashboard();
+
+    Promise.all([apiService.get('/users'), apiService.get('/trips')]).then(([users, trips]) => {
+        if (Array.isArray(users)) db.setCollection('users', users);
+        if (Array.isArray(trips)) db.setCollection('trips', trips);
+        const activeNav = container.querySelector('.nav-item.active');
+        if (activeNav?.dataset.target === 'dashboard') renderDashboard();
+    });
 }

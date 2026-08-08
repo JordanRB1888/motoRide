@@ -5,6 +5,8 @@ class RealSocketClient {
   constructor() {
     this.listeners = new Map(); // eventName -> Set of callbacks
     this.processedMessageIds = new Set();
+    this.socketHandlers = new Map();
+    this.pendingRooms = new Set();
 
     // 1. Setup BroadcastChannel for 0ms cross-tab real-time sync
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -43,8 +45,9 @@ class RealSocketClient {
     }
 
     // 3. Setup Socket.IO client for backend server communication
+    const configuredSocketUrl = import.meta.env.VITE_SOCKET_URL?.replace(/\/$/, '');
     const serverUrl = typeof window !== 'undefined' 
-      ? (window.location.hostname === 'localhost' ? 'http://localhost:4000' : 'https://moto-ride-production.up.railway.app')
+      ? (configuredSocketUrl || (window.location.hostname === 'localhost' ? 'http://localhost:4000' : 'https://moto-ride-production.up.railway.app'))
       : 'http://localhost:4000';
 
     try {
@@ -65,6 +68,7 @@ class RealSocketClient {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
+      this.pendingRooms.forEach(room => this.socket.emit('join:room', room));
       eventLogger.info(`⚡ [Socket.IO Client] Conectado al Servidor Backend Real ID: ${this.socket.id}`);
     });
 
@@ -91,6 +95,7 @@ class RealSocketClient {
   }
 
   joinRoom(room) {
+    this.pendingRooms.add(room);
     if (this.socket && this.socket.connected) {
       this.socket.emit('join:room', room);
     }
@@ -102,10 +107,10 @@ class RealSocketClient {
     }
     this.listeners.get(eventName).add(callback);
 
-    if (this.socket) {
-      this.socket.on(eventName, (data) => {
-        this._triggerLocalListeners(eventName, data);
-      });
+    if (this.socket && !this.socketHandlers.has(eventName)) {
+      const handler = (data) => this._triggerLocalListeners(eventName, data);
+      this.socketHandlers.set(eventName, handler);
+      this.socket.on(eventName, handler);
     }
   }
 
@@ -114,8 +119,10 @@ class RealSocketClient {
     if (callbacks) {
       callbacks.delete(callback);
     }
-    if (this.socket) {
-      this.socket.off(eventName, callback);
+    if (this.socket && callbacks && callbacks.size === 0) {
+      const handler = this.socketHandlers.get(eventName);
+      if (handler) this.socket.off(eventName, handler);
+      this.socketHandlers.delete(eventName);
     }
   }
 
@@ -146,6 +153,18 @@ class RealSocketClient {
 
   getSocket() {
     return this.socket;
+  }
+
+  connect() {
+    if (this.socket && !this.socket.connected) this.socket.connect();
+    return this.socket;
+  }
+
+  authenticate(token) {
+    if (!this.socket || !token) return;
+    this.socket.auth = { token };
+    if (this.socket.connected) this.socket.disconnect();
+    this.socket.connect();
   }
 }
 

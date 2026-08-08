@@ -150,6 +150,11 @@ export function renderDriverApp(container) {
     }
 
     function setOnline(online) {
+        if (online && user.isVerified === false) {
+            toggle.checked = false;
+            showToast('Tu cuenta está pendiente de aprobación administrativa', 'warning');
+            return;
+        }
         isOnline = online;
         toggle.checked = online;
         if (online) {

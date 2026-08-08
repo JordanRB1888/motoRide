@@ -580,6 +580,11 @@ export function renderPassengerApp(container) {
       } else {
         currentTrip.status = data.status;
       }
+      db.update('trips', data.tripId, {
+        status: data.status,
+        driverId: data.driver?.id,
+        driver: data.driver
+      });
       
       if (data.driver) {
         currentDriver = data.driver;

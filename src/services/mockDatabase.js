@@ -1,4 +1,4 @@
-import { socket } from './mockSocket.js';
+import { socket } from './socketClient.js';
 import { syncInsertSupabase, syncUpdateSupabase } from './supabaseClient.js';
 
 class MockDatabase {
@@ -87,7 +87,11 @@ class MockDatabase {
 
   query(collection, predicate) {
     const data = this.getCollection(collection);
-    return data.filter(predicate);
+    if (typeof predicate === 'function') return data.filter(predicate);
+    if (predicate && typeof predicate === 'object') {
+      return data.filter(item => Object.entries(predicate).every(([key, value]) => item[key] === value));
+    }
+    return data;
   }
 }
 

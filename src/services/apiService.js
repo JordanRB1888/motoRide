@@ -1,16 +1,27 @@
 import { syncInsertSupabase, syncUpdateSupabase } from './supabaseClient.js';
 import { eventLogger } from '../utils/logger.js';
+import { db as localDatabase } from './mockDatabase.js';
 
 class ApiService {
   constructor() {
-    this.baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-      ? 'http://localhost:4000/api' 
-      : '/api';
+    const configuredUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
+    this.baseUrl = configuredUrl || (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      ? 'http://localhost:4000/api'
+      : 'https://moto-ride-production.up.railway.app/api');
+  }
+
+  getAuthHeaders() {
+    try {
+      const session = JSON.parse(localStorage.getItem('58express_session') || 'null');
+      return session?.token ? { Authorization: `Bearer ${session.token}` } : {};
+    } catch {
+      return {};
+    }
   }
 
   async get(endpoint) {
     try {
-      const res = await fetch(`${this.baseUrl}${endpoint}`);
+      const res = await fetch(`${this.baseUrl}${endpoint}`, { headers: this.getAuthHeaders() });
       if (res.ok) return await res.json();
     } catch (err) {
       eventLogger.warn(`API GET ${endpoint} note:`, err);
@@ -22,7 +33,7 @@ class ApiService {
     try {
       const res = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...this.getAuthHeaders() },
         body: JSON.stringify(data)
       });
       if (res.ok) return await res.json();
@@ -30,6 +41,33 @@ class ApiService {
       eventLogger.warn(`API POST ${endpoint} note:`, err);
     }
     return null;
+  }
+
+  async patch(endpoint, data) {
+    try {
+      const res = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...this.getAuthHeaders() },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) return await res.json();
+    } catch (err) {
+      eventLogger.warn(`API PATCH ${endpoint} note:`, err);
+    }
+    return null;
+  }
+
+  async delete(endpoint) {
+    try {
+      const res = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders()
+      });
+      return res.ok;
+    } catch (err) {
+      eventLogger.warn(`API DELETE ${endpoint} note:`, err);
+      return false;
+    }
   }
 
   /**
@@ -54,26 +92,4 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
-export const db = {
-  query: (collection, filter) => {
-    // Adapter for UI compatibility
-    return [
-      {
-        id: 'd1',
-        role: 'driver',
-        firstName: 'Carlos',
-        lastName: 'Mendoza',
-        phone: '+58 414-000-0004',
-        vehicleBrand: 'Bera',
-        vehicleModel: 'SBR 150',
-        vehiclePlate: 'AC3M49P',
-        rating: 4.9,
-        totalTrips: 142,
-        location: { lat: 10.6427, lng: -71.6125 }
-      }
-    ];
-  },
-  getCollection: () => [],
-  insert: (col, data) => data,
-  update: (col, id, patch) => patch
-};
+export const db = localDatabase;

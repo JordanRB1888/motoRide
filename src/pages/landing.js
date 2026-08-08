@@ -44,7 +44,7 @@ export function renderLanding(container) {
                             <input type="text" id="email" placeholder="Correo o Teléfono" required>
                         </div>
                         <div class="input-group">
-                            <input type="password" id="password" placeholder="Contraseña (mock)" required value="password123">
+                            <input type="password" id="password" placeholder="Contraseña" required>
                         </div>
                         <button type="submit" class="primary-btn">Ingresar</button>
                         
@@ -91,10 +91,12 @@ export function renderLanding(container) {
     const btnOpenDriverReg = container.querySelector('#btn-open-driver-reg');
 
     let selectedRole = '';
+    let registrationMode = false;
 
     container.querySelectorAll('.role-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             selectedRole = btn.dataset.role;
+            registrationMode = false;
             roleSelection.classList.add('hidden');
             loginForm.classList.remove('hidden');
             
@@ -117,8 +119,7 @@ export function renderLanding(container) {
     if (btnOpenDriverReg) {
         btnOpenDriverReg.addEventListener('click', () => {
             const modal = createDriverRegistrationModal({
-                onSuccess: (newDriver) => {
-                    authService.login(newDriver.email, 'password123', 'driver');
+                onSuccess: () => {
                     window.navigateTo('#/driver');
                 }
             });
@@ -155,21 +156,31 @@ export function renderLanding(container) {
         if (!email) return;
 
         try {
-            const result = authService.login(email, password || 'password123', selectedRole);
+            const result = registrationMode
+                ? await authService.register({
+                    firstName: email.split('@')[0] || 'Usuario',
+                    lastName: 'Express',
+                    email,
+                    password
+                }, selectedRole)
+                : await authService.login(email, password, selectedRole);
             if (result && result.success && result.user) {
                 window.navigateTo(`#/${selectedRole}`);
             } else {
-                authService.register({ 
-                    firstName: email.split('@')[0] || 'Usuario', 
-                    lastName: 'Express', 
-                    email, 
-                    phone: '+584140000000' 
-                }, selectedRole);
-                window.navigateTo(`#/${selectedRole}`);
+                showToast(registrationMode ? 'No se pudo crear la cuenta' : 'Credenciales incorrectas', 'error');
             }
         } catch (error) {
             console.error('Login error:', error);
-            window.navigateTo(`#/${selectedRole}`);
+            showToast('No se pudo conectar con el servidor', 'error');
         }
+    });
+
+    const registerLink = container.querySelector('#link-register');
+    registerLink?.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (selectedRole !== 'passenger') return;
+        registrationMode = !registrationMode;
+        loginTitle.textContent = registrationMode ? 'Registro Pasajero' : 'Ingreso Pasajero';
+        registerLink.textContent = registrationMode ? 'Ya tengo una cuenta' : 'Registrarse';
     });
 }

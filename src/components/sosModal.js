@@ -1,5 +1,5 @@
 import { icon } from '../utils/icons.js';
-import { socket } from '../services/mockSocket.js';
+import { socket } from '../services/socketClient.js';
 import { showToast } from './toast.js';
 
 export function createSosModal({ trip, currentUser, location }) {

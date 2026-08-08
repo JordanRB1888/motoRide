@@ -1,5 +1,6 @@
 import { db } from '../../services/mockDatabase.js';
 import { showToast } from '../../components/toast.js';
+import { apiService } from '../../services/apiService.js';
 
 export function renderUsersManagement(container) {
     let currentTab = 'drivers'; // Default to drivers as requested
@@ -304,7 +305,7 @@ export function renderUsersManagement(container) {
         }
     }
 
-    function approveDriver(driverId) {
+    async function approveDriver(driverId) {
         const driver = db.findById('users', driverId);
         if (!driver) return;
 
@@ -316,32 +317,31 @@ export function renderUsersManagement(container) {
             carnetCirculacion: 'approved'
         };
 
-        db.update('users', driverId, {
-            status: 'ONLINE',
-            isVerified: true,
-            documents: defaultDocs
-        });
+        const updated = await apiService.patch(`/admin/drivers/${driverId}`, { action: 'approve' });
+        if (!updated) return showToast('No se pudo aprobar el conductor', 'error');
+        db.update('users', driverId, updated);
         showToast(`¡Conductor ${driver.firstName} ${driver.lastName} APROBADO para trabajar!`, 'success');
         renderView();
     }
 
-    function suspendDriver(driverId) {
+    async function suspendDriver(driverId) {
         const driver = db.findById('users', driverId);
         if (!driver) return;
 
-        db.update('users', driverId, {
-            status: 'SUSPENDED',
-            isVerified: false
-        });
+        const updated = await apiService.patch(`/admin/drivers/${driverId}`, { action: 'suspend' });
+        if (!updated) return showToast('No se pudo suspender el conductor', 'error');
+        db.update('users', driverId, updated);
         showToast(`Acceso suspendido a ${driver.firstName} ${driver.lastName}`, 'warning');
         renderView();
     }
 
-    function confirmDeleteDriver(driverId) {
+    async function confirmDeleteDriver(driverId) {
         const driver = db.findById('users', driverId);
         if (!driver) return;
 
         if (confirm(`¿Estás seguro de que deseas ELIMINAR a ${driver.firstName} ${driver.lastName} de la aplicación? El conductor perderá acceso permanentemente.`)) {
+            const deleted = await apiService.delete(`/admin/drivers/${driverId}`);
+            if (!deleted) return showToast('No se pudo eliminar el conductor', 'error');
             db.delete('users', driverId);
             showToast(`Conductor ${driver.firstName} ${driver.lastName} eliminado del sistema`, 'error');
             renderView();
@@ -417,7 +417,7 @@ export function renderUsersManagement(container) {
         overlay.querySelector('#close-add-modal').addEventListener('click', () => overlay.remove());
         overlay.querySelector('#cancel-add-btn').addEventListener('click', () => overlay.remove());
 
-        overlay.querySelector('#add-driver-form').addEventListener('submit', (e) => {
+        overlay.querySelector('#add-driver-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const firstName = overlay.querySelector('#new-fname').value.trim();
             const lastName = overlay.querySelector('#new-lname').value.trim();
@@ -451,8 +451,10 @@ export function renderUsersManagement(container) {
                 }
             };
 
-            db.insert('users', newDriver);
-            showToast(`¡Conductor ${firstName} ${lastName} registrado con éxito!`, 'success');
+            const created = await apiService.post('/admin/drivers', newDriver);
+            if (!created?.user) return showToast('No se pudo registrar el conductor', 'error');
+            db.insert('users', created.user);
+            showToast(`Conductor registrado. Contraseña temporal: ${created.temporaryPassword}`, 'success');
             overlay.remove();
             renderView();
         });
@@ -562,10 +564,12 @@ export function renderUsersManagement(container) {
             overlay.querySelector('#close-inspector-modal').addEventListener('click', () => overlay.remove());
 
             overlay.querySelectorAll('.approve-doc-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', async () => {
                     const key = btn.dataset.key;
                     docs[key] = 'approved';
-                    db.update('users', driver.id, { documents: docs });
+                    const updated = await apiService.patch(`/admin/drivers/${driver.id}`, { documentKey: key, documentStatus: 'approved' });
+                    if (!updated) return showToast('No se pudo actualizar el documento', 'error');
+                    db.update('users', driver.id, updated);
                     showToast(`Documento ${key} marcado como APROBADO`, 'success');
                     renderModalContent();
                     renderTable();
@@ -573,10 +577,12 @@ export function renderUsersManagement(container) {
             });
 
             overlay.querySelectorAll('.reject-doc-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', async () => {
                     const key = btn.dataset.key;
                     docs[key] = 'rejected';
-                    db.update('users', driver.id, { documents: docs });
+                    const updated = await apiService.patch(`/admin/drivers/${driver.id}`, { documentKey: key, documentStatus: 'rejected', action: 'pending' });
+                    if (!updated) return showToast('No se pudo actualizar el documento', 'error');
+                    db.update('users', driver.id, updated);
                     showToast(`Documento ${key} RECHAZADO`, 'error');
                     renderModalContent();
                     renderTable();

@@ -3,3 +3,8 @@ dist
 .vercel
 .env
 .env.local
+server/data/*.json
+server/data/*.tmp
+server/data/*.sqlite
+server/data/*.sqlite-wal
+server/data/*.sqlite-shm

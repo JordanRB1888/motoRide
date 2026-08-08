@@ -44,10 +44,9 @@ async function router() {
         }
         renderDriverApp(appContainer);
     } else if (hash === '#/admin') {
-        let adminUser = user;
-        if (!adminUser || adminUser.role !== 'admin') {
-            const loginRes = authService.login('admin@58express.com', 'admin', 'admin');
-            adminUser = loginRes.user;
+        if (!user || user.role !== 'admin') {
+            window.navigateTo('#/');
+            return;
         }
         renderAdminApp(appContainer);
     } else {
