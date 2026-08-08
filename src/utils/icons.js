@@ -4,6 +4,8 @@
 
 export const icons = {
   menu: '<path d="M3 12h18M3 6h18M3 18h18" />',
+  maximize: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
+  arrowRight: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
   close: '<path d="M18 6L6 18M6 6l12 12" />',
   back: '<path d="M19 12H5M12 19l-7-7 7-7" />',
   search: '<circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />',
