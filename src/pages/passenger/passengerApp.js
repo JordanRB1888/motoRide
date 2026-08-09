@@ -4,8 +4,7 @@ import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import * as helpers from '../../utils/helpers.js';
 import { apiService, db } from '../../services/apiService.js';
-import { authService } from '../../services/mockAuth.js';
-import { tripEngine } from '../../services/mockTrip.js';
+import { authService } from '../../services/authService.js';
 import { socket } from '../../services/socketClient.js';
 import { fareCalculator } from '../../services/fareCalculator.js';
 import { renderFarePreview, renderSearchingState, renderDriverCard } from './requestRide.js';
@@ -50,7 +49,8 @@ export function renderPassengerApp(container) {
   let selectedRideType = 'MOTO';
   const notifiedTripEvents = new Set();
 
-  const user = authService.getCurrentUser() || { id: 'p1', name: 'Pasajero' };
+  const user = authService.getCurrentUser();
+  if (!user) return;
 
   container.innerHTML = `
     <div class="passenger-app">
@@ -735,7 +735,7 @@ export function renderPassengerApp(container) {
     container.appendChild(modal);
   }
 
-  function requestRide(destCoords, fareData) {
+  async function requestRide(destCoords, fareData) {
     const pickupLocation = selectedPickupLocation || passengerLocation;
     if (!pickupLocation) {
       showToast('Necesitamos obtener tu ubicación real antes de solicitar la carrera.', 'error');
@@ -748,7 +748,7 @@ export function renderPassengerApp(container) {
     
     const fareUSD = fareData?.totalUSD || fareData?.fareUSD || 4.50;
     // A driver is assigned only after the backend matching flow accepts the ride.
-    // Preselecting a mock driver made SEARCHING rides look accepted after refresh.
+    // A SEARCHING ride must never look accepted until the server assigns a driver.
     currentDriver = null;
     
     // Construct trip object synchronously with valid unique ID
@@ -776,16 +776,27 @@ export function renderPassengerApp(container) {
       createdAt: new Date().toISOString()
     };
 
-    db.insert('trips', currentTrip);
-
     eventLogger.log('PASSENGER', `Solicitud de carrera enviada al DriverDispatchService [${currentTrip.id}] hacia ${currentTrip.destination.address}`);
 
-    // Persist and dispatch through the backend. If REST is temporarily unavailable,
-    // fall back to the authenticated real-time channel.
-    apiService.post('/trips/create', currentTrip).then((result) => {
-      if (!result?.trip) driverDispatchService.dispatchTrip(currentTrip);
-      else startTripStatusPolling();
-    });
+    // SQLite on the backend is the source of truth. The UI only begins a real
+    // search after the server accepts (or safely queues) the authenticated request.
+    const result = await apiService.createTrip(currentTrip);
+    if (!result?.trip) {
+      currentTrip = null;
+      setState('IDLE');
+      showPassengerTripToggle(false);
+      bottomSheet.setContent('');
+      bottomSheet.collapse();
+      showToast('No se pudo registrar la carrera. Comprueba tu conexión e inténtalo nuevamente.', 'error');
+      return;
+    }
+    currentTrip = result.trip;
+    if (result.queued) {
+      showToast('Solicitud guardada de forma segura. Se enviará al recuperar conexión.', 'warning');
+      window.addEventListener('online', () => setTimeout(startTripStatusPolling, 800), { once: true });
+    } else {
+      startTripStatusPolling();
+    }
     notifyTripEvent('REQUESTED', 'Buscando conductor', `Solicitud enviada hacia ${currentTrip.destination.address}. Te avisaremos cuando un conductor acepte.`);
     startPassengerTracking();
   }

@@ -2,6 +2,9 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
+import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,15 +13,28 @@ import jwt from 'jsonwebtoken';
 import { DatabaseSync } from 'node:sqlite';
 import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
 import { transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
+import { createPrivateStorage } from './services/privateStorage.js';
+import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = String(process.env.CLIENT_ORIGIN || 'https://plus58express.vercel.app,http://localhost:3000,http://localhost:5173,http://127.0.0.1:4173')
+  .split(',').map(value => value.trim()).filter(Boolean);
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    callback(new Error('ORIGIN_NOT_ALLOWED'));
+  }
+}));
+app.use(express.json({ limit: '1mb' }));
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
+app.use('/api/auth', authLimiter);
+app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
     methods: ['GET', 'POST']
   }
 });
@@ -27,11 +43,27 @@ const PORT = process.env.PORT || 4000;
 const serverDir = path.dirname(fileURLToPath(import.meta.url));
 const dataFile = process.env.DATA_FILE || path.join(serverDir, 'data', 'plus58express.sqlite');
 const jwtSecret = process.env.JWT_SECRET || 'plus58express-development-secret';
+const isProduction = process.env.NODE_ENV === 'production' || String(process.env.RAILWAY_ENVIRONMENT_NAME || '').toLowerCase() === 'production';
+if (isProduction && (!process.env.JWT_SECRET || jwtSecret.length < 32)) {
+  throw new Error('JWT_SECRET_REQUIRED_IN_PRODUCTION');
+}
+const privateStorage = createPrivateStorage({
+  rootDirectory: process.env.UPLOAD_DIR || path.join(path.dirname(dataFile), 'private-uploads')
+});
 let pricingConfig = {
   ...DEFAULT_PRICING,
   bcvRate: Number(process.env.BCV_RATE || 0),
   parallelRate: Number(process.env.PARALLEL_RATE || 0)
 };
+
+function sanitizeText(value, max = 240) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[<>&"']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
 
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
@@ -43,7 +75,8 @@ io.use((socket, next) => {
     if (currentUser.role === 'driver' && (!currentUser.isVerified || currentUser.status === 'SUSPENDED')) {
       return next(new Error('DRIVER_NOT_APPROVED'));
     }
-    socket.data.auth = { userId: payload.sub, role: payload.role };
+    if (currentUser.accountStatus === 'DISABLED') return next(new Error('ACCOUNT_DISABLED'));
+    socket.data.auth = { userId: currentUser.id, role: currentUser.role };
     next();
   } catch {
     next(new Error('INVALID_SESSION'));
@@ -58,48 +91,24 @@ function allowSocketRole(socket, role) {
 
 // In-Memory Database & State Sync Engine (Real-Time Backend Dispatch)
 const initialDatabase = {
-  users: [
-    {
-      id: 'd1',
-      role: 'driver',
-      firstName: 'Carlos',
-      lastName: 'Mendoza',
-      phone: '+58 414-000-0004',
-      email: 'conductor@58express.com',
-      vehicleBrand: 'Bera',
-      vehicleType: 'MOTO',
-      vehicleModel: 'SBR 150',
-      vehiclePlate: 'AC3M49P',
-      vehicleColor: 'Negro',
-      rating: 4.9,
-      totalTrips: 142,
-      isVerified: true,
-      status: 'AVAILABLE',
-      location: { lat: 10.6427, lng: -71.6125, heading: 0, updatedAt: Date.now() }
-    },
-    {
-      id: 'p1',
-      role: 'passenger',
-      firstName: 'Jordan',
-      lastName: 'Pérez',
-      phone: '+58 412-123-4567',
-      email: 'pasajero@58express.com',
-      walletBalance: 45.00
-    },
-    {
-      id: 'admin_1',
-      role: 'admin',
-      firstName: 'Admin',
-      lastName: '+58express',
-      phone: '+58 414-000-0000',
-      email: process.env.ADMIN_EMAIL || 'admin@58express.com'
-    }
-  ],
+  users: [{
+    id: 'admin_1',
+    role: 'admin',
+    firstName: 'Admin',
+    lastName: '+58express',
+    phone: '+58 414-000-0000',
+    email: process.env.ADMIN_EMAIL || 'admin@58express.com',
+    accountStatus: 'ACTIVE'
+  }],
   trips: [],
   notifications: [],
   messages: [],
   supportMessages: [],
-  settings: []
+  settings: [],
+  transactions: [],
+  driverApplications: [],
+  driverDocuments: [],
+  adminActions: []
 };
 
 fs.mkdirSync(path.dirname(dataFile), { recursive: true });
@@ -113,7 +122,28 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS supportMessages (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS transactions (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS driverApplications (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS driverDocuments (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS adminActions (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS schemaMigrations (id TEXT PRIMARY KEY, appliedAt TEXT NOT NULL);
 `);
+
+const migrationsDirectory = path.join(serverDir, 'migrations');
+if (fs.existsSync(migrationsDirectory)) {
+  for (const filename of fs.readdirSync(migrationsDirectory).filter(name => name.endsWith('.sql')).sort()) {
+    if (sqlite.prepare('SELECT id FROM schemaMigrations WHERE id = ?').get(filename)) continue;
+    sqlite.exec('BEGIN IMMEDIATE');
+    try {
+      sqlite.exec(fs.readFileSync(path.join(migrationsDirectory, filename), 'utf8'));
+      sqlite.prepare('INSERT INTO schemaMigrations (id, appliedAt) VALUES (?, ?)').run(filename, new Date().toISOString());
+      sqlite.exec('COMMIT');
+    } catch (error) {
+      sqlite.exec('ROLLBACK');
+      throw new Error(`MIGRATION_FAILED:${filename}:${error.message}`);
+    }
+  }
+}
 
 function loadCollection(table) {
   return sqlite.prepare(`SELECT payload FROM ${table}`).all().map(row => JSON.parse(row.payload));
@@ -125,18 +155,17 @@ const database = {
   notifications: loadCollection('notifications'),
   messages: loadCollection('messages'),
   supportMessages: loadCollection('supportMessages'),
-  settings: loadCollection('settings')
+  settings: loadCollection('settings'),
+  transactions: loadCollection('transactions'),
+  driverApplications: loadCollection('driverApplications'),
+  driverDocuments: loadCollection('driverDocuments'),
+  adminActions: loadCollection('adminActions')
 };
 
 const storedPricing = database.settings.find(item => item.id === 'pricing');
 if (storedPricing?.value) pricingConfig = { ...pricingConfig, ...storedPricing.value };
 
 function ensureSeedCredentials() {
-  const defaults = {
-    d1: 'password123',
-    p1: 'password123',
-    admin_1: 'admin'
-  };
   let changed = false;
   for (const seedUser of initialDatabase.users) {
     if (!database.users.some(user => user.id === seedUser.id)) {
@@ -144,14 +173,26 @@ function ensureSeedCredentials() {
       changed = true;
     }
   }
-  for (const user of database.users) {
-    const seed = initialDatabase.users.find(item => item.id === user.id);
-    if (seed && user.isVerified === undefined && seed.isVerified !== undefined) {
-      user.isVerified = seed.isVerified;
-      changed = true;
+  const admin = database.users.find(user => user.id === 'admin_1');
+  if (admin && !admin.passwordHash) {
+    const bootstrapPassword = process.env.ADMIN_PASSWORD || (isProduction ? crypto.randomUUID() : 'admin');
+    admin.passwordHash = bcrypt.hashSync(bootstrapPassword, 12);
+    admin.accountStatus = 'ACTIVE';
+    changed = true;
+  }
+  if (isProduction && process.env.DISABLE_LEGACY_DEMO_USERS !== 'false') {
+    for (const user of database.users.filter(item => ['d1', 'p1'].includes(item.id))) {
+      if (user.accountStatus !== 'DISABLED') {
+        user.accountStatus = 'DISABLED';
+        user.disabledReason = 'LEGACY_DEMO_ACCOUNT';
+        if (user.role === 'driver') user.status = 'SUSPENDED';
+        changed = true;
+      }
     }
-    if (defaults[user.id] && (!user.passwordHash || !bcrypt.compareSync(defaults[user.id], user.passwordHash))) {
-      user.passwordHash = bcrypt.hashSync(defaults[user.id], 12);
+  }
+  for (const user of database.users) {
+    if (!user.accountStatus) {
+      user.accountStatus = 'ACTIVE';
       changed = true;
     }
   }
@@ -161,7 +202,7 @@ function ensureSeedCredentials() {
 function persistDatabase() {
   try {
     sqlite.exec('BEGIN IMMEDIATE');
-    for (const table of ['users', 'trips', 'notifications', 'messages', 'supportMessages', 'settings']) {
+    for (const table of ['users', 'trips', 'notifications', 'messages', 'supportMessages', 'settings', 'transactions', 'driverApplications', 'driverDocuments', 'adminActions']) {
       sqlite.exec(`DELETE FROM ${table}`);
       const insert = sqlite.prepare(`INSERT INTO ${table} (id, payload) VALUES (?, ?)`);
       for (const item of database[table]) insert.run(item.id, JSON.stringify(item));
@@ -177,12 +218,24 @@ ensureSeedCredentials();
 
 function publicUser(user) {
   if (!user) return null;
-  const { passwordHash, ...safeUser } = user;
+  const { passwordHash, photoStorageKey, ...safeUser } = user;
   return safeUser;
 }
 
 function signToken(user) {
   return jwt.sign({ sub: user.id, role: user.role }, jwtSecret, { expiresIn: '7d' });
+}
+
+function creditCompletedTrip(trip) {
+  if (!trip || trip.status !== TRIP_STATUS.COMPLETED || database.transactions.some(item => item.type === 'DRIVER_EARNING' && item.tripId === trip.id)) return;
+  const driver = database.users.find(user => user.id === trip.driverId);
+  if (!driver) return;
+  const gross = Number(trip.fareUSD || trip.fareEUR || trip.pricing?.fareUSD || 0);
+  const commission = Math.round(gross * Number(pricingConfig.commissionRate || 0.15) * 100) / 100;
+  const net = Math.max(0, Math.round((gross - commission) * 100) / 100);
+  driver.walletBalance = Math.round((Number(driver.walletBalance || 0) + net) * 100) / 100;
+  trip.driverEarningUSD = net;
+  database.transactions.push({ id:`transaction_${crypto.randomUUID()}`, userId:driver.id, tripId:trip.id, type:'DRIVER_EARNING', amount:net, gross, commission, currency:'USD', status:'APPROVED', createdAt:new Date().toISOString() });
 }
 
 function requireAuth(req, res, next) {
@@ -192,6 +245,7 @@ function requireAuth(req, res, next) {
     const payload = jwt.verify(token, jwtSecret);
     const user = database.users.find(item => item.id === payload.sub);
     if (!user) return res.status(401).json({ error: 'INVALID_SESSION' });
+    if (user.accountStatus === 'DISABLED') return res.status(403).json({ error: 'ACCOUNT_DISABLED' });
     req.user = user;
     next();
   } catch {
@@ -204,6 +258,24 @@ function requireRole(role) {
     ? next()
     : res.status(403).json({ error: 'FORBIDDEN' });
 }
+
+function requireApprovedDriver(req, res, next) {
+  if (req.user?.role !== 'driver') return res.status(403).json({ error: 'FORBIDDEN' });
+  if (!req.user.isVerified || req.user.status === 'SUSPENDED') return res.status(403).json({ error: 'DRIVER_NOT_APPROVED' });
+  next();
+}
+
+app.use('/api', createDriverApplicationsRouter({
+  database,
+  persistDatabase,
+  publicUser,
+  signToken,
+  requireAuth,
+  requireRole,
+  io,
+  bcrypt,
+  privateStorage
+}));
 
 // Driver Dispatch Registry & Atomic Lock Map
 const driverRegistry = new Map();
@@ -287,11 +359,19 @@ app.post('/api/pricing/estimate', requireAuth, (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   const { identifier, phone, email, password, role } = req.body;
   const loginId = String(identifier || phone || email || '').trim().toLowerCase();
-  const user = database.users.find(item =>
-    (!role || item.role === role) &&
+  const identityUser = database.users.find(item =>
     [item.email, item.phone].filter(Boolean).some(value => String(value).trim().toLowerCase() === loginId)
   );
-  if (!user || !user.passwordHash || !await bcrypt.compare(String(password || ''), user.passwordHash)) {
+  if (identityUser?.accountStatus === 'DISABLED') return res.status(403).json({ error: 'ACCOUNT_DISABLED' });
+  if (!identityUser || !identityUser.passwordHash || !await bcrypt.compare(String(password || ''), identityUser.passwordHash)) {
+    return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+  }
+  if (role === 'driver' && identityUser?.role === 'passenger' && identityUser.driverApplicationId) {
+    const application = database.driverApplications.find(item => item.id === identityUser.driverApplicationId);
+    return res.status(403).json({ error: 'DRIVER_APPLICATION_NOT_APPROVED', applicationStatus: application?.status || 'pending' });
+  }
+  const user = identityUser && (!role || identityUser.role === role) ? identityUser : null;
+  if (!user) {
     return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
   }
   res.json({ status: 'success', user: publicUser(user), token: signToken(user) });
@@ -299,34 +379,42 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/auth/register', async (req, res) => {
   const {
-    email, phone, password, role = 'passenger', firstName, lastName,
-    vehicleType = 'MOTO', vehicleBrand, vehicleModel, vehiclePlate, vehicleColor, vehicleYear,
-    licenseNumber, documents, photoUrl
+    email, phone, password, role = 'passenger', firstName, lastName
   } = req.body;
-  if (!email || !password || password.length < 6 || !['passenger', 'driver'].includes(role)) {
-    return res.status(400).json({ error: 'INVALID_REGISTRATION' });
-  }
+  const normalizedFirstName = sanitizeText(firstName, 80);
+  const normalizedLastName = sanitizeText(lastName, 80);
   const normalizedEmail = String(email).trim().toLowerCase();
-  const normalizedPhone = phone ? String(phone).trim() : null;
-  const duplicate = database.users.some(user => user.email?.toLowerCase() === normalizedEmail || (normalizedPhone && user.phone === normalizedPhone));
+  const normalizedPhone = String(phone || '').trim();
+  const phoneDigits = normalizedPhone.replace(/\D/g, '');
+  const fields = {};
+  if (role !== 'passenger') fields.role = 'El registro directo solamente permite cuentas de cliente.';
+  if (normalizedFirstName.length < 2) fields.firstName = 'El nombre es obligatorio.';
+  if (normalizedLastName.length < 2) fields.lastName = 'El apellido es obligatorio.';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) fields.email = 'Introduce una dirección de correo válida.';
+  if (phoneDigits.length < 10 || phoneDigits.length > 15) fields.phone = 'Introduce un teléfono válido.';
+  if (String(password || '').length < 8) fields.password = 'La contraseña debe tener al menos 8 caracteres.';
+  if (Object.keys(fields).length) return res.status(400).json({ error: 'VALIDATION_FAILED', fields });
+  const duplicate = database.users.some(user => user.email?.toLowerCase() === normalizedEmail || String(user.phone || '').replace(/\D/g, '') === phoneDigits);
   if (duplicate) return res.status(409).json({ error: 'USER_EXISTS' });
+  const now = new Date().toISOString();
+  const passwordHash = await bcrypt.hash(password, 12);
+  if (database.users.some(existing => existing.email?.toLowerCase() === normalizedEmail || String(existing.phone || '').replace(/\D/g, '') === phoneDigits)) return res.status(409).json({ error: 'USER_EXISTS' });
   const user = {
-    id: `${role}_${Date.now()}`,
-    role,
-    firstName: firstName || normalizedEmail.split('@')[0],
-    lastName: lastName || 'Express',
+    id: `passenger_${crypto.randomUUID()}`,
+    role: 'passenger',
+    firstName: normalizedFirstName,
+    lastName: normalizedLastName,
     email: normalizedEmail,
     phone: normalizedPhone,
-    passwordHash: await bcrypt.hash(password, 12),
+    passwordHash,
     rating: 5,
     totalTrips: 0,
-    walletBalance: role === 'passenger' ? 0 : undefined,
-    status: role === 'driver' ? 'OFFLINE' : undefined,
-    isVerified: role === 'passenger',
-    ...(role === 'driver' ? {
-      vehicleType: vehicleType === 'CAR' ? 'CAR' : 'MOTO', vehicleBrand, vehicleModel, vehiclePlate, vehicleColor, vehicleYear,
-      licenseNumber, documents, photoUrl
-    } : {})
+    walletBalance: 0,
+    accountStatus: 'ACTIVE',
+    emailVerified: false,
+    phoneVerified: false,
+    createdAt: now,
+    updatedAt: now
   };
   database.users.push(user);
   persistDatabase();
@@ -336,10 +424,51 @@ app.post('/api/auth/register', async (req, res) => {
 app.get('/api/auth/me', requireAuth, (req, res) => res.json(publicUser(req.user)));
 
 app.patch('/api/auth/me', requireAuth, (req, res) => {
-  const allowed = ['firstName', 'lastName', 'phone', 'photoUrl', 'cedula', 'vehicleType', 'vehicleBrand', 'vehicleModel', 'vehiclePlate', 'vehicleColor'];
-  for (const key of allowed) if (key in req.body) req.user[key] = req.body[key];
+  const allowed = ['firstName', 'lastName', 'phone', 'cedula', ...(req.user.role === 'driver' ? ['vehicleBrand', 'vehicleModel', 'vehiclePlate', 'vehicleColor'] : [])];
+  for (const key of allowed) {
+    if (!(key in req.body)) continue;
+    const value = sanitizeText(req.body[key], key === 'phone' ? 30 : 100);
+    if (['firstName','lastName'].includes(key) && value.length < 2) return res.status(400).json({ error:'VALIDATION_FAILED', fields:{[key]:'Campo obligatorio.'} });
+    if (key === 'phone' && (value.replace(/\D/g,'').length < 10 || value.replace(/\D/g,'').length > 15)) return res.status(400).json({ error:'VALIDATION_FAILED', fields:{phone:'Teléfono inválido.'} });
+    if (key === 'phone' && database.users.some(user => user.id !== req.user.id && String(user.phone || '').replace(/\D/g,'') === value.replace(/\D/g,''))) return res.status(409).json({ error:'USER_EXISTS' });
+    req.user[key] = key === 'vehiclePlate' ? value.toUpperCase() : value;
+  }
+  req.user.updatedAt = new Date().toISOString();
   persistDatabase();
   res.json(publicUser(req.user));
+});
+
+const profilePhotoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => callback(null, ['image/jpeg','image/png','image/webp'].includes(file.mimetype))
+}).single('file');
+
+app.post('/api/auth/me/photo', requireAuth, profilePhotoUpload, (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'INVALID_PROFILE_PHOTO' });
+  let storageKey;
+  try { storageKey = privateStorage.save(req.file, req.user.id); }
+  catch (error) { return res.status(400).json({ error: error.code || 'UPLOAD_FAILED' }); }
+  if (req.user.photoStorageKey) privateStorage.remove(req.user.photoStorageKey);
+  req.user.photoStorageKey = storageKey;
+  req.user.photoMimeType = req.file.mimetype;
+  req.user.photoSize = req.file.size;
+  req.user.photoUrl = `/users/${req.user.id}/photo`;
+  req.user.updatedAt = new Date().toISOString();
+  persistDatabase();
+  res.json(publicUser(req.user));
+});
+
+app.get('/api/users/:id/photo', (req, res) => {
+  const user = database.users.find(item => item.id === req.params.id);
+  if (!user?.photoStorageKey) return res.status(404).json({ error: 'PHOTO_NOT_FOUND' });
+  const absolutePath = privateStorage.resolve(user.photoStorageKey);
+  if (!absolutePath) return res.status(404).json({ error: 'PHOTO_NOT_FOUND' });
+  res.setHeader('Content-Type', user.photoMimeType || 'image/jpeg');
+  res.setHeader('Content-Length', String(user.photoSize || fs.statSync(absolutePath).size));
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  fs.createReadStream(absolutePath).pipe(res);
 });
 
 app.get('/api/users', requireAuth, requireRole('admin'), (req, res) => {
@@ -363,6 +492,11 @@ app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => 
       available: drivers.filter(driver => ['AVAILABLE', 'ONLINE'].includes(driver.status)).length,
       busy: drivers.filter(driver => ['BUSY', 'IN_TRIP'].includes(driver.status)).length,
       offline: drivers.filter(driver => !['AVAILABLE', 'ONLINE', 'BUSY', 'IN_TRIP'].includes(driver.status)).length
+    },
+    driverApplications: {
+      total: database.driverApplications.length,
+      pending: database.driverApplications.filter(item => item.status === 'pending').length,
+      needsChanges: database.driverApplications.filter(item => item.status === 'needs_changes').length
     },
     averageRating: ratings.length ? Math.round(ratings.reduce((a, b) => a + b, 0) / ratings.length * 10) / 10 : null,
     bcvRate: Number(pricingConfig.bcvRate || 0)
@@ -406,15 +540,16 @@ app.get('/api/admin/finance', requireAuth, requireRole('admin'), (req, res) => {
     const commission = Math.round(gross * commissionRate * 100) / 100;
     const driver = database.users.find(user => user.id === trip.driverId);
     const passenger = database.users.find(user => user.id === trip.passengerId);
-    return { id: trip.id, date: trip.completedAt || trip.closedAt || trip.updatedAt, gross, commission, driverNet: Math.round((gross - commission) * 100) / 100, payoutStatus: trip.payoutStatus || 'PENDING', paymentMethod: trip.paymentMethod || 'EFECTIVO', driver: publicUser(driver), passenger: publicUser(passenger) };
+    return { id: trip.id, date: trip.completedAt || trip.closedAt || trip.updatedAt, gross, commission, driverNet: Math.round((gross - commission) * 100) / 100, payoutStatus: trip.payoutStatus || 'CREDITED', paymentMethod: trip.paymentMethod || 'EFECTIVO', driver: publicUser(driver), passenger: publicUser(passenger) };
   }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   res.json({
     bcvRate: Number(pricingConfig.bcvRate || 0), commissionRate, transactions,
+    walletRequests: database.transactions.filter(item => ['TOP_UP','PAYOUT'].includes(item.type)).slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).map(item=>({...item,user:publicUser(database.users.find(user=>user.id===item.userId))})),
     summary: {
       gross: transactions.reduce((s, t) => s + t.gross, 0),
       commission: transactions.reduce((s, t) => s + t.commission, 0),
-      pending: transactions.filter(t => t.payoutStatus === 'PENDING').reduce((s, t) => s + t.driverNet, 0),
-      paid: transactions.filter(t => t.payoutStatus === 'PAID').reduce((s, t) => s + t.driverNet, 0)
+      pending: database.transactions.filter(t => t.type === 'PAYOUT' && t.status === 'PENDING').reduce((s, t) => s + t.amount, 0),
+      paid: database.transactions.filter(t => t.type === 'PAYOUT' && t.status === 'APPROVED').reduce((s, t) => s + t.amount, 0)
     }
   });
 });
@@ -447,8 +582,9 @@ app.get('/api/support/threads', requireAuth, (req, res) => {
 app.post('/api/support/messages', requireAuth, (req, res) => {
   const conversationUserId = req.user.role === 'admin' ? req.body.recipientId : req.user.id;
   const target = database.users.find(user => user.id === conversationUserId && user.role !== 'admin');
-  if (!target || (!req.body.text?.trim() && !req.body.image)) return res.status(400).json({ error: 'INVALID_SUPPORT_MESSAGE' });
-  const message = { id: `support_${crypto.randomUUID()}`, conversationUserId, senderId: req.user.id, senderRole: req.user.role, text: String(req.body.text || '').trim(), image: req.body.image || null, createdAt: new Date().toISOString(), read: false };
+  const image = typeof req.body.image === 'string' && /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(req.body.image) && req.body.image.length <= 1_000_000 ? req.body.image : null;
+  if (!target || (!req.body.text?.trim() && !image)) return res.status(400).json({ error: 'INVALID_SUPPORT_MESSAGE' });
+  const message = { id: `support_${crypto.randomUUID()}`, conversationUserId, senderId: req.user.id, senderRole: req.user.role, text: sanitizeText(req.body.text, 2000), image, createdAt: new Date().toISOString(), read: false };
   database.supportMessages.push(message);
   persistDatabase();
   io.to('admins').to(`user:${conversationUserId}`).emit('support:message', { ...message, user: publicUser(target) });
@@ -461,10 +597,93 @@ app.patch('/api/support/threads/:userId/read', requireAuth, requireRole('admin')
   res.json({ ok: true });
 });
 
+app.get('/api/notifications/me', requireAuth, (req, res) => {
+  const notifications = database.notifications
+    .filter(item => item.userId === req.user.id || item.targetRole === 'all' || item.targetRole === req.user.role)
+    .sort((a, b) => new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp))
+    .slice(0, 150);
+  res.json(notifications);
+});
+
+app.patch('/api/notifications/:id/read', requireAuth, (req, res) => {
+  const notification = database.notifications.find(item => item.id === req.params.id);
+  if (!notification || !(notification.userId === req.user.id || notification.targetRole === 'all' || notification.targetRole === req.user.role)) {
+    return res.status(404).json({ error: 'NOTIFICATION_NOT_FOUND' });
+  }
+  notification.read = true;
+  notification.readAt = new Date().toISOString();
+  persistDatabase();
+  res.json(notification);
+});
+
+app.patch('/api/notifications/me/read-all', requireAuth, (req, res) => {
+  const now = new Date().toISOString();
+  database.notifications.forEach(item => {
+    if (item.userId === req.user.id || item.targetRole === 'all' || item.targetRole === req.user.role) {
+      item.read = true;
+      item.readAt = now;
+    }
+  });
+  persistDatabase();
+  res.json({ ok: true });
+});
+
+app.get('/api/wallet/me', requireAuth, (req, res) => {
+  res.json({
+    balance: Number(req.user.walletBalance || 0),
+    currency: 'USD',
+    transactions: database.transactions.filter(item => item.userId === req.user.id).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 150)
+  });
+});
+
+app.post('/api/wallet/topups', requireAuth, (req, res) => {
+  const amount = Math.round(Number(req.body.amount) * 100) / 100;
+  const reference = String(req.body.reference || '').replace(/\D/g, '').slice(0, 20);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1000 || reference.length < 6) return res.status(400).json({ error: 'INVALID_TOPUP' });
+  if (database.transactions.some(item => item.type === 'TOP_UP' && item.reference === reference && item.status !== 'REJECTED')) return res.status(409).json({ error: 'REFERENCE_EXISTS' });
+  const transaction = { id:`transaction_${crypto.randomUUID()}`, userId:req.user.id, type:'TOP_UP', amount, currency:'USD', method:'PAGO_MOVIL', reference, status:'PENDING', createdAt:new Date().toISOString() };
+  database.transactions.push(transaction);
+  database.notifications.push({ id:`notification_${crypto.randomUUID()}`, targetRole:'admin', title:'Recarga pendiente de verificación', message:`${req.user.firstName} registró una recarga de $${amount.toFixed(2)}.`, category:'FINANCE', read:false, createdAt:new Date().toISOString() });
+  persistDatabase();
+  io.to('admins').emit('finance:topup_pending', transaction);
+  res.status(201).json(transaction);
+});
+
+app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, (req, res) => {
+  const available = Number(req.user.walletBalance || 0);
+  const amount = Math.round(Number(req.body.amount || available) * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0 || amount > available) return res.status(400).json({ error:'INVALID_PAYOUT' });
+  if (database.transactions.some(item => item.userId===req.user.id && item.type==='PAYOUT' && item.status==='PENDING')) return res.status(409).json({ error:'PAYOUT_ALREADY_PENDING' });
+  const transaction={id:`transaction_${crypto.randomUUID()}`,userId:req.user.id,type:'PAYOUT',amount,currency:'USD',method:'PAGO_MOVIL',status:'PENDING',createdAt:new Date().toISOString()};
+  database.transactions.push(transaction);
+  database.notifications.push({ id:`notification_${crypto.randomUUID()}`, targetRole:'admin', title:'Liquidación pendiente', message:`${sanitizeText(req.user.firstName,80)} solicitó retirar $${amount.toFixed(2)}.`, category:'FINANCE', read:false, createdAt:new Date().toISOString() });
+  persistDatabase();io.to('admins').emit('finance:payout_pending',transaction);res.status(201).json(transaction);
+});
+
+app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), (req, res) => {
+  const transaction = database.transactions.find(item => item.id === req.params.id);
+  if (!transaction) return res.status(404).json({ error:'TRANSACTION_NOT_FOUND' });
+  const status = String(req.body.status || '').toUpperCase();
+  if (!['APPROVED','REJECTED'].includes(status) || transaction.status !== 'PENDING') return res.status(409).json({ error:'INVALID_TRANSACTION_STATE' });
+  const owner = database.users.find(item => item.id === transaction.userId);
+  if (status === 'APPROVED' && transaction.type === 'PAYOUT' && Number(owner?.walletBalance || 0) < transaction.amount) return res.status(409).json({ error:'INSUFFICIENT_BALANCE' });
+  transaction.status = status; transaction.reviewedBy = req.user.id; transaction.reviewedAt = new Date().toISOString();
+  if (status === 'APPROVED' && owner && transaction.type === 'TOP_UP') owner.walletBalance = Math.round((Number(owner.walletBalance || 0) + transaction.amount) * 100) / 100;
+  if (status === 'APPROVED' && owner && transaction.type === 'PAYOUT') {
+    owner.walletBalance = Math.round((Number(owner.walletBalance || 0) - transaction.amount) * 100) / 100;
+  }
+  const isPayout = transaction.type === 'PAYOUT';
+  database.adminActions.push({ id:`admin_action_${crypto.randomUUID()}`, adminId:req.user.id, targetUserId:transaction.userId, action:`${isPayout?'payout':'topup'}_${status.toLowerCase()}`, transactionId:transaction.id, createdAt:new Date().toISOString() });
+  database.notifications.push({ id:`notification_${crypto.randomUUID()}`, userId:transaction.userId, title:isPayout?(status==='APPROVED'?'Liquidación pagada':'Liquidación rechazada'):(status==='APPROVED'?'Recarga acreditada':'Recarga rechazada'), message:isPayout?(status==='APPROVED'?`Administración aprobó tu liquidación de $${transaction.amount.toFixed(2)}.`:'Administración rechazó la solicitud de liquidación.'):(status==='APPROVED'?`Se acreditaron $${transaction.amount.toFixed(2)} a tu billetera.`:'Administración no pudo validar la referencia enviada.'), category:'FINANCE', read:false, createdAt:new Date().toISOString() });
+  persistDatabase();
+  io.to(`user:${transaction.userId}`).emit('finance:topup_updated', transaction);
+  res.json({ transaction, balance:Number(owner?.walletBalance || 0) });
+});
+
 app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), (req, res) => {
   const role = ['all', 'driver', 'passenger'].includes(req.body.role) ? req.body.role : 'all';
   if (!req.body.title?.trim() || !req.body.message?.trim()) return res.status(400).json({ error: 'INVALID_BROADCAST' });
-  const notification = { id: `notification_${crypto.randomUUID()}`, title: req.body.title.trim(), message: req.body.message.trim(), category: 'ANNOUNCEMENT', icon: '📢', targetRole: role, createdAt: new Date().toISOString() };
+  const notification = { id: `notification_${crypto.randomUUID()}`, title: sanitizeText(req.body.title, 120), message: sanitizeText(req.body.message, 1000), category: 'ANNOUNCEMENT', icon: '📢', targetRole: role, createdAt: new Date().toISOString() };
   database.notifications.push(notification);
   persistDatabase();
   if (role === 'all') io.to('drivers').to('passengers').emit('platform:notification', notification);
@@ -477,6 +696,9 @@ app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (re
   const driver = database.users.find(user => user.id === req.params.id && user.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
   const { action, documentKey, documentStatus } = req.body;
+  const reason = sanitizeText(req.body.reason, 600);
+  if (action === 'suspend' && !reason) return res.status(400).json({ error: 'REASON_REQUIRED' });
+  const previousStatus = driver.status;
   if (documentKey && ['approved', 'rejected', 'pending'].includes(documentStatus)) {
     driver.documents = { ...(driver.documents || {}), [documentKey]: documentStatus };
   }
@@ -492,6 +714,13 @@ app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (re
   } else if (action === 'pending') {
     driver.isVerified = false;
     driver.status = 'PENDING_APPROVAL';
+  }
+  const application = database.driverApplications.find(item => item.userId === driver.id);
+  if (application && action === 'suspend') Object.assign(application, { status: 'suspended', decisionReason: reason, reviewedBy: req.user.id, reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  if (application && action === 'approve' && application.status === 'suspended') Object.assign(application, { status: 'approved', decisionReason: null, reviewedBy: req.user.id, reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  if (['approve','suspend'].includes(action)) {
+    database.adminActions.push({ id:`admin_action_${crypto.randomUUID()}`, adminId:req.user.id, targetUserId:driver.id, applicationId:application?.id||null, action:action==='approve'?'reactivate':'suspend', previousStatus, nextStatus:driver.status, reason:reason||null, createdAt:new Date().toISOString() });
+    database.notifications.push({ id:`notification_${crypto.randomUUID()}`, userId:driver.id, title:action==='suspend'?'Cuenta de conductor suspendida':'Cuenta de conductor reactivada', message:action==='suspend'?reason:'Tu acceso operativo fue restaurado.', category:'SYSTEM', read:false, createdAt:new Date().toISOString() });
   }
   persistDatabase();
   io.to(`user:${driver.id}`).emit('driver:account_updated', publicUser(driver));
@@ -517,6 +746,7 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) 
   tripLocks.delete(trip.id);
   const driver = database.users.find(user => user.id === trip.driverId);
   if (driver) driver.status = 'AVAILABLE';
+  if (trip.status === TRIP_STATUS.COMPLETED) creditCompletedTrip(trip);
   persistDatabase();
   io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
     tripId: trip.id,
@@ -559,6 +789,14 @@ app.post('/api/admin/drivers', requireAuth, requireRole('admin'), async (req, re
 
 app.get('/api/trips', requireAuth, requireRole('admin'), (req, res) => {
   res.json(database.trips);
+});
+
+app.get('/api/trips/me/history', requireAuth, (req, res) => {
+  if (!['passenger', 'driver'].includes(req.user.role)) return res.status(403).json({ error: 'FORBIDDEN' });
+  const trips = database.trips
+    .filter(item => req.user.role === 'passenger' ? item.passengerId === req.user.id : item.driverId === req.user.id || item.assignedDriverId === req.user.id)
+    .sort((a, b) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0) - new Date(a.completedAt || a.updatedAt || a.createdAt || 0));
+  res.json(trips);
 });
 
 app.get('/api/trips/active/me', requireAuth, (req, res) => {
@@ -651,7 +889,40 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   res.json({ status: 'created', trip });
 });
 
-app.patch('/api/drivers/status', requireAuth, requireRole('driver'), (req, res) => {
+app.post('/api/trips/scheduled', requireAuth, requireRole('passenger'), (req, res) => {
+  const scheduledAt = new Date(req.body.scheduledAt);
+  const pickupAddress = String(req.body.pickup?.address || '').trim().slice(0, 240);
+  const destinationAddress = String(req.body.destination?.address || '').trim().slice(0, 240);
+  if (!pickupAddress || !destinationAddress || Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now() + 30 * 60 * 1000) return res.status(400).json({ error:'INVALID_SCHEDULED_TRIP' });
+  const trip = { id:`scheduled_${crypto.randomUUID()}`, passengerId:req.user.id, pickup:{...req.body.pickup,address:pickupAddress}, destination:{...req.body.destination,address:destinationAddress}, scheduledAt:scheduledAt.toISOString(), rideType:req.body.rideType==='CAR'?'CAR':'MOTO', paymentMethod:String(req.body.paymentMethod||'CASH').slice(0,30), fareUSD:Math.max(0,Math.round(Number(req.body.fareUSD||0)*100)/100), status:'SCHEDULED', assignedDriverId:null, createdAt:new Date().toISOString() };
+  database.trips.push(trip); persistDatabase(); io.to('drivers').to('admins').emit('scheduled_trip:new',trip); res.status(201).json(trip);
+});
+
+app.get('/api/trips/scheduled/available', requireAuth, requireApprovedDriver, (req, res) => {
+  const trips = database.trips.filter(item => item.status==='SCHEDULED' && item.rideType===(req.user.vehicleType||'MOTO') && (!item.assignedDriverId || item.assignedDriverId===req.user.id) && new Date(item.scheduledAt)>new Date()).map(trip=>({...trip,passenger:publicUser(database.users.find(user=>user.id===trip.passengerId))}));
+  res.json(trips);
+});
+
+app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, (req, res) => {
+  const trip = database.trips.find(item=>item.id===req.params.id && item.status==='SCHEDULED');
+  if(!trip)return res.status(404).json({error:'SCHEDULED_TRIP_NOT_FOUND'});
+  if(trip.assignedDriverId && trip.assignedDriverId!==req.user.id)return res.status(409).json({error:'ALREADY_ASSIGNED'});
+  trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=new Date().toISOString();persistDatabase();io.to(`user:${trip.passengerId}`).to('admins').emit('scheduled_trip:claimed',{tripId:trip.id,driver:publicUser(req.user)});res.json(trip);
+});
+
+app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), (req, res) => {
+  const trip = database.trips.find(item => item.id === req.params.id && item.passengerId === req.user.id && item.status === 'SCHEDULED');
+  if (!trip) return res.status(404).json({ error: 'SCHEDULED_TRIP_NOT_FOUND' });
+  if (trip.assignedDriverId) return res.status(409).json({ error: 'SCHEDULED_TRIP_ALREADY_ASSIGNED' });
+  trip.status = TRIP_STATUS.CANCELLED;
+  trip.cancelledAt = new Date().toISOString();
+  trip.updatedAt = trip.cancelledAt;
+  persistDatabase();
+  io.to('admins').emit('scheduled_trip:cancelled', { tripId: trip.id });
+  res.json(trip);
+});
+
+app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
@@ -662,7 +933,7 @@ app.patch('/api/drivers/status', requireAuth, requireRole('driver'), (req, res) 
   res.json(driver);
 });
 
-app.patch('/api/drivers/location', requireAuth, requireRole('driver'), (req, res) => {
+app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
@@ -692,6 +963,8 @@ function dispatchTripToDrivers(trip) {
   const availableDrivers = database.users
     .filter(u =>
       u.role === 'driver' &&
+      u.isVerified === true &&
+      u.accountStatus !== 'DISABLED' &&
       u.status === 'AVAILABLE' &&
       driverRegistry.has(u.id) &&
       (u.vehicleType || 'MOTO') === (trip.rideType || 'MOTO') &&
@@ -778,7 +1051,11 @@ io.on('connection', (socket) => {
   socket.on('driver:location', (data) => {
     if (!allowSocketRole(socket, 'driver')) return;
     data.driverId = socket.data.auth.userId;
-    const { driverId, lat, lng, heading } = data;
+    const driverId = data.driverId;
+    const lat = Number(data.latitude ?? data.lat);
+    const lng = Number(data.longitude ?? data.lng);
+    const heading = Number(data.heading || 0);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const driver = database.users.find(u => u.id === driverId);
     if (driver) {
       driver.location = { lat, lng, heading: heading || 0, updatedAt: Date.now() };
@@ -961,6 +1238,7 @@ io.on('connection', (socket) => {
         if (assignedDriver) assignedDriver.status = 'AVAILABLE';
         tripLocks.delete(tripId);
       }
+      if (trip.status === TRIP_STATUS.COMPLETED) creditCompletedTrip(trip);
       persistDatabase();
     }
     io.to(`user:${trip?.passengerId}`).to('drivers').to('admins').emit('tripStatusUpdated', data);
@@ -994,7 +1272,7 @@ io.on('connection', (socket) => {
       return;
     }
     const text = String(data.text || '').trim().slice(0, 1000);
-    const image = typeof data.image === 'string' && data.image.length <= 1_000_000 ? data.image : null;
+    const image = typeof data.image === 'string' && /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(data.image) && data.image.length <= 1_000_000 ? data.image : null;
     if (!text && !image) return;
     const sender = database.users.find(user => user.id === userId);
     const message = {
@@ -1045,6 +1323,15 @@ io.on('connection', (socket) => {
     }
     console.log(`[+58express Socket.IO] Client disconnected: ${socket.id}`);
   });
+});
+
+app.use((error, _req, res, _next) => {
+  if (error instanceof multer.MulterError) {
+    return res.status(400).json({ error: error.code === 'LIMIT_FILE_SIZE' ? 'FILE_TOO_LARGE' : 'UPLOAD_FAILED' });
+  }
+  if (error?.message === 'ORIGIN_NOT_ALLOWED') return res.status(403).json({ error: 'ORIGIN_NOT_ALLOWED' });
+  console.error('[+58express HTTP]', error);
+  return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR' });
 });
 
 server.listen(PORT, () => {

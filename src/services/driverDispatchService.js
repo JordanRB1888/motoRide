@@ -1,5 +1,5 @@
 import { socket } from './socketClient.js';
-import { db } from './mockDatabase.js';
+import { db } from './clientCache.js';
 import { eventLogger } from '../utils/logger.js';
 import { calculateHaversine } from '../utils/helpers.js';
 
@@ -47,18 +47,18 @@ class DriverDispatchService {
     const existing = this.driverRegistry.get(driver.id) || {};
     const updated = {
       id: driver.id,
-      firstName: driver.firstName || 'Carlos',
-      lastName: driver.lastName || 'Mendoza',
-      phone: driver.phone || '+58 414-000-0004',
-      photoUrl: driver.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driver.firstName || 'Driver')}`,
-      vehicleBrand: driver.vehicleBrand || 'Bera',
-      vehicleModel: driver.vehicleModel || 'SBR 150',
-      vehiclePlate: driver.vehiclePlate || 'AC3M49P',
-      vehicleColor: driver.vehicleColor || 'Negro',
-      rating: driver.rating || 4.9,
-      totalTrips: driver.totalTrips || 120,
+      firstName: driver.firstName || '',
+      lastName: driver.lastName || '',
+      phone: driver.phone || '',
+      photoUrl: driver.photoUrl || null,
+      vehicleBrand: driver.vehicleBrand || '',
+      vehicleModel: driver.vehicleModel || '',
+      vehiclePlate: driver.vehiclePlate || '',
+      vehicleColor: driver.vehicleColor || '',
+      rating: Number(driver.rating || 0),
+      totalTrips: Number(driver.totalTrips || 0),
       status: driver.status || existing.status || 'AVAILABLE',
-      location: driver.location || existing.location || { lat: 10.6427, lng: -71.6125, heading: 0, updatedAt: Date.now() },
+      location: driver.location || existing.location || null,
       lastHeartbeat: Date.now()
     };
 
@@ -74,7 +74,8 @@ class DriverDispatchService {
     let driver = this.driverRegistry.get(driverId);
     if (!driver) {
       const dbUser = db.query('users', { id: driverId })[0];
-      driver = this.registerDriver(dbUser || { id: driverId, firstName: 'Carlos', lastName: 'Mendoza' });
+      if (!dbUser) return null;
+      driver = this.registerDriver(dbUser);
     }
 
     driver.location = {

@@ -3,12 +3,13 @@ import './styles/passenger.css';
 import './styles/driver.css';
 import './styles/admin.css';
 import './styles/diorama.css';
-import { seedDatabase } from './services/mockDatabase.js';
-import { authService } from './services/mockAuth.js';
+import { seedDatabase } from './services/clientCache.js';
+import { authService } from './services/authService.js';
 import { renderLanding } from './pages/landing.js';
 import { renderPassengerApp } from './pages/passenger/passengerApp.js';
 import { renderDriverApp } from './pages/driver/driverApp.js';
 import { renderAdminApp } from './pages/admin/adminApp.js';
+import { notificationService } from './services/notificationService.js';
 
 const appContainer = document.getElementById('app');
 
@@ -58,7 +59,12 @@ window.addEventListener('hashchange', router);
 
 async function initApp() {
     await seedDatabase();
-    router();
+    if (authService.isAuthenticated()) {
+        const refreshedUser = await authService.refreshSession();
+        if (!refreshedUser) authService.logout();
+        else await notificationService.syncFromServer(refreshedUser.id);
+    }
+    await router();
 }
 
 document.addEventListener('DOMContentLoaded', initApp);

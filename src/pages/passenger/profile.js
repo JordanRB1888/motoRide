@@ -1,263 +1,87 @@
 import { icon } from '../../utils/icons.js';
-import { authService } from '../../services/mockAuth.js';
-import { db } from '../../services/mockDatabase.js';
+import { authService } from '../../services/authService.js';
+import { apiService } from '../../services/apiService.js';
 import { showToast } from '../../components/toast.js';
 import { createAdminSupportChat } from '../../components/adminSupportChat.js';
+import { renderDriverApplicationStatus } from '../../components/driverApplicationStatus.js';
+
+const avatarFallback = user => `https://ui-avatars.com/api/?name=${encodeURIComponent(`${user.firstName || 'Cliente'} ${user.lastName || ''}`)}&background=FFC107&color=07111d&size=192&bold=true`;
 
 export function renderProfile(container) {
-  const user = authService.getCurrentUser() || {
-    id: 'p1',
-    firstName: 'Jordan',
-    lastName: 'Pérez',
-    phone: '+58 412-555-0001',
-    email: 'jordan@58express.com',
-    age: 28,
-    cedula: 'V-24.891.042',
-    rating: 5.0,
-    walletBalance: 25.00,
-    totalTrips: 18
+  const user = authService.getCurrentUser();
+  if (!user) return;
+  let editing = false;
+  let privateAvatarUrl = null;
+
+  const hydrateAvatar = async () => {
+    if (!String(user.photoUrl || '').startsWith('/')) return;
+    const url = await apiService.getPrivateFileUrl(user.photoUrl);
+    if (!url) return;
+    if (privateAvatarUrl) URL.revokeObjectURL(privateAvatarUrl);
+    privateAvatarUrl = url;
+    const image = container.querySelector('#profile-avatar-img');
+    if (image) image.src = url;
   };
 
-  const avatarUrl = user.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((user.firstName || 'Pasajero') + ' ' + (user.lastName || ''))}&background=FFC107&color=121824&size=128&bold=true`;
-
-  let isEditing = false;
-
-  const renderView = () => {
-    container.innerHTML = `
-      <div class="profile-page fade-in" style="padding: 24px 16px 120px; max-width: 440px; margin: 0 auto;">
-        
-        <!-- Header -->
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
-          <div>
-            <h2 style="color: var(--text-primary); font-size: 1.4rem; font-weight: 900; margin: 0; letter-spacing: -0.5px;">Mi Perfil</h2>
-            <small style="color: var(--text-secondary); font-size: 0.8rem;">Pasajero Registrado</small>
-          </div>
-          <span style="
-            font-size: 0.78rem; padding: 6px 14px; border-radius: 20px; font-weight: 800;
-            background: rgba(0, 230, 118, 0.12); color: var(--success); border: 1.5px solid var(--success);
-            display: inline-flex; align-items: center; gap: 6px;
-          ">
-            ${icon('check', 14)} Pasajero Verificado
-          </span>
+  const render = () => {
+    container.innerHTML = `<div class="profile-page real-profile-page fade-in">
+      <header class="real-profile-heading"><div><span>CUENTA +58EXPRESS</span><h2>Mi perfil</h2></div><b>${icon('check',14)} Cuenta activa</b></header>
+      <section class="real-profile-card">
+        <div class="real-profile-accent"></div>
+        <div class="real-profile-avatar">
+          <img id="profile-avatar-img" src="${String(user.photoUrl || '').startsWith('http') ? user.photoUrl : avatarFallback(user)}" alt="Foto de perfil">
+          <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          <button id="profile-photo-button" type="button">${icon('camera',15)} Cambiar foto</button>
         </div>
-
-        <!-- Ultra-Premium Profile Card -->
-        <div class="diorama-card-3d" style="
-          background: var(--surface-card); border-radius: 28px; padding: 28px 20px; text-align: center;
-          border: 1.5px solid var(--border-gold); box-shadow: 0 20px 45px rgba(0,0,0,0.6); margin-bottom: 20px;
-          position: relative; overflow: hidden;
-        ">
-          <div style="position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, #FFC107 0%, #00D2FF 50%, #00E676 100%);"></div>
-
-          <!-- Avatar Container -->
-          <div style="position: relative; width: 108px; height: 108px; margin: 0 auto 16px;">
-            <input type="file" id="profile-photo-input" accept="image/*" style="display: none;" />
-            <img src="${avatarUrl}" id="profile-avatar-img" style="
-              width: 100%; height: 100%; border-radius: 50%;
-              border: 3.5px solid var(--accent-primary);
-              box-shadow: 0 0 25px rgba(255,193,7,0.35);
-              object-fit: cover;
-            ">
-            
-            <button id="btn-trigger-photo-upload" style="
-              position: absolute; bottom: 0; right: -2px;
-              background: var(--accent-primary); color: #121824; font-size: 0.75rem;
-              padding: 5px 10px; border-radius: 14px; font-weight: 900;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; border: 1.5px solid #121824;
-              display: flex; align-items: center; gap: 4px;
-            " title="Subir Foto Real de Perfil">
-              Foto Real
-            </button>
-          </div>
-
-          <!-- User Info Title -->
-          <h3 style="color: var(--text-primary); font-size: 1.35rem; font-weight: 900; margin: 0 0 12px; letter-spacing: -0.3px;">
-            ${user.firstName || 'Pasajero'} ${user.lastName || ''}
-          </h3>
-
-          <!-- Details Pill Grid -->
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; background: var(--surface-elevated); padding: 14px 16px; border-radius: 18px; border: 1px solid var(--border-color);">
-            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem;">
-              <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
-                ${icon('phone', 14)} Teléfono
-              </span>
-              <strong style="color: var(--text-primary); font-weight: 700;">${user.phone || '+58 412-555-0001'}</strong>
-            </div>
-
-            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem;">
-              <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
-                ${icon('shield', 14)} Cédula / ID
-              </span>
-              <strong style="color: var(--text-primary); font-weight: 700;">${user.cedula || 'V-24.891.042'}</strong>
-            </div>
-
-            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem;">
-              <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
-                ${icon('message', 14)} Correo
-              </span>
-              <strong style="color: var(--accent-secondary); font-weight: 700;">${user.email || 'jordan@58express.com'}</strong>
-            </div>
-          </div>
-
-          <!-- Quick Stats inside Card -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
-            <div style="background: rgba(255, 193, 7, 0.08); padding: 12px; border-radius: 16px; border: 1px solid rgba(255, 193, 7, 0.2);">
-              <small style="color: var(--text-secondary); display: block; font-size: 0.72rem;">CARRERAS REALIZADAS</small>
-              <strong style="color: var(--accent-primary); font-size: 1.15rem; font-weight: 900;">${user.totalTrips || 18} viajes</strong>
-            </div>
-            <div style="background: rgba(0, 230, 118, 0.08); padding: 12px; border-radius: 16px; border: 1px solid rgba(0, 230, 118, 0.2);">
-              <small style="color: var(--text-secondary); display: block; font-size: 0.72rem;">CALIFICACIÓN</small>
-              <strong style="color: var(--success); font-size: 1.15rem; font-weight: 900; display: inline-flex; align-items: center; gap: 4px;">
-                ${user.rating || 5.0} ${icon('star', 14, 'fill-star')}
-              </strong>
-            </div>
-          </div>
-
-          <!-- Edit Info Button -->
-          <button id="btn-toggle-edit-info" class="btn" style="
-            width: 100%; padding: 12px; border-radius: 16px; background: rgba(0, 210, 255, 0.12);
-            border: 1.5px solid var(--accent-secondary); color: var(--accent-secondary);
-            font-weight: 800; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
-          ">
-            ${icon('edit', 16)} ${isEditing ? 'Cancelar Edición' : 'Editar Datos Personales'}
-          </button>
+        <h3>${user.firstName || ''} ${user.lastName || ''}</h3>
+        <p>Pasajero registrado desde ${new Date(user.createdAt || Date.now()).toLocaleDateString('es-VE')}</p>
+        <div class="real-profile-details">
+          <label><span>${icon('phone',15)} Teléfono</span><strong>${user.phone || 'Sin registrar'}</strong></label>
+          <label><span>${icon('message',15)} Correo</span><strong>${user.email || 'Sin registrar'}</strong></label>
+          <label><span>${icon('shield',15)} Cédula / ID</span><strong>${user.cedula || 'Sin registrar'}</strong></label>
         </div>
+        <div class="real-profile-stats"><article><small>VIAJES</small><strong>${Number(user.totalTrips || 0)}</strong></article><article><small>CALIFICACIÓN</small><strong>${Number(user.rating || 5).toFixed(1)} ★</strong></article></div>
+        <button id="profile-edit-toggle" class="real-profile-secondary" type="button">${icon('edit',16)} ${editing ? 'Cancelar edición' : 'Editar datos personales'}</button>
+      </section>
+      ${editing ? `<form id="profile-edit-form" class="real-profile-form">
+        <h3>Información personal</h3>
+        <div><label>Nombre<input name="firstName" required minlength="2" value="${user.firstName || ''}"></label><label>Apellido<input name="lastName" required minlength="2" value="${user.lastName || ''}"></label></div>
+        <label>Teléfono<input name="phone" required value="${user.phone || ''}"></label>
+        <label>Cédula / ID<input name="cedula" value="${user.cedula || ''}"></label>
+        <button type="submit">${icon('check',16)} Guardar cambios</button>
+      </form>` : ''}
+      ${user.driverApplicationId ? '<div id="driver-application-status-slot"></div>' : ''}
+      <button id="passenger-support-btn" class="real-profile-support" type="button">${icon('message',17)} Atención directa con administración</button>
+      <button id="profile-logout-btn" class="real-profile-logout" type="button">${icon('logout',17)} Cerrar sesión</button>
+    </div>`;
 
-        ${isEditing ? `
-          <!-- Inline Edit Information Card -->
-          <div class="diorama-card-3d" style="
-            background: var(--surface-card); border-radius: 24px; padding: 20px;
-            border: 1.5px solid var(--accent-secondary); margin-bottom: 20px;
-          ">
-            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 800; margin: 0 0 14px; display:flex; align-items:center; gap:6px;">
-              ${icon('edit', 16)} Modificar Información Personal
-            </h4>
-
-            <form id="edit-profile-form" style="display: flex; flex-direction: column; gap: 12px;">
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div>
-                  <small style="color: var(--text-secondary); font-weight:700;">Nombre *</small>
-                  <input type="text" id="edit-fname" value="${user.firstName || ''}" required style="
-                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
-                    background: var(--surface-input); color: white; outline: none; font-size: 0.9rem;
-                  " />
-                </div>
-                <div>
-                  <small style="color: var(--text-secondary); font-weight:700;">Apellido *</small>
-                  <input type="text" id="edit-lname" value="${user.lastName || ''}" required style="
-                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
-                    background: var(--surface-input); color: white; outline: none; font-size: 0.9rem;
-                  " />
-                </div>
-              </div>
-
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div>
-                  <small style="color: var(--text-secondary); font-weight:700;">Teléfono WhatsApp *</small>
-                  <input type="text" id="edit-phone" value="${user.phone || ''}" required style="
-                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
-                    background: var(--surface-input); color: white; outline: none; font-size: 0.9rem;
-                  " />
-                </div>
-                <div>
-                  <small style="color: var(--text-secondary); font-weight:700;">Edad / Cédula</small>
-                  <input type="text" id="edit-cedula" value="${user.cedula || 'V-24.891.042'}" style="
-                    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-color);
-                    background: var(--surface-input); color: white; outline: none; font-size: 0.9rem;
-                  " />
-                </div>
-              </div>
-
-              <button type="submit" id="btn-save-profile-info" class="btn btn-3d primary-btn" style="
-                width: 100%; padding: 14px; font-weight: 900; font-size: 0.95rem; margin-top: 6px;
-                background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824; cursor: pointer; display:flex; align-items:center; justify-content:center; gap:6px;
-              ">
-                ${icon('check', 18)} GUARDAR DATOS ACTUALIZADOS
-              </button>
-            </form>
-          </div>
-        ` : ''}
-
-        <button id="passenger-support-btn" class="btn" style="width:100%;padding:14px;margin-bottom:12px;border-radius:18px;background:rgba(0,210,255,.12);border:1.5px solid var(--accent-secondary);color:var(--accent-secondary);font-weight:800;cursor:pointer">💬 Hablar con Soporte +58express</button>
-
-        <!-- Clean Logout Button -->
-        <div>
-          <button id="profile-logout-btn" class="btn" style="
-            width: 100%; padding: 14px; font-weight: 800; font-size: 0.95rem;
-            background: rgba(255, 77, 77, 0.12); border: 1.5px solid var(--danger);
-            color: var(--danger); border-radius: 18px;
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-            cursor: pointer; transition: all 0.2s ease;
-          ">
-            ${icon('logout', 18)} Cerrar Sesión / Salir
-          </button>
-        </div>
-      </div>
-    `;
-
-    // Photo Upload Triggers
-    const photoInput = container.querySelector('#profile-photo-input');
-    const photoUploadBtn = container.querySelector('#btn-trigger-photo-upload');
-
-    if (photoUploadBtn && photoInput) {
-      photoUploadBtn.addEventListener('click', () => photoInput.click());
-      photoInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            user.photoUrl = evt.target.result;
-            db.update('users', user.id, { photoUrl: evt.target.result });
-            authService.updateProfile({ photoUrl: evt.target.result });
-            showToast('¡Foto de perfil real actualizada con éxito!', 'success');
-            renderView();
-          };
-          reader.readAsDataURL(file);
-        }
-      });
-    }
-
-    // Toggle Edit Info
-    const toggleEditBtn = container.querySelector('#btn-toggle-edit-info');
-    if (toggleEditBtn) {
-      toggleEditBtn.addEventListener('click', () => {
-        isEditing = !isEditing;
-        renderView();
-      });
-    }
-
-    // Save Edit Form
-    const editForm = container.querySelector('#edit-profile-form');
-    if (editForm) {
-      editForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const firstName = container.querySelector('#edit-fname').value.trim();
-        const lastName = container.querySelector('#edit-lname').value.trim();
-        const phone = container.querySelector('#edit-phone').value.trim();
-        const cedula = container.querySelector('#edit-cedula').value.trim();
-
-        user.firstName = firstName;
-        user.lastName = lastName;
-        user.phone = phone;
-        user.cedula = cedula;
-
-        db.update('users', user.id, { firstName, lastName, phone, cedula });
-        authService.updateProfile({ firstName, lastName, phone, cedula });
-
-        showToast('¡Información personal actualizada!', 'success');
-        isEditing = false;
-        renderView();
-      });
-    }
-
-    container.querySelector('#passenger-support-btn')?.addEventListener('click', () => document.body.appendChild(createAdminSupportChat(user)));
-
-    // Logout Event
-    container.querySelector('#profile-logout-btn').addEventListener('click', () => {
-      authService.logout();
-      window.navigateTo('#/');
+    hydrateAvatar();
+    if (user.driverApplicationId) renderDriverApplicationStatus(container.querySelector('#driver-application-status-slot'));
+    container.querySelector('#profile-edit-toggle').onclick = () => { editing = !editing; render(); };
+    container.querySelector('#profile-photo-button').onclick = () => container.querySelector('#profile-photo-input').click();
+    container.querySelector('#profile-photo-input').onchange = async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) return showToast('Usa JPG, PNG o WebP de hasta 5 MB.', 'error');
+      const form = new FormData(); form.append('file', file);
+      const button = container.querySelector('#profile-photo-button'); button.disabled = true;
+      const updated = await apiService.postForm('/auth/me/photo', form); button.disabled = false;
+      if (!updated) return showToast('No se pudo guardar la foto.', 'error');
+      authService.acceptSession(updated, authService.getSession().token);
+      Object.assign(user, updated);
+      const preview = URL.createObjectURL(file);
+      container.querySelector('#profile-avatar-img').src = preview;
+      showToast('Foto guardada de forma segura.', 'success');
+    };
+    container.querySelector('#profile-edit-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const result = await authService.updateProfile(values);
+      if (!result.success) return showToast('No se pudo actualizar el perfil.', 'error');
+      Object.assign(user, result.user); editing = false; showToast('Perfil actualizado.', 'success'); render();
     });
+    container.querySelector('#passenger-support-btn').onclick = () => document.body.appendChild(createAdminSupportChat(user));
+    container.querySelector('#profile-logout-btn').onclick = () => { authService.logout(); window.navigateTo('#/'); };
   };
-
-  renderView();
+  render();
 }

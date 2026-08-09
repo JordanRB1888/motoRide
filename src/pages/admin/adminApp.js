@@ -1,10 +1,11 @@
 import { db, apiService } from '../../services/apiService.js';
-import { authService } from '../../services/mockAuth.js';
+import { authService } from '../../services/authService.js';
 import { renderFleetMap } from './fleetMap.js';
 import { renderUsersManagement } from './usersManagement.js';
 import { renderTariffsConfig } from './tariffsConfig.js';
 import { renderFinances } from './finances.js';
 import { renderAdminSupport } from './adminSupport.js';
+import { renderDriverApplicationsManagement } from './driverApplicationsManagement.js';
 import { initThemeToggle } from '../../utils/themeToggle.js';
 import { createNotificationCenterModal } from '../../components/notificationCenterModal.js';
 import { notificationService } from '../../services/notificationService.js';
@@ -16,10 +17,11 @@ const statusLabel = status => ({SEARCHING:'Buscando',DRIVER_ASSIGNED:'Asignado',
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 
 export function renderAdminApp(container) {
-  const admin = authService.getCurrentUser() || { id:'admin_1', firstName:'Admin', role:'admin' };
+  const admin = authService.getCurrentUser();
+  if (!admin) return;
   let overview = null;
   let dashboardMap = null;
-  const nav = [['dashboard','grid','Centro de Operaciones'],['fleet','map','Mapa de Flota'],['users','users','Usuarios'],['tariffs','dollarSign','Tarifas'],['finances','trending','Finanzas'],['support','message','Soporte']];
+  const nav = [['dashboard','grid','Centro de Operaciones'],['fleet','map','Mapa de Flota'],['applications','shield','Solicitudes'],['users','users','Usuarios'],['tariffs','dollarSign','Tarifas'],['finances','trending','Finanzas'],['support','message','Soporte']];
 
   container.innerHTML = `<div class="admin-app"><aside class="admin-sidebar" id="sidebar"><div class="admin-logo"><img src="/app-icon-v2.png" alt="+58 Express"><div class="logo-text-full"><span>+58</span>express<small>Operations</small></div></div><nav class="admin-nav">${nav.map(([id,ic,label],index)=>`<button class="nav-item ${index?'':'active'}" data-target="${id}"><span class="nav-icon">${icon(ic,19)}</span><span class="nav-text">${label}</span></button>`).join('')}</nav><div class="admin-system-card"><span class="system-pin">M</span><div><strong>Maracaibo</strong><small><i></i>Sistema operativo</small></div></div><button class="sidebar-collapse" id="sidebar-collapse">${icon('chevronLeft',17)}<span class="nav-text">Contraer menú</span></button></aside><main class="admin-main"><header class="admin-header"><div class="header-left"><button class="mobile-menu-btn" id="menu-btn">${icon('menu',19)}</button><div><h2 id="page-title">Centro de Operaciones</h2><small>Control, seguridad y movilidad en tiempo real</small></div></div><div class="admin-command"><button id="admin-bell" class="admin-icon-button" title="Notificaciones">${icon('bell',18)}<span id="admin-badge"></span></button><div id="theme"></div><div class="admin-profile"><span class="admin-avatar">${escapeHtml(admin.firstName?.[0] || 'A')}</span><div><strong>Hola, ${escapeHtml(admin.firstName)}</strong><small>Administrador</small></div></div><button class="logout-btn" id="logout">Salir</button></div></header><div class="admin-content" id="admin-content"></div></main></div>`;
 
@@ -30,7 +32,7 @@ export function renderAdminApp(container) {
   container.querySelector('#menu-btn').onclick=toggleSidebar;
   container.querySelector('#sidebar-collapse').onclick=toggleSidebar;
   container.querySelector('#logout').onclick=()=>{authService.logout();window.navigateTo('#/');};
-  const updateBadge=()=>{const count=notificationService.getUnreadCount(admin.id||'admin_1'),badge=container.querySelector('#admin-badge');badge.textContent=count>99?'99+':count;badge.hidden=!count;};
+  const updateBadge=()=>{const count=notificationService.getUnreadCount(admin.id),badge=container.querySelector('#admin-badge');badge.textContent=count>99?'99+':count;badge.hidden=!count;};
   updateBadge(); window.addEventListener('58express:notifications-updated',updateBadge);
   container.querySelector('#admin-bell').onclick=()=>container.appendChild(createNotificationCenterModal(admin));
 
@@ -59,11 +61,13 @@ export function renderAdminApp(container) {
     initDashboardMap(users);
   };
 
-  const renderers={dashboard,fleet:()=>renderFleetMap(content),users:()=>renderUsersManagement(content),tariffs:()=>renderTariffsConfig(content),finances:()=>renderFinances(content),support:()=>renderAdminSupport(content)};
+  const renderers={dashboard,fleet:()=>renderFleetMap(content),applications:()=>renderDriverApplicationsManagement(content),users:()=>renderUsersManagement(content),tariffs:()=>renderTariffsConfig(content),finances:()=>renderFinances(content),support:()=>renderAdminSupport(content)};
   const switchTab=id=>{if(dashboardMap){dashboardMap.remove();dashboardMap=null;}container.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.target===id));title.textContent=nav.find(item=>item[0]===id)?.[2]||id;content.innerHTML='';renderers[id]?.();};
   container.querySelectorAll('.nav-item').forEach(button=>button.onclick=()=>switchTab(button.dataset.target));
-  const refresh=async()=>{const [users,trips,stats]=await Promise.all([apiService.get('/users'),apiService.get('/trips'),apiService.get('/admin/overview')]);if(Array.isArray(users))db.setCollection('users',users);if(Array.isArray(trips))db.setCollection('trips',trips);overview=stats;if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();};
-  socket.on('rideRequested',data=>{notificationService.notify(admin.id||'admin_1',{title:'Nueva solicitud de viaje',message:`Solicitud #${data?.id?.slice(-6)||''}`,category:'TRIP',icon:'🏍️'});refresh();});
+  const refresh=async()=>{const [users,trips,stats]=await Promise.all([apiService.get('/users'),apiService.get('/trips'),apiService.get('/admin/overview')]);if(Array.isArray(users))db.setCollection('users',users);if(Array.isArray(trips))db.setCollection('trips',trips);overview=stats;const applicationsButton=container.querySelector('[data-target="applications"]');if(applicationsButton)applicationsButton.dataset.count=stats?.driverApplications?.pending?String(stats.driverApplications.pending):'';if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();};
+  socket.on('rideRequested',data=>{notificationService.notify(admin.id,{title:'Nueva solicitud de viaje',message:`Solicitud #${data?.id?.slice(-6)||''}`,category:'TRIP',icon:'🏍️'});refresh();});
   socket.on('tripStatusUpdated',refresh);socket.on('admin:driver_updated',refresh);socket.on('admin:driver_location',data=>{const users=db.getCollection('users')||[],driver=users.find(u=>u.id===(data.userId||data.driverId));if(driver)driver.location={...(driver.location||{}),...data};if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();});socket.on('finance:payout_updated',refresh);
+  socket.on('driver_application:new',()=>{notificationService.syncFromServer?.(admin.id);if(container.querySelector('.nav-item.active')?.dataset.target==='applications')renderDriverApplicationsManagement(content);});
+  socket.on('driver_application:updated',()=>{if(container.querySelector('.nav-item.active')?.dataset.target==='applications')renderDriverApplicationsManagement(content);});
   dashboard();refresh();
 }

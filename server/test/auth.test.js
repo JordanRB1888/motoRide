@@ -46,7 +46,8 @@ test('registro, login y sesión JWT funcionan sin exponer contraseña', async (t
       password: 'segura123',
       role: 'passenger',
       firstName: 'Nuevo',
-      lastName: 'Pasajero'
+      lastName: 'Pasajero',
+      phone: '+584120001111'
     })
   });
   assert.equal(registration.status, 201);
@@ -85,7 +86,7 @@ test('registro, login y sesión JWT funcionan sin exponer contraseña', async (t
 
 test('no permite registrar correos duplicados', async (t) => {
   const api = await startServer(t);
-  const payload = { email: 'duplicado@58express.com', password: 'segura123', role: 'passenger' };
+  const payload = { email: 'duplicado@58express.com', phone: '+584120002222', password: 'segura123', role: 'passenger', firstName: 'Usuario', lastName: 'Duplicado' };
   const first = await fetch(`${api}/auth/register`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload)
   });
@@ -96,39 +97,15 @@ test('no permite registrar correos duplicados', async (t) => {
   assert.equal(second.status, 409);
 });
 
-test('un conductor requiere aprobación administrativa antes de conectarse', async (t) => {
+test('el registro directo no permite crear un conductor sin solicitud', async (t) => {
   const api = await startServer(t);
   const registration = await fetch(`${api}/auth/register`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email: 'pendiente@58express.com', password: 'segura123', role: 'driver', firstName: 'Pendiente' })
   });
-  const driver = await registration.json();
-  assert.equal(driver.user.isVerified, false);
-
-  const rejectedSocket = io(api.replace('/api', ''), { auth: { token: driver.token }, reconnection: false });
-  const rejection = await new Promise(resolve => rejectedSocket.on('connect_error', error => resolve(error.message)));
-  rejectedSocket.close();
-  assert.equal(rejection, 'DRIVER_NOT_APPROVED');
-
-  const adminLogin = await fetch(`${api}/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ identifier: 'admin@58express.com', password: 'admin', role: 'admin' })
-  });
-  const admin = await adminLogin.json();
-  const approval = await fetch(`${api}/admin/drivers/${driver.user.id}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${admin.token}` },
-    body: JSON.stringify({ action: 'approve' })
-  });
-  assert.equal(approval.status, 200);
-  assert.equal((await approval.json()).isVerified, true);
-
-  const approvedSocket = io(api.replace('/api', ''), { auth: { token: driver.token }, reconnection: false });
-  await new Promise((resolve, reject) => {
-    approvedSocket.on('connect', resolve);
-    approvedSocket.on('connect_error', reject);
-  });
-  approvedSocket.close();
+  assert.equal(registration.status, 400);
+  const payload = await registration.json();
+  assert.equal(payload.error, 'VALIDATION_FAILED');
+  assert.ok(payload.fields.role);
 });

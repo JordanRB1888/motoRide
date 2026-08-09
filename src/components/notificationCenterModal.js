@@ -2,6 +2,7 @@ import { notificationService } from '../services/notificationService.js';
 import { audioEffects } from '../utils/audioEffects.js';
 import { showToast } from './toast.js';
 import { icon } from '../utils/icons.js';
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 
 export function createNotificationCenterModal(user, onClose) {
     const userId = user?.id || 'global';
@@ -76,7 +77,7 @@ export function createNotificationCenterModal(user, onClose) {
                                 <strong>${item.title.replace(/[^\w\s.,+\-/:()áéíóúñÁÉÍÓÚÑ]/gi, '')}</strong>
                                 <time>${new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
                             </div>
-                            <p>${item.message}</p>
+                            <p>${escapeHtml(item.message)}</p>
                         </div>
                         ${item.read ? '' : '<span class="notification-new-dot" aria-label="No leída"></span>'}
                         <span class="notification-chevron" aria-hidden="true">›</span>

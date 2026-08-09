@@ -47,7 +47,7 @@ class RealSocketClient {
     // 3. Setup Socket.IO client for backend server communication
     const configuredSocketUrl = import.meta.env.VITE_SOCKET_URL?.replace(/\/$/, '');
     const serverUrl = typeof window !== 'undefined' 
-      ? (configuredSocketUrl || (window.location.hostname === 'localhost' ? 'http://localhost:4000' : 'https://motoride-production-4ce4.up.railway.app'))
+      ? (configuredSocketUrl || (['localhost','127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:4000' : 'https://motoride-production-4ce4.up.railway.app'))
       : 'http://localhost:4000';
 
     let savedToken = null;

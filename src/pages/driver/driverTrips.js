@@ -1,5 +1,5 @@
-import { authService } from '../../services/mockAuth.js';
-import { db, apiService } from '../../services/apiService.js';
+import { authService } from '../../services/authService.js';
+import { apiService } from '../../services/apiService.js';
 import { icon } from '../../utils/icons.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
@@ -9,9 +9,8 @@ export function renderDriverTrips() {
   const container = document.createElement('div');
   container.className = 'driver-trips-page';
   const user = authService.getCurrentUser() || {};
-  const trips = db.getCollection('trips')
-    .filter(trip => !user.id || !trip.driverId || trip.driverId === user.id)
-    .sort((a, b) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0) - new Date(a.completedAt || a.updatedAt || a.createdAt || 0));
+  let trips = [];
+  let loading = true;
 
   const drawList = () => {
     container.innerHTML = `<header class="driver-trips-header"><div><h2>Historial de viajes</h2><p>Consulta cada carrera, conversación y comprobante.</p></div><span>${trips.length} viajes</span></header>
@@ -20,7 +19,7 @@ export function renderDriverTrips() {
     const list = container.querySelector('.driver-trip-history-list');
     const renderFiltered = filter => {
       const selected = filter === 'ALL' ? trips : trips.filter(trip => trip.status === filter);
-      list.innerHTML = selected.length ? selected.map(trip => `
+      list.innerHTML = loading ? '<div class="driver-trips-empty"><strong>Cargando historial real…</strong></div>' : selected.length ? selected.map(trip => `
         <article class="driver-history-card">
           <div class="history-card-top"><span class="history-id">#${esc(String(trip.id || '').slice(-7) || 'VIAJE')}</span><span class="history-status ${esc((trip.status || 'COMPLETED').toLowerCase())}">${trip.status === 'CANCELLED' ? 'Cancelado' : 'Completado'}</span></div>
           <div class="history-route"><span class="route-dot pickup"></span><div><small>RECOGIDA</small><strong>${esc(trip.pickup?.address || 'Ubicación del pasajero')}</strong></div><span class="route-line"></span><span class="route-dot destination"></span><div><small>DESTINO</small><strong>${esc(trip.destination?.address || 'Destino en Maracaibo')}</strong></div></div>
@@ -58,5 +57,10 @@ export function renderDriverTrips() {
   };
 
   drawList();
+  apiService.get('/trips/me/history').then(result => {
+    trips = Array.isArray(result) ? result : [];
+    loading = false;
+    drawList();
+  });
   return container;
 }

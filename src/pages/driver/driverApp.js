@@ -1,7 +1,6 @@
-import { authService } from '../../services/mockAuth.js';
-import { db } from '../../services/apiService.js';
+import { authService } from '../../services/authService.js';
+import { db, apiService } from '../../services/apiService.js';
 import { socket } from '../../services/socketClient.js';
-import { tripEngine } from '../../services/mockTrip.js';
 import { MapComponent } from '../../components/mapComponent.js';
 import { icon } from '../../utils/icons.js';
 import { renderIncomingRide } from './incomingRide.js';
@@ -23,20 +22,15 @@ import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 import { notificationService } from '../../services/notificationService.js';
 
 export function renderDriverApp(container) {
-    const user = authService.getCurrentUser() || {
-        id: 'driver_1',
-        firstName: 'Carlos',
-        lastName: 'Mendoza',
-        vehicleBrand: 'Bera',
-        vehicleModel: 'BR200',
-        vehiclePlate: 'AC3M49P',
-        rating: 4.8,
-        totalTrips: 342,
-        photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos'
-    };
+    const user = authService.getCurrentUser();
+    if (!user || user.role !== 'driver' || !user.isVerified) {
+        authService.logout();
+        window.navigateTo('#/');
+        return;
+    }
 
     const driverFullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Carlos Mendoza';
-    const driverAvatarUrl = user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
+    const driverAvatarUrl = user.photoUrl ? apiService.resolveUrl(user.photoUrl) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
 
     container.innerHTML = `
         <div class="driver-app">
@@ -84,7 +78,7 @@ export function renderDriverApp(container) {
                     </div>
                     <div class="stat-item diorama-card-3d" id="stat-btn-earnings" style="cursor:pointer;" title="Ver Ganancias & Retirar">
                         <span class="stat-label" style="display:flex; align-items:center; gap:4px;">${icon('dollarSign', 14)} Ganancias</span>
-                        <span class="stat-value" id="stat-earnings">$48.50</span>
+                        <span class="stat-value" id="stat-earnings">$${Number(user.walletBalance || 0).toFixed(2)}</span>
                     </div>
                     <div class="stat-item diorama-card-3d" id="stat-btn-rating" style="cursor:pointer;" title="Ver Perfil & Calificación">
                         <span class="stat-label" style="display:flex; align-items:center; gap:4px;">${icon('star', 14)} Calificación</span>
@@ -207,7 +201,7 @@ export function renderDriverApp(container) {
             driverGpsTracker.startTracking(user);
             driverDispatchService.registerDriver({
                 ...user,
-                id: user.id || 'driver_1',
+                id: user.id,
                 status: 'AVAILABLE'
             });
         } else {
@@ -217,7 +211,7 @@ export function renderDriverApp(container) {
             onlineOverlay.classList.add('hidden');
             
             driverGpsTracker.stopTracking();
-            driverDispatchService.updateDriverStatus(user.id || 'driver_1', 'OFFLINE');
+            driverDispatchService.updateDriverStatus(user.id, 'OFFLINE');
         }
     }
 

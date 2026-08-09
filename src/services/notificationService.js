@@ -1,5 +1,6 @@
 import { audioEffects } from '../utils/audioEffects.js';
 import { socket } from './socketClient.js';
+import { apiService } from './apiService.js';
 
 class NotificationService {
     constructor() {
@@ -8,12 +9,15 @@ class NotificationService {
             let session = null;
             try { session = JSON.parse(localStorage.getItem('58express_session') || 'null'); } catch {}
             const user = session?.user;
-            if (!user?.id || (payload.targetRole && payload.targetRole !== 'all' && payload.targetRole !== user.role)) return;
+            if (!user?.id || (payload.userId && payload.userId !== user.id) || (payload.targetRole && payload.targetRole !== 'all' && payload.targetRole !== user.role)) return;
             this.notify(user.id, {
+                id: payload.id,
                 title: payload.title || 'Aviso de +58express',
                 message: payload.message || '',
                 category: payload.category || 'SYSTEM',
-                icon: payload.icon || '🔔'
+                icon: payload.icon || '🔔',
+                createdAt: payload.createdAt,
+                read: Boolean(payload.read)
             });
         });
     }
@@ -48,16 +52,26 @@ class NotificationService {
         }
     }
 
-    addNotification(userId, { title, message, category = 'SYSTEM', icon = '🔔' }) {
+    async syncFromServer(userId) {
+        if (!userId) return [];
+        const list = await apiService.get('/notifications/me');
+        if (!Array.isArray(list)) return this.getNotifications(userId);
+        const normalized = list.map(item => ({ ...item, timestamp: item.timestamp || item.createdAt || new Date().toISOString() }));
+        this.saveNotifications(userId, normalized);
+        return normalized;
+    }
+
+    addNotification(userId, { id, title, message, category = 'SYSTEM', icon = '🔔', createdAt, timestamp, read = false }) {
         const list = this.getNotifications(userId);
+        if (id && list.some(item => item.id === id)) return list.find(item => item.id === id);
         const newNotif = {
-            id: 'notif_' + Date.now(),
+            id: id || 'notif_' + crypto.randomUUID(),
             title,
             message,
             category,
             icon,
-            read: false,
-            timestamp: new Date().toISOString()
+            read,
+            timestamp: timestamp || createdAt || new Date().toISOString()
         };
 
         list.unshift(newNotif);
@@ -131,10 +145,11 @@ class NotificationService {
         return globalNotif;
     }
 
-    markAllAsRead(userId) {
+    async markAllAsRead(userId) {
         const list = this.getNotifications(userId);
         list.forEach(n => n.read = true);
         this.saveNotifications(userId, list);
+        await apiService.patch('/notifications/me/read-all', {});
     }
 
     getUnreadCount(userId) {

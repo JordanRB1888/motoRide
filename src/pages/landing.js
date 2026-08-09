@@ -1,4 +1,4 @@
-import { authService } from '../services/mockAuth.js';
+import { authService } from '../services/authService.js';
 import { createDriverRegistrationModal } from '../components/driverRegistrationModal.js';
 import { showToast } from '../components/toast.js';
 import { icon } from '../utils/icons.js';
@@ -43,6 +43,13 @@ export function renderLanding(container) {
                     <button id="back-btn" class="back-btn">← Volver</button>
                     <h2 id="login-title">Ingreso</h2>
                     <form id="auth-form">
+                        <div id="passenger-register-fields" class="hidden">
+                            <div class="landing-register-grid">
+                                <div class="input-group"><input type="text" id="register-first-name" placeholder="Nombre"></div>
+                                <div class="input-group"><input type="text" id="register-last-name" placeholder="Apellido"></div>
+                            </div>
+                            <div class="input-group"><input type="tel" id="register-phone" placeholder="Teléfono +58"></div>
+                        </div>
                         <div class="input-group"><input type="text" id="email" placeholder="Correo o Teléfono" required></div>
                         <div class="input-group"><input type="password" id="password" placeholder="Contraseña" required></div>
                         <button type="submit" class="primary-btn">Ingresar</button>
@@ -72,7 +79,9 @@ export function renderLanding(container) {
     const emailInput = container.querySelector('#email');
     const passwordInput = container.querySelector('#password');
     const driverRegSection = container.querySelector('#driver-register-section');
+    const passengerRegisterFields = container.querySelector('#passenger-register-fields');
     const btnOpenDriverReg = container.querySelector('#btn-open-driver-reg');
+    const submitButton = authForm.querySelector('[type="submit"]');
 
     let selectedRole = '';
     let registrationMode = false;
@@ -85,6 +94,8 @@ export function renderLanding(container) {
             loginForm.classList.remove('hidden');
             loginTitle.textContent = { passenger: 'Ingreso Pasajero', driver: 'Ingreso Conductor', admin: 'Ingreso Administración' }[selectedRole];
             driverRegSection.classList.toggle('hidden', selectedRole !== 'driver');
+            passengerRegisterFields.classList.add('hidden');
+            submitButton.textContent = 'Ingresar';
         });
     });
 
@@ -94,7 +105,7 @@ export function renderLanding(container) {
     });
 
     btnOpenDriverReg?.addEventListener('click', () => {
-        const modal = createDriverRegistrationModal({ onSuccess: () => window.navigateTo('#/driver') });
+        const modal = createDriverRegistrationModal({ onSuccess: () => window.navigateTo('#/passenger') });
         container.appendChild(modal);
     });
 
@@ -121,9 +132,18 @@ export function renderLanding(container) {
         if (!email) return;
         try {
             const result = registrationMode
-                ? await authService.register({ firstName: email.split('@')[0] || 'Usuario', lastName: 'Express', email, password }, selectedRole)
+                ? await authService.register({
+                    firstName: container.querySelector('#register-first-name')?.value.trim(),
+                    lastName: container.querySelector('#register-last-name')?.value.trim(),
+                    phone: container.querySelector('#register-phone')?.value.trim(),
+                    email,
+                    password
+                }, selectedRole)
                 : await authService.login(email, password, selectedRole);
             if (result?.success && result.user) window.navigateTo(`#/${selectedRole}`);
+            else if (result?.error === 'USER_EXISTS') showToast('El correo o teléfono ya está registrado.', 'error');
+            else if (result?.error === 'DRIVER_APPLICATION_NOT_APPROVED') showToast(`Tu solicitud está en estado: ${result.applicationStatus}. Ingresa como pasajero para revisarla.`, 'warning', 6500);
+            else if (result?.fields) showToast(Object.values(result.fields)[0], 'error');
             else showToast(registrationMode ? 'No se pudo crear la cuenta' : 'Credenciales incorrectas', 'error');
         } catch (error) {
             console.error('Login error:', error);
@@ -137,5 +157,9 @@ export function renderLanding(container) {
         registrationMode = !registrationMode;
         loginTitle.textContent = registrationMode ? 'Registro Pasajero' : 'Ingreso Pasajero';
         event.currentTarget.textContent = registrationMode ? 'Ya tengo una cuenta' : 'Registrarse';
+        passengerRegisterFields.classList.toggle('hidden', !registrationMode);
+        submitButton.textContent = registrationMode ? 'Crear mi cuenta' : 'Ingresar';
+        container.querySelectorAll('#passenger-register-fields input').forEach(input => { input.required = registrationMode; });
+        emailInput.placeholder = registrationMode ? 'Correo electrónico' : 'Correo o Teléfono';
     });
 }

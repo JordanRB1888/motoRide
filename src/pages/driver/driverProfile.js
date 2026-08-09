@@ -1,37 +1,23 @@
 import { icon } from '../../utils/icons.js';
-import { authService } from '../../services/mockAuth.js';
-import { db } from '../../services/mockDatabase.js';
+import { authService } from '../../services/authService.js';
+import { apiService } from '../../services/apiService.js';
 import { showToast } from '../../components/toast.js';
 import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 import { getBcvEuroRate, formatVes } from '../../utils/bcvRates.js';
 
 export function renderDriverProfile(container, options = {}) {
-  const user = authService.getCurrentUser() || {
-    id: 'driver_1',
-    firstName: 'Carlos',
-    lastName: 'Mendoza',
-    age: 32,
-    cedula: 'V-19.402.103',
-    vehicleBrand: 'Bera',
-    vehicleModel: 'BR200',
-    vehiclePlate: 'AC3M49P',
-    vehicleColor: 'Negro',
-    vehicleYear: 2023,
-    rating: 4.8,
-    totalTrips: 342,
-    phone: '+58 414-000-0004',
-    photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos'
-  };
+  const user = authService.getCurrentUser();
+  if (!user) return;
 
   const bcvRate = getBcvEuroRate();
-  const balanceEUR = 48.50;
+  const balanceEUR = Number(user.walletBalance || 0);
   const formattedVES = formatVes(balanceEUR);
 
   let isEditing = false;
 
   const renderView = () => {
     const driverFullName = `${user.firstName || 'Carlos'} ${user.lastName || 'Mendoza'}`;
-    const avatarUrl = user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
+    const avatarUrl = user.photoUrl ? apiService.resolveUrl(user.photoUrl) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
 
     container.innerHTML = `
       <div class="driver-profile-page driver-profile-premium fade-in" style="padding: 24px 16px 120px; max-width: 440px; margin: 0 auto;">
@@ -285,18 +271,17 @@ export function renderDriverProfile(container, options = {}) {
 
     if (driverPhotoBtn && driverPhotoInput) {
       driverPhotoBtn.addEventListener('click', () => driverPhotoInput.click());
-      driverPhotoInput.addEventListener('change', (e) => {
+      driverPhotoInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            user.photoUrl = evt.target.result;
-            db.update('users', user.id, { photoUrl: evt.target.result });
-            authService.updateProfile({ photoUrl: evt.target.result });
-            showToast('¡Foto real del conductor actualizada!', 'success');
-            renderView();
-          };
-          reader.readAsDataURL(file);
+          const form = new FormData();
+          form.append('file', file);
+          const updated = await apiService.postForm('/auth/me/photo', form);
+          if (!updated) return showToast('No se pudo guardar la foto.', 'error');
+          authService.acceptSession(updated, authService.getSession().token);
+          Object.assign(user, updated);
+          container.querySelector('#driver-avatar-img').src = URL.createObjectURL(file);
+          showToast('Foto guardada de forma segura.', 'success');
         }
       });
     }
@@ -313,7 +298,7 @@ export function renderDriverProfile(container, options = {}) {
     // Edit Driver Form Submit
     const editForm = container.querySelector('#edit-driver-form');
     if (editForm) {
-      editForm.addEventListener('submit', (e) => {
+      editForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const firstName = container.querySelector('#edit-drv-fname').value.trim();
         const lastName = container.querySelector('#edit-drv-lname').value.trim();
@@ -324,19 +309,10 @@ export function renderDriverProfile(container, options = {}) {
         const vehiclePlate = container.querySelector('#edit-drv-plate').value.trim();
         const vehicleColor = container.querySelector('#edit-drv-color').value.trim();
 
-        user.firstName = firstName;
-        user.lastName = lastName;
-        user.phone = phone;
-        user.cedula = cedula;
-        user.vehicleBrand = vehicleBrand;
-        user.vehicleModel = vehicleModel;
-        user.vehiclePlate = vehiclePlate;
-        user.vehicleColor = vehicleColor;
-
-        db.update('users', user.id, { firstName, lastName, phone, cedula, vehicleBrand, vehicleModel, vehiclePlate, vehicleColor });
-        authService.updateProfile({ firstName, lastName, phone, cedula, vehicleBrand, vehicleModel, vehiclePlate, vehicleColor });
-
-        showToast('¡Datos de moto y conductor actualizados!', 'success');
+        const result = await authService.updateProfile({ firstName, lastName, phone, cedula, vehicleBrand, vehicleModel, vehiclePlate, vehicleColor });
+        if (!result.success) return showToast('No se pudieron guardar los datos.', 'error');
+        Object.assign(user, result.user);
+        showToast('Datos del conductor actualizados.', 'success');
         isEditing = false;
         renderView();
       });
@@ -446,11 +422,12 @@ function openWithdrawalModal(container, balanceEUR, bcvRate) {
 
   modalOverlay.querySelector('#close-withdrawal').addEventListener('click', () => modalOverlay.remove());
 
-  modalOverlay.querySelector('#withdrawal-form').addEventListener('submit', (e) => {
+  modalOverlay.querySelector('#withdrawal-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const amount = modalOverlay.querySelector('#withdraw-amount').value;
-    const vesConverted = amount * bcvRate;
-    showToast(`Solicitud de retiro de €${amount} EUR (Bs. ${vesConverted.toLocaleString('es-VE', {minimumFractionDigits:2})}) enviada a Administración. Recibirás tu Pago Móvil en breve.`, 'success');
+    const result = await apiService.post('/wallet/payouts', { amount: Number(amount) });
+    if (!result) return showToast(apiService.lastError?.error === 'PAYOUT_ALREADY_PENDING' ? 'Ya existe una liquidación pendiente.' : 'No se pudo enviar la liquidación.', 'error');
+    showToast('Solicitud de liquidación enviada a Administración.', 'success');
     modalOverlay.remove();
   });
 }

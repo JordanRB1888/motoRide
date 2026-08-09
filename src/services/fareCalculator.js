@@ -1,4 +1,4 @@
-import { db } from './mockDatabase.js';
+import { db } from './clientCache.js';
 
 // Fallback constants if db setting is missing
 const DEFAULT_PRICING = {

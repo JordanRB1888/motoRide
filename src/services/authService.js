@@ -1,29 +1,31 @@
 import { apiService } from './apiService.js';
-import { db } from './mockDatabase.js';
 import { socketClient } from './socketClient.js';
 
 function saveSession(user, token) {
   const session = { userId: user.id, role: user.role, token, user };
   localStorage.setItem('58express_session', JSON.stringify(session));
   socketClient.authenticate(token);
-  const existing = db.findById('users', user.id);
-  if (existing) db.update('users', user.id, user);
-  else db.insert('users', user);
 }
 
 export const authService = {
   async login(identifier, password, role = null) {
     const result = await apiService.post('/auth/login', { identifier, password, role });
-    if (!result?.user || !result?.token) return { success: false, error: result?.error || 'INVALID_CREDENTIALS' };
+    if (!result?.user || !result?.token) return { success: false, ...(apiService.lastError || { error: 'INVALID_CREDENTIALS' }) };
     saveSession(result.user, result.token);
     return { success: true, user: result.user, token: result.token };
   },
 
   async register(userData, role) {
     const result = await apiService.post('/auth/register', { ...userData, role });
-    if (!result?.user || !result?.token) return { success: false, error: result?.error || 'REGISTRATION_FAILED' };
+    if (!result?.user || !result?.token) return { success: false, ...(apiService.lastError || { error: 'REGISTRATION_FAILED' }) };
     saveSession(result.user, result.token);
     return { success: true, user: result.user, token: result.token };
+  },
+
+  acceptSession(user, token) {
+    if (!user?.id || !token) return { success: false, error: 'INVALID_SESSION' };
+    saveSession(user, token);
+    return { success: true, user, token };
   },
 
   logout() {
@@ -33,8 +35,7 @@ export const authService = {
   },
 
   getCurrentUser() {
-    const session = this.getSession();
-    return session?.user || (session?.userId ? db.findById('users', session.userId) : null);
+    return this.getSession()?.user || null;
   },
 
   isAuthenticated() {

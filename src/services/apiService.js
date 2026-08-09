@@ -1,14 +1,14 @@
-import { syncInsertSupabase, syncUpdateSupabase } from './supabaseClient.js';
 import { eventLogger } from '../utils/logger.js';
-import { db as localDatabase } from './mockDatabase.js';
+import { db as clientCache } from './clientCache.js';
 import { offlineRequestQueue } from './offlineRequestQueue.js';
 
 class ApiService {
   constructor() {
     const configuredUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
-    this.baseUrl = configuredUrl || (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    this.baseUrl = configuredUrl || (typeof window !== 'undefined' && ['localhost','127.0.0.1'].includes(window.location.hostname)
       ? 'http://localhost:4000/api'
       : 'https://motoride-production-4ce4.up.railway.app/api');
+    this.lastError = null;
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => this.flushOfflineRequests());
       queueMicrotask(() => navigator.onLine && this.flushOfflineRequests());
@@ -19,110 +19,72 @@ class ApiService {
     try {
       const session = JSON.parse(localStorage.getItem('58express_session') || 'null');
       return session?.token ? { Authorization: `Bearer ${session.token}` } : {};
-    } catch {
-      return {};
-    }
+    } catch { return {}; }
   }
 
-  async get(endpoint) {
+  async request(endpoint, { method = 'GET', body = null } = {}) {
     try {
-      const res = await fetch(`${this.baseUrl}${endpoint}`, { headers: this.getAuthHeaders() });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      eventLogger.warn(`API GET ${endpoint} note:`, err);
-    }
-    return null;
-  }
-
-  async post(endpoint, data) {
-    try {
-      const res = await fetch(`${this.baseUrl}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...this.getAuthHeaders() },
-        body: JSON.stringify(data)
+      const isFormData = body instanceof FormData;
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method,
+        headers: { ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}), ...this.getAuthHeaders() },
+        body: body ? (isFormData ? body : JSON.stringify(body)) : undefined
       });
-      if (res.ok) return await res.json();
-      if (endpoint === '/trips/create' && res.status >= 500) this.queueOfflineTrip(endpoint, data);
-    } catch (err) {
-      eventLogger.warn(`API POST ${endpoint} note:`, err);
-      if (endpoint === '/trips/create') {
-        this.queueOfflineTrip(endpoint, data);
-        return { queued: true, trip: data };
+      const payload = response.status === 204 ? null : await response.json().catch(() => null);
+      if (response.ok) {
+        this.lastError = null;
+        return payload ?? true;
       }
+      this.lastError = { status: response.status, ...(payload || { error: 'REQUEST_FAILED' }) };
+      return null;
+    } catch (error) {
+      this.lastError = { status: 0, error: 'NETWORK_ERROR' };
+      eventLogger.warn(`API ${method} ${endpoint}:`, error);
+      return null;
     }
-    return null;
+  }
+
+  get(endpoint) { return this.request(endpoint); }
+  resolveUrl(endpoint) { return String(endpoint || '').startsWith('http') ? endpoint : `${this.baseUrl}${endpoint}`; }
+  post(endpoint, data) { return this.request(endpoint, { method: 'POST', body: data }); }
+  postForm(endpoint, formData) { return this.post(endpoint, formData); }
+  patch(endpoint, data) { return this.request(endpoint, { method: 'PATCH', body: data }); }
+  putForm(endpoint, formData) { return this.request(endpoint, { method: 'PUT', body: formData }); }
+  delete(endpoint) { return this.request(endpoint, { method: 'DELETE' }); }
+
+  async getPrivateFileUrl(endpoint) {
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, { headers: this.getAuthHeaders() });
+      if (!response.ok) return null;
+      return URL.createObjectURL(await response.blob());
+    } catch { return null; }
   }
 
   queueOfflineTrip(endpoint, data) {
-    offlineRequestQueue.enqueue({
-      endpoint,
-      data,
-      idempotencyKey: data.id || crypto.randomUUID()
-    });
+    offlineRequestQueue.enqueue({ endpoint, data, idempotencyKey: data.id || crypto.randomUUID() });
   }
 
   async flushOfflineRequests() {
     return offlineRequestQueue.flush(async request => {
-      const res = await fetch(`${this.baseUrl}${request.endpoint}`, {
+      const response = await fetch(`${this.baseUrl}${request.endpoint}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': request.idempotencyKey,
-          ...this.getAuthHeaders()
-        },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': request.idempotencyKey, ...this.getAuthHeaders() },
         body: JSON.stringify(request.data)
       });
-      return res.ok;
+      return response.ok;
     });
   }
 
-  async patch(endpoint, data) {
-    try {
-      const res = await fetch(`${this.baseUrl}${endpoint}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...this.getAuthHeaders() },
-        body: JSON.stringify(data)
-      });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      eventLogger.warn(`API PATCH ${endpoint} note:`, err);
+  async createTrip(data) {
+    const result = await this.post('/trips/create', data);
+    if (result) return result;
+    if (this.lastError?.status >= 500 || this.lastError?.error === 'NETWORK_ERROR') {
+      this.queueOfflineTrip('/trips/create', data);
+      return { queued: true, trip: data };
     }
     return null;
-  }
-
-  async delete(endpoint) {
-    try {
-      const res = await fetch(`${this.baseUrl}${endpoint}`, {
-        method: 'DELETE',
-        headers: this.getAuthHeaders()
-      });
-      return res.ok;
-    } catch (err) {
-      eventLogger.warn(`API DELETE ${endpoint} note:`, err);
-      return false;
-    }
-  }
-
-  /**
-   * Supabase Cloud Real-Time Persistence Methods
-   */
-  async syncTripToSupabase(trip) {
-    try {
-      await syncInsertSupabase('trips', {
-        id: trip.id,
-        passenger_id: trip.passengerId,
-        driver_id: trip.driverId,
-        origin: trip.pickup?.address || 'Basílica de Chiquinquirá',
-        destination: trip.destination?.address || 'Maracaibo',
-        fare_usd: trip.fareEUR || trip.fareUSD || 4.50,
-        status: trip.status || 'SEARCHING',
-        created_at: new Date().toISOString()
-      });
-    } catch (err) {
-      // Graceful fallback
-    }
   }
 }
 
 export const apiService = new ApiService();
-export const db = localDatabase;
+export const db = clientCache;

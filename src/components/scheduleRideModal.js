@@ -1,6 +1,6 @@
 import { getBcvEuroRate, formatVes } from '../utils/bcvRates.js';
 import { showToast } from './toast.js';
-import { db } from '../services/mockDatabase.js';
+import { apiService } from '../services/apiService.js';
 
 export function createScheduleRideModal({ originName = 'Basílica de Chiquinquirá', destinationName = '', fareEUR = 4.50, onSchedule, onClose }) {
     const bcvRate = getBcvEuroRate();
@@ -159,35 +159,23 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
             });
         });
 
-        modal.querySelector('#confirm-schedule-btn').addEventListener('click', () => {
+        modal.querySelector('#confirm-schedule-btn').addEventListener('click', async () => {
             if (!selectedDate || !selectedTime || !currentDestination) {
                 showToast('Por favor completa la fecha, hora y lugar de destino', 'error');
                 return;
             }
 
-            const reservationCode = 'RES-' + Math.floor(100000 + Math.random() * 900000);
             const formattedDateTime = `${selectedDate} a las ${selectedTime}`;
-
-            // Save scheduled trip to database
-            const scheduledTrip = {
-                id: reservationCode,
-                role: 'passenger',
+            const scheduledTrip = await apiService.post('/trips/scheduled', {
                 pickup: { address: currentOrigin },
                 destination: { address: currentDestination },
-                scheduledDate: selectedDate,
-                scheduledTime: selectedTime,
-                formattedDateTime,
-                fareEUR: currentFareEUR,
-                fareVES: currentFareEUR * bcvRate,
-                isPaidInAdvance,
-                status: 'SCHEDULED',
-                assignedDriverId: null,
-                createdAt: new Date().toISOString()
-            };
+                scheduledAt: new Date(`${selectedDate}T${selectedTime}:00`).toISOString(),
+                fareUSD: currentFareEUR,
+                paymentMethod: isPaidInAdvance ? 'WALLET_PENDING' : 'CASH'
+            });
+            if (!scheduledTrip) return showToast('No se pudo registrar la reserva. Selecciona una hora futura válida.', 'error');
 
-            db.insert('trips', scheduledTrip);
-
-            showToast(`¡Reserva ${reservationCode} confirmada para ${formattedDateTime}!`, 'success');
+            showToast(`Reserva confirmada para ${formattedDateTime}.`, 'success');
             overlay.remove();
             if (onSchedule) onSchedule(scheduledTrip);
         });

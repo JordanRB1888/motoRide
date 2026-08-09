@@ -1,346 +1,161 @@
-import { authService } from '../services/mockAuth.js';
+import { authService } from '../services/authService.js';
+import { apiService } from '../services/apiService.js';
 import { showToast } from './toast.js';
+import { icon } from '../utils/icons.js';
 
-export function createDriverRegistrationModal({ onClose, onSuccess }) {
-    const overlay = document.createElement('div');
-    overlay.className = 'diorama-card-3d fade-in';
-    overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 9999;
-        background: rgba(10, 15, 24, 0.94); backdrop-filter: blur(24px);
-        display: flex; align-items: center; justify-content: center; padding: 16px;
-    `;
+const DOCUMENTS = [
+  ['identity_front', 'Cédula por delante', true],
+  ['identity_back', 'Cédula por detrás', true],
+  ['driver_license', 'Licencia de conducir', true],
+  ['vehicle_registration', 'Registro del vehículo', true],
+  ['vehicle_insurance', 'Seguro / RCV', false],
+  ['vehicle_photo', 'Foto completa del vehículo', true],
+  ['plate_photo', 'Foto legible de la placa', true],
+  ['driver_selfie', 'Selfie del conductor', true]
+];
 
-    let currentStep = 1;
+const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char]));
 
-    // Form State
-    const formData = {
-        firstName: '',
-        lastName: '',
-        phone: '',
-        email: '',
-        password: '',
-        vehicleType: 'MOTO',
-        vehicleBrand: 'Bera',
-        vehicleModel: 'BR200',
-        vehiclePlate: '',
-        vehicleColor: 'Rojo',
-        vehicleYear: 2023,
-        licenseNumber: '',
-        documents: {
-            cedula: { status: 'pending', previewUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=400&q=80' },
-            licencia: { status: 'pending', previewUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=400&q=80' },
-            rcv: { status: 'pending', previewUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=400&q=80' },
-            certificadoMedico: { status: 'pending', previewUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=400&q=80' },
-            carnetCirculacion: { status: 'pending', previewUrl: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=400&q=80' }
-        }
-    };
+export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
+  const overlay = document.createElement('div');
+  overlay.className = 'driver-application-overlay';
+  let step = 1;
+  let submitting = false;
+  const values = {
+    firstName:'', lastName:'', identityNumber:'', birthDate:'', phone:'', email:'', password:'',
+    address:'', city:'Maracaibo', region:'Zulia', vehicleType:'MOTO', vehicleBrand:'', vehicleModel:'',
+    vehicleYear:'', vehicleColor:'', vehiclePlate:'', vehicleAdditionalInfo:''
+  };
+  const files = new Map();
 
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-        width: 100%; max-width: 580px; max-height: 90vh; background: var(--surface-card); border-radius: 28px;
-        border: 2px solid var(--accent-primary); padding: 24px; box-shadow: 0 30px 70px rgba(0,0,0,0.8);
-        display: flex; flex-direction: column; overflow: hidden; animation: dioramaLand 0.35s ease-out;
-    `;
+  const close = () => {
+    files.forEach(item => item.preview && URL.revokeObjectURL(item.preview));
+    overlay.remove();
+    onClose?.();
+  };
 
-    const renderStep = () => {
-        modal.innerHTML = `
-            <!-- Header -->
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border-color); padding-bottom: 14px; margin-bottom: 16px;">
-                <div>
-                    <h3 style="color: var(--text-primary); font-size: 1.25rem; font-weight: 900; margin: 0;">
-                        📝 Registro de Nuevo Conductor
-                    </h3>
-                    <small style="color: var(--accent-primary); font-weight:700;">Paso ${currentStep} de 3 · Solicitud de Ingreso +58express Maracaibo</small>
-                </div>
-                <button id="close-reg-modal" style="color: var(--text-secondary); font-size: 1.3rem; background: none; border: none; cursor: pointer;">✕</button>
-            </div>
+  const capture = () => {
+    overlay.querySelectorAll('[data-field]').forEach(input => { values[input.dataset.field] = input.value; });
+  };
 
-            <!-- Steps Progress Bar -->
-            <div style="display:flex; gap: 6px; margin-bottom: 20px;">
-                <div style="flex:1; height:6px; border-radius:10px; background:${currentStep >= 1 ? 'var(--accent-primary)' : 'var(--surface-elevated)'}"></div>
-                <div style="flex:1; height:6px; border-radius:10px; background:${currentStep >= 2 ? 'var(--accent-primary)' : 'var(--surface-elevated)'}"></div>
-                <div style="flex:1; height:6px; border-radius:10px; background:${currentStep >= 3 ? 'var(--accent-primary)' : 'var(--surface-elevated)'}"></div>
-            </div>
-
-            <!-- Body Container -->
-            <div style="flex:1; overflow-y: auto; padding-right: 4px; margin-bottom: 16px;">
-                ${currentStep === 1 ? `
-                    <div style="display:flex; flex-direction:column; gap: 14px;">
-                        <h4 style="color:var(--text-primary); font-size:1rem; font-weight:800; margin:0;">1. Datos Personales y Cuenta</h4>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div>
-                                <small style="color:var(--text-secondary);">Nombre *</small>
-                                <input type="text" id="reg-fname" value="${formData.firstName}" placeholder="Ej: Gabriel" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                            </div>
-                            <div>
-                                <small style="color:var(--text-secondary);">Apellido *</small>
-                                <input type="text" id="reg-lname" value="${formData.lastName}" placeholder="Ej: Zambrano" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                            </div>
-                        </div>
-
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div>
-                                <small style="color:var(--text-secondary);">Correo Electrónico *</small>
-                                <input type="email" id="reg-email" value="${formData.email}" placeholder="correo@ejemplo.com" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                            </div>
-                            <div>
-                                <small style="color:var(--text-secondary);">Teléfono / WhatsApp *</small>
-                                <input type="text" id="reg-phone" value="${formData.phone}" placeholder="+58 414-000-0000" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                            </div>
-                        </div>
-
-                        <div>
-                            <small style="color:var(--text-secondary);">Contraseña para Iniciar Sesión *</small>
-                            <input type="password" id="reg-pass" value="${formData.password}" placeholder="Mínimo 6 caracteres" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                        </div>
-                    </div>
-                ` : ''}
-
-                ${currentStep === 2 ? `
-                    <div style="display:flex; flex-direction:column; gap: 14px;">
-                        <h4 style="color:var(--text-primary); font-size:1rem; font-weight:800; margin:0;">2. Datos del Vehículo</h4>
-                        <div>
-                            <small style="color:var(--text-secondary);">Tipo de vehículo *</small>
-                            <select id="reg-vehicle-type" style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;">
-                                <option value="MOTO" ${formData.vehicleType === 'MOTO' ? 'selected' : ''}>Moto</option>
-                                <option value="CAR" ${formData.vehicleType === 'CAR' ? 'selected' : ''}>Automóvil</option>
-                            </select>
-                        </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div>
-                                <small style="color:var(--text-secondary);">Marca del vehículo *</small>
-                                <select id="reg-brand" style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;">
-                                    <option value="Bera" ${formData.vehicleBrand === 'Bera' ? 'selected' : ''}>Bera</option>
-                                    <option value="Empire Keeway" ${formData.vehicleBrand === 'Empire Keeway' ? 'selected' : ''}>Empire Keeway</option>
-                                    <option value="Honda" ${formData.vehicleBrand === 'Honda' ? 'selected' : ''}>Honda</option>
-                                    <option value="Yamaha" ${formData.vehicleBrand === 'Yamaha' ? 'selected' : ''}>Yamaha</option>
-                                    <option value="UM" ${formData.vehicleBrand === 'UM' ? 'selected' : ''}>UM</option>
-                                    <option value="Suzuki" ${formData.vehicleBrand === 'Suzuki' ? 'selected' : ''}>Suzuki</option>
-                                    <option value="Toyota" ${formData.vehicleBrand === 'Toyota' ? 'selected' : ''}>Toyota</option>
-                                    <option value="Chevrolet" ${formData.vehicleBrand === 'Chevrolet' ? 'selected' : ''}>Chevrolet</option>
-                                    <option value="Ford" ${formData.vehicleBrand === 'Ford' ? 'selected' : ''}>Ford</option>
-                                    <option value="Hyundai" ${formData.vehicleBrand === 'Hyundai' ? 'selected' : ''}>Hyundai</option>
-                                    <option value="Kia" ${formData.vehicleBrand === 'Kia' ? 'selected' : ''}>Kia</option>
-                                    <option value="Nissan" ${formData.vehicleBrand === 'Nissan' ? 'selected' : ''}>Nissan</option>
-                                </select>
-                            </div>
-                            <div>
-                                <small style="color:var(--text-secondary);">Modelo *</small>
-                                <input type="text" id="reg-model" value="${formData.vehicleModel}" placeholder="Ej: BR200, SBR, Keeway" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                            </div>
-                        </div>
-
-                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-                            <div>
-                                <small style="color:var(--text-secondary);">Placa del vehículo *</small>
-                                <input type="text" id="reg-plate" value="${formData.vehiclePlate}" placeholder="Ej: AC9M11P" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                            </div>
-                            <div>
-                                <small style="color:var(--text-secondary);">Color *</small>
-                                <input type="text" id="reg-color" value="${formData.vehicleColor}" placeholder="Ej: Rojo" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                            </div>
-                            <div>
-                                <small style="color:var(--text-secondary);">Año *</small>
-                                <input type="number" id="reg-year" value="${formData.vehicleYear}" placeholder="2023" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                            </div>
-                        </div>
-
-                        <div>
-                            <small style="color:var(--text-secondary);">Número de Licencia de Conducir *</small>
-                            <input type="text" id="reg-licno" value="${formData.licenseNumber}" placeholder="Ej: L-984721" required style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:white;" />
-                        </div>
-                    </div>
-                ` : ''}
-
-                ${currentStep === 3 ? `
-                    <div style="display:flex; flex-direction:column; gap: 14px;">
-                        <h4 style="color:var(--text-primary); font-size:1rem; font-weight:800; margin:0;">3. Carga de Requisitos y Documentación Obligatoria</h4>
-                        <small style="color:var(--text-secondary);">Adjunta foto legible de cada uno de los 5 requisitos para que la Administración revise tu solicitud:</small>
-
-                        <div style="display:flex; flex-direction:column; gap: 10px;">
-                            ${[
-                                { key: 'cedula', label: '🪪 Cédula de Identidad 🇻🇪' },
-                                { key: 'licencia', label: '📄 Licencia de Conducir (2do Grado)' },
-                                { key: 'rcv', label: '📑 RCV (Seguro de Responsabilidad Civil)' },
-                                { key: 'certificadoMedico', label: '🏥 Certificado Médico' },
-                                { key: 'carnetCirculacion', label: '🏍️ Carnet de Circulación de la Moto' }
-                            ].map(doc => `
-                                <div style="display:flex; align-items:center; justify-content:space-between; padding: 12px 16px; background: var(--surface-elevated); border-radius: 14px; border: 1px solid var(--border-color);">
-                                    <div>
-                                        <strong style="color:var(--text-primary); font-size: 0.9rem; display:block;">${doc.label}</strong>
-                                        <small style="color:var(--success); font-size:0.75rem; font-weight:700;">✓ Listo para revisión</small>
-                                    </div>
-                                    <label style="
-                                        padding: 8px 14px; border-radius: 12px; background: rgba(255,193,7,0.15);
-                                        border: 1px solid var(--accent-primary); color: var(--accent-primary);
-                                        font-size: 0.8rem; font-weight: 800; cursor: pointer;
-                                    ">
-                                        📷 Adjuntar Foto
-                                        <input type="file" class="doc-file-input" data-key="${doc.key}" accept="image/*" style="display:none;" />
-                                    </label>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : ''}
-            </div>
-
-            <!-- Footer Action Bar -->
-            <div style="display:flex; justify-content:space-between; align-items:center; border-top: 1px solid var(--border-color); padding-top: 14px;">
-                ${currentStep > 1 ? `
-                    <button id="prev-step-btn" class="btn" style="padding: 12px 20px; border-radius: 16px; background: var(--surface-elevated); color: white; font-weight: 700;">
-                        ← Anterior
-                    </button>
-                ` : '<div></div>'}
-
-                ${currentStep < 3 ? `
-                    <button id="next-step-btn" class="btn btn-3d primary-btn" style="padding: 12px 24px; border-radius: 16px; font-weight: 900;">
-                        Siguiente ➔
-                    </button>
-                ` : `
-                    <button id="submit-reg-btn" class="btn btn-3d primary-btn" style="
-                        padding: 14px 24px; border-radius: 16px; font-weight: 900;
-                        background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824;
-                    ">
-                        🚀 ENVIAR SOLICITUD A ADMINISTRACIÓN
-                    </button>
-                `}
-            </div>
-        `;
-
-        modal.querySelector('#close-reg-modal').addEventListener('click', () => overlay.remove());
-
-        if (modal.querySelector('#prev-step-btn')) {
-            modal.querySelector('#prev-step-btn').addEventListener('click', () => {
-                currentStep--;
-                renderStep();
-            });
-        }
-
-        if (modal.querySelector('#next-step-btn')) {
-            modal.querySelector('#next-step-btn').addEventListener('click', () => {
-                if (saveStepData()) {
-                    currentStep++;
-                    renderStep();
-                }
-            });
-        }
-
-        if (modal.querySelector('#submit-reg-btn')) {
-            modal.querySelector('#submit-reg-btn').addEventListener('click', () => {
-                submitRegistration();
-            });
-        }
-
-        modal.querySelectorAll('.doc-file-input').forEach(input => {
-            input.addEventListener('change', (e) => {
-                const key = input.dataset.key;
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (evt) => {
-                        formData.documents[key] = { status: 'pending', previewUrl: evt.target.result };
-                        showToast(`Documento ${key} adjuntado con éxito`, 'success');
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
-        });
-    };
-
-    function saveStepData() {
-        if (currentStep === 1) {
-            formData.firstName = modal.querySelector('#reg-fname').value.trim();
-            formData.lastName = modal.querySelector('#reg-lname').value.trim();
-            formData.email = modal.querySelector('#reg-email').value.trim();
-            formData.phone = modal.querySelector('#reg-phone').value.trim();
-            formData.password = modal.querySelector('#reg-pass').value.trim();
-
-            if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone || formData.password.length < 6) {
-                showToast('Por favor completa todos los datos personales obligatorios', 'error');
-                return false;
-            }
-        } else if (currentStep === 2) {
-            formData.vehicleType = modal.querySelector('#reg-vehicle-type').value === 'CAR' ? 'CAR' : 'MOTO';
-            formData.vehicleBrand = modal.querySelector('#reg-brand').value;
-            formData.vehicleModel = modal.querySelector('#reg-model').value.trim();
-            formData.vehiclePlate = modal.querySelector('#reg-plate').value.trim();
-            formData.vehicleColor = modal.querySelector('#reg-color').value.trim();
-            formData.vehicleYear = parseInt(modal.querySelector('#reg-year').value, 10) || 2023;
-            formData.licenseNumber = modal.querySelector('#reg-licno').value.trim();
-
-            if (!formData.vehicleModel || !formData.vehiclePlate || !formData.licenseNumber) {
-                showToast('Por favor completa todos los datos del vehículo y licencia', 'error');
-                return false;
-            }
-        }
-        return true;
+  const validateStep = () => {
+    capture();
+    if (step === 1) {
+      const required = ['firstName','lastName','identityNumber','birthDate','phone','email','password','address','city','region'];
+      const missing = required.find(key => !String(values[key]).trim());
+      if (missing) return 'Completa todos los datos personales obligatorios.';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) return 'Introduce una dirección de correo válida.';
+      if (values.phone.replace(/\D/g,'').length < 10) return 'Introduce un número telefónico válido.';
+      if (values.password.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
     }
-
-    async function submitRegistration() {
-        const newDriver = {
-            id: 'driver_' + Date.now(),
-            role: 'driver',
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            phone: formData.phone,
-            vehicleType: formData.vehicleType,
-            vehicleBrand: formData.vehicleBrand,
-            vehicleModel: formData.vehicleModel,
-            vehiclePlate: formData.vehiclePlate,
-            vehicleColor: formData.vehicleColor,
-            vehicleYear: formData.vehicleYear,
-            licenseNumber: formData.licenseNumber,
-            photoUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(formData.firstName)}`,
-            status: 'OFFLINE',
-            isVerified: false,
-            rating: 5.0,
-            totalTrips: 0,
-            documents: formData.documents,
-            password: formData.password
-        };
-
-        const registration = await authService.register(newDriver, 'driver');
-        if (!registration.success) {
-            showToast('No se pudo registrar: el correo o teléfono ya existe', 'error');
-            return;
-        }
-        Object.assign(newDriver, registration.user);
-
-        // Show pending confirmation overlay
-        modal.innerHTML = `
-            <div style="text-align:center; padding: 20px 10px;">
-                <div style="font-size: 3.5rem; margin-bottom: 12px;">✅</div>
-                <h3 style="color: var(--text-primary); font-size: 1.4rem; font-weight: 900; margin-bottom: 8px;">
-                    ¡Solicitud de conductor recibida!
-                </h3>
-                <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; margin-bottom: 20px;">
-                    Bienvenido <strong>${formData.firstName} ${formData.lastName}</strong>. La administración revisará tu moto <strong>${formData.vehicleBrand} (${formData.vehiclePlate})</strong> y tus documentos.
-                </p>
-
-                <div style="background: rgba(0,230,118,0.12); padding: 14px; border-radius: 16px; border: 1.5px solid var(--success); margin-bottom: 24px; text-align: left;">
-                    <strong style="color: var(--success); font-size: 0.88rem; display:block; margin-bottom: 4px;">ESTADO DE TU CUENTA:</strong>
-                    <span style="color: var(--text-primary); font-size: 0.85rem;">🟡 Pendiente de revisión administrativa</span>
-                </div>
-
-                <button id="close-success-reg-btn" class="btn btn-3d primary-btn" style="
-                    width: 100%; padding: 16px; font-weight: 900; font-size: 1rem;
-                    background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824;
-                ">
-                    🚀 ENTRAR AL APARTADO DE CONDUCTORES AHORA
-                </button>
-            </div>
-        `;
-
-        modal.querySelector('#close-success-reg-btn').addEventListener('click', () => {
-            overlay.remove();
-            window.navigateTo('#/driver');
-            if (onSuccess) onSuccess(newDriver);
-        });
+    if (step === 2) {
+      const required = ['vehicleBrand','vehicleModel','vehicleYear','vehicleColor','vehiclePlate'];
+      if (required.some(key => !String(values[key]).trim())) return 'Completa toda la información del vehículo.';
     }
+    if (step === 3) {
+      const missingDocument = DOCUMENTS.find(([key,,required]) => required && !files.has(key));
+      if (missingDocument) return `Debes subir: ${missingDocument[1]}.`;
+    }
+    return null;
+  };
 
-    overlay.appendChild(modal);
-    renderStep();
-    return overlay;
+  const personalStep = () => `
+    <section class="driver-application-step">
+      <h3>Información personal</h3><p>Estos datos deben coincidir con tus documentos.</p>
+      <div class="driver-application-grid two">
+        ${field('firstName','Nombre','text','Ej. Gabriel')}${field('lastName','Apellido','text','Ej. Zambrano')}
+        ${field('identityNumber','Cédula / documento','text','V-12345678')}${field('birthDate','Fecha de nacimiento','date','')}
+        ${field('phone','Teléfono / WhatsApp','tel','+58 414-000-0000')}${field('email','Correo electrónico','email','correo@ejemplo.com')}
+      </div>
+      ${field('address','Dirección','text','Urbanización, avenida, calle y referencia')}
+      <div class="driver-application-grid two">${field('city','Ciudad','text','Maracaibo')}${field('region','Estado / región','text','Zulia')}</div>
+      ${field('password','Contraseña','password','Mínimo 8 caracteres')}
+    </section>`;
+
+  const vehicleStep = () => `
+    <section class="driver-application-step">
+      <h3>Vehículo de trabajo</h3><p>Registra exactamente el vehículo que utilizarás en la plataforma.</p>
+      <label class="driver-application-field"><span>Tipo de vehículo *</span><select data-field="vehicleType"><option value="MOTO" ${values.vehicleType==='MOTO'?'selected':''}>Motocicleta</option><option value="CAR" ${values.vehicleType==='CAR'?'selected':''}>Automóvil</option></select></label>
+      <div class="driver-application-grid two">${field('vehicleBrand','Marca','text','Bera, Empire, Toyota...')}${field('vehicleModel','Modelo','text','BR200, SBR 150...')}</div>
+      <div class="driver-application-grid three">${field('vehicleYear','Año','number','2024')}${field('vehicleColor','Color','text','Negro')}${field('vehiclePlate','Placa','text','AC3M49P')}</div>
+      ${field('vehicleAdditionalInfo','Información adicional','text','Cilindraje, número de unidad u observaciones (opcional)',false)}
+    </section>`;
+
+  const documentsStep = () => `
+    <section class="driver-application-step">
+      <h3>Documentos privados</h3><p>JPG, PNG, WEBP o PDF. Máximo 5 MB por archivo. Solo administración podrá consultarlos.</p>
+      <div class="driver-document-grid">${DOCUMENTS.map(([key,label,required]) => {
+        const item = files.get(key);
+        return `<label class="driver-document-input ${item?'ready':''}">
+          <input type="file" data-document="${key}" accept="image/jpeg,image/png,image/webp,application/pdf">
+          <span class="driver-document-icon">${item ? icon('check',18) : icon('upload',18)}</span>
+          <span><strong>${escapeHtml(label)} ${required?'*':''}</strong><small>${item ? escapeHtml(item.file.name) : 'Toca para seleccionar'}</small></span>
+          ${item?.preview && item.file.type.startsWith('image/') ? `<img src="${item.preview}" alt="Vista previa">` : ''}
+        </label>`;
+      }).join('')}</div>
+    </section>`;
+
+  const confirmationStep = () => `
+    <section class="driver-application-step driver-application-review">
+      <span class="review-shield">${icon('shield',30)}</span><h3>Revisa y envía tu solicitud</h3>
+      <p>La cuenta no quedará habilitada como conductor hasta que administración revise la información y los documentos.</p>
+      <div class="review-summary"><div><small>Solicitante</small><strong>${escapeHtml(values.firstName)} ${escapeHtml(values.lastName)}</strong></div><div><small>Vehículo</small><strong>${escapeHtml(values.vehicleBrand)} ${escapeHtml(values.vehicleModel)} · ${escapeHtml(values.vehiclePlate)}</strong></div><div><small>Documentos</small><strong>${files.size} archivos adjuntos</strong></div></div>
+      <label class="driver-terms"><input type="checkbox" id="driver-terms"> <span>Confirmo que la información es auténtica y autorizo su revisión para fines operativos y de seguridad.</span></label>
+    </section>`;
+
+  function field(key, label, type = 'text', placeholder = '', required = true) {
+    return `<label class="driver-application-field"><span>${label} ${required?'*':''}</span><input data-field="${key}" type="${type}" value="${escapeHtml(values[key])}" placeholder="${escapeHtml(placeholder)}" ${required?'required':''}></label>`;
+  }
+
+  const bind = () => {
+    overlay.querySelector('[data-close]')?.addEventListener('click', close);
+    overlay.querySelector('[data-back]')?.addEventListener('click', () => { capture(); step -= 1; render(); });
+    overlay.querySelector('[data-next]')?.addEventListener('click', () => {
+      const error = validateStep();
+      if (error) return showToast(error, 'error');
+      step += 1; render();
+    });
+    overlay.querySelectorAll('[data-document]').forEach(input => input.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (file.size > 5 * 1024 * 1024) return showToast('El archivo supera el máximo de 5 MB.', 'error');
+      if (!['image/jpeg','image/png','image/webp','application/pdf'].includes(file.type)) return showToast('Formato de archivo no permitido.', 'error');
+      const previous = files.get(event.target.dataset.document);
+      if (previous?.preview) URL.revokeObjectURL(previous.preview);
+      files.set(event.target.dataset.document, { file, preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null });
+      render();
+    }));
+    overlay.querySelector('[data-submit]')?.addEventListener('click', submit);
+  };
+
+  const submit = async () => {
+    if (submitting) return;
+    if (!overlay.querySelector('#driver-terms')?.checked) return showToast('Debes confirmar que la información es auténtica.', 'error');
+    submitting = true; render();
+    const form = new FormData();
+    Object.entries(values).forEach(([key,value]) => form.append(key, value));
+    files.forEach((item,key) => form.append(key, item.file));
+    const result = await apiService.postForm('/driver-applications', form);
+    submitting = false;
+    if (!result?.user || !result?.token) {
+      const error = apiService.lastError;
+      if (error?.error === 'USER_EXISTS') showToast('El correo o teléfono ya está registrado.', 'error');
+      else if (error?.error === 'MISSING_DOCUMENTS') showToast('Faltan documentos obligatorios.', 'error');
+      else showToast(error?.fields ? Object.values(error.fields)[0] : 'No se pudo enviar la solicitud. Inténtalo nuevamente.', 'error');
+      render(); return;
+    }
+    authService.acceptSession(result.user, result.token);
+    showToast('Solicitud enviada. El equipo de +58Express comenzará la revisión.', 'success', 6000);
+    files.forEach(item => item.preview && URL.revokeObjectURL(item.preview));
+    overlay.remove();
+    onSuccess?.(result);
+  };
+
+  const render = () => {
+    overlay.innerHTML = `<div class="driver-application-modal"><header><div><span>SOLICITUD DE CONDUCTOR</span><h2>Trabaja con +58Express</h2></div><button data-close aria-label="Cerrar">${icon('close',20)}</button></header><div class="driver-application-progress">${[1,2,3,4].map((number,index)=>`<div class="${step>=number?'active':''}"><i>${number}</i><span>${['Personal','Vehículo','Documentos','Confirmación'][index]}</span></div>`).join('')}</div><main>${step===1?personalStep():step===2?vehicleStep():step===3?documentsStep():confirmationStep()}</main><footer>${step>1?`<button class="secondary" data-back ${submitting?'disabled':''}>${icon('chevronLeft',17)} Atrás</button>`:'<span></span>'}${step<4?`<button class="primary" data-next>Siguiente ${icon('arrowRight',17)}</button>`:`<button class="primary" data-submit ${submitting?'disabled':''}>${submitting?'Enviando de forma segura…':`${icon('check',17)} Enviar solicitud`}</button>`}</footer></div>`;
+    bind();
+  };
+
+  render();
+  return overlay;
 }

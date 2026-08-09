@@ -42,9 +42,37 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
     assert.equal(response.status, 200);
     return (await response.json()).token;
   };
-  const passengerToken = await login('pasajero@58express.com', 'password123', 'passenger');
-  const driverToken = await login('conductor@58express.com', 'password123', 'driver');
   const adminToken = await login('admin@58express.com', 'admin', 'admin');
+  const passengerRegistration = await fetch(`${url}/api/auth/register`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({email:'pasajero.real@58express.com',phone:'+584120003333',password:'password123',role:'passenger',firstName:'Ana',lastName:'Cliente'}) });
+  assert.equal(passengerRegistration.status, 201);
+  const passengerAccount = await passengerRegistration.json();
+  const driverCreation = await fetch(`${url}/api/admin/drivers`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`}, body:JSON.stringify({email:'conductor.real@58express.com',phone:'+584140004444',firstName:'Carlos',lastName:'Conductor',vehicleBrand:'Bera',vehicleModel:'BR200',vehiclePlate:'TEST58'}) });
+  assert.equal(driverCreation.status, 201);
+  const driverAccount = await driverCreation.json();
+  const passengerToken = passengerAccount.token;
+  const driverToken = await login('conductor.real@58express.com', driverAccount.temporaryPassword, 'driver');
+  const passengerId = passengerAccount.user.id;
+  const driverId = driverAccount.user.id;
+  const walletBefore = await fetch(`${url}/api/wallet/me`, { headers:{ authorization:`Bearer ${passengerToken}` } });
+  assert.equal((await walletBefore.json()).balance, 0);
+  const topupResponse = await fetch(`${url}/api/wallet/topups`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({amount:10,reference:'12345678'}) });
+  assert.equal(topupResponse.status, 201);
+  const topup = await topupResponse.json();
+  const walletPending = await fetch(`${url}/api/wallet/me`, { headers:{ authorization:`Bearer ${passengerToken}` } });
+  assert.equal((await walletPending.json()).balance, 0);
+  const approveTopup = await fetch(`${url}/api/admin/transactions/${topup.id}`, { method:'PATCH', headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`}, body:JSON.stringify({status:'APPROVED'}) });
+  assert.equal(approveTopup.status, 200);
+  const scheduledResponse = await fetch(`${url}/api/trips/scheduled`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({pickup:{address:'Vereda del Lago'},destination:{address:'Sambil Maracaibo'},scheduledAt:new Date(Date.now()+60*60*1000).toISOString(),fareUSD:4.5,rideType:'MOTO'}) });
+  assert.equal(scheduledResponse.status, 201);
+  const scheduledTrip = await scheduledResponse.json();
+  const claimScheduled = await fetch(`${url}/api/trips/scheduled/${scheduledTrip.id}/claim`, { method:'POST', headers:{authorization:`Bearer ${driverToken}`}});
+  assert.equal(claimScheduled.status, 200);
+  assert.equal((await claimScheduled.json()).driverId, driverId);
+  const cancellableSchedule = await fetch(`${url}/api/trips/scheduled`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({pickup:{address:'La Limpia'},destination:{address:'Vereda del Lago'},scheduledAt:new Date(Date.now()+2*60*60*1000).toISOString(),fareUSD:5,rideType:'MOTO'}) });
+  const cancellableTrip = await cancellableSchedule.json();
+  const cancelSchedule = await fetch(`${url}/api/trips/scheduled/${cancellableTrip.id}`, { method:'DELETE', headers:{authorization:`Bearer ${passengerToken}`} });
+  assert.equal(cancelSchedule.status, 200);
+  assert.equal((await cancelSchedule.json()).status, 'CANCELLED');
   const passenger = io(url, { auth: { token: passengerToken } });
   const driver = io(url, { auth: { token: driverToken } });
   const admin = io(url, { auth: { token: adminToken } });
@@ -54,10 +82,11 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   admin.on('rideRequested', trip => {
     if (trip.id === 'test_trip') adminSawRequest = true;
   });
-  driver.on('connect', () => driver.emit('driver:connect', { userId: 'd1', status: 'AVAILABLE' }));
+  driver.on('connect', () => driver.emit('driver:connect', { userId: driverId, status: 'AVAILABLE' }));
+  driver.on('driver:connected', () => driver.emit('driver:location', { latitude: 10.6428, longitude: -71.6126, heading: 0 }));
   driver.on('rideRequested', trip => {
     if (trip.id === 'test_trip') {
-      driver.emit('rideAccepted', { tripId: trip.id, driver: { id: 'd1', firstName: 'Carlos' } });
+      driver.emit('rideAccepted', { tripId: trip.id, driver: { id: driverId, firstName: 'Carlos' } });
     }
   });
 
@@ -66,6 +95,7 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
     new Promise(resolve => driver.on('driver:connected', resolve)),
     new Promise(resolve => admin.on('connect', resolve))
   ]);
+  await new Promise(resolve => setTimeout(resolve, 100));
 
   const updatePromise = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('No llegó la asignación')), 5000);
@@ -79,7 +109,7 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
 
   passenger.emit('rideRequested', {
     id: 'test_trip',
-    passengerId: 'p1',
+    passengerId,
     pickup: { lat: 10.6427, lng: -71.6125 },
     destination: { lat: 10.65, lng: -71.60 },
     fareEUR: 4.5
@@ -87,12 +117,12 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
 
   const update = await updatePromise;
   assert.equal(adminSawRequest, true);
-  assert.equal(update.driver.id, 'd1');
+  assert.equal(update.driver.id, driverId);
 
   const locationPromise = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('No llegó el GPS del conductor')), 5000);
     passenger.on('driverLocationUpdated', location => {
-      if (location.tripId === 'test_trip' && location.driverId === 'd1') {
+      if (location.tripId === 'test_trip' && location.driverId === driverId) {
         clearTimeout(timeout);
         resolve(location);
       }
@@ -113,7 +143,7 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   });
   passenger.emit('passenger:location_update', { latitude: 10.644, longitude: -71.614 });
   const passengerLocation = await passengerLocationPromise;
-  assert.equal(passengerLocation.passengerId, 'p1');
+  assert.equal(passengerLocation.passengerId, passengerId);
 
   const activeResponse = await fetch(`${url}/api/trips/active/me`, {
     headers: { authorization: `Bearer ${passengerToken}` }
@@ -132,7 +162,7 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   });
   passenger.emit('chat:send_message', { tripId: 'test_trip', text: 'Voy saliendo' });
   const message = await chatPromise;
-  assert.equal(message.senderId, 'p1');
+  assert.equal(message.senderId, passengerId);
 
   const historyResponse = await fetch(`${url}/api/trips/test_trip/messages`, {
     headers: { authorization: `Bearer ${passengerToken}` }
@@ -156,11 +186,28 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   driver.emit('tripStatusUpdated', { tripId: 'test_trip', status: 'COMPLETED' });
   await completedPromise;
 
+  const driverWalletResponse = await fetch(`${url}/api/wallet/me`, { headers:{authorization:`Bearer ${driverToken}`} });
+  const driverWallet = await driverWalletResponse.json();
+  assert.ok(driverWallet.balance > 0);
+  const payoutResponse = await fetch(`${url}/api/wallet/payouts`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${driverToken}`}, body:JSON.stringify({amount:driverWallet.balance}) });
+  assert.equal(payoutResponse.status, 201);
+  const payout = await payoutResponse.json();
+  const approvePayout = await fetch(`${url}/api/admin/transactions/${payout.id}`, { method:'PATCH', headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`}, body:JSON.stringify({status:'APPROVED'}) });
+  assert.equal(approvePayout.status, 200);
+  assert.equal((await approvePayout.json()).balance, 0);
+
   const pendingReviewResponse = await fetch(`${url}/api/trips/pending-review/me`, {
     headers: { authorization: `Bearer ${passengerToken}` }
   });
   assert.equal(pendingReviewResponse.status, 200);
   assert.equal((await pendingReviewResponse.json()).trip.id, 'test_trip');
+
+  const passengerHistoryResponse = await fetch(`${url}/api/trips/me/history`, { headers:{authorization:`Bearer ${passengerToken}`} });
+  const passengerHistory = await passengerHistoryResponse.json();
+  assert.equal(passengerHistoryResponse.status, 200);
+  assert.ok(passengerHistory.some(trip => trip.id === 'test_trip'));
+  const driverHistoryResponse = await fetch(`${url}/api/trips/me/history`, { headers:{authorization:`Bearer ${driverToken}`} });
+  assert.ok((await driverHistoryResponse.json()).some(trip => trip.id === 'test_trip'));
 
   const ratingPromise = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('No se registró la calificación del pasajero')), 5000);

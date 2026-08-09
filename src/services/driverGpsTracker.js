@@ -1,5 +1,5 @@
 import { socketClient } from './socketClient.js';
-import { authService } from './mockAuth.js';
+import { authService } from './authService.js';
 import { apiService } from './apiService.js';
 import { eventLogger } from '../utils/logger.js';
 import { showToast } from '../components/toast.js';
