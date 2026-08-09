@@ -69,6 +69,9 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   assert.equal(duplicateApproval.status, 409);
   const walletCredited = await fetch(`${url}/api/wallet/me`, { headers:{ authorization:`Bearer ${passengerToken}` } });
   assert.equal((await walletCredited.json()).balance, 10);
+  const unaffordableRide = await fetch(`${url}/api/trips/create`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({id:'too_expensive',pickup:{lat:10.6427,lng:-71.6125},destination:{lat:10.65,lng:-71.60},fareUSD:25,paymentMethod:'wallet'}) });
+  assert.equal(unaffordableRide.status, 402);
+  assert.equal((await unaffordableRide.json()).error, 'INSUFFICIENT_WALLET_BALANCE');
   const scheduledResponse = await fetch(`${url}/api/trips/scheduled`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({pickup:{address:'Vereda del Lago'},destination:{address:'Sambil Maracaibo'},scheduledAt:new Date(Date.now()+60*60*1000).toISOString(),fareUSD:4.5,rideType:'MOTO'}) });
   assert.equal(scheduledResponse.status, 201);
   const scheduledTrip = await scheduledResponse.json();
@@ -119,7 +122,8 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
     passengerId,
     pickup: { lat: 10.6427, lng: -71.6125 },
     destination: { lat: 10.65, lng: -71.60 },
-    fareEUR: 4.5
+    fareEUR: 4.5,
+    paymentMethod: 'wallet'
   });
 
   const update = await updatePromise;
@@ -192,6 +196,19 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   await new Promise(resolve => setTimeout(resolve, 80));
   driver.emit('tripStatusUpdated', { tripId: 'test_trip', status: 'COMPLETED' });
   await completedPromise;
+
+  const passengerWalletResponse = await fetch(`${url}/api/wallet/me`, { headers:{authorization:`Bearer ${passengerToken}`} });
+  const passengerWallet = await passengerWalletResponse.json();
+  assert.equal(passengerWallet.balance, 5.5);
+  const ridePayments = passengerWallet.transactions.filter(transaction => transaction.type === 'RIDE_PAYMENT' && transaction.tripId === 'test_trip');
+  assert.equal(ridePayments.length, 1);
+  assert.equal(ridePayments[0].amount, -4.5);
+  driver.emit('tripStatusUpdated', { tripId: 'test_trip', status: 'COMPLETED' });
+  await new Promise(resolve => setTimeout(resolve, 80));
+  const walletAfterDuplicateCompletion = await fetch(`${url}/api/wallet/me`, { headers:{authorization:`Bearer ${passengerToken}`} });
+  const walletAfterDuplicate = await walletAfterDuplicateCompletion.json();
+  assert.equal(walletAfterDuplicate.balance, 5.5);
+  assert.equal(walletAfterDuplicate.transactions.filter(transaction => transaction.type === 'RIDE_PAYMENT' && transaction.tripId === 'test_trip').length, 1);
 
   const driverWalletResponse = await fetch(`${url}/api/wallet/me`, { headers:{authorization:`Bearer ${driverToken}`} });
   const driverWallet = await driverWalletResponse.json();

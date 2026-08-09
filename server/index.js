@@ -226,6 +226,60 @@ function signToken(user) {
   return jwt.sign({ sub: user.id, role: user.role }, jwtSecret, { expiresIn: '7d' });
 }
 
+const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+const tripFareUSD = trip => Math.max(0, roundMoney(trip?.fareUSD || trip?.fareEUR || trip?.pricing?.fareUSD || 0));
+const isWalletPayment = paymentMethod => ['WALLET', 'BILLETERA', 'BILLETERA EXPRESS'].includes(
+  String(paymentMethod || '').trim().replaceAll('_', ' ').toUpperCase()
+);
+
+function ensureWalletCanCoverTrip(trip, passenger) {
+  if (!isWalletPayment(trip?.paymentMethod)) return;
+  if (trip?.id && database.transactions.some(item => item.type === 'RIDE_PAYMENT' && item.tripId === trip.id)) return;
+  const fare = tripFareUSD(trip);
+  const balance = roundMoney(passenger?.walletBalance || 0);
+  if (!passenger || fare <= 0 || balance < fare) {
+    const error = new Error('INSUFFICIENT_WALLET_BALANCE');
+    error.code = 'INSUFFICIENT_WALLET_BALANCE';
+    error.balance = balance;
+    error.required = fare;
+    throw error;
+  }
+}
+
+function debitPassengerWalletForCompletedTrip(trip) {
+  if (!trip || trip.status !== TRIP_STATUS.COMPLETED || !isWalletPayment(trip.paymentMethod)) return null;
+  const existing = database.transactions.find(item => item.type === 'RIDE_PAYMENT' && item.tripId === trip.id);
+  if (existing) return existing;
+
+  const passenger = database.users.find(user => user.id === trip.passengerId);
+  ensureWalletCanCoverTrip(trip, passenger);
+  const fare = tripFareUSD(trip);
+  passenger.walletBalance = roundMoney(Number(passenger.walletBalance || 0) - fare);
+  trip.passengerWalletDebitUSD = fare;
+  const transaction = {
+    id: `transaction_${crypto.randomUUID()}`,
+    userId: passenger.id,
+    tripId: trip.id,
+    type: 'RIDE_PAYMENT',
+    amount: -fare,
+    currency: 'USD',
+    status: 'APPROVED',
+    balanceAfter: passenger.walletBalance,
+    createdAt: new Date().toISOString()
+  };
+  database.transactions.push(transaction);
+  database.notifications.push({
+    id: `notification_${crypto.randomUUID()}`,
+    userId: passenger.id,
+    title: 'Pago de viaje realizado',
+    message: `Se descontaron $${fare.toFixed(2)} de tu Billetera Express. Saldo disponible: $${passenger.walletBalance.toFixed(2)}.`,
+    category: 'FINANCE',
+    read: false,
+    createdAt: transaction.createdAt
+  });
+  return transaction;
+}
+
 function creditCompletedTrip(trip) {
   if (!trip || trip.status !== TRIP_STATUS.COMPLETED || database.transactions.some(item => item.type === 'DRIVER_EARNING' && item.tripId === trip.id)) return;
   const driver = database.users.find(user => user.id === trip.driverId);
@@ -236,6 +290,21 @@ function creditCompletedTrip(trip) {
   driver.walletBalance = Math.round((Number(driver.walletBalance || 0) + net) * 100) / 100;
   trip.driverEarningUSD = net;
   database.transactions.push({ id:`transaction_${crypto.randomUUID()}`, userId:driver.id, tripId:trip.id, type:'DRIVER_EARNING', amount:net, gross, commission, currency:'USD', status:'APPROVED', createdAt:new Date().toISOString() });
+}
+
+function settleCompletedTrip(trip) {
+  const passengerTransaction = debitPassengerWalletForCompletedTrip(trip);
+  creditCompletedTrip(trip);
+  return passengerTransaction;
+}
+
+function emitPassengerWalletUpdate(trip, transaction) {
+  if (!transaction) return;
+  const passenger = database.users.find(user => user.id === trip.passengerId);
+  io.to(`user:${trip.passengerId}`).emit('wallet:updated', {
+    balance: roundMoney(passenger?.walletBalance || 0),
+    transaction
+  });
 }
 
 function requireAuth(req, res, next) {
@@ -767,6 +836,13 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) 
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
   const allowedStatuses = ['CANCELLED', 'COMPLETED'];
   if (!allowedStatuses.includes(req.body.status)) return res.status(400).json({ error: 'INVALID_STATUS' });
+  if (req.body.status === TRIP_STATUS.COMPLETED) {
+    try {
+      ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
+    } catch (error) {
+      return res.status(402).json({ error: error.code, balance: error.balance, required: error.required });
+    }
+  }
   try {
     transitionTrip(trip, req.body.status, { actorId: req.user.id, actorRole: 'admin' });
   } catch (error) {
@@ -776,8 +852,9 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) 
   tripLocks.delete(trip.id);
   const driver = database.users.find(user => user.id === trip.driverId);
   if (driver) driver.status = 'AVAILABLE';
-  if (trip.status === TRIP_STATUS.COMPLETED) creditCompletedTrip(trip);
+  const passengerTransaction = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
   persistDatabase();
+  emitPassengerWalletUpdate(trip, passengerTransaction);
   io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
     tripId: trip.id,
     status: trip.status
@@ -909,6 +986,11 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
     }, pricingConfig);
     trip.fareUSD = trip.pricing.fareUSD;
     trip.fareVES = trip.pricing.fareVES;
+  }
+  try {
+    ensureWalletCanCoverTrip(trip, req.user);
+  } catch (error) {
+    return res.status(402).json({ error: error.code, balance: error.balance, required: error.required });
   }
   database.trips.push(trip);
   persistDatabase();
@@ -1167,6 +1249,12 @@ io.on('connection', (socket) => {
     tripData.pickup = pickup;
     tripData.destination = destination;
     tripData.passengerId = socket.data.auth.userId;
+    try {
+      ensureWalletCanCoverTrip(tripData, database.users.find(user => user.id === socket.data.auth.userId));
+    } catch (error) {
+      socket.emit('rideRequestFailed', { tripId: tripData?.id, reason: error.code, balance: error.balance, required: error.required });
+      return;
+    }
     console.log(`[+58express Socket.IO] Passenger requested ride [${tripData.id}]`);
     const existing = database.trips.find(t => t.id === tripData.id);
     const trip = existing || {
@@ -1257,6 +1345,14 @@ io.on('connection', (socket) => {
       return;
     }
     if (trip) {
+      if (status === TRIP_STATUS.COMPLETED) {
+        try {
+          ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
+        } catch (error) {
+          socket.emit('tripStatusRejected', { tripId, status, error: error.code, balance: error.balance, required: error.required });
+          return;
+        }
+      }
       try {
         transitionTrip(trip, status, { actorId: socket.data.auth.userId, actorRole: 'driver' });
       } catch (error) {
@@ -1268,8 +1364,9 @@ io.on('connection', (socket) => {
         if (assignedDriver) assignedDriver.status = 'AVAILABLE';
         tripLocks.delete(tripId);
       }
-      if (trip.status === TRIP_STATUS.COMPLETED) creditCompletedTrip(trip);
+      const passengerTransaction = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
       persistDatabase();
+      emitPassengerWalletUpdate(trip, passengerTransaction);
     }
     io.to(`user:${trip?.passengerId}`).to('drivers').to('admins').emit('tripStatusUpdated', data);
   });
