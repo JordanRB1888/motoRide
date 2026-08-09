@@ -302,10 +302,12 @@ export function renderPassengerApp(container) {
 
   function showManualPickupBanner() {
     manualPickupBanner?.classList.remove('hidden');
+    container.classList.add('manual-pickup-mode');
   }
 
   function hideManualPickupBanner() {
     manualPickupBanner?.classList.add('hidden');
+    container.classList.remove('manual-pickup-mode');
   }
 
   function beginManualPickupSelection(place) {
@@ -316,7 +318,6 @@ export function renderPassengerApp(container) {
     mapComponent.addMarker([Number(place.lat), Number(place.lon)], 'destination');
     bottomSheet.collapse();
     showManualPickupBanner();
-    showToast('Toca el mapa exactamente donde quieres que llegue el conductor.', 'warning', 6500);
   }
 
   function cancelManualPickupSelection() {
@@ -612,21 +613,15 @@ export function renderPassengerApp(container) {
 
     let origin = originOverride;
     if (!origin) {
-      showToast('Obteniendo tu ubicación actual para calcular la ruta...', 'info');
+      const locationToast = showToast('Obteniendo tu ubicación actual para calcular la ruta...', 'info', 10000);
       try {
         origin = await getPassengerOrigin();
       } catch (error) {
-        const permissionState = await getGeolocationPermissionState();
-        if (permissionState === 'prompt') {
-          showToast('Puedes pulsar “Listo” para usar el GPS o marcar tu recogida directamente en el mapa.', 'info', 6500);
-        } else if (permissionState === 'denied') {
-          showToast('El GPS está bloqueado. Marca manualmente dónde debe recogerte el conductor.', 'warning', 6500);
-        } else {
-          showToast('No recibimos señal GPS. Marca manualmente tu punto de recogida.', 'warning', 6500);
-        }
+        locationToast?.close();
         beginManualPickupSelection(place);
         return;
       }
+      locationToast?.close();
     }
     if (selectionId !== destinationSelectionId || !origin) return;
 

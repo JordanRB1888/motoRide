@@ -129,6 +129,9 @@ export function showToast(message, type = 'info', duration = 3200) {
   }, duration);
 
   toast.dataset.timeoutId = timeoutId;
+  return {
+    close: () => closeToast(toast)
+  };
 }
 
 function closeToast(toast) {
