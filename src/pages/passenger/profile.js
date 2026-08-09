@@ -24,8 +24,16 @@ export function renderProfile(container) {
   };
 
   const render = () => {
+    const fullName = `${user.firstName || 'Pasajero'} ${user.lastName || ''}`.trim();
+    const registeredAt = new Date(user.createdAt || Date.now()).toLocaleDateString('es-VE', {
+      day: '2-digit', month: '2-digit', year: 'numeric'
+    });
+
     container.innerHTML = `<div class="profile-page real-profile-page fade-in">
-      <header class="real-profile-heading"><div><span>CUENTA +58EXPRESS</span><h2>Mi perfil</h2></div><b>${icon('check',14)} Cuenta activa</b></header>
+      <header class="real-profile-heading">
+        <div><span>CUENTA +58EXPRESS</span><h2>Mi perfil</h2></div>
+        <b>${icon('check',14)} Cuenta activa</b>
+      </header>
       <section class="real-profile-card">
         <div class="real-profile-accent"></div>
         <div class="real-profile-avatar">
@@ -33,15 +41,21 @@ export function renderProfile(container) {
           <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
           <button id="profile-photo-button" type="button">${icon('camera',15)} Cambiar foto</button>
         </div>
-        <h3>${user.firstName || ''} ${user.lastName || ''}</h3>
-        <p>Pasajero registrado desde ${new Date(user.createdAt || Date.now()).toLocaleDateString('es-VE')}</p>
+        <h3>${fullName}</h3>
+        <div class="real-profile-verified">${icon('checkCircle',13)} Cuenta verificada</div>
+        <p>Pasajero registrado desde ${registeredAt}</p>
         <div class="real-profile-details">
           <label><span>${icon('phone',15)} Teléfono</span><strong>${user.phone || 'Sin registrar'}</strong></label>
           <label><span>${icon('message',15)} Correo</span><strong>${user.email || 'Sin registrar'}</strong></label>
           <label><span>${icon('shield',15)} Cédula / ID</span><strong>${user.cedula || 'Sin registrar'}</strong></label>
         </div>
-        <div class="real-profile-stats"><article><small>VIAJES</small><strong>${Number(user.totalTrips || 0)}</strong></article><article><small>CALIFICACIÓN</small><strong>${Number(user.rating || 5).toFixed(1)} ★</strong></article></div>
-        <button id="profile-edit-toggle" class="real-profile-secondary" type="button">${icon('edit',16)} ${editing ? 'Cancelar edición' : 'Editar datos personales'}</button>
+        <div class="real-profile-stats">
+          <article><span>${icon('route',18)}</span><div><small>VIAJES</small><strong>${Number(user.totalTrips || 0)}</strong></div></article>
+          <article><span>${icon('starFilled',18)}</span><div><small>CALIFICACIÓN</small><strong>${Number(user.rating || 5).toFixed(1)}</strong></div></article>
+        </div>
+        <button id="profile-edit-toggle" class="real-profile-secondary real-profile-action" type="button">
+          <span>${icon('edit',16)} ${editing ? 'Cancelar edición' : 'Editar datos personales'}</span>${icon('chevronRight',16)}
+        </button>
       </section>
       ${editing ? `<form id="profile-edit-form" class="real-profile-form">
         <h3>Información personal</h3>
@@ -51,8 +65,14 @@ export function renderProfile(container) {
         <button type="submit">${icon('check',16)} Guardar cambios</button>
       </form>` : ''}
       ${user.driverApplicationId ? '<div id="driver-application-status-slot"></div>' : ''}
-      <button id="passenger-support-btn" class="real-profile-support" type="button">${icon('message',17)} Atención directa con administración</button>
-      <button id="profile-logout-btn" class="real-profile-logout" type="button">${icon('logout',17)} Cerrar sesión</button>
+      <button id="passenger-support-btn" class="real-profile-support real-profile-action" type="button">
+        <span class="real-profile-action-icon">${icon('message',18)}</span>
+        <span><strong>Atención directa con administración</strong><small>Soporte para tu cuenta, pagos o viajes</small></span>
+        ${icon('chevronRight',17)}
+      </button>
+      <button id="profile-logout-btn" class="real-profile-logout real-profile-action" type="button">
+        <span>${icon('logout',17)} Cerrar sesión</span>${icon('chevronRight',17)}
+      </button>
     </div>`;
 
     hydrateAvatar();
