@@ -503,13 +503,32 @@ app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => 
   });
 });
 
-app.get('/api/drivers/nearby', requireAuth, requireRole('admin'), (req, res) => {
-  res.json(database.users.filter(user => user.role === 'driver').map(driver => ({
-    ...publicUser(driver),
-    ...(driver.location || {}),
-    driverId: driver.id,
-    driverName: `${driver.firstName || ''} ${driver.lastName || ''}`.trim()
-  })));
+app.get('/api/drivers/nearby', requireAuth, (req, res) => {
+  const drivers = database.users.filter(user => user.role === 'driver');
+  if (req.user.role === 'admin') {
+    return res.json(drivers.map(driver => ({
+      ...publicUser(driver),
+      ...(driver.location || {}),
+      driverId: driver.id,
+      driverName: `${driver.firstName || ''} ${driver.lastName || ''}`.trim()
+    })));
+  }
+
+  res.json(drivers
+    .filter(driver => ['AVAILABLE', 'ONLINE'].includes(driver.status) && Number.isFinite(driver.location?.lat) && Number.isFinite(driver.location?.lng))
+    .map(driver => ({
+      id: driver.id,
+      driverId: driver.id,
+      firstName: driver.firstName || 'Conductor',
+      photoUrl: driver.photoUrl || null,
+      rating: Number(driver.rating || 0),
+      vehicleType: driver.vehicleType || 'MOTO',
+      status: driver.status,
+      lat: driver.location.lat,
+      lng: driver.location.lng,
+      heading: Number(driver.location.heading || 0),
+      updatedAt: driver.location.updatedAt || null
+    })));
 });
 
 app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), (req, res) => {

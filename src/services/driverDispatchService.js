@@ -74,8 +74,11 @@ class DriverDispatchService {
     let driver = this.driverRegistry.get(driverId);
     if (!driver) {
       const dbUser = db.query('users', { id: driverId })[0];
-      if (!dbUser) return null;
-      driver = this.registerDriver(dbUser);
+      driver = this.registerDriver(dbUser || {
+        id: driverId,
+        firstName: 'Conductor',
+        status: 'AVAILABLE'
+      });
     }
 
     driver.location = {

@@ -103,6 +103,7 @@ export class MapComponent {
 
     this.locateBtn = document.createElement('button');
     this.locateBtn.className = 'gps-locate-btn';
+    this.locateBtn.setAttribute('aria-label', 'Centrar mi ubicación');
     this.locateBtn.title = 'Ir a mi ubicación actual';
     this.locateBtn.innerHTML = `🎯`;
     Object.assign(this.locateBtn.style, {
@@ -200,15 +201,15 @@ export class MapComponent {
       return this.markers.get(id);
     }
     
+    const vehicleType = String(info.vehicleType || info.rideType || 'MOTO').toUpperCase();
+    const vehicleGlyph = vehicleType === 'CAR' ? icon('car', 19) : icon('bike', 19);
     const svgIcon = L.divIcon({
       className: 'driver-3d-marker',
       html: `
         <div class="moto-3d-badge">
           <div class="moto-3d-shadow"></div>
-          <div class="moto-3d-body" style="transform: rotate(${heading}deg);">
-            <svg class="moto-3d-arrow" viewBox="0 0 24 24">
-              <path d="M12 2L19 21L12 17L5 21L12 2Z"/>
-            </svg>
+          <div class="moto-3d-body" data-heading="${Number(heading) || 0}">
+            <span class="moto-vehicle-icon">${vehicleGlyph}</span>
           </div>
         </div>
       `,
@@ -230,7 +231,7 @@ export class MapComponent {
       this.setPickupMarker(coords[0], coords[1]);
     } else {
       const id = 'marker_' + Math.random();
-      this.addDriverMarker(id, coords[0], coords[1], Math.floor(Math.random() * 360));
+      this.addDriverMarker(id, coords[0], coords[1], Number(options.heading || 0), options);
     }
   }
 
@@ -253,9 +254,7 @@ export class MapComponent {
     if (!marker) return;
 
     const bodyEl = marker.getElement()?.querySelector('.moto-3d-body');
-    if (bodyEl) {
-      bodyEl.style.transform = `rotate(${heading}deg)`;
-    }
+    if (bodyEl) bodyEl.dataset.heading = String(Number(heading) || 0);
 
     this._animateMarker(marker, [lat, lng], 1500);
   }

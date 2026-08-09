@@ -1079,11 +1079,19 @@ export function renderPassengerApp(container) {
 
   // Track Driver's Real-Time GPS Location Stream
   socket.on('driverLocationUpdated', (locData) => {
-    if (!currentTrip || !currentDriver || locData?.tripId !== currentTrip.id) return;
-    if (locData.driverId !== currentDriver.id) return;
     const lat = Number(locData.lat ?? locData.latitude);
     const lng = Number(locData.lng ?? locData.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const driverId = locData.driverId || locData.userId;
+
+    if (!currentTrip || !currentDriver) {
+      if (driverId && ['IDLE', 'SELECTING_DESTINATION'].includes(currentState)) {
+        mapComponent.addDriverMarker(driverId, lat, lng, locData.heading || 0, locData);
+      }
+      return;
+    }
+    if (driverId !== currentDriver.id) return;
+    if (locData.tripId && locData.tripId !== currentTrip.id) return;
 
     mapComponent.addDriverMarker(currentDriver.id, lat, lng, locData.heading || 0, currentDriver);
     if (currentTrip?.pickup?.lat && currentTrip?.pickup?.lng) {
@@ -1165,13 +1173,26 @@ export function renderPassengerApp(container) {
     }
   }
 
-  function renderActiveDrivers() {
+  async function renderActiveDrivers() {
     mapComponent.clearMarkers();
-    const activeDrivers = db.query('users', { role: 'driver' });
+    const nearby = await apiService.get('/drivers/nearby');
+    const activeDrivers = Array.isArray(nearby) ? nearby : driverDispatchService.getAvailableDrivers();
     activeDrivers.forEach(driver => {
-      if (driver.location && driver.location.lat && driver.location.lng) {
-        mapComponent.addMarker([driver.location.lat, driver.location.lng], 'driver', { icon: 'motorcycle' });
-      }
+      const lat = Number(driver.location?.lat ?? driver.lat);
+      const lng = Number(driver.location?.lng ?? driver.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      driverDispatchService.registerDriver({
+        ...driver,
+        id: driver.id || driver.driverId,
+        location: { lat, lng, heading: Number(driver.heading || driver.location?.heading || 0) }
+      });
+      mapComponent.addDriverMarker(
+        driver.id || driver.driverId,
+        lat,
+        lng,
+        Number(driver.heading || driver.location?.heading || 0),
+        driver
+      );
     });
   }
 
