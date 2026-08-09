@@ -5,6 +5,9 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY index.js ./index.js
 COPY domain ./domain
+COPY routes ./routes
+COPY services ./services
+COPY migrations ./migrations
 
 EXPOSE 4000
 CMD ["node", "index.js"]
