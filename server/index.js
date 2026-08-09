@@ -403,7 +403,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     message: '+58express Real Backend Server Active 🇻🇪',
-    features: { livePassengerGpsOrigin: true },
+    features: { livePassengerGpsOrigin: true, idempotentWalletRideSettlement: true },
     timestamp: Date.now()
   });
 });
