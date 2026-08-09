@@ -60,8 +60,15 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   const topup = await topupResponse.json();
   const walletPending = await fetch(`${url}/api/wallet/me`, { headers:{ authorization:`Bearer ${passengerToken}` } });
   assert.equal((await walletPending.json()).balance, 0);
-  const approveTopup = await fetch(`${url}/api/admin/transactions/${topup.id}`, { method:'PATCH', headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`}, body:JSON.stringify({status:'APPROVED'}) });
+  const unconfirmedTopup = await fetch(`${url}/api/admin/transactions/${topup.id}`, { method:'PATCH', headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`}, body:JSON.stringify({status:'APPROVED'}) });
+  assert.equal(unconfirmedTopup.status, 400);
+  const approveTopup = await fetch(`${url}/api/admin/transactions/${topup.id}`, { method:'PATCH', headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`}, body:JSON.stringify({status:'APPROVED',referenceConfirmed:true,reviewNote:'Referencia validada en banco'}) });
   assert.equal(approveTopup.status, 200);
+  assert.equal((await approveTopup.json()).balance, 10);
+  const duplicateApproval = await fetch(`${url}/api/admin/transactions/${topup.id}`, { method:'PATCH', headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`}, body:JSON.stringify({status:'APPROVED',referenceConfirmed:true}) });
+  assert.equal(duplicateApproval.status, 409);
+  const walletCredited = await fetch(`${url}/api/wallet/me`, { headers:{ authorization:`Bearer ${passengerToken}` } });
+  assert.equal((await walletCredited.json()).balance, 10);
   const scheduledResponse = await fetch(`${url}/api/trips/scheduled`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({pickup:{address:'Vereda del Lago'},destination:{address:'Sambil Maracaibo'},scheduledAt:new Date(Date.now()+60*60*1000).toISOString(),fareUSD:4.5,rideType:'MOTO'}) });
   assert.equal(scheduledResponse.status, 201);
   const scheduledTrip = await scheduledResponse.json();

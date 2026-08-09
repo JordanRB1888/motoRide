@@ -498,6 +498,10 @@ app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => 
       pending: database.driverApplications.filter(item => item.status === 'pending').length,
       needsChanges: database.driverApplications.filter(item => item.status === 'needs_changes').length
     },
+    walletRequests: {
+      pendingTopups: database.transactions.filter(item => item.type === 'TOP_UP' && item.status === 'PENDING').length,
+      pendingPayouts: database.transactions.filter(item => item.type === 'PAYOUT' && item.status === 'PENDING').length
+    },
     averageRating: ratings.length ? Math.round(ratings.reduce((a, b) => a + b, 0) / ratings.length * 10) / 10 : null,
     bcvRate: Number(pricingConfig.bcvRate || 0)
   });
@@ -684,9 +688,15 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), (req
   if (!transaction) return res.status(404).json({ error:'TRANSACTION_NOT_FOUND' });
   const status = String(req.body.status || '').toUpperCase();
   if (!['APPROVED','REJECTED'].includes(status) || transaction.status !== 'PENDING') return res.status(409).json({ error:'INVALID_TRANSACTION_STATE' });
+  if (transaction.type === 'TOP_UP' && status === 'APPROVED' && req.body.referenceConfirmed !== true) {
+    return res.status(400).json({ error:'TOPUP_REFERENCE_CONFIRMATION_REQUIRED' });
+  }
   const owner = database.users.find(item => item.id === transaction.userId);
   if (status === 'APPROVED' && transaction.type === 'PAYOUT' && Number(owner?.walletBalance || 0) < transaction.amount) return res.status(409).json({ error:'INSUFFICIENT_BALANCE' });
-  transaction.status = status; transaction.reviewedBy = req.user.id; transaction.reviewedAt = new Date().toISOString();
+  transaction.status = status;
+  transaction.reviewedBy = req.user.id;
+  transaction.reviewedAt = new Date().toISOString();
+  transaction.reviewNote = sanitizeText(req.body.reviewNote, 500) || null;
   if (status === 'APPROVED' && owner && transaction.type === 'TOP_UP') owner.walletBalance = Math.round((Number(owner.walletBalance || 0) + transaction.amount) * 100) / 100;
   if (status === 'APPROVED' && owner && transaction.type === 'PAYOUT') {
     owner.walletBalance = Math.round((Number(owner.walletBalance || 0) - transaction.amount) * 100) / 100;
@@ -696,6 +706,7 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), (req
   database.notifications.push({ id:`notification_${crypto.randomUUID()}`, userId:transaction.userId, title:isPayout?(status==='APPROVED'?'Liquidación pagada':'Liquidación rechazada'):(status==='APPROVED'?'Recarga acreditada':'Recarga rechazada'), message:isPayout?(status==='APPROVED'?`Administración aprobó tu liquidación de $${transaction.amount.toFixed(2)}.`:'Administración rechazó la solicitud de liquidación.'):(status==='APPROVED'?`Se acreditaron $${transaction.amount.toFixed(2)} a tu billetera.`:'Administración no pudo validar la referencia enviada.'), category:'FINANCE', read:false, createdAt:new Date().toISOString() });
   persistDatabase();
   io.to(`user:${transaction.userId}`).emit('finance:topup_updated', transaction);
+  io.to('admins').emit('finance:transaction_updated', { id: transaction.id, type: transaction.type, status: transaction.status });
   res.json({ transaction, balance:Number(owner?.walletBalance || 0) });
 });
 
