@@ -15,6 +15,10 @@ const DOCUMENTS = [
 ];
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char]));
+const FIELD_STEPS = {
+  firstName:1,lastName:1,identityNumber:1,birthDate:1,phone:1,email:1,password:1,address:1,city:1,region:1,
+  vehicleBrand:2,vehicleModel:2,vehicleYear:2,vehicleColor:2,vehiclePlate:2
+};
 
 export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
   const overlay = document.createElement('div');
@@ -47,10 +51,18 @@ export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) return 'Introduce una dirección de correo válida.';
       if (values.phone.replace(/\D/g,'').length < 10) return 'Introduce un número telefónico válido.';
       if (values.password.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+      const identityDigits = values.identityNumber.replace(/\D/g, '');
+      if (identityDigits.length < 5 || identityDigits.length > 12) return 'Introduce una cédula válida; puedes escribirla con o sin puntos.';
+      const birth = new Date(`${values.birthDate}T00:00:00`);
+      const age = Number.isNaN(birth.getTime()) ? -1 : Math.floor((Date.now() - birth.getTime()) / 31557600000);
+      if (age < 18 || age > 80) return 'Para registrarte como conductor debes tener entre 18 y 80 años.';
     }
     if (step === 2) {
       const required = ['vehicleBrand','vehicleModel','vehicleYear','vehicleColor','vehiclePlate'];
       if (required.some(key => !String(values[key]).trim())) return 'Completa toda la información del vehículo.';
+      const year = Number(values.vehicleYear);
+      if (!Number.isInteger(year) || year < 1980 || year > new Date().getFullYear() + 1) return 'Introduce un año válido para el vehículo.';
+      if (!/^[A-Z0-9-]{4,12}$/i.test(values.vehiclePlate.replace(/\s+/g, ''))) return 'Introduce una placa válida, sin caracteres especiales.';
     }
     if (step === 3) {
       const missingDocument = DOCUMENTS.find(([key,,required]) => required && !files.has(key));
@@ -139,9 +151,15 @@ export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
     submitting = false;
     if (!result?.user || !result?.token) {
       const error = apiService.lastError;
-      if (error?.error === 'USER_EXISTS') showToast('El correo o teléfono ya está registrado.', 'error');
-      else if (error?.error === 'MISSING_DOCUMENTS') showToast('Faltan documentos obligatorios.', 'error');
-      else showToast(error?.fields ? Object.values(error.fields)[0] : 'No se pudo enviar la solicitud. Inténtalo nuevamente.', 'error');
+      const fieldName = error?.fields ? Object.keys(error.fields)[0] : null;
+      if (fieldName && FIELD_STEPS[fieldName]) step = FIELD_STEPS[fieldName];
+      if (error?.error === 'USER_EXISTS') showToast('Ese correo o teléfono pertenece a otra cuenta. Inicia sesión o utiliza tus datos correctos.', 'error', 7000);
+      else if (error?.error === 'EXISTING_ACCOUNT_AUTH_REQUIRED') showToast('Ya tienes cuenta de pasajero. Escribe la misma contraseña de esa cuenta para solicitar ser conductor.', 'error', 8000);
+      else if (error?.error === 'DRIVER_APPLICATION_EXISTS') showToast(`Ya existe una solicitud de conductor en estado “${error.applicationStatus || 'pendiente'}”. Inicia sesión como pasajero para revisarla.`, 'warning', 8000);
+      else if (error?.error === 'MISSING_DOCUMENTS') { step = 3; showToast('Faltan documentos obligatorios. Revisa los archivos marcados con *.', 'error', 7000); }
+      else if (error?.error === 'FILE_TOO_LARGE' || error?.status === 413) { step = 3; showToast('Uno de los archivos supera 5 MB. Reduce su tamaño y vuelve a intentarlo.', 'error', 8000); }
+      else if (error?.error === 'INVALID_FILE_TYPE') { step = 3; showToast('Un archivo no es válido. Usa JPG, PNG, WEBP o PDF.', 'error', 8000); }
+      else showToast(error?.fields ? Object.values(error.fields)[0] : 'No se pudo enviar la solicitud. Verifica tu conexión y vuelve a intentarlo.', 'error', 7000);
       render(); return;
     }
     authService.acceptSession(result.user, result.token);

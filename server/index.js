@@ -1456,6 +1456,9 @@ app.use((error, _req, res, _next) => {
   if (error instanceof multer.MulterError) {
     return res.status(400).json({ error: error.code === 'LIMIT_FILE_SIZE' ? 'FILE_TOO_LARGE' : 'UPLOAD_FAILED' });
   }
+  if (error?.code === 'INVALID_FILE_TYPE' || error?.message === 'INVALID_FILE_TYPE') {
+    return res.status(400).json({ error: 'INVALID_FILE_TYPE' });
+  }
   if (error?.message === 'ORIGIN_NOT_ALLOWED') return res.status(403).json({ error: 'ORIGIN_NOT_ALLOWED' });
   console.error('[+58express HTTP]', error);
   return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR' });

@@ -35,12 +35,18 @@ const text = (value, max = 160) => String(value ?? '')
   .trim()
   .slice(0, max);
 
+const normalizeIdentityNumber = value => {
+  const compact = text(value, 40).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const match = compact.match(/^([VEJPG]?)(\d{5,12})$/);
+  return match ? `${match[1] ? `${match[1]}-` : ''}${match[2]}` : compact;
+};
+
 export function normalizeDriverApplicationInput(input = {}) {
   return {
     personal: {
       firstName: text(input.firstName, 80),
       lastName: text(input.lastName, 80),
-      identityNumber: text(input.identityNumber, 40).toUpperCase(),
+      identityNumber: normalizeIdentityNumber(input.identityNumber),
       birthDate: text(input.birthDate, 10),
       phone: text(input.phone, 30),
       email: text(input.email, 180).toLowerCase(),

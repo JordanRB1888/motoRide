@@ -14,7 +14,12 @@ import {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: DRIVER_DOCUMENT_TYPES.length },
-  fileFilter: (_req, file, callback) => callback(null, ['image/jpeg','image/png','image/webp','application/pdf'].includes(file.mimetype))
+  fileFilter: (_req, file, callback) => {
+    if (['image/jpeg','image/png','image/webp','application/pdf'].includes(file.mimetype)) return callback(null, true);
+    const error = new Error('INVALID_FILE_TYPE');
+    error.code = 'INVALID_FILE_TYPE';
+    callback(error);
+  }
 });
 
 const uploadFields = upload.fields(DRIVER_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
@@ -75,15 +80,23 @@ export function createDriverApplicationsRouter({
     if (!validation.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: validation.errors });
     const { personal, vehicle } = validation.normalized;
     const phoneKey = personal.phone.replace(/\D/g, '');
-    const duplicate = database.users.some(user => user.email?.toLowerCase() === personal.email || String(user.phone || '').replace(/\D/g, '') === phoneKey);
-    if (duplicate) return res.status(409).json({ error: 'USER_EXISTS' });
+    const matchingUsers = database.users.filter(user => user.email?.toLowerCase() === personal.email || String(user.phone || '').replace(/\D/g, '') === phoneKey);
+    const existingUser = matchingUsers.length === 1 ? matchingUsers[0] : null;
+    if (matchingUsers.length > 1 || (existingUser && existingUser.role !== 'passenger')) return res.status(409).json({ error: 'USER_EXISTS' });
+    if (existingUser?.driverApplicationId) {
+      const existingApplication = database.driverApplications.find(item => item.id === existingUser.driverApplicationId);
+      return res.status(409).json({ error: 'DRIVER_APPLICATION_EXISTS', applicationStatus: existingApplication?.status || 'pending' });
+    }
+    if (existingUser && (!existingUser.passwordHash || !await bcrypt.compare(String(req.body.password || ''), existingUser.passwordHash))) {
+      return res.status(401).json({ error: 'EXISTING_ACCOUNT_AUTH_REQUIRED' });
+    }
 
     const files = Object.entries(req.files || {}).flatMap(([type, items]) => items.map(file => ({ type, file })));
     const missing = REQUIRED_DRIVER_DOCUMENTS.filter(type => !files.some(item => item.type === type));
     if (missing.length) return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
 
     const now = new Date().toISOString();
-    const userId = `passenger_${crypto.randomUUID()}`;
+    const userId = existingUser?.id || `passenger_${crypto.randomUUID()}`;
     const applicationId = `driver_application_${crypto.randomUUID()}`;
     const stored = [];
     try {
@@ -108,12 +121,13 @@ export function createDriverApplicationsRouter({
       return res.status(400).json({ error: error.code || 'UPLOAD_FAILED' });
     }
 
-    const passwordHash = await bcrypt.hash(String(req.body.password), 12);
-    if (database.users.some(item => item.email?.toLowerCase() === personal.email || String(item.phone || '').replace(/\D/g, '') === personal.phone.replace(/\D/g, ''))) {
+    const passwordHash = existingUser?.passwordHash || await bcrypt.hash(String(req.body.password), 12);
+    const conflictingUser = database.users.find(item => item.id !== userId && (item.email?.toLowerCase() === personal.email || String(item.phone || '').replace(/\D/g, '') === personal.phone.replace(/\D/g, '')));
+    if (conflictingUser) {
       stored.forEach(document => privateStorage.remove(document.storageKey));
       return res.status(409).json({ error: 'USER_EXISTS' });
     }
-    const user = {
+    const user = existingUser || {
       id: userId,
       role: 'passenger',
       firstName: personal.firstName,
@@ -136,6 +150,21 @@ export function createDriverApplicationsRouter({
       createdAt: now,
       updatedAt: now
     };
+    if (existingUser) {
+      Object.assign(user, {
+        firstName: personal.firstName,
+        lastName: personal.lastName,
+        email: personal.email,
+        phone: personal.phone,
+        cedula: personal.identityNumber,
+        birthDate: personal.birthDate,
+        address: personal.address,
+        city: personal.city,
+        region: personal.region,
+        driverApplicationId: applicationId,
+        updatedAt: now
+      });
+    }
     const application = {
       id: applicationId,
       userId,
@@ -150,7 +179,7 @@ export function createDriverApplicationsRouter({
       decisionReason: null,
       requestedChanges: []
     };
-    database.users.push(user);
+    if (!existingUser) database.users.push(user);
     database.driverApplications.push(application);
     database.driverDocuments.push(...stored);
     const adminNotification = createNotification({
