@@ -280,31 +280,72 @@ function debitPassengerWalletForCompletedTrip(trip) {
   return transaction;
 }
 
-function creditCompletedTrip(trip) {
-  if (!trip || trip.status !== TRIP_STATUS.COMPLETED || database.transactions.some(item => item.type === 'DRIVER_EARNING' && item.tripId === trip.id)) return;
+function settleDriverForCompletedTrip(trip) {
+  if (!trip || trip.status !== TRIP_STATUS.COMPLETED) return null;
+  const existing = database.transactions.find(item => ['DRIVER_EARNING', 'PLATFORM_COMMISSION'].includes(item.type) && item.tripId === trip.id);
+  if (existing) return existing;
   const driver = database.users.find(user => user.id === trip.driverId);
-  if (!driver) return;
-  const gross = Number(trip.fareUSD || trip.fareEUR || trip.pricing?.fareUSD || 0);
-  const commission = Math.round(gross * Number(pricingConfig.commissionRate || 0.15) * 100) / 100;
-  const net = Math.max(0, Math.round((gross - commission) * 100) / 100);
-  driver.walletBalance = Math.round((Number(driver.walletBalance || 0) + net) * 100) / 100;
+  if (!driver) return null;
+  const gross = tripFareUSD(trip);
+  const commission = roundMoney(gross * Number(pricingConfig.commissionRate || 0.15));
+  const net = Math.max(0, roundMoney(gross - commission));
+  const platformCollectedPayment = isWalletPayment(trip.paymentMethod);
+  const amount = platformCollectedPayment ? net : -commission;
+  driver.walletBalance = roundMoney(Number(driver.walletBalance || 0) + amount);
   trip.driverEarningUSD = net;
-  database.transactions.push({ id:`transaction_${crypto.randomUUID()}`, userId:driver.id, tripId:trip.id, type:'DRIVER_EARNING', amount:net, gross, commission, currency:'USD', status:'APPROVED', createdAt:new Date().toISOString() });
+  trip.platformCommissionUSD = commission;
+  trip.driverSettlementType = platformCollectedPayment ? 'WALLET_CREDIT' : 'COMMISSION_DEBIT';
+  const transaction = {
+    id: `transaction_${crypto.randomUUID()}`,
+    userId: driver.id,
+    tripId: trip.id,
+    type: platformCollectedPayment ? 'DRIVER_EARNING' : 'PLATFORM_COMMISSION',
+    amount,
+    gross,
+    commission,
+    net,
+    paymentMethod: trip.paymentMethod || 'efectivo',
+    currency: 'USD',
+    status: 'APPROVED',
+    balanceAfter: driver.walletBalance,
+    createdAt: new Date().toISOString()
+  };
+  database.transactions.push(transaction);
+  database.notifications.push({
+    id: `notification_${crypto.randomUUID()}`,
+    userId: driver.id,
+    title: platformCollectedPayment ? 'Ganancia acreditada' : 'Comisión de viaje registrada',
+    message: platformCollectedPayment
+      ? `Se acreditaron $${net.toFixed(2)} por el viaje. Saldo: $${driver.walletBalance.toFixed(2)}.`
+      : `Recibiste el pago directamente. Se descontó la comisión de +58Express por $${commission.toFixed(2)}. Saldo operativo: $${driver.walletBalance.toFixed(2)}.`,
+    category: 'FINANCE',
+    read: false,
+    createdAt: transaction.createdAt
+  });
+  return transaction;
 }
 
 function settleCompletedTrip(trip) {
   const passengerTransaction = debitPassengerWalletForCompletedTrip(trip);
-  creditCompletedTrip(trip);
-  return passengerTransaction;
+  const driverTransaction = settleDriverForCompletedTrip(trip);
+  return { passengerTransaction, driverTransaction };
 }
 
-function emitPassengerWalletUpdate(trip, transaction) {
-  if (!transaction) return;
-  const passenger = database.users.find(user => user.id === trip.passengerId);
-  io.to(`user:${trip.passengerId}`).emit('wallet:updated', {
-    balance: roundMoney(passenger?.walletBalance || 0),
-    transaction
-  });
+function emitCompletedTripWalletUpdates(trip, settlement) {
+  if (settlement?.passengerTransaction) {
+    const passenger = database.users.find(user => user.id === trip.passengerId);
+    io.to(`user:${trip.passengerId}`).emit('wallet:updated', {
+      balance: roundMoney(passenger?.walletBalance || 0),
+      transaction: settlement.passengerTransaction
+    });
+  }
+  if (settlement?.driverTransaction) {
+    const driver = database.users.find(user => user.id === trip.driverId);
+    io.to(`user:${trip.driverId}`).emit('wallet:updated', {
+      balance: roundMoney(driver?.walletBalance || 0),
+      transaction: settlement.driverTransaction
+    });
+  }
 }
 
 function requireAuth(req, res, next) {
@@ -406,7 +447,8 @@ app.get('/api/health', (req, res) => {
     features: {
       livePassengerGpsOrigin: true,
       idempotentWalletRideSettlement: true,
-      resilientDriverApplications: true
+      resilientDriverApplications: true,
+      driverCommissionDebtLedger: true
     },
     timestamp: Date.now()
   });
@@ -636,7 +678,7 @@ app.get('/api/admin/finance', requireAuth, requireRole('admin'), (req, res) => {
     const commission = Math.round(gross * commissionRate * 100) / 100;
     const driver = database.users.find(user => user.id === trip.driverId);
     const passenger = database.users.find(user => user.id === trip.passengerId);
-    return { id: trip.id, date: trip.completedAt || trip.closedAt || trip.updatedAt, gross, commission, driverNet: Math.round((gross - commission) * 100) / 100, payoutStatus: trip.payoutStatus || 'CREDITED', paymentMethod: trip.paymentMethod || 'EFECTIVO', driver: publicUser(driver), passenger: publicUser(passenger) };
+    return { id: trip.id, date: trip.completedAt || trip.closedAt || trip.updatedAt, gross, commission, driverNet: Math.round((gross - commission) * 100) / 100, settlementType:trip.driverSettlementType || (isWalletPayment(trip.paymentMethod) ? 'WALLET_CREDIT' : 'COMMISSION_DEBIT'), payoutStatus: trip.payoutStatus || 'CREDITED', paymentMethod: trip.paymentMethod || 'EFECTIVO', driver: publicUser(driver), passenger: publicUser(passenger) };
   }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   res.json({
     bcvRate: Number(pricingConfig.bcvRate || 0), commissionRate, transactions,
@@ -645,7 +687,9 @@ app.get('/api/admin/finance', requireAuth, requireRole('admin'), (req, res) => {
       gross: transactions.reduce((s, t) => s + t.gross, 0),
       commission: transactions.reduce((s, t) => s + t.commission, 0),
       pending: database.transactions.filter(t => t.type === 'PAYOUT' && t.status === 'PENDING').reduce((s, t) => s + t.amount, 0),
-      paid: database.transactions.filter(t => t.type === 'PAYOUT' && t.status === 'APPROVED').reduce((s, t) => s + t.amount, 0)
+      paid: database.transactions.filter(t => t.type === 'PAYOUT' && t.status === 'APPROVED').reduce((s, t) => s + t.amount, 0),
+      driverDebt: Math.abs(database.users.filter(user => user.role === 'driver' && Number(user.walletBalance || 0) < 0).reduce((sum, user) => sum + Number(user.walletBalance || 0), 0)),
+      driversInDebt: database.users.filter(user => user.role === 'driver' && Number(user.walletBalance || 0) < 0).length
     }
   });
 });
@@ -779,6 +823,12 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), (req
   database.notifications.push({ id:`notification_${crypto.randomUUID()}`, userId:transaction.userId, title:isPayout?(status==='APPROVED'?'Liquidación pagada':'Liquidación rechazada'):(status==='APPROVED'?'Recarga acreditada':'Recarga rechazada'), message:isPayout?(status==='APPROVED'?`Administración aprobó tu liquidación de $${transaction.amount.toFixed(2)}.`:'Administración rechazó la solicitud de liquidación.'):(status==='APPROVED'?`Se acreditaron $${transaction.amount.toFixed(2)} a tu billetera.`:'Administración no pudo validar la referencia enviada.'), category:'FINANCE', read:false, createdAt:new Date().toISOString() });
   persistDatabase();
   io.to(`user:${transaction.userId}`).emit('finance:topup_updated', transaction);
+  if (owner) {
+    io.to(`user:${transaction.userId}`).emit('wallet:updated', {
+      balance: roundMoney(owner.walletBalance || 0),
+      transaction
+    });
+  }
   io.to('admins').emit('finance:transaction_updated', { id: transaction.id, type: transaction.type, status: transaction.status });
   res.json({ transaction, balance:Number(owner?.walletBalance || 0) });
 });
@@ -856,9 +906,9 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) 
   tripLocks.delete(trip.id);
   const driver = database.users.find(user => user.id === trip.driverId);
   if (driver) driver.status = 'AVAILABLE';
-  const passengerTransaction = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
+  const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
   persistDatabase();
-  emitPassengerWalletUpdate(trip, passengerTransaction);
+  emitCompletedTripWalletUpdates(trip, settlement);
   io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
     tripId: trip.id,
     status: trip.status
@@ -1368,9 +1418,9 @@ io.on('connection', (socket) => {
         if (assignedDriver) assignedDriver.status = 'AVAILABLE';
         tripLocks.delete(tripId);
       }
-      const passengerTransaction = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
+      const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
       persistDatabase();
-      emitPassengerWalletUpdate(trip, passengerTransaction);
+      emitCompletedTripWalletUpdates(trip, settlement);
     }
     io.to(`user:${trip?.passengerId}`).to('drivers').to('admins').emit('tripStatusUpdated', data);
   });

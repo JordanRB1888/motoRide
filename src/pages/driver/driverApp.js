@@ -78,7 +78,7 @@ export function renderDriverApp(container) {
                     </div>
                     <div class="stat-item diorama-card-3d" id="stat-btn-earnings" style="cursor:pointer;" title="Ver Ganancias & Retirar">
                         <span class="stat-label" style="display:flex; align-items:center; gap:4px;">${icon('dollarSign', 14)} Ganancias</span>
-                        <span class="stat-value" id="stat-earnings">$${Number(user.walletBalance || 0).toFixed(2)}</span>
+                        <span class="stat-value ${Number(user.walletBalance || 0) < 0 ? 'debt' : ''}" id="stat-earnings">${Number(user.walletBalance || 0) < 0 ? '−' : ''}$${Math.abs(Number(user.walletBalance || 0)).toFixed(2)}</span>
                     </div>
                     <div class="stat-item diorama-card-3d" id="stat-btn-rating" style="cursor:pointer;" title="Ver Perfil & Calificación">
                         <span class="stat-label" style="display:flex; align-items:center; gap:4px;">${icon('star', 14)} Calificación</span>
@@ -140,8 +140,20 @@ export function renderDriverApp(container) {
     let activeChatTripId = null;
     let unreadMessages = 0;
     let tripPanelCollapsed = false;
+    let driverHomeAnimationTimer = null;
     const notifiedDriverEvents = new Set();
     let currentMap = new MapComponent('driver-map', { is3D: true, navigation: true });
+    const ownDriverMarkerId = `self:${user.id || 'driver'}`;
+
+    window.addEventListener('58express:driver-position', event => {
+        const position = event.detail || {};
+        const lat = Number(position.latitude ?? position.lat);
+        const lng = Number(position.longitude ?? position.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        currentMap.addDriverMarker(ownDriverMarkerId, lat, lng, Number(position.heading || 0), {
+            vehicleType: currentTrip?.rideType || user.vehicleType || user.vehicle?.type || 'MOTO'
+        });
+    });
 
     const toggle = container.querySelector('#online-toggle');
     const statusText = container.querySelector('#driver-status-text');
@@ -211,6 +223,7 @@ export function renderDriverApp(container) {
             onlineOverlay.classList.add('hidden');
             
             driverGpsTracker.stopTracking();
+            currentMap.removeDriverMarker(ownDriverMarkerId);
             driverDispatchService.updateDriverStatus(user.id, 'OFFLINE');
         }
     }
@@ -254,6 +267,24 @@ export function renderDriverApp(container) {
         renderDriverProfile(overlay, { onOpenDocuments: () => switchTab('documentos') });
     }
 
+    function animateDriverHome() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const brand = container.querySelector('.driver-brand-lockup');
+        const stats = container.querySelector('#stats-bar');
+        if (!brand) return;
+        window.clearTimeout(driverHomeAnimationTimer);
+        brand.classList.remove('driver-brand-ride-in');
+        stats?.classList.remove('driver-stats-reveal');
+        // Fuerza el reinicio para repetir el recorrido al volver a Inicio.
+        void brand.offsetWidth;
+        brand.classList.add('driver-brand-ride-in');
+        stats?.classList.add('driver-stats-reveal');
+        driverHomeAnimationTimer = window.setTimeout(() => {
+            brand.classList.remove('driver-brand-ride-in');
+            stats?.classList.remove('driver-stats-reveal');
+        }, 1050);
+    }
+
     function switchTab(tabName) {
         const tabs = container.querySelectorAll('.nav-tab');
         const pageOverlay = container.querySelector('#page-overlay');
@@ -266,6 +297,7 @@ export function renderDriverApp(container) {
             pageOverlay.classList.remove('active');
             pageOverlay.style.display = 'none';
             pageOverlay.innerHTML = '';
+            requestAnimationFrame(animateDriverHome);
         } else if (tabName === 'programados') {
             pageOverlay.classList.remove('hidden');
             pageOverlay.classList.add('active');
@@ -292,6 +324,11 @@ export function renderDriverApp(container) {
             pageOverlay.appendChild(renderDriverTrips());
         } else if (tabName === 'perfil') {
             openDriverProfileModal();
+        }
+        if (tabName !== 'inicio' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            pageOverlay.classList.remove('driver-overlay-enter');
+            void pageOverlay.offsetWidth;
+            pageOverlay.classList.add('driver-overlay-enter');
         }
     }
 
@@ -364,8 +401,10 @@ export function renderDriverApp(container) {
     function showTripRoute(trip, stage = 'PICKUP') {
         const pickup = trip?.pickup;
         const destination = trip?.destination;
-        if (Number.isFinite(Number(pickup?.lat)) && Number.isFinite(Number(pickup?.lng))) {
+        if (stage !== 'DESTINATION' && Number.isFinite(Number(pickup?.lat)) && Number.isFinite(Number(pickup?.lng))) {
             currentMap.setPickupMarker(Number(pickup.lat), Number(pickup.lng));
+        } else if (stage === 'DESTINATION') {
+            currentMap.clearMarkers('pickup');
         }
         if (Number.isFinite(Number(destination?.lat)) && Number.isFinite(Number(destination?.lng))) {
             currentMap.setDestinationMarker(Number(destination.lat), Number(destination.lng));
@@ -486,8 +525,14 @@ export function renderDriverApp(container) {
             onSubmit: (res) => {
                 socket.emit('tripRated', { tripId: trip.id, rating: res.rating, tags: res.tags, comment: res.comment, targetRole: 'passenger' });
                 const fare = tripFare(trip);
-                notifyDriver('EARNINGS', 'Ganancia registrada', `Se acreditaron $${(fare * 0.85).toFixed(2)} USD netos por la carrera.`, 'FINANCE', trip.id);
-                showToast(`Viaje finalizado · Ganancia neta $${(fare * 0.85).toFixed(2)} USD`, 'success');
+                const walletPayment = ['wallet', 'billetera', 'billetera express'].includes(String(trip.paymentMethod || '').replaceAll('_', ' ').toLowerCase());
+                if (walletPayment) {
+                    notifyDriver('EARNINGS', 'Ganancia acreditada', `Se acreditaron $${(fare * 0.85).toFixed(2)} USD netos por la carrera.`, 'FINANCE', trip.id);
+                    showToast(`Viaje finalizado · Neto acreditado $${(fare * 0.85).toFixed(2)} USD`, 'success');
+                } else {
+                    notifyDriver('COMMISSION', 'Comisión registrada', `Recibiste el pago directamente. +58Express descontó $${(fare * 0.15).toFixed(2)} USD de comisión.`, 'FINANCE', trip.id);
+                    showToast(`Viaje finalizado · Comisión $${(fare * 0.15).toFixed(2)} descontada`, 'info');
+                }
                 clearCompletedTripUi();
             }
         });
@@ -589,6 +634,27 @@ export function renderDriverApp(container) {
         }
     });
 
+    socket.on('wallet:updated', update => {
+        const balance = Number(update?.balance || 0);
+        user.walletBalance = balance;
+        const session = authService.getSession();
+        if (session?.token) authService.acceptSession(user, session.token);
+        const earningsStat = container.querySelector('#stat-earnings');
+        if (earningsStat) {
+            earningsStat.textContent = `${balance < 0 ? '−' : ''}$${Math.abs(balance).toFixed(2)}`;
+            earningsStat.classList.toggle('debt', balance < 0);
+        }
+        const transaction = update?.transaction;
+        if (transaction?.type === 'PLATFORM_COMMISSION') {
+            showToast(`Comisión descontada: $${Math.abs(Number(transaction.amount || 0)).toFixed(2)}. Saldo operativo: $${balance.toFixed(2)}.`, balance < 0 ? 'warning' : 'info');
+        } else if (transaction?.type === 'TOP_UP' && transaction.status === 'APPROVED') {
+            showToast(`Recarga acreditada. Saldo operativo: $${balance.toFixed(2)}.`, 'success');
+        } else if (transaction?.type === 'DRIVER_EARNING') {
+            showToast(`Ganancia acreditada. Saldo disponible: $${balance.toFixed(2)}.`, 'success');
+        }
+        window.dispatchEvent(new CustomEvent('58express:wallet-updated', { detail: update }));
+    });
+
     async function restoreActiveTrip() {
         const active = await apiService.get('/trips/active/me');
         if (!active?.trip || active.trip.driverId !== user.id) return;
@@ -629,6 +695,7 @@ export function renderDriverApp(container) {
     // Auto-enable online mode by default so driver is ready immediately
     setOnline(true);
     restoreActiveTrip();
+    requestAnimationFrame(animateDriverHome);
 
     // Tab Navigation
     const tabs = container.querySelectorAll('.nav-tab');

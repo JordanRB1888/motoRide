@@ -95,7 +95,7 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   driver.on('connect', () => driver.emit('driver:connect', { userId: driverId, status: 'AVAILABLE' }));
   driver.on('driver:connected', () => driver.emit('driver:location', { latitude: 10.6428, longitude: -71.6126, heading: 0 }));
   driver.on('rideRequested', trip => {
-    if (trip.id === 'test_trip') {
+    if (['test_trip', 'cash_trip'].includes(trip.id)) {
       driver.emit('rideAccepted', { tripId: trip.id, driver: { id: driverId, firstName: 'Carlos' } });
     }
   });
@@ -255,4 +255,24 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   assert.equal(persisted.status, 'COMPLETED');
   assert.equal(persisted.driverReview.rating, 5);
   assert.equal(persisted.driverReview.tipEUR, 1);
+
+  const cashAssigned = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('No se asignó la carrera en efectivo')), 5000);
+    passenger.on('tripStatusUpdated', update => {
+      if (update.tripId === 'cash_trip' && update.status === 'EN_ROUTE') { clearTimeout(timeout); resolve(update); }
+    });
+  });
+  const cashCreation = await fetch(`${url}/api/trips/create`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({id:'cash_trip',pickup:{lat:10.6427,lng:-71.6125},destination:{lat:10.65,lng:-71.60},fareUSD:10,paymentMethod:'efectivo',rideType:'MOTO'}) });
+  assert.equal(cashCreation.status,200);await cashAssigned;
+  driver.emit('tripStatusUpdated',{tripId:'cash_trip',status:'ARRIVED'});await new Promise(resolve=>setTimeout(resolve,60));
+  driver.emit('tripStatusUpdated',{tripId:'cash_trip',status:'IN_PROGRESS'});await new Promise(resolve=>setTimeout(resolve,60));
+  const cashCompleted = new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('No finalizó la carrera en efectivo')),5000);passenger.on('tripStatusUpdated',update=>{if(update.tripId==='cash_trip'&&update.status==='COMPLETED'){clearTimeout(timeout);resolve(update);}});});
+  driver.emit('tripStatusUpdated',{tripId:'cash_trip',status:'COMPLETED'});await cashCompleted;
+  const driverDebtResponse=await fetch(`${url}/api/wallet/me`,{headers:{authorization:`Bearer ${driverToken}`}});const driverDebt=await driverDebtResponse.json();
+  assert.equal(driverDebt.balance,-1.5);const commissionEntries=driverDebt.transactions.filter(transaction=>transaction.type==='PLATFORM_COMMISSION'&&transaction.tripId==='cash_trip');assert.equal(commissionEntries.length,1);assert.equal(commissionEntries[0].amount,-1.5);
+  const passengerAfterCash=await fetch(`${url}/api/wallet/me`,{headers:{authorization:`Bearer ${passengerToken}`}});assert.equal((await passengerAfterCash.json()).balance,5.5);
+  const debtTopupResponse=await fetch(`${url}/api/wallet/topups`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${driverToken}`},body:JSON.stringify({amount:5,reference:'87654321'})});
+  assert.equal(debtTopupResponse.status,201);const debtTopup=await debtTopupResponse.json();
+  const approveDebtTopup=await fetch(`${url}/api/admin/transactions/${debtTopup.id}`,{method:'PATCH',headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`},body:JSON.stringify({status:'APPROVED',referenceConfirmed:true})});
+  assert.equal(approveDebtTopup.status,200);assert.equal((await approveDebtTopup.json()).balance,3.5);
 });

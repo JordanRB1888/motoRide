@@ -11,6 +11,7 @@ export function renderDriverProfile(container, options = {}) {
 
   const bcvRate = getBcvEuroRate();
   const balanceEUR = Number(user.walletBalance || 0);
+  const hasWalletDebt = balanceEUR < 0;
   const formattedVES = formatVes(balanceEUR);
 
   let isEditing = false;
@@ -205,9 +206,9 @@ export function renderDriverProfile(container, options = {}) {
         ">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
             <div>
-              <small style="color:var(--text-secondary); display:block; font-size:0.78rem;">BALANCE DISPONIBLE EN EUROS (BCV)</small>
-              <div style="font-size: 2rem; font-weight: 900; color: var(--accent-primary); font-family: 'JetBrains Mono', monospace;">
-                €${balanceEUR.toFixed(2)} EUR
+              <small style="color:var(--text-secondary); display:block; font-size:0.78rem;">${hasWalletDebt ? 'SALDO DEUDOR / COMISIONES PENDIENTES' : 'BALANCE DISPONIBLE EN USD'}</small>
+              <div style="font-size: 2rem; font-weight: 900; color: ${hasWalletDebt ? 'var(--danger)' : 'var(--accent-primary)'}; font-family: 'JetBrains Mono', monospace;">
+                ${hasWalletDebt ? '−' : ''}$${Math.abs(balanceEUR).toFixed(2)} USD
               </div>
               <div style="color:var(--text-secondary); font-size:0.85rem; font-weight:700;">
                 ~ ${formattedVES} (Tasa BCV Euro: Bs. ${bcvRate.toFixed(2)})
@@ -215,12 +216,12 @@ export function renderDriverProfile(container, options = {}) {
             </div>
           </div>
 
-          <button id="btn-request-withdrawal" class="btn btn-3d primary-btn" style="
+          <button id="btn-request-withdrawal" class="btn btn-3d primary-btn" ${hasWalletDebt ? 'disabled' : ''} style="
             width: 100%; padding: 16px; font-weight: 900; font-size: 1rem;
             background: linear-gradient(135deg, #FFC107 0%, #FF8F00 100%); color: #121824;
             border-radius: 16px; margin-top: 6px;
           ">
-            💸 SOLICITAR RETIRO POR PAGO MÓVIL
+            ${hasWalletDebt ? 'RECARGA DESDE GANANCIAS PARA QUEDAR AL DÍA' : '💸 SOLICITAR RETIRO POR PAGO MÓVIL'}
           </button>
         </div>
 
@@ -319,7 +320,7 @@ export function renderDriverProfile(container, options = {}) {
     }
 
     // Request Withdrawal Modal Event
-    container.querySelector('#btn-request-withdrawal').addEventListener('click', () => {
+    container.querySelector('#btn-request-withdrawal')?.addEventListener('click', () => {
       openWithdrawalModal(container, balanceEUR, bcvRate);
     });
 
