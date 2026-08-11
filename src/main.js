@@ -8,7 +8,6 @@ import './styles/support.css';
 import './styles/users.css';
 import './styles/receipt.css';
 import './styles/diorama.css';
-import './styles/modern-yellow-lab.css';
 import { seedDatabase } from './services/clientCache.js';
 import { authService } from './services/authService.js';
 import { renderLanding } from './pages/landing.js';
@@ -25,6 +24,16 @@ document.documentElement.classList.toggle('modern-yellow-lab', localModernPrevie
 if (localModernPreview && new URLSearchParams(window.location.search).get('light') !== '1') {
     localStorage.setItem('58express_theme', 'dark');
     document.documentElement.classList.remove('theme-light');
+}
+
+// El laboratorio visual sigue siendo un experimento local: su hoja de estilos
+// se carga bajo demanda para que no forme parte del CSS inicial en producción.
+// Hasta que se promueva de forma deliberada, en Vercel no se verá este diseño.
+if (localModernPreview) {
+    import('./styles/modern-yellow-lab.css').catch(error => {
+        console.warn('[+58express] No se pudo cargar el laboratorio visual local:', error?.message);
+        document.documentElement.classList.remove('modern-yellow-lab');
+    });
 }
 
 async function dismissAppSplash() {

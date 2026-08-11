@@ -49,7 +49,8 @@ export class MapComponent {
     this.destinationMarker = null;
     this.tileLayer = null;
     this.is3DActive = false;
-    
+    this._destroyed = false;
+
     this._initMap();
     this._createLocationButton();
     this._themeHandler = event => this.setMapTheme(event.detail?.theme);
@@ -80,7 +81,8 @@ export class MapComponent {
   }
 
   setMapTheme(theme = 'light') {
-    if (!this.map) return;
+    // Un cambio de tema que llegue tarde no debe tocar un mapa ya desechado.
+    if (this._destroyed || !this.map) return;
     if (this.tileLayer) this.map.removeLayer(this.tileLayer);
     this.tileLayer = L.tileLayer(this._tileUrlForTheme(theme), {
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
@@ -494,9 +496,35 @@ export class MapComponent {
   }
 
   destroy() {
+    // Idempotente: la aplicación reconstruye pantallas y puede pedir la
+    // destrucción del mismo mapa más de una vez.
+    if (this._destroyed) return;
+    this._destroyed = true;
+
+    if (this._themeHandler) {
+      window.removeEventListener('58express:theme-change', this._themeHandler);
+      this._themeHandler = null;
+    }
+
+    // Cada marcador programa un temporizador para quitar el estado "en
+    // movimiento"; si sobreviven, disparan sobre nodos ya desechados.
+    for (const marker of this.markers.values()) {
+      if (marker?._movementTimer) {
+        window.clearTimeout(marker._movementTimer);
+        marker._movementTimer = null;
+      }
+    }
+    this.markers.clear();
+
     if (this.map) {
       this.map.remove();
       this.map = null;
     }
+
+    this.routeLayer = null;
+    this.userMarker = null;
+    this.pickupMarker = null;
+    this.destinationMarker = null;
+    this.tileLayer = null;
   }
 }

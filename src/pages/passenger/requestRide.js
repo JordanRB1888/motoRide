@@ -2,6 +2,7 @@ import { icon } from '../../utils/icons.js';
 import { createStatusBadge } from '../../components/statusBadge.js';
 import { createRatingStars } from '../../components/ratingStars.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
+import { escapeHtml, safeImageUrl, safeNumber } from '../../utils/safeDom.js';
 
 export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancelRoute, onScheduleRide, onRideTypeChange) {
   const methodLabels = {
@@ -22,7 +23,7 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
       <div class="fare-preview-body">
         <div class="fare-destination-row">
           <span class="fare-pin">${icon('mapPin', 19)}</span>
-          <div><small>DESTINO SELECCIONADO</small><strong>${fareData.destination}</strong></div>
+          <div><small>DESTINO SELECCIONADO</small><strong>${escapeHtml(fareData.destination)}</strong></div>
           <button type="button" class="btn-cancel-route-icon" aria-label="Cambiar destino">${icon('close', 16)}</button>
         </div>
         <div class="ride-type-selector">
@@ -34,9 +35,9 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
           </button>
         </div>
         <div class="fare-summary-grid">
-          <div class="fare-total"><small>Tarifa estimada</small><strong>$${fareData.fareUSD}</strong><span>USD · ~ Bs. ${fareData.fareVES}</span></div>
-          <div class="fare-metric"><small>Distancia</small><strong>${fareData.distance}</strong></div>
-          <div class="fare-metric"><small>Tiempo</small><strong>${fareData.duration}</strong></div>
+          <div class="fare-total"><small>Tarifa estimada</small><strong>$${escapeHtml(fareData.fareUSD)}</strong><span>USD · ~ Bs. ${escapeHtml(fareData.fareVES)}</span></div>
+          <div class="fare-metric"><small>Distancia</small><strong>${escapeHtml(fareData.distance)}</strong></div>
+          <div class="fare-metric"><small>Tiempo</small><strong>${escapeHtml(fareData.duration)}</strong></div>
         </div>
         <button type="button" id="payment-selector-btn" class="fare-payment-selector">
           <span class="payment-leading">${icon('banknote', 19)}</span>
@@ -84,7 +85,7 @@ function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelR
           <div style="flex:1; overflow:hidden;">
             <small style="color:var(--text-secondary); display:block; font-size:0.75rem;">DESTINO SELECCIONADO</small>
             <strong style="color:var(--text-primary); font-size:0.95rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              ${fareData.destination}
+              ${escapeHtml(fareData.destination)}
             </strong>
           </div>
         </div>
@@ -107,10 +108,10 @@ function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelR
         <div>
           <span style="color:var(--text-secondary); font-size:0.8rem; display:block;">TARIFA ESTIMADA</span>
           <div style="font-size: 2.2rem; font-weight: 900; color: var(--accent-primary); font-family: 'JetBrains Mono', monospace; line-height: 1;">
-            $${fareData.fareUSD} <span style="font-size: 0.9rem; font-weight: 700;">USD</span>
+            $${escapeHtml(fareData.fareUSD)} <span style="font-size: 0.9rem; font-weight: 700;">USD</span>
           </div>
           <div style="color: var(--text-secondary); font-size: 0.82rem; font-weight: 600; margin-top: 4px;">
-            ~ Bs. ${fareData.fareVES} (Tasa BCV)
+            ~ Bs. ${escapeHtml(fareData.fareVES)} (Tasa BCV)
           </div>
         </div>
 
@@ -118,13 +119,13 @@ function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelR
           <div style="background: var(--surface-card); padding: 6px 12px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 6px;">
             <small style="color:var(--text-secondary);">Distancia</small>
             <div style="font-weight: 800; color: var(--text-primary); font-size: 0.95rem; display:flex; align-items:center; justify-content:flex-end; gap:4px;">
-              ${icon('mapPin', 14)} ${fareData.distance}
+              ${icon('mapPin', 14)} ${escapeHtml(fareData.distance)}
             </div>
           </div>
           <div style="background: var(--surface-card); padding: 6px 12px; border-radius: 12px; border: 1px solid var(--border-color);">
             <small style="color:var(--text-secondary);">Tiempo Est.</small>
             <div style="font-weight: 800; color: var(--accent-secondary); font-size: 0.95rem; display:flex; align-items:center; justify-content:flex-end; gap:4px;">
-              ${icon('clock', 14)} ${fareData.duration}
+              ${icon('clock', 14)} ${escapeHtml(fareData.duration)}
             </div>
           </div>
         </div>
@@ -245,11 +246,18 @@ export function renderSearchingState(onCancel, rideType = 'MOTO') {
 export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onMinimize) {
   const div = document.createElement('div');
   div.className = 'driver-card assigned-driver-card fade-in';
+  // Todo lo que viene del perfil del conductor se trata como dato externo.
   const driverName = `${driver.firstName || 'Conductor'} ${driver.lastName || ''}`.trim();
-  const driverInitials = driverName.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+  const driverInitials = driverName.split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase();
   const fallbackAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverName)}`;
-  const driverAvatar = driver.photoUrl || fallbackAvatar;
-  const etaMinutes = Math.max(1, Math.round(Number(trip?.pickupEtaMin ?? trip?.etaMin ?? 3)));
+  const driverAvatar = safeImageUrl(driver.photoUrl, fallbackAvatar);
+  const driverRating = safeNumber(driver.rating, { fallback: 4.9, min: 0, max: 5, decimals: 1 });
+  const driverTrips = Math.round(safeNumber(driver.totalTrips, { fallback: 120, min: 0 }));
+  const vehicleBrand = driver.vehicleBrand || 'Bera';
+  const vehicleModel = driver.vehicleModel || 'SBR';
+  const vehicleColor = driver.vehicleColor || 'Negro';
+  const vehiclePlate = driver.vehiclePlate || 'AC3M49P';
+  const etaMinutes = Math.max(1, Math.round(safeNumber(trip?.pickupEtaMin ?? trip?.etaMin, { fallback: 3, min: 1 })));
   const driverArrived = trip?.status === 'ARRIVED';
   
   div.innerHTML = `
@@ -257,14 +265,14 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
       <header class="assigned-driver-header passenger-trip-card-header">
         <div class="assigned-driver-identity">
           <div class="assigned-driver-avatar">
-            <span>${driverInitials}</span>
-            <img src="${driverAvatar}" alt="Foto de ${driverName}">
+            <span>${escapeHtml(driverInitials)}</span>
+            <img src="${escapeHtml(driverAvatar)}" alt="Foto de ${escapeHtml(driverName)}">
             <i aria-label="Conductor conectado"></i>
           </div>
           <div class="assigned-driver-name">
             <small>TU CONDUCTOR</small>
-            <h4>${driverName}</h4>
-            <div>${icon('starFilled', 14)} <strong>${driver.rating || 4.9}</strong> <span>(${driver.totalTrips || 120} viajes)</span></div>
+            <h4>${escapeHtml(driverName)}</h4>
+            <div>${icon('starFilled', 14)} <strong>${driverRating}</strong> <span>(${driverTrips} viajes)</span></div>
           </div>
         </div>
         <div class="passenger-trip-card-actions">
@@ -275,9 +283,9 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
       <div class="assigned-vehicle-row">
         <div>
           <small>Vehículo</small>
-          <strong>${driver.vehicleBrand || 'Bera'} ${driver.vehicleModel || 'SBR'} <span>· ${driver.vehicleColor || 'Negro'}</span></strong>
+          <strong>${escapeHtml(vehicleBrand)} ${escapeHtml(vehicleModel)} <span>· ${escapeHtml(vehicleColor)}</span></strong>
         </div>
-        <b>${driver.vehiclePlate || 'AC3M49P'}</b>
+        <b>${escapeHtml(vehiclePlate)}</b>
       </div>
 
       <div class="assigned-driver-status ${driverArrived ? 'has-arrived' : ''}">

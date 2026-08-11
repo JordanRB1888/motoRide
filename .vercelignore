@@ -1,3 +1,6 @@
-.codex-vite.err.log
-.codex-vite.out.log
+# Artefactos locales de desarrollo y de revisión: no forman parte del despliegue.
+.claude/
+.codex-*.log
 design-reference/
+phase-*.patch
+frontend-*.patch

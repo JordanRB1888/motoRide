@@ -26,6 +26,7 @@ import { eventLogger } from '../../utils/logger.js';
 import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
+import { safeCoordinate } from '../../utils/safeDom.js';
 
 export function renderPassengerApp(container) {
   let currentState = 'IDLE';
@@ -606,11 +607,24 @@ export function renderPassengerApp(container) {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Maracaibo, Zulia, Venezuela')}&limit=5`);
       const data = await res.json();
       resultsContainer.innerHTML = '';
-      data.forEach(item => {
+      (Array.isArray(data) ? data : []).forEach(item => {
+        // Nominatim es un servicio externo: sus coordenadas se validan y su
+        // texto nunca entra por innerHTML.
+        const lat = safeCoordinate(item?.lat, 'lat');
+        const lon = safeCoordinate(item?.lon, 'lng');
+        const label = String(item?.display_name ?? '').trim();
+        if (lat === null || lon === null || !label) return;
+
         const li = document.createElement('li');
         li.style.cssText = 'padding:12px; border-bottom:1px solid var(--border-color); cursor:pointer; color:var(--text-primary); display:flex; align-items:center; gap:10px;';
-        li.innerHTML = `${icon('mapPin')} <span>${item.display_name}</span>`;
-        li.addEventListener('click', () => selectDestination(item));
+        // El icono es markup propio de la aplicación; la dirección va como texto.
+        const pin = document.createElement('span');
+        pin.className = 'search-result-pin';
+        pin.innerHTML = icon('mapPin');
+        const name = document.createElement('span');
+        name.textContent = label;
+        li.append(pin, name);
+        li.addEventListener('click', () => selectDestination({ ...item, lat, lon, display_name: label }));
         resultsContainer.appendChild(li);
       });
     } catch (err) {
@@ -625,9 +639,9 @@ export function renderPassengerApp(container) {
   async function selectDestination(place, { originOverride = null } = {}) {
     const selectionId = ++destinationSelectionId;
     currentSelectedDestinationName = place.display_name || 'Punto de Destino en Maracaibo';
-    const lat = Number.parseFloat(place.lat);
-    const lon = Number.parseFloat(place.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    const lat = safeCoordinate(place?.lat, 'lat');
+    const lon = safeCoordinate(place?.lon, 'lng');
+    if (lat === null || lon === null) {
       showToast('No pudimos identificar las coordenadas de ese destino.', 'error');
       return;
     }
