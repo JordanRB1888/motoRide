@@ -916,10 +916,12 @@ body > .bottom-sheet-overlay.searching-ride-overlay{background:transparent!impor
   filter: drop-shadow(0 8px 8px rgba(0,0,0,.58));
   transition: transform .28s cubic-bezier(.2,.75,.25,1), filter .28s ease;
 }
+.vehicle-art .real-vehicle-moto { transform: scale(1.18); }
 .vehicle-choice.active .vehicle-art .real-vehicle-image {
   transform: translateY(-2px) scale(1.05);
   filter: drop-shadow(0 9px 9px rgba(0,0,0,.58)) drop-shadow(0 0 8px rgba(255,196,0,.24));
 }
+.vehicle-choice.active .vehicle-art .real-vehicle-moto { transform: translateY(-2px) scale(1.24); }
 .ride-type-vehicle {
   width: 76px;
   height: 50px;
