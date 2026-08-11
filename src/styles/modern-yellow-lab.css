@@ -522,3 +522,392 @@ html.modern-yellow-lab :is(.finance-section-tabs, .driver-admin-filters, .topup-
   from { opacity: 0; transform: translateY(10px) scale(.992); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* ============================================================
+ * Variante clara — html.modern-yellow-lab.theme-light
+ * Un selector más específico que las reglas base, de modo que gana
+ * incluso donde la variante oscura usa !important. El amarillo sigue
+ * siendo el color de marca; sobre fondo claro los textos que antes eran
+ * amarillos pasan a --lab-yellow-ink para conservar contraste legible.
+ * ============================================================ */
+
+html.modern-yellow-lab.theme-light {
+  --lab-bg: #f4f5f9;
+  --lab-bg-soft: #ffffff;
+  --lab-panel: rgba(255, 255, 255, .96);
+  --lab-panel-strong: #ffffff;
+  --lab-panel-warm: #fff8e0;
+  --lab-line: rgba(18, 20, 28, .11);
+  --lab-line-bright: rgba(176, 128, 0, .42);
+  --lab-yellow: #ffd21f;
+  --lab-yellow-2: #ffb800;
+  --lab-yellow-ink: #8a6200;
+  --lab-yellow-soft: rgba(255, 193, 7, .16);
+  --lab-white: #14161c;
+  --lab-muted: #5b6070;
+  --lab-muted-2: #767c8c;
+  --lab-green: #0f8a52;
+  --lab-red: #cc2f43;
+  --lab-blue: #0b6fa8;
+  --lab-shadow: 0 20px 54px rgba(24, 27, 38, .13);
+  color-scheme: light;
+  background: var(--lab-bg);
+}
+
+/* Fondo general */
+html.modern-yellow-lab.theme-light,
+html.modern-yellow-lab.theme-light body,
+html.modern-yellow-lab.theme-light #app {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(255, 193, 7, .14), transparent 36%),
+    var(--lab-bg) !important;
+  color: var(--lab-white);
+}
+
+html.modern-yellow-lab.theme-light * {
+  scrollbar-color: rgba(176, 128, 0, .34) transparent;
+}
+
+/* Texto principal y secundario */
+html.modern-yellow-lab.theme-light :is(h1, h2, h3, h4, h5, strong, b) { color: var(--lab-white); }
+html.modern-yellow-lab.theme-light :is(small, .tagline, .role-copy small, .stat-label) {
+  color: var(--lab-muted) !important;
+}
+
+/* Inputs, selects y textareas */
+html.modern-yellow-lab.theme-light :is(input, select, textarea, .search-input-wrapper,
+  .search-sheet-input, .fare-payment-selector) {
+  color: var(--lab-white) !important;
+  background: #ffffff !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 1px 2px rgba(18, 20, 28, .05) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(input, textarea)::placeholder { color: #8b90a0 !important; }
+
+/* Estados hover y focus */
+html.modern-yellow-lab.theme-light :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--lab-yellow-ink) !important;
+  outline-offset: 3px;
+}
+
+html.modern-yellow-lab.theme-light :is(input, select, textarea):focus {
+  border-color: var(--lab-yellow-2) !important;
+  box-shadow: 0 0 0 3px rgba(255, 193, 7, .26) !important;
+}
+
+/* Tarjetas y paneles */
+html.modern-yellow-lab.theme-light :is(.glass-panel, .diorama-card-3d, .ops-panel, .finance-card,
+  .wallet-real-history, .real-profile-card, .passenger-history-card,
+  .earnings-chart-card, .earnings-activity-card, .driver-history-card) {
+  background: linear-gradient(150deg, #ffffff, #f7f8fc) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 12px 34px rgba(24, 27, 38, .09) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.fare-confirm-card, .assigned-driver-shell,
+  .searching-ride-shell, .completion-card, .driver-card) {
+  background: linear-gradient(155deg, #ffffff, #f6f7fb) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: var(--lab-shadow) !important;
+}
+
+/* Landing y autenticación */
+html.modern-yellow-lab.theme-light .landing-container {
+  background:
+    radial-gradient(circle at 50% -12%, rgba(255, 193, 7, .2), transparent 40%),
+    var(--lab-bg) !important;
+}
+
+html.modern-yellow-lab.theme-light .landing-card-premium {
+  background: linear-gradient(160deg, #ffffff, #f5f6fb) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 22px 60px rgba(24, 27, 38, .12) !important;
+}
+
+/* El chip de marca conserva el fondo oscuro en modo noche; en claro pasa a
+   blanco cálido para no dejar un bloque negro con texto oscuro encima. */
+html.modern-yellow-lab.theme-light .landing-brand-icon {
+  background: linear-gradient(150deg, #ffffff, #fff6d8) !important;
+  border-color: var(--lab-line-bright) !important;
+  color: var(--lab-white) !important;
+  box-shadow: 0 14px 32px rgba(24, 27, 38, .12), 0 0 26px rgba(255, 193, 7, .22) !important;
+}
+
+html.modern-yellow-lab.theme-light .landing-background .glow-orb { opacity: .1; }
+html.modern-yellow-lab.theme-light .landing-header .logo-text { color: var(--lab-white) !important; }
+html.modern-yellow-lab.theme-light .landing-header .tagline { color: var(--lab-muted) !important; }
+html.modern-yellow-lab.theme-light :is(.role-selection h2, .login-form h2) { color: var(--lab-white) !important; }
+
+html.modern-yellow-lab.theme-light .role-btn {
+  background: #ffffff !important;
+  border: 1px solid var(--lab-line) !important;
+  color: var(--lab-white) !important;
+  box-shadow: 0 6px 18px rgba(24, 27, 38, .07) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.role-btn.passenger-btn, .role-btn.driver-btn,
+  .role-btn.admin-btn) {
+  background: #ffffff !important;
+}
+
+html.modern-yellow-lab.theme-light .role-btn:hover,
+html.modern-yellow-lab.theme-light :is(.role-btn.passenger-btn, .role-btn.driver-btn,
+  .role-btn.admin-btn):hover {
+  background: #fffaea !important;
+  border-color: var(--lab-line-bright) !important;
+  box-shadow: 0 12px 28px rgba(176, 128, 0, .16) !important;
+}
+
+html.modern-yellow-lab.theme-light .role-btn .role-arrow { color: var(--lab-yellow-ink) !important; }
+
+/* Cabeceras de pasajero y conductor */
+html.modern-yellow-lab.theme-light :is(.passenger-app, .driver-app) {
+  background: var(--lab-bg) !important;
+  color: var(--lab-white);
+}
+
+html.modern-yellow-lab.theme-light :is(.passenger-app, .driver-app)::after {
+  background: linear-gradient(180deg, rgba(244, 245, 249, .14), transparent 43%, rgba(244, 245, 249, .5)) !important;
+}
+
+/* El mapa no se oscurece cuando la interfaz está en claro */
+html.modern-yellow-lab.theme-light :is(.passenger-app, .driver-app) .leaflet-tile-pane {
+  filter: saturate(1) contrast(1) brightness(1) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.passenger-mobile-header, .driver-header) {
+  background: rgba(255, 255, 255, .93) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 14px 38px rgba(24, 27, 38, .1) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.passenger-profile-shortcut, .passenger-header-icon,
+  #header-notif-btn-driver, .driver-header-actions .theme-toggle-btn) {
+  color: var(--lab-white) !important;
+  background: #ffffff !important;
+  border: 1px solid var(--lab-line) !important;
+}
+
+/* Navegación inferior */
+html.modern-yellow-lab.theme-light :is(.bottom-nav, .driver-nav-tabs) {
+  background: rgba(255, 255, 255, .96) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 18px 44px rgba(24, 27, 38, .14) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.nav-btn, .nav-tab) { color: #6b7183 !important; }
+
+html.modern-yellow-lab.theme-light :is(.nav-btn.active, .nav-tab.active) {
+  color: var(--lab-yellow-ink) !important;
+  background: linear-gradient(145deg, rgba(255, 193, 7, .24), rgba(255, 193, 7, .08)) !important;
+  box-shadow: inset 0 0 0 1px rgba(176, 128, 0, .22) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.nav-btn.active, .nav-tab.active) svg {
+  stroke: var(--lab-yellow-ink) !important;
+}
+
+/* Inicio del pasajero */
+html.modern-yellow-lab.theme-light .top-search-bar {
+  background: linear-gradient(155deg, #ffffff, #f6f7fb) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 -12px 40px rgba(24, 27, 38, .12) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.passenger-dock-handle, .trip-sheet-handle) {
+  background: #c7cbd8 !important;
+}
+
+html.modern-yellow-lab.theme-light .search-icon { color: var(--lab-yellow-ink) !important; }
+
+html.modern-yellow-lab.theme-light .search-sheet {
+  background: linear-gradient(155deg, #ffffff, #f4f5fa) !important;
+  border-color: var(--lab-line) !important;
+}
+
+html.modern-yellow-lab.theme-light .place-item {
+  border-color: var(--lab-line) !important;
+  background: #ffffff !important;
+}
+
+html.modern-yellow-lab.theme-light .place-item:hover { background: #fffaea !important; }
+
+html.modern-yellow-lab.theme-light .vehicle-choice {
+  background: #ffffff !important;
+  border: 1px solid var(--lab-line) !important;
+}
+
+html.modern-yellow-lab.theme-light .vehicle-choice.active {
+  border-color: var(--lab-yellow-2) !important;
+  background: linear-gradient(145deg, rgba(255, 193, 7, .18), rgba(255, 193, 7, .05)) !important;
+}
+
+html.modern-yellow-lab.theme-light .vehicle-choice em { color: var(--lab-yellow-ink) !important; }
+html.modern-yellow-lab.theme-light .fare-total strong { color: var(--lab-yellow-ink) !important; }
+
+html.modern-yellow-lab.theme-light .ride-type-option {
+  background: #ffffff !important;
+  border-color: var(--lab-line) !important;
+}
+html.modern-yellow-lab.theme-light .ride-type-option.active { border-color: var(--lab-yellow-2) !important; }
+
+/* Conductor */
+html.modern-yellow-lab.theme-light .stats-bar {
+  background: rgba(255, 255, 255, .96) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 14px 36px rgba(24, 27, 38, .1) !important;
+}
+html.modern-yellow-lab.theme-light .stat-label { color: var(--lab-muted) !important; }
+html.modern-yellow-lab.theme-light .stat-value { color: var(--lab-white) !important; }
+html.modern-yellow-lab.theme-light .stat-item:nth-child(2) .stat-value,
+html.modern-yellow-lab.theme-light .stat-item:nth-child(3) .stat-value {
+  color: var(--lab-yellow-ink) !important;
+}
+
+html.modern-yellow-lab.theme-light .offline-overlay {
+  background: linear-gradient(155deg, #ffffff, #f4f5fa) !important;
+}
+
+html.modern-yellow-lab.theme-light .waiting-badge {
+  color: #0b6b40 !important;
+  background: #e6f7ee !important;
+  border-color: rgba(15, 138, 82, .3) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.driver-trip-sheet, .active-trip-panel,
+  .incoming-request-card, .driver-rating-premium) {
+  background: linear-gradient(155deg, #ffffff, #f5f6fb) !important;
+  border-color: var(--lab-line) !important;
+  box-shadow: var(--lab-shadow) !important;
+}
+
+html.modern-yellow-lab.theme-light .trip-passenger-row {
+  background: var(--lab-yellow-soft) !important;
+  border-color: rgba(176, 128, 0, .26) !important;
+}
+
+html.modern-yellow-lab.theme-light .incoming-countdown { color: var(--lab-yellow-ink) !important; }
+html.modern-yellow-lab.theme-light .countdown-progress { stroke: var(--lab-yellow-2) !important; }
+
+html.modern-yellow-lab.theme-light :is(.driver-profile-identity-card,
+  .driver-profile-balance-card) {
+  background: linear-gradient(155deg, #ffffff, #f5f6fb) !important;
+}
+
+/* Modales */
+html.modern-yellow-lab.theme-light :is(.chat-modal, .notification-center-modal,
+  .wallet-topup-modal, .payment-modal, .topup-review-modal, .application-review-panel) {
+  background: linear-gradient(155deg, #ffffff, #f5f6fb) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 30px 80px rgba(24, 27, 38, .2) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.chat-modal-backdrop, .wallet-topup-backdrop,
+  .application-review-backdrop, .topup-review-backdrop) {
+  background: rgba(28, 31, 42, .42) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.chat-message.received, .message.received) {
+  background: #eceef5 !important;
+  color: var(--lab-white) !important;
+}
+
+/* Panel administrativo y barra lateral */
+html.modern-yellow-lab.theme-light .admin-app {
+  --admin-bg: var(--lab-bg);
+  --admin-panel: var(--lab-panel);
+  --admin-panel-2: var(--lab-panel-strong);
+  --admin-line: var(--lab-line);
+  background: var(--lab-bg) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.admin-sidebar, .admin-header) {
+  background: rgba(255, 255, 255, .95) !important;
+  border-color: var(--lab-line) !important;
+}
+
+html.modern-yellow-lab.theme-light .nav-item { color: #666c7e !important; }
+
+html.modern-yellow-lab.theme-light .nav-item.active {
+  color: var(--lab-yellow-ink) !important;
+  background: linear-gradient(135deg, rgba(255, 193, 7, .22), rgba(255, 193, 7, .07)) !important;
+  box-shadow: inset 0 0 0 1px rgba(176, 128, 0, .26) !important;
+}
+
+html.modern-yellow-lab.theme-light .nav-item:hover { background: rgba(255, 193, 7, .1) !important; }
+
+html.modern-yellow-lab.theme-light .admin-content {
+  background:
+    radial-gradient(circle at 62% 0, rgba(255, 193, 7, .11), transparent 30%),
+    var(--lab-bg) !important;
+}
+
+html.modern-yellow-lab.theme-light .eyebrow { color: var(--lab-yellow-ink) !important; }
+
+html.modern-yellow-lab.theme-light :is(.operations-map-card, .metric-card, .ops-panel,
+  .finance-card, .finance-metric, .topup-queue-card, .topup-kpis article,
+  .driver-admin-table-card, .driver-admin-toolbar, .data-table-container) {
+  background: linear-gradient(150deg, #ffffff, #f7f8fc) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 12px 34px rgba(24, 27, 38, .08) !important;
+}
+
+html.modern-yellow-lab.theme-light .data-table th {
+  background: #f1f3f8 !important;
+  color: var(--lab-muted) !important;
+}
+
+html.modern-yellow-lab.theme-light .data-table tbody tr:hover {
+  background: rgba(255, 193, 7, .1) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.finance-section-tabs, .driver-admin-filters,
+  .topup-filters) {
+  background: #eef0f6 !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.finance-section-tabs, .driver-admin-filters,
+  .topup-filters) button.active {
+  color: #111216 !important;
+  background: var(--lab-yellow) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.wallet-history-filters,
+  .passenger-history-filters) button.active {
+  color: #111216 !important;
+  background: var(--lab-yellow) !important;
+}
+
+/* Cintillos y superposiciones del centro de operaciones. Vienen de admin.css
+   con fondos oscuros propios: sin esto quedaban paneles negros sobre la
+   interfaz clara, y en .map-overlay-stats el texto resultaba ilegible. */
+html.modern-yellow-lab.theme-light :is(.ops-health, .ops-rate) {
+  background: #ffffff !important;
+  border: 1px solid var(--lab-line) !important;
+  color: var(--lab-muted) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.map-expand, .map-overlay-stats) {
+  background: rgba(255, 255, 255, .94) !important;
+  border: 1px solid var(--lab-line) !important;
+  color: var(--lab-white) !important;
+  box-shadow: 0 8px 24px rgba(24, 27, 38, .12) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.map-expand, .map-overlay-stats) :is(span, small, strong, b) {
+  color: inherit !important;
+}
+
+/* Cabecera de la tarjeta del mapa: su fondo propio dejaba texto oscuro sobre
+   oscuro. El contenedor Leaflet se aclara para no mostrar un hueco negro
+   mientras cargan los tiles. */
+html.modern-yellow-lab.theme-light .map-card-head,
+html.modern-yellow-lab.theme-light .map-card-head > div {
+  background: transparent !important;
+  color: var(--lab-white) !important;
+}
+
+html.modern-yellow-lab.theme-light #operations-map {
+  background: #e9edf3 !important;
+}

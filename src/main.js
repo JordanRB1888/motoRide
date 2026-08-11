@@ -15,15 +15,28 @@ import { renderPassengerApp } from './pages/passenger/passengerApp.js';
 import { renderDriverApp } from './pages/driver/driverApp.js';
 import { renderAdminApp } from './pages/admin/adminApp.js';
 import { notificationService } from './services/notificationService.js';
+import {
+    MODERN_EXPERIENCE_CLASS,
+    applyTheme,
+    isModernExperienceEnabled,
+    readStoredTheme,
+    resolveInitialTheme
+} from './utils/themePreference.js';
 
 const appContainer = document.getElementById('app');
 const appSplash = document.getElementById('app-splash');
-const modernExperienceEnabled = new URLSearchParams(window.location.search).get('classic') !== '1';
-document.documentElement.classList.toggle('modern-yellow-lab', modernExperienceEnabled);
-if (modernExperienceEnabled && new URLSearchParams(window.location.search).get('light') !== '1') {
-    localStorage.setItem('58express_theme', 'dark');
-    document.documentElement.classList.remove('theme-light');
-}
+const modernExperienceEnabled = isModernExperienceEnabled(window.location.search);
+document.documentElement.classList.toggle(MODERN_EXPERIENCE_CLASS, modernExperienceEnabled);
+// El tema se resuelve con el helper compartido y nunca se sobrescribe la
+// preferencia guardada: sin preferencia se arranca en oscuro, y quien haya
+// elegido modo claro lo conserva entre recargas.
+applyTheme(
+    resolveInitialTheme({
+        storedValue: readStoredTheme(window.localStorage),
+        search: window.location.search
+    }),
+    document.documentElement
+);
 
 // La experiencia moderna es ahora la interfaz oficial de +58Express.
 // ?classic=1 queda disponible solo como comparación temporal de diagnóstico.

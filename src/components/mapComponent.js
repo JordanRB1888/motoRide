@@ -2,6 +2,7 @@ import { icon } from '../utils/icons.js';
 import { fareCalculator } from '../services/fareCalculator.js';
 import { showToast } from './toast.js';
 import { normalizeVehicleType, vehicleImage } from '../utils/vehicleMedia.js';
+import { readAppliedTheme } from '../utils/themePreference.js';
 
 const vehicleMarkerArtwork = vehicleType => vehicleImage(vehicleType, {
   variant: 'map',
@@ -62,7 +63,10 @@ export class MapComponent {
     try {
       this.map = L.map(this.targetElement, { zoomControl: true }).setView(this.options.center, this.options.zoom);
       
-      this.tileLayer = L.tileLayer(this._tileUrlForTheme(localStorage.getItem('58express_theme') || 'light'), {
+      // El mapa arranca con el mismo tema que el resto de la interfaz: antes
+      // caía en 'light' por omisión y mostraba tiles claros sobre una interfaz
+      // oscura en la primera visita.
+      this.tileLayer = L.tileLayer(this._tileUrlForTheme(readAppliedTheme(document.documentElement)), {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 20

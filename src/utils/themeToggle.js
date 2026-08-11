@@ -1,18 +1,31 @@
 import { showToast } from '../components/toast.js';
+import {
+    applyTheme,
+    oppositeTheme,
+    persistTheme,
+    readAppliedTheme,
+    readStoredTheme,
+    resolveInitialTheme
+} from './themePreference.js';
+
+const themeLabel = theme => (theme === 'light' ? 'Modo Día' : 'Modo Noche');
 
 export function initThemeToggle(containerId = null) {
-    const savedTheme = localStorage.getItem('58express_theme') || 'dark';
-    
-    if (savedTheme === 'light') {
-        document.documentElement.classList.add('theme-light');
-    } else {
-        document.documentElement.classList.remove('theme-light');
-    }
+    // Misma resolución que main.js: una sola regla para toda la aplicación.
+    const appliedTheme = applyTheme(
+        resolveInitialTheme({
+            storedValue: readStoredTheme(window.localStorage),
+            search: window.location.search
+        }),
+        document.documentElement
+    );
 
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'theme-toggle-btn';
     toggleBtn.title = 'Alternar Modo Día / Noche';
-    toggleBtn.innerHTML = savedTheme === 'light' ? 'Modo Día' : 'Modo Noche';
+    // El botón anuncia el tema que está pintado de verdad, no el guardado.
+    toggleBtn.textContent = themeLabel(appliedTheme);
+    toggleBtn.setAttribute('aria-pressed', String(appliedTheme === 'light'));
 
     Object.assign(toggleBtn.style, {
         background: 'var(--surface-elevated, #1e293b)',
@@ -32,12 +45,15 @@ export function initThemeToggle(containerId = null) {
 
     toggleBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const isLight = document.documentElement.classList.toggle('theme-light');
-        const newTheme = isLight ? 'light' : 'dark';
-        localStorage.setItem('58express_theme', newTheme);
-        window.dispatchEvent(new CustomEvent('58express:theme-change', { detail: { theme: newTheme } }));
-        toggleBtn.innerHTML = isLight ? 'Modo Día' : 'Modo Noche';
-        showToast(isLight ? 'Modo Día activado' : 'Modo Noche activado', 'info');
+        // Se parte del tema realmente aplicado para que el botón no se
+        // desincronice si otra pantalla ya lo cambió.
+        const nextTheme = oppositeTheme(readAppliedTheme(document.documentElement));
+        const activeTheme = applyTheme(nextTheme, document.documentElement);
+        persistTheme(activeTheme, window.localStorage);
+        window.dispatchEvent(new CustomEvent('58express:theme-change', { detail: { theme: activeTheme } }));
+        toggleBtn.textContent = themeLabel(activeTheme);
+        toggleBtn.setAttribute('aria-pressed', String(activeTheme === 'light'));
+        showToast(activeTheme === 'light' ? 'Modo Día activado' : 'Modo Noche activado', 'info');
     });
 
     return toggleBtn;
