@@ -223,6 +223,26 @@ function publicUser(user) {
   return safeUser;
 }
 
+// Representación mínima del conductor para el pasajero: solo lo que la tarjeta
+// de viaje necesita. Deja fuera correo, cédula, documentos, saldo y ubicación.
+function driverPublicSummary(driver) {
+  if (!driver) return null;
+  return {
+    id: driver.id,
+    firstName: driver.firstName || '',
+    lastName: driver.lastName || '',
+    phone: driver.phone || '',
+    photoUrl: driver.photoUrl || null,
+    rating: Number(driver.rating || 0),
+    totalTrips: Number(driver.totalTrips || 0),
+    vehicleType: driver.vehicleType || 'MOTO',
+    vehicleBrand: driver.vehicleBrand || '',
+    vehicleModel: driver.vehicleModel || '',
+    vehiclePlate: driver.vehiclePlate || '',
+    vehicleColor: driver.vehicleColor || ''
+  };
+}
+
 function signToken(user) {
   return jwt.sign({ sub: user.id, role: user.role }, jwtSecret, { expiresIn: '7d' });
 }
@@ -1203,6 +1223,20 @@ io.on('connection', (socket) => {
   socket.join(`${socket.data.auth.role}s`);
   socket.join(`user:${socket.data.auth.userId}`);
 
+  // Registra un handler de evento a prueba de payloads hostiles. Un valor por
+  // defecto (`data = {}`) no cubre un `null` explícito, así que desestructurar
+  // lanzaba y, al ser síncrono, tumbaba el proceso entero. Aquí el payload se
+  // normaliza a objeto y cualquier excepción queda contenida en el socket.
+  const on = (event, handler) => socket.on(event, payload => {
+    const data = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+    try {
+      handler(data);
+    } catch (error) {
+      console.error(`[+58express Socket.IO] Error no controlado en ${event}:`, error?.message);
+      socket.emit('socket:error', { event, error: 'EVENT_FAILED' });
+    }
+  });
+
   socket.on('join:room', (room) => {
     const allowedRooms = [`${socket.data.auth.role}s`, `user:${socket.data.auth.userId}`];
     if (!allowedRooms.includes(room)) return;
@@ -1210,7 +1244,7 @@ io.on('connection', (socket) => {
     console.log(`[+58express Socket.IO] Socket ${socket.id} joined room: ${room}`);
   });
 
-  socket.on('driver:connect', (data = {}) => {
+  on('driver:connect', (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
     socket.join('drivers');
     // Nunca se resuelve el conductor por el payload: solo por la sesión firmada.
@@ -1252,10 +1286,10 @@ io.on('connection', (socket) => {
     emitDriverLocation(driverId, { ...driver.location });
   };
 
-  socket.on('driver:location', handleDriverLocation);
-  socket.on('driver:location_update', handleDriverLocation);
+  on('driver:location', handleDriverLocation);
+  on('driver:location_update', handleDriverLocation);
 
-  socket.on('passenger:location_update', (data = {}) => {
+  on('passenger:location_update', (data = {}) => {
     if (!allowSocketRole(socket, 'passenger')) return;
     const passengerId = socket.data.auth.userId;
     const trip = database.trips.findLast(item =>
@@ -1289,97 +1323,92 @@ io.on('connection', (socket) => {
     emitDriverPresence(driver);
   };
 
-  socket.on('driver:status', handleDriverStatus);
-  socket.on('driver:status_change', handleDriverStatus);
+  on('driver:status', handleDriverStatus);
+  on('driver:status_change', handleDriverStatus);
 
   // Passenger Ride Request Event
-  socket.on('rideRequested', (tripData) => {
+  on('rideRequested', (tripData) => {
     if (!allowSocketRole(socket, 'passenger')) return;
-    const pickup = normalizeLocation(tripData?.pickup);
-    const destination = normalizeLocation(tripData?.destination);
-    if (!pickup || !destination) {
-      socket.emit('rideRequestFailed', { tripId: tripData?.id, reason: 'VALID_GPS_COORDINATES_REQUIRED' });
-      return;
-    }
-    tripData.pickup = pickup;
-    tripData.destination = destination;
-    tripData.passengerId = socket.data.auth.userId;
-    try {
-      ensureWalletCanCoverTrip(tripData, database.users.find(user => user.id === socket.data.auth.userId));
-    } catch (error) {
-      socket.emit('rideRequestFailed', { tripId: tripData?.id, reason: error.code, balance: error.balance, required: error.required });
-      return;
-    }
-    console.log(`[+58express Socket.IO] Passenger requested ride [${tripData.id}]`);
-    const existing = database.trips.find(t => t.id === tripData.id);
-    const trip = existing || {
-      ...tripData,
-      id: tripData.id || 'trip_' + Date.now(),
-      status: 'SEARCHING',
-      createdAt: tripData.createdAt || new Date().toISOString()
-    };
-    if (!existing) {
-      database.trips.push(trip);
-      persistDatabase();
-    }
-    dispatchTripToDrivers(trip);
+    // `rideRequested` entrante ya no crea, modifica ni redespacha viajes: la
+    // única vía es POST /api/trips/create, que valida tarifa, saldo y GPS y
+    // persiste en SQLite antes de despachar. El evento saliente del mismo
+    // nombre (oferta al conductor) no se ve afectado.
+    socket.emit('rideRequestFailed', {
+      tripId: typeof tripData?.id === 'string' ? tripData.id : null,
+      reason: 'USE_REST_API'
+    });
   });
 
   // Driver Atomic Ride Acceptance Event
-  socket.on('rideAccepted', (data) => {
+  on('rideAccepted', (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
-    const { tripId } = data;
-    const authenticatedDriver = database.users.find(user =>
-      user.id === socket.data.auth.userId && user.role === 'driver'
-    );
-    if (!authenticatedDriver?.isVerified) {
-      socket.emit('rideAcceptanceFailed', { tripId, reason: 'DRIVER_NOT_APPROVED' });
-      return;
+    // Del cliente solo se acepta el identificador del viaje.
+    const tripId = typeof data.tripId === 'string' ? data.tripId : null;
+    const driverId = socket.data.auth.userId;
+    // Todo rechazo sale por aquí sin haber tocado viaje, conductor, cerrojo,
+    // sesión ni temporizador.
+    const reject = reason => socket.emit('rideAcceptanceFailed', { tripId, reason });
+
+    if (!tripId) return reject('INVALID_TRIP_ID');
+    const authenticatedDriver = database.users.find(user => user.id === driverId && user.role === 'driver');
+    if (!authenticatedDriver?.isVerified || authenticatedDriver.status === 'SUSPENDED') {
+      return reject('DRIVER_NOT_APPROVED');
     }
-    const driver = publicUser(authenticatedDriver);
+    // Sin sesión de despacho no hay oferta que aceptar: conocer el ID del viaje
+    // no basta.
     const dispatchSession = dispatchSessions.get(tripId);
-    if (dispatchSession && dispatchSession.currentDriverId !== driver.id) {
-      socket.emit('rideAcceptanceFailed', { tripId, reason: 'NOT_CURRENT_OFFER' });
-      return;
+    if (!dispatchSession) return reject('NO_ACTIVE_OFFER');
+    if (dispatchSession.currentDriverId !== driverId) return reject('NOT_CURRENT_OFFER');
+
+    const trip = database.trips.find(item => item.id === tripId);
+    if (!trip) return reject('TRIP_NOT_FOUND');
+    if (normalizeTripStatus(trip.status) !== TRIP_STATUS.SEARCHING) {
+      return reject('TRIP_NOT_SEARCHING');
+    }
+    if (tripLocks.get(tripId)) return reject('ALREADY_ACCEPTED');
+    if (!canTransitionTrip(trip.status, TRIP_STATUS.DRIVER_ASSIGNED)) {
+      return reject('INVALID_TRIP_TRANSITION');
     }
 
-    // Atomic Lock Check
-    if (tripLocks.get(tripId)) {
-      socket.emit('rideAcceptanceFailed', { tripId, reason: 'ALREADY_ACCEPTED' });
-      return;
-    }
-
+    // A partir de aquí se muta estado. La transición va protegida para que un
+    // evento malicioso no pueda derribar el proceso, y el cerrojo se revierte
+    // si algo falla.
     tripLocks.set(tripId, true);
+    try {
+      transitionTrip(trip, TRIP_STATUS.DRIVER_ASSIGNED, { actorId: driverId, actorRole: 'driver' });
+    } catch (error) {
+      tripLocks.delete(tripId);
+      return reject(error.code || 'INVALID_TRIP_TRANSITION');
+    }
+
     if (dispatchTimers.has(tripId)) {
       clearTimeout(dispatchTimers.get(tripId));
       dispatchTimers.delete(tripId);
     }
     dispatchSessions.delete(tripId);
 
-    // Update trip and driver status
-    const trip = database.trips.find(t => t.id === tripId);
-    if (trip) {
-      transitionTrip(trip, TRIP_STATUS.DRIVER_ASSIGNED, { actorId: driver.id, actorRole: 'driver' });
-      trip.driver = driver;
-      trip.driverId = driver?.id;
-      persistDatabase();
-    }
-
-    const dUser = database.users.find(u => u.id === driver.id);
-    if (dUser) dUser.status = 'BUSY';
+    const driver = driverPublicSummary(authenticatedDriver);
+    trip.driver = driver;
+    trip.driverId = driverId;
+    // El conductor pasa a BUSY solo con la asignación ya consolidada.
+    authenticatedDriver.status = DRIVER_STATUS.BUSY;
+    persistDatabase();
 
     console.log(`[+58express Socket.IO] Atomic lock success! Ride [${tripId}] assigned to ${driver.firstName}`);
 
-    // Solo los participantes del viaje y administración: el perfil del conductor
-    // (correo, teléfono, cédula, documentos) no se difunde al resto de la flota.
-    io.to(`user:${trip?.passengerId}`).to(`user:${driver.id}`).to('admins').emit('tripStatusUpdated', {
-      tripId,
+    // Solo los participantes del viaje y administración.
+    io.to(`user:${trip.passengerId}`).to(`user:${driverId}`).to('admins').emit('tripStatusUpdated', {
+      tripId: trip.id,
+      // `EN_ROUTE` es el alias que consumen las pantallas actuales; el estado
+      // realmente persistido viaja en canonicalStatus.
       status: 'EN_ROUTE',
+      canonicalStatus: trip.status,
+      updatedAt: trip.updatedAt,
       driver
     });
   });
 
-  socket.on('rideRejected', ({ tripId } = {}) => {
+  on('rideRejected', ({ tripId } = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
     const session = dispatchSessions.get(tripId);
     if (!session || session.currentDriverId !== socket.data.auth.userId) return;
@@ -1392,43 +1421,55 @@ io.on('connection', (socket) => {
   });
 
   // Trip Status Transition Event ('ARRIVED', 'IN_PROGRESS', 'COMPLETED')
-  socket.on('tripStatusUpdated', (data) => {
+  on('tripStatusUpdated', (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
-    const { tripId, status, driver } = data;
-    const trip = database.trips.find(t => t.id === tripId);
+    // Del payload del conductor solo se leen estos dos campos; cualquier otra
+    // cosa que venga (driver, roles, HTML, campos extra) se descarta.
+    const tripId = typeof data.tripId === 'string' ? data.tripId : null;
+    const status = typeof data.status === 'string' ? data.status : null;
+    const trip = tripId ? database.trips.find(t => t.id === tripId) : null;
     if (!trip || trip.driverId !== socket.data.auth.userId) {
       socket.emit('authorization:error', { error: 'FORBIDDEN', tripId });
       return;
     }
-    if (trip) {
-      if (status === TRIP_STATUS.COMPLETED) {
-        try {
-          ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
-        } catch (error) {
-          socket.emit('tripStatusRejected', { tripId, status, error: error.code, balance: error.balance, required: error.required });
-          return;
-        }
-      }
+    if (!status) {
+      socket.emit('tripStatusRejected', { tripId, status: null, error: 'INVALID_TRIP_STATUS' });
+      return;
+    }
+    if (status === TRIP_STATUS.COMPLETED) {
       try {
-        transitionTrip(trip, status, { actorId: socket.data.auth.userId, actorRole: 'driver' });
+        ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
       } catch (error) {
-        socket.emit('tripStatusRejected', { tripId, status, error: error.code });
+        socket.emit('tripStatusRejected', { tripId, status, error: error.code, balance: error.balance, required: error.required });
         return;
       }
-      if (status === 'COMPLETED' || status === 'CANCELLED') {
-        const assignedDriver = database.users.find(user => user.id === trip.driverId);
-        if (assignedDriver) assignedDriver.status = 'AVAILABLE';
-        tripLocks.delete(tripId);
-      }
-      const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
-      persistDatabase();
-      emitCompletedTripWalletUpdates(trip, settlement);
     }
-    io.to(`user:${trip?.passengerId}`).to(`user:${socket.data.auth.userId}`).to('admins').emit('tripStatusUpdated', data);
+    try {
+      transitionTrip(trip, status, { actorId: socket.data.auth.userId, actorRole: 'driver' });
+    } catch (error) {
+      socket.emit('tripStatusRejected', { tripId, status, error: error.code || 'INVALID_TRIP_TRANSITION' });
+      return;
+    }
+    if ([TRIP_STATUS.COMPLETED, TRIP_STATUS.CANCELLED].includes(trip.status)) {
+      const assignedDriver = database.users.find(user => user.id === trip.driverId);
+      if (assignedDriver) assignedDriver.status = DRIVER_STATUS.AVAILABLE;
+      tripLocks.delete(tripId);
+    }
+    const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
+    persistDatabase();
+    emitCompletedTripWalletUpdates(trip, settlement);
+    // Payload construido por el servidor a partir del viaje ya persistido:
+    // nunca se retransmite el objeto recibido del conductor.
+    io.to(`user:${trip.passengerId}`).to(`user:${socket.data.auth.userId}`).to('admins').emit('tripStatusUpdated', {
+      tripId: trip.id,
+      status: trip.status,
+      canonicalStatus: trip.status,
+      updatedAt: trip.updatedAt
+    });
   });
 
   // Passenger Ride Cancelled Event
-  socket.on('rideCancelled', (data = {}) => {
+  on('rideCancelled', (data = {}) => {
     if (!allowSocketRole(socket, 'passenger')) return;
     const { tripId } = data;
     const passengerId = socket.data.auth.userId;
@@ -1478,7 +1519,7 @@ io.on('connection', (socket) => {
     if (assignedDriver) emitDriverPresence(assignedDriver, { includeActivePassenger: false });
   });
 
-  socket.on('chat:send_message', (data = {}) => {
+  on('chat:send_message', (data = {}) => {
     const trip = database.trips.find(item => item.id === data.tripId);
     const { userId, role } = socket.data.auth;
     if (!trip || !userCanAccessTrip(userId, role, trip) || role === 'admin') {
@@ -1504,7 +1545,7 @@ io.on('connection', (socket) => {
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', message);
   });
 
-  socket.on('tripRated', (data = {}) => {
+  on('tripRated', (data = {}) => {
     const trip = database.trips.find(item => item.id === data.tripId);
     const { userId, role } = socket.data.auth;
     if (!trip || !userCanAccessTrip(userId, role, trip) || !['driver', 'passenger'].includes(role)) return;

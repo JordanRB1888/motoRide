@@ -117,14 +117,19 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
     });
   });
 
-  passenger.emit('rideRequested', {
-    id: 'test_trip',
-    passengerId,
-    pickup: { lat: 10.6427, lng: -71.6125 },
-    destination: { lat: 10.65, lng: -71.60 },
-    fareEUR: 4.5,
-    paymentMethod: 'wallet'
+  // El viaje se crea por REST: `rideRequested` entrante ya no crea viajes.
+  const tripCreation = await fetch(`${url}/api/trips/create`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${passengerToken}` },
+    body: JSON.stringify({
+      id: 'test_trip',
+      pickup: { lat: 10.6427, lng: -71.6125 },
+      destination: { lat: 10.65, lng: -71.60 },
+      fareEUR: 4.5,
+      paymentMethod: 'wallet'
+    })
   });
+  assert.equal(tripCreation.status, 200);
 
   const update = await updatePromise;
   assert.equal(adminSawRequest, true);
