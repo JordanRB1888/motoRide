@@ -1,7 +1,7 @@
 /*
- * +58Express — Modern Yellow Lab
- * Local-only visual experiment. main.js enables this class exclusively on
- * localhost/127.0.0.1. Add ?classic=1 to compare with the current UI.
+ * +58Express — Modern Yellow Experience
+ * Official production interface. Add ?classic=1 only as a temporary
+ * diagnostic comparison with the previous interface.
  */
 
 html.modern-yellow-lab {

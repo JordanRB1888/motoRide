@@ -18,20 +18,18 @@ import { notificationService } from './services/notificationService.js';
 
 const appContainer = document.getElementById('app');
 const appSplash = document.getElementById('app-splash');
-const localModernPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-    && new URLSearchParams(window.location.search).get('classic') !== '1';
-document.documentElement.classList.toggle('modern-yellow-lab', localModernPreview);
-if (localModernPreview && new URLSearchParams(window.location.search).get('light') !== '1') {
+const modernExperienceEnabled = new URLSearchParams(window.location.search).get('classic') !== '1';
+document.documentElement.classList.toggle('modern-yellow-lab', modernExperienceEnabled);
+if (modernExperienceEnabled && new URLSearchParams(window.location.search).get('light') !== '1') {
     localStorage.setItem('58express_theme', 'dark');
     document.documentElement.classList.remove('theme-light');
 }
 
-// El laboratorio visual sigue siendo un experimento local: su hoja de estilos
-// se carga bajo demanda para que no forme parte del CSS inicial en producción.
-// Hasta que se promueva de forma deliberada, en Vercel no se verá este diseño.
-if (localModernPreview) {
+// La experiencia moderna es ahora la interfaz oficial de +58Express.
+// ?classic=1 queda disponible solo como comparación temporal de diagnóstico.
+if (modernExperienceEnabled) {
     import('./styles/modern-yellow-lab.css').catch(error => {
-        console.warn('[+58express] No se pudo cargar el laboratorio visual local:', error?.message);
+        console.warn('[+58express] No se pudo cargar la experiencia visual moderna:', error?.message);
         document.documentElement.classList.remove('modern-yellow-lab');
     });
 }
