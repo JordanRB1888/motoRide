@@ -12,7 +12,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { DatabaseSync } from 'node:sqlite';
 import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
-import { transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
+import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
+import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
 import { createPrivateStorage } from './services/privateStorage.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
@@ -406,15 +407,31 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 function normalizeLocation(location) {
-  if (location?.lat === null || location?.lat === undefined || location?.lng === null || location?.lng === undefined || String(location.lat).trim() === '' || String(location.lng).trim() === '') {
-    return null;
-  }
-  const lat = Number(location?.lat);
-  const lng = Number(location?.lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-    return null;
-  }
-  return { ...location, lat, lng };
+  const coordinates = normalizeCoordinates(location);
+  if (!coordinates) return null;
+  return { ...location, lat: coordinates.lat, lng: coordinates.lng };
+}
+
+// Un conductor solo existe para administración, para sí mismo y para el
+// pasajero con el que comparte un viaje activo. Ese es el alcance máximo de
+// cualquier evento de flota.
+function activeTripForDriver(driverId) {
+  return database.trips.findLast(trip =>
+    trip.driverId === driverId &&
+    ['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(trip.status)
+  ) || null;
+}
+
+function emitDriverPresence(driver, { includeActivePassenger = true } = {}) {
+  if (!driver?.id) return;
+  const summary = { driverId: driver.id, userId: driver.id, status: driver.status || 'OFFLINE' };
+  let audience = io.to('admins').to(`user:${driver.id}`);
+  const activeTrip = includeActivePassenger ? activeTripForDriver(driver.id) : null;
+  if (activeTrip?.passengerId) audience = audience.to(`user:${activeTrip.passengerId}`);
+  audience.emit('driverStatusChanged', summary);
+  // El perfil completo (correo, teléfono, cédula, documentos) es exclusivo de
+  // administración; el resto de la flota solo recibe el resumen de estado.
+  io.to('admins').emit('admin:driver_updated', publicUser(driver));
 }
 
 function userCanAccessTrip(userId, role, trip) {
@@ -423,10 +440,7 @@ function userCanAccessTrip(userId, role, trip) {
 
 function emitDriverLocation(driverId, location) {
   const payload = { ...location, driverId, userId: driverId };
-  const activeTrip = database.trips.findLast(trip =>
-    trip.driverId === driverId &&
-    ['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(trip.status)
-  );
+  const activeTrip = activeTripForDriver(driverId);
   io.to('admins').to(`user:${driverId}`).emit('driverLocationUpdated', {
     ...payload,
     tripId: activeTrip?.id || null
@@ -437,6 +451,8 @@ function emitDriverLocation(driverId, location) {
       tripId: activeTrip.id
     });
   }
+  // El mapa de flota es una pantalla exclusiva de administración.
+  io.to('admins').emit('admin:driver_location', payload);
 }
 
 // REST Endpoints
@@ -1092,28 +1108,24 @@ app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, (req, res) 
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
-  driver.status = req.body.status || driver.status;
+  const status = normalizeDriverStatus(req.body.status);
+  if (!status) return res.status(400).json({ error: 'INVALID_DRIVER_STATUS' });
+  driver.status = status;
   persistDatabase();
-  io.emit('driverStatusChanged', { driverId, userId: driverId, status: driver.status });
-  io.emit('admin:driver_updated', driver);
-  res.json(driver);
+  emitDriverPresence(driver);
+  res.json(publicUser(driver));
 });
 
 app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
-  driver.location = {
-    lat: Number(req.body.latitude ?? req.body.lat),
-    lng: Number(req.body.longitude ?? req.body.lng),
-    heading: Number(req.body.heading || 0),
-    updatedAt: Date.now()
-  };
+  const coordinates = normalizeCoordinates(req.body);
+  if (!coordinates) return res.status(400).json({ error: 'INVALID_COORDINATES' });
+  driver.location = { ...coordinates, updatedAt: Date.now() };
   persistDatabase();
-  const payload = { ...driver.location, driverId, userId: driverId };
-  emitDriverLocation(driverId, payload);
-  io.emit('admin:driver_location', payload);
-  res.json(driver);
+  emitDriverLocation(driverId, { ...driver.location });
+  res.json(publicUser(driver));
 });
 
 function dispatchTripToDrivers(trip) {
@@ -1200,52 +1212,48 @@ io.on('connection', (socket) => {
 
   socket.on('driver:connect', (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
-    data.userId = socket.data.auth.userId;
     socket.join('drivers');
-    const driver = database.users.find(u => u.id === data.userId) || database.users.find(u => u.role === 'driver');
-    if (driver) {
-      driver.status = data.status || 'AVAILABLE';
-      driver.socketId = socket.id;
-      driverRegistry.set(driver.id, socket.id);
-      persistDatabase();
+    // Nunca se resuelve el conductor por el payload: solo por la sesión firmada.
+    const driver = database.users.find(u => u.id === socket.data.auth.userId && u.role === 'driver');
+    if (!driver) {
+      socket.emit('authorization:error', { error: 'DRIVER_NOT_FOUND' });
+      return;
     }
-    socket.emit('driver:connected', { success: true, socketId: socket.id, driver: driver || null });
-    io.emit('admin:driver_updated', driver || { userId: data.userId, status: data.status || 'AVAILABLE' });
+    const requestedStatus = data.status === undefined ? DRIVER_STATUS.AVAILABLE : normalizeDriverStatus(data.status);
+    if (!requestedStatus) {
+      socket.emit('driver:status_rejected', { error: 'INVALID_DRIVER_STATUS', status: data.status });
+      return;
+    }
+    driver.status = requestedStatus;
+    driver.socketId = socket.id;
+    driverRegistry.set(driver.id, socket.id);
+    persistDatabase();
+    socket.emit('driver:connected', { success: true, socketId: socket.id, driver: publicUser(driver) });
+    emitDriverPresence(driver);
   });
 
   // Driver GPS Continuous Streaming Event
-  socket.on('driver:location', (data) => {
+  const handleDriverLocation = (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
-    data.driverId = socket.data.auth.userId;
-    const driverId = data.driverId;
-    const lat = Number(data.latitude ?? data.lat);
-    const lng = Number(data.longitude ?? data.lng);
-    const heading = Number(data.heading || 0);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    const driver = database.users.find(u => u.id === driverId);
-    if (driver) {
-      driver.location = { lat, lng, heading: heading || 0, updatedAt: Date.now() };
-      driver.status = driver.status || 'AVAILABLE';
-      persistDatabase();
+    // El identificador siempre proviene de la sesión, jamás del payload.
+    const driverId = socket.data.auth.userId;
+    const coordinates = normalizeCoordinates(data);
+    if (!coordinates) {
+      socket.emit('driver:location_rejected', { error: 'INVALID_COORDINATES' });
+      return;
     }
-    emitDriverLocation(driverId, { lat, lng, heading: heading || 0, updatedAt: Date.now() });
-  });
+    const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
+    if (!driver) return;
+    driver.location = { ...coordinates, updatedAt: Date.now() };
+    // Reportar GPS no reactiva a un conductor suspendido ni cambia su estado:
+    // solo cubre el caso de una cuenta sin estado previo.
+    if (!driver.status) driver.status = DRIVER_STATUS.AVAILABLE;
+    persistDatabase();
+    emitDriverLocation(driverId, { ...driver.location });
+  };
 
-  socket.on('driver:location_update', (data) => {
-    if (!allowSocketRole(socket, 'driver')) return;
-    data.userId = socket.data.auth.userId;
-    const driverId = data.userId || data.driverId;
-    const lat = data.latitude ?? data.lat;
-    const lng = data.longitude ?? data.lng;
-    const driver = database.users.find(u => u.id === driverId);
-    if (driver && Number.isFinite(lat) && Number.isFinite(lng)) {
-      driver.location = { lat, lng, heading: data.heading || 0, updatedAt: Date.now() };
-      persistDatabase();
-    }
-    const payload = { ...data, driverId, lat, lng };
-    emitDriverLocation(driverId, payload);
-    io.emit('admin:driver_location', payload);
-  });
+  socket.on('driver:location', handleDriverLocation);
+  socket.on('driver:location_update', handleDriverLocation);
 
   socket.on('passenger:location_update', (data = {}) => {
     if (!allowSocketRole(socket, 'passenger')) return;
@@ -1265,31 +1273,24 @@ io.on('connection', (socket) => {
     io.to(`user:${trip.driverId}`).to('admins').emit('passengerLocationUpdated', payload);
   });
 
-  // Driver Status Toggle Event ('AVAILABLE' | 'BUSY' | 'OFFLINE')
-  socket.on('driver:status', (data) => {
+  // Driver Status Toggle Event ('AVAILABLE' | 'BUSY' | 'IN_TRIP' | 'OFFLINE')
+  const handleDriverStatus = (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
-    data.driverId = socket.data.auth.userId;
-    const { driverId, status } = data;
-    const driver = database.users.find(u => u.id === driverId);
-    if (driver) {
-      driver.status = status;
-      persistDatabase();
+    const driverId = socket.data.auth.userId;
+    const status = normalizeDriverStatus(data.status);
+    if (!status) {
+      socket.emit('driver:status_rejected', { error: 'INVALID_DRIVER_STATUS', status: data.status });
+      return;
     }
-    io.emit('driverStatusChanged', { driverId, status });
-  });
+    const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
+    if (!driver) return;
+    driver.status = status;
+    persistDatabase();
+    emitDriverPresence(driver);
+  };
 
-  socket.on('driver:status_change', (data) => {
-    if (!allowSocketRole(socket, 'driver')) return;
-    data.userId = socket.data.auth.userId;
-    const driverId = data.userId || data.driverId;
-    const driver = database.users.find(u => u.id === driverId);
-    if (driver) {
-      driver.status = data.status;
-      persistDatabase();
-    }
-    io.emit('driverStatusChanged', { driverId, userId: driverId, status: data.status });
-    io.emit('admin:driver_updated', driver || data);
-  });
+  socket.on('driver:status', handleDriverStatus);
+  socket.on('driver:status_change', handleDriverStatus);
 
   // Passenger Ride Request Event
   socket.on('rideRequested', (tripData) => {
@@ -1369,8 +1370,9 @@ io.on('connection', (socket) => {
 
     console.log(`[+58express Socket.IO] Atomic lock success! Ride [${tripId}] assigned to ${driver.firstName}`);
 
-    // Broadcast confirmation to ALL clients (Passengers, Drivers, Admin)
-    io.to(`user:${trip?.passengerId}`).to('drivers').to('admins').emit('tripStatusUpdated', {
+    // Solo los participantes del viaje y administración: el perfil del conductor
+    // (correo, teléfono, cédula, documentos) no se difunde al resto de la flota.
+    io.to(`user:${trip?.passengerId}`).to(`user:${driver.id}`).to('admins').emit('tripStatusUpdated', {
       tripId,
       status: 'EN_ROUTE',
       driver
@@ -1422,27 +1424,58 @@ io.on('connection', (socket) => {
       persistDatabase();
       emitCompletedTripWalletUpdates(trip, settlement);
     }
-    io.to(`user:${trip?.passengerId}`).to('drivers').to('admins').emit('tripStatusUpdated', data);
+    io.to(`user:${trip?.passengerId}`).to(`user:${socket.data.auth.userId}`).to('admins').emit('tripStatusUpdated', data);
   });
 
   // Passenger Ride Cancelled Event
-  socket.on('rideCancelled', (data) => {
+  socket.on('rideCancelled', (data = {}) => {
     if (!allowSocketRole(socket, 'passenger')) return;
     const { tripId } = data;
+    const passengerId = socket.data.auth.userId;
+    const trip = database.trips.find(t => t.id === tripId);
+    if (!trip) {
+      socket.emit('rideCancellationRejected', { tripId, error: 'TRIP_NOT_FOUND' });
+      return;
+    }
+    // La propiedad del viaje se comprueba antes de tocar cerrojos o temporizadores:
+    // de lo contrario un tercero podría desarmar el despacho de un viaje ajeno.
+    if (trip.passengerId !== passengerId) {
+      socket.emit('rideCancellationRejected', { tripId, error: 'FORBIDDEN' });
+      return;
+    }
+    // `canTransitionTrip` admite el estado consigo mismo, así que los viajes ya
+    // terminados se descartan aparte.
+    const isClosed = [TRIP_STATUS.COMPLETED, TRIP_STATUS.CANCELLED].includes(normalizeTripStatus(trip.status));
+    if (isClosed || !canTransitionTrip(trip.status, TRIP_STATUS.CANCELLED)) {
+      socket.emit('rideCancellationRejected', { tripId, error: 'TRIP_NOT_CANCELLABLE', status: trip.status });
+      return;
+    }
+
+    // Se captura al conductor con la oferta abierta antes de limpiar la sesión,
+    // para poder cerrarle el modal de carrera entrante.
+    const offeredDriverId = dispatchSessions.get(tripId)?.currentDriverId || null;
     tripLocks.delete(tripId);
     dispatchSessions.delete(tripId);
     if (dispatchTimers.has(tripId)) {
       clearTimeout(dispatchTimers.get(tripId));
       dispatchTimers.delete(tripId);
     }
-    const trip = database.trips.find(t => t.id === tripId);
-    if (trip) {
-      transitionTrip(trip, TRIP_STATUS.CANCELLED, { actorId: socket.data.auth.userId, actorRole: 'passenger' });
-      persistDatabase();
+    try {
+      transitionTrip(trip, TRIP_STATUS.CANCELLED, { actorId: passengerId, actorRole: 'passenger' });
+    } catch (error) {
+      socket.emit('rideCancellationRejected', { tripId, error: error.code || 'TRIP_NOT_CANCELLABLE', status: trip.status });
+      return;
     }
+    const assignedDriver = database.users.find(user => user.id === trip.driverId);
+    if (assignedDriver) assignedDriver.status = DRIVER_STATUS.AVAILABLE;
+    persistDatabase();
 
     console.log(`[+58express Socket.IO] Ride [${tripId}] cancelled by passenger`);
-    io.emit('rideCancelled', { tripId });
+    let audience = io.to(`user:${passengerId}`).to('admins');
+    if (trip.driverId) audience = audience.to(`user:${trip.driverId}`);
+    if (offeredDriverId && offeredDriverId !== trip.driverId) audience = audience.to(`user:${offeredDriverId}`);
+    audience.emit('rideCancelled', { tripId });
+    if (assignedDriver) emitDriverPresence(assignedDriver, { includeActivePassenger: false });
   });
 
   socket.on('chat:send_message', (data = {}) => {
@@ -1496,10 +1529,12 @@ io.on('connection', (socket) => {
         driverRegistry.delete(driverId);
         const driver = database.users.find(u => u.id === driverId);
         if (driver) {
-          driver.status = 'OFFLINE';
+          driver.status = DRIVER_STATUS.OFFLINE;
           persistDatabase();
+          emitDriverPresence(driver);
+        } else {
+          io.to('admins').emit('admin:driver_updated', { userId: driverId, status: DRIVER_STATUS.OFFLINE });
         }
-        io.emit('admin:driver_updated', driver || { userId: driverId, status: 'OFFLINE' });
       }
     }
     console.log(`[+58express Socket.IO] Client disconnected: ${socket.id}`);
