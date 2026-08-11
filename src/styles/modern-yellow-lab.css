@@ -95,27 +95,6 @@ html.modern-yellow-lab :is(input, select, textarea, .search-input-wrapper,
 
 html.modern-yellow-lab :is(input, textarea)::placeholder { color: #656976 !important; }
 
-/* Local experiment badge, desktop only */
-@media (min-width: 900px) {
-  html.modern-yellow-lab body::before {
-    content: 'MODERN YELLOW · PRUEBA LOCAL';
-    position: fixed;
-    z-index: 200000;
-    right: 18px;
-    bottom: 18px;
-    padding: 8px 12px;
-    border: 1px solid var(--lab-line-bright);
-    border-radius: 999px;
-    background: rgba(12, 13, 18, .88);
-    color: var(--lab-yellow);
-    font-size: 10px;
-    font-weight: 850;
-    letter-spacing: .12em;
-    pointer-events: none;
-    backdrop-filter: blur(16px);
-  }
-}
-
 /* Landing and authentication */
 html.modern-yellow-lab .landing-container {
   background:
