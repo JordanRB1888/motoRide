@@ -1,6 +1,7 @@
 import { icon } from '../../utils/icons.js';
 import { createRatingStars } from '../../components/ratingStars.js';
 import { showToast } from '../../components/toast.js';
+import { vehicleImage } from '../../utils/vehicleMedia.js';
 
 export function renderActiveRide(trip, driver, onSOS, onChat, onMinimize) {
   const div = document.createElement('div');
@@ -32,7 +33,7 @@ export function renderActiveRide(trip, driver, onSOS, onChat, onMinimize) {
                style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--accent-primary);">
           <div>
             <strong style="display:block; color:var(--text-primary); font-size:0.95rem;">${driver?.firstName || 'Conductores'} ${driver?.lastName || ''}</strong>
-            <span style="color:var(--accent-primary); font-size:0.82rem; font-weight:700;">🏍️ ${driver?.vehicleBrand || 'Bera'} · ${driver?.vehiclePlate || 'AC3M49P'}</span>
+            <span class="active-driver-vehicle" style="color:var(--accent-primary); font-size:0.82rem; font-weight:700;">${vehicleImage(driver?.vehicleType || trip?.rideType || 'MOTO', { className: 'active-driver-vehicle-image', decorative: true })}${driver?.vehicleBrand || 'Bera'} · ${driver?.vehiclePlate || 'AC3M49P'}</span>
           </div>
         </div>
 

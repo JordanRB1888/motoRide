@@ -1,6 +1,7 @@
 import { icon } from '../../utils/icons.js';
 import { createStatusBadge } from '../../components/statusBadge.js';
 import { createRatingStars } from '../../components/ratingStars.js';
+import { vehicleImage } from '../../utils/vehicleMedia.js';
 
 export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancelRoute, onScheduleRide, onRideTypeChange) {
   const methodLabels = {
@@ -26,10 +27,10 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
         </div>
         <div class="ride-type-selector">
           <button type="button" class="ride-type-option ${fareData.rideType === 'MOTO' ? 'active' : ''}" data-ride-type="MOTO">
-            <span>🏍️</span><div><strong>Moto</strong><small>Rápida y económica</small></div>
+            <span class="ride-type-vehicle">${vehicleImage('MOTO', { decorative: true })}</span><div><strong>Moto</strong><small>Rápida y económica</small></div>
           </button>
           <button type="button" class="ride-type-option ${fareData.rideType === 'CAR' ? 'active' : ''}" data-ride-type="CAR">
-            <span>🚘</span><div><strong>Automóvil</strong><small>Más comodidad</small></div>
+            <span class="ride-type-vehicle">${vehicleImage('CAR', { decorative: true })}</span><div><strong>Automóvil</strong><small>Más comodidad</small></div>
           </button>
         </div>
         <div class="fare-summary-grid">
@@ -97,8 +98,8 @@ function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelR
       </div>
       
       <div class="ride-type-selector" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
-        <button type="button" class="ride-type-option" data-ride-type="MOTO" style="padding:13px 10px; border-radius:16px; border:1.5px solid ${fareData.rideType === 'MOTO' ? 'var(--accent-primary)' : 'var(--border-color)'}; background:${fareData.rideType === 'MOTO' ? 'rgba(255,193,7,.16)' : 'var(--surface-elevated)'}; color:var(--text-primary); font-weight:850; cursor:pointer;">🏍️ Moto<br><small style="color:var(--text-secondary);">Rápida y económica</small></button>
-        <button type="button" class="ride-type-option" data-ride-type="CAR" style="padding:13px 10px; border-radius:16px; border:1.5px solid ${fareData.rideType === 'CAR' ? 'var(--accent-primary)' : 'var(--border-color)'}; background:${fareData.rideType === 'CAR' ? 'rgba(255,193,7,.16)' : 'var(--surface-elevated)'}; color:var(--text-primary); font-weight:850; cursor:pointer;">🚘 Automóvil<br><small style="color:var(--text-secondary);">Más comodidad</small></button>
+        <button type="button" class="ride-type-option" data-ride-type="MOTO" style="padding:13px 10px; border-radius:16px; border:1.5px solid ${fareData.rideType === 'MOTO' ? 'var(--accent-primary)' : 'var(--border-color)'}; background:${fareData.rideType === 'MOTO' ? 'rgba(255,193,7,.16)' : 'var(--surface-elevated)'}; color:var(--text-primary); font-weight:850; cursor:pointer;"><span class="ride-type-vehicle">${vehicleImage('MOTO', { decorative: true })}</span>Moto<br><small style="color:var(--text-secondary);">Rápida y económica</small></button>
+        <button type="button" class="ride-type-option" data-ride-type="CAR" style="padding:13px 10px; border-radius:16px; border:1.5px solid ${fareData.rideType === 'CAR' ? 'var(--accent-primary)' : 'var(--border-color)'}; background:${fareData.rideType === 'CAR' ? 'rgba(255,193,7,.16)' : 'var(--surface-elevated)'}; color:var(--text-primary); font-weight:850; cursor:pointer;"><span class="ride-type-vehicle">${vehicleImage('CAR', { decorative: true })}</span>Automóvil<br><small style="color:var(--text-secondary);">Más comodidad</small></button>
       </div>
 
       <!-- Fare and Distance Stats -->
@@ -211,11 +212,7 @@ export function renderSearchingState(onCancel, rideType = 'MOTO') {
           <span class="searching-radar-ring ring-two"></span>
           <span class="searching-radar-sweep"></span>
           <div class="searching-vehicle-art ${isCar ? 'is-car' : 'is-moto'}">
-            ${isCar ? `
-              <svg viewBox="0 0 96 72"><path class="search-tyre" d="M16 25h8v22h-8zM72 25h8v22h-8z"/><path class="search-shell" d="M25 12h46l10 19v22c0 5-4 9-9 9H24c-5 0-9-4-9-9V31z"/><path class="search-glass" d="m31 17 34 0 8 16H23z"/><path class="search-detail" d="M21 38h54M48 18v39"/><circle class="search-light" cx="27" cy="17" r="4"/><circle class="search-light" cx="69" cy="17" r="4"/></svg>
-            ` : `
-              <svg viewBox="0 0 112 76"><circle class="search-tyre" cx="24" cy="55" r="14"/><circle class="search-tyre" cx="88" cy="55" r="14"/><path class="search-detail" d="M24 55h27l16-28h19M50 55 38 29h25l25 26M42 25h16"/><path class="search-shell" d="M42 36h25l10 18H49z"/><circle class="search-rider" cx="61" cy="17" r="9"/><path class="search-rider-body" d="m58 27-8 18h20l-3-17z"/><circle class="search-light" cx="90" cy="43" r="4"/></svg>
-            `}
+            ${vehicleImage(isCar ? 'CAR' : 'MOTO', { className: 'searching-real-vehicle', decorative: true })}
           </div>
         </div>
         <div class="searching-ride-copy">

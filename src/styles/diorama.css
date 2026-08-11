@@ -195,7 +195,7 @@
   z-index: 3;
   width: 50px;
   height: 50px;
-  padding: 5px;
+  padding: 4px;
   border-radius: 18px;
   background: linear-gradient(145deg, rgba(11, 23, 38, .98), rgba(2, 9, 17, .98));
   border: 1.5px solid rgba(255, 196, 0, .94);
@@ -204,6 +204,19 @@
   transition: transform .42s cubic-bezier(.2, .75, .25, 1), box-shadow .25s ease;
   will-change: transform;
 }
+
+.live-vehicle-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 5px 4px rgba(0, 0, 0, .62));
+}
+
+.live-vehicle-moto .live-vehicle-photo { transform: scale(.88); }
+.live-vehicle-car .live-vehicle-photo { transform: scale(.94); }
 
 .live-vehicle-svg {
   width: 100%;
@@ -266,7 +279,7 @@
 
 .live-vehicle-marker.is-moving .vehicle-motion-trail { opacity: .8; animation: vehicleTrailPulse .55s ease-in-out infinite alternate; }
 .live-vehicle-marker.is-moving .live-vehicle-rotor { box-shadow: inset 0 1px rgba(255,255,255,.14), 0 0 0 5px rgba(255,196,0,.14), 0 0 28px rgba(255,196,0,.42); }
-.live-vehicle-marker.is-moving .vehicle-artwork { animation: vehicleRoadVibration .26s ease-in-out infinite alternate; transform-origin: center; }
+.live-vehicle-marker.is-moving .live-vehicle-photo { animation: vehicleRoadVibration .26s ease-in-out infinite alternate; transform-origin: center; }
 
 .vehicle-live-dot {
   position: absolute;
@@ -335,6 +348,11 @@
   .live-vehicle-marker *,
   .waiting-passenger-marker * { animation: none !important; transition-duration: .01ms !important; }
 }
+
+.incoming-real-vehicle { display: inline-flex !important; align-items: center; gap: 7px; }
+.incoming-real-vehicle .real-vehicle-image { width: 44px; height: 27px; object-fit: contain; filter: drop-shadow(0 4px 4px rgba(0,0,0,.42)); }
+.pricing-vehicle-heading { display: flex; align-items: center; gap: 12px; min-height: 54px; }
+.pricing-vehicle-heading .real-vehicle-image { width: 82px; height: 50px; object-fit: contain; filter: drop-shadow(0 7px 6px rgba(0,0,0,.48)); }
 
 /* ============================================================
    DIORAMA CARDS & TACTILE 3D UX PANELS

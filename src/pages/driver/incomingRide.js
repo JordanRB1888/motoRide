@@ -1,4 +1,5 @@
 import { icon } from '../../utils/icons.js';
+import { vehicleImage } from '../../utils/vehicleMedia.js';
 
 export function renderIncomingRide(trip, passenger, onAccept, onReject) {
     const overlay = document.createElement('div');
@@ -32,7 +33,7 @@ export function renderIncomingRide(trip, passenger, onAccept, onReject) {
                 <div class="incoming-earning"><small>GANANCIA NETA</small><strong>$${fare.toFixed(2)} <span>USD</span></strong></div>
                 <div><small>DISTANCIA</small><strong>${icon('mapPin', 18)} ${distance.toFixed(1)} km</strong></div>
                 <div><small>TIEMPO</small><strong>${icon('clock', 18)} ${Math.round(duration)} min</strong></div>
-                <span class="incoming-type">${trip?.rideType === 'CAR' ? icon('car', 17) : icon('bike', 17)} ${rideType}</span>
+                <span class="incoming-type incoming-real-vehicle">${vehicleImage(trip?.rideType, { decorative: true })}<span>${rideType}</span></span>
                 <span class="incoming-payment">${icon('wallet', 17)} ${payment}</span>
             </div>
 

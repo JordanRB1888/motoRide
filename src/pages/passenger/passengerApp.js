@@ -25,6 +25,7 @@ import { audioEffects } from '../../utils/audioEffects.js';
 import { eventLogger } from '../../utils/logger.js';
 import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { createAdminSupportChat } from '../../components/adminSupportChat.js';
+import { vehicleImage } from '../../utils/vehicleMedia.js';
 
 export function renderPassengerApp(container) {
   let currentState = 'IDLE';
@@ -87,8 +88,8 @@ export function renderPassengerApp(container) {
           <input type="text" id="destination-input" placeholder="Ingresa tu destino" readonly>
         </div>
         <div class="passenger-vehicle-selector" aria-label="Tipo de servicio">
-          <button type="button" class="vehicle-choice active" data-vehicle="MOTO"><span class="vehicle-art">🏍️</span><span><b>Moto</b><small>1 pasajero</small><em>Desde $1.50</em></span></button>
-          <button type="button" class="vehicle-choice" data-vehicle="CAR"><span class="vehicle-art">🚙</span><span><b>Auto</b><small>1–4 pasajeros</small><em>Desde $2.50</em></span></button>
+          <button type="button" class="vehicle-choice active" data-vehicle="MOTO"><span class="vehicle-art">${vehicleImage('MOTO', { decorative: true })}</span><span><b>Moto</b><small>1 pasajero</small><em>Desde $1.50</em></span></button>
+          <button type="button" class="vehicle-choice" data-vehicle="CAR"><span class="vehicle-art">${vehicleImage('CAR', { decorative: true })}</span><span><b>Auto</b><small>1–4 pasajeros</small><em>Desde $2.50</em></span></button>
         </div>
       </div>
 

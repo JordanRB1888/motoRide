@@ -2,6 +2,7 @@ import { socketClient } from '../../services/socketClient.js';
 import { apiService } from '../../services/apiService.js';
 import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
+import { vehicleImage } from '../../utils/vehicleMedia.js';
 
 const escapeHtml = value => String(value ?? '')
   .replaceAll('&', '&amp;')
@@ -92,7 +93,7 @@ async function initializeFleetMap(container) {
 
   function markerIcon(driver) {
     const status = statusOf(driver);
-    const vehicleIcon = driver.vehicleType === 'CAR' ? icon('car', 18) : icon('bike', 18);
+    const vehicleIcon = vehicleImage(driver.vehicleType, { variant: 'map', className: 'fleet-real-vehicle', decorative: true });
     return L.divIcon({
       className: 'fleet-driver-leaflet-marker',
       html: `<span class="${status.toLowerCase()}">${vehicleIcon}<i></i></span>`,
@@ -151,7 +152,7 @@ async function initializeFleetMap(container) {
     const speed = Number(driver.speed);
     panel.innerHTML = `<header><img src="${escapeHtml(photo)}" alt=""><div><strong>${escapeHtml(nameOf(driver))}</strong><span class="${status.toLowerCase()}">${statusText(status)}</span></div><button id="close-fleet-driver">${icon('close', 18)}</button></header>
       <div class="fleet-driver-facts">
-        <article><span>${icon(driver.vehicleType === 'CAR' ? 'car' : 'bike', 17)}</span><div><small>Vehículo</small><strong>${escapeHtml(`${driver.vehicleBrand || 'No disponible'} ${driver.vehicleModel || ''}`.trim())}</strong></div><code>${escapeHtml(driver.vehiclePlate || 'Sin placa')}</code></article>
+        <article><span class="fleet-detail-vehicle">${vehicleImage(driver.vehicleType, { decorative: true })}</span><div><small>Vehículo</small><strong>${escapeHtml(`${driver.vehicleBrand || 'No disponible'} ${driver.vehicleModel || ''}`.trim())}</strong></div><code>${escapeHtml(driver.vehiclePlate || 'Sin placa')}</code></article>
         <article><span>${icon('route', 17)}</span><div><small>Ruta actual</small><strong>${escapeHtml(routeLabel)}</strong></div></article>
         <article><span>${icon('clock', 17)}</span><div><small>Última actualización GPS</small><strong class="fresh">${relativeTime(driver.updatedAt || driver.location?.updatedAt)}</strong></div></article>
         <article><span>${icon('trending', 17)}</span><div><small>Velocidad actual</small><strong>${Number.isFinite(speed) ? `${Math.round(speed)} km/h` : 'No disponible'}</strong></div></article>

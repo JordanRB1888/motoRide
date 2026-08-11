@@ -1,44 +1,20 @@
 import { icon } from '../utils/icons.js';
 import { fareCalculator } from '../services/fareCalculator.js';
 import { showToast } from './toast.js';
+import { normalizeVehicleType, vehicleImage } from '../utils/vehicleMedia.js';
 
-const normalizeVehicleType = (value = '') => {
-  const normalized = String(value).trim().toUpperCase();
-  return ['CAR', 'AUTO', 'AUTOMOVIL', 'AUTOMÓVIL'].includes(normalized) ? 'CAR' : 'MOTO';
-};
-
-const vehicleMarkerSvg = (vehicleType) => vehicleType === 'CAR'
-  ? `<svg class="live-vehicle-svg" viewBox="0 0 64 64" aria-hidden="true">
-      <g class="vehicle-artwork">
-        <path class="vehicle-tyre" d="M15 17h5v12h-5zM44 17h5v12h-5zM15 36h5v12h-5zM44 36h5v12h-5z"/>
-        <path class="vehicle-shell" d="M22 7h20l7 15v27c0 5-4 9-9 9H24c-5 0-9-4-9-9V22z"/>
-        <path class="vehicle-glass" d="m24 12 16 0 4 11H20zM20 29h24v15H20z"/>
-        <path class="vehicle-highlight" d="M24 8h7v49h-7c-5 0-9-4-9-9V22z"/>
-        <path class="vehicle-detail" d="M20 28h24M32 29v15M22 49h20"/>
-        <path class="vehicle-headlight" d="M21 8h7v4h-8zM36 8h7l1 4h-8z"/>
-        <path class="vehicle-taillight" d="M20 52h8v4h-6zM36 52h8l-2 4h-6z"/>
-      </g>
-    </svg>`
-  : `<svg class="live-vehicle-svg" viewBox="0 0 64 64" aria-hidden="true">
-      <g class="vehicle-artwork">
-        <ellipse class="vehicle-tyre" cx="32" cy="10" rx="7" ry="9"/>
-        <ellipse class="vehicle-tyre" cx="32" cy="54" rx="7" ry="9"/>
-        <path class="vehicle-detail" d="M21 17h22M24 17l8 13 8-13M32 30v18M25 45h14"/>
-        <path class="vehicle-shell" d="M26 26c0-5 2-9 6-9s6 4 6 9l4 17-10 7-10-7z"/>
-        <path class="vehicle-highlight" d="M27 27c0-4 1-7 4-8v29l-7-6z"/>
-        <circle class="vehicle-rider" cx="32" cy="29" r="7"/>
-        <path class="vehicle-glass" d="M27 27c1-6 9-6 10 0-3-2-7-2-10 0z"/>
-        <circle class="vehicle-headlight" cx="32" cy="8" r="3.5"/>
-        <path class="vehicle-taillight" d="M28 55h8v4h-8z"/>
-      </g>
-    </svg>`;
+const vehicleMarkerArtwork = vehicleType => vehicleImage(vehicleType, {
+  variant: 'map',
+  className: 'live-vehicle-photo',
+  decorative: true
+});
 
 const vehicleMarkerHtml = (vehicleType, heading = 0) => `
   <div class="live-vehicle-marker live-vehicle-${vehicleType.toLowerCase()}" style="--vehicle-heading:${Number(heading) || 0}deg">
     <span class="vehicle-heading-cone"></span>
     <span class="vehicle-motion-trail"></span>
     <span class="vehicle-ground-shadow"></span>
-    <div class="live-vehicle-rotor">${vehicleMarkerSvg(vehicleType)}</div>
+    <div class="live-vehicle-rotor">${vehicleMarkerArtwork(vehicleType)}</div>
     <span class="vehicle-live-dot"></span>
   </div>`;
 

@@ -12,6 +12,7 @@ import { createNotificationCenterModal } from '../../components/notificationCent
 import { notificationService } from '../../services/notificationService.js';
 import { socket } from '../../services/socketClient.js';
 import { icon } from '../../utils/icons.js';
+import { vehicleImage } from '../../utils/vehicleMedia.js';
 
 const ACTIVE_STATUSES = ['SEARCHING','DRIVER_ASSIGNED','EN_ROUTE','ARRIVED','IN_PROGRESS','IN_TRIP'];
 const statusLabel = status => ({SEARCHING:'Buscando',DRIVER_ASSIGNED:'Asignado',EN_ROUTE:'En camino',ARRIVED:'En recogida',IN_PROGRESS:'En viaje',IN_TRIP:'En viaje',COMPLETED:'Completado',CANCELLED:'Cancelado'}[status] || status || 'Pendiente');
@@ -45,7 +46,7 @@ export function renderAdminApp(container) {
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(dashboardMap);
     users.filter(u=>u.role==='driver'&&Number.isFinite(u.location?.lat)&&Number.isFinite(u.location?.lng)).forEach(driver=>{
       const tone=['AVAILABLE','ONLINE'].includes(driver.status)?'#20dc8e':['BUSY','IN_TRIP'].includes(driver.status)?'#22c7e8':'#ffb800';
-      const marker=L.divIcon({className:'ops-driver-marker',html:`<span style="--marker-tone:${tone}">${icon(driver.vehicleType==='CAR'?'car':'navigation',16)}</span>`,iconSize:[38,38],iconAnchor:[19,19]});
+      const marker=L.divIcon({className:'ops-driver-marker',html:`<span style="--marker-tone:${tone}">${vehicleImage(driver.vehicleType,{variant:'map',className:'ops-real-vehicle',decorative:true})}</span>`,iconSize:[38,38],iconAnchor:[19,19]});
       L.marker([driver.location.lat,driver.location.lng],{icon:marker}).addTo(dashboardMap).bindTooltip(`${escapeHtml(driver.firstName)} · ${statusLabel(driver.status)}`);
     });
   });

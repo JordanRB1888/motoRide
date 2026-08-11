@@ -893,5 +893,49 @@ body > .bottom-sheet-overlay.searching-ride-overlay{background:transparent!impor
 @media(max-width:370px),(max-height:700px){body>.bottom-sheet.searching-ride-sheet{max-height:292px!important}.searching-ride-main{grid-template-columns:86px minmax(0,1fr);gap:8px}.searching-radar{width:82px;height:82px}.searching-radar-ring.ring-one{width:50px;height:50px}.searching-radar-ring.ring-two{width:74px;height:74px}.searching-vehicle-art{width:62px;height:48px}.searching-ride-copy h3{font-size:.9rem}.searching-minimize-btn,.searching-cancel-btn{min-height:36px}}
 @media(prefers-reduced-motion:reduce){.searching-radar-ring,.searching-radar-sweep,.searching-vehicle-art,.searching-live-label i{animation:none!important}}
 
+/* Realistic +58Express vehicle media */
+.real-vehicle-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.vehicle-art {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  font-size: 0 !important;
+}
+.vehicle-art .real-vehicle-image {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 8px rgba(0,0,0,.58));
+  transition: transform .28s cubic-bezier(.2,.75,.25,1), filter .28s ease;
+}
+.vehicle-choice.active .vehicle-art .real-vehicle-image {
+  transform: translateY(-2px) scale(1.05);
+  filter: drop-shadow(0 9px 9px rgba(0,0,0,.58)) drop-shadow(0 0 8px rgba(255,196,0,.24));
+}
+.ride-type-vehicle {
+  width: 76px;
+  height: 50px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 76px;
+}
+.ride-type-vehicle .real-vehicle-image { width: 100%; height: 100%; filter: drop-shadow(0 7px 7px rgba(0,0,0,.5)); }
+.searching-vehicle-art .searching-real-vehicle { width: 100%; height: 100%; object-fit: contain; }
+.searching-vehicle-art.is-car .searching-real-vehicle { transform: scale(1.08); }
+.active-driver-vehicle { display: inline-flex; align-items: center; gap: 7px; }
+.active-driver-vehicle-image { width: 42px; height: 25px; object-fit: contain; filter: drop-shadow(0 4px 4px rgba(0,0,0,.45)); }
+@media(max-width:370px){
+  .vehicle-art{flex-basis:60px;width:60px;height:46px}
+  .ride-type-vehicle{width:62px;height:43px;flex-basis:62px}
+}
+
 /* Passenger home cockpit — map-first premium layout */
 .passenger-app .map-legend-bar{display:none!important}.passenger-app .leaflet-tile-pane{filter:saturate(.68) contrast(1.08) brightness(.86)}.theme-light .passenger-app .leaflet-tile-pane{filter:saturate(.86) contrast(1.02) brightness(1.03)}.passenger-app .leaflet-top.leaflet-left{left:auto;right:10px}.passenger-app .leaflet-control-zoom{margin-top:102px!important;margin-right:0!important;border:1px solid rgba(148,163,184,.28)!important;border-radius:14px!important;overflow:hidden;box-shadow:0 10px 24px rgba(0,0,0,.34)!important}.passenger-app .leaflet-control-zoom a{width:38px!important;height:38px!important;line-height:38px!important;border-color:rgba(148,163,184,.16)!important;background:rgba(6,16,28,.94)!important;color:#f8fafc!important}.passenger-app .gps-locate-btn{right:14px!important;bottom:272px!important;width:48px!important;height:48px!important;border:1px solid rgba(148,163,184,.4)!important;background:rgba(6,16,28,.94)!important;color:#f8fafc!important;font-size:0!important;box-shadow:0 12px 28px rgba(0,0,0,.45)!important}.passenger-app .gps-locate-btn:after{content:"";width:18px;height:18px;border:3px solid #f8fafc;border-radius:50%;box-shadow:0 0 0 5px rgba(255,255,255,.05)}.passenger-app .gps-locate-btn:before{content:"";position:absolute;width:4px;height:4px;border-radius:50%;background:#ffc400}.passenger-app .top-search-bar{bottom:83px!important;padding:10px 11px 11px!important;gap:8px!important;border-radius:24px!important;border-color:rgba(148,163,184,.3)!important;background:linear-gradient(160deg,rgba(7,17,30,.985),rgba(2,10,19,.985))!important;box-shadow:0 -18px 48px rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.035)!important}.passenger-dock-handle{width:42px!important;height:4px!important;background:#53657a!important}.passenger-search-title{text-align:center;padding:0!important;font-size:.92rem!important;letter-spacing:-.025em}.passenger-app .search-input-wrapper{height:46px!important;padding:0 13px!important;border-radius:14px!important;background:rgba(2,9,17,.74)!important;border-color:rgba(148,163,184,.24)!important}.passenger-app .search-input-wrapper input{font-size:.73rem!important;color:#dce4ec!important}.passenger-app .passenger-vehicle-selector{gap:8px}.passenger-app .vehicle-choice{min-width:0;height:80px;padding:8px 10px;border-radius:16px}.passenger-app .vehicle-choice.active{background:linear-gradient(145deg,rgba(255,196,0,.11),rgba(5,14,24,.98));box-shadow:inset 0 0 0 1px rgba(255,196,0,.12),0 7px 18px rgba(0,0,0,.16)}.passenger-app .vehicle-choice:not(.active){background:linear-gradient(145deg,rgba(0,200,255,.055),rgba(5,14,24,.98))}.passenger-app .vehicle-art{font-size:1.75rem}.passenger-app .vehicle-choice b{font-size:.78rem}.passenger-app .vehicle-choice small{font-size:.55rem}.passenger-app .vehicle-choice em{font-size:.56rem}.passenger-app .vehicle-choice.active em{color:#ffc400}.passenger-app .vehicle-choice:not(.active) em{color:#16c8ea}.passenger-app .bottom-nav{height:67px!important;border-radius:22px!important;background:rgba(3,11,21,.985)!important;box-shadow:0 17px 42px rgba(0,0,0,.5)!important}.passenger-app .nav-btn.active{border:1px solid rgba(255,196,0,.42);background:linear-gradient(145deg,rgba(255,196,0,.16),rgba(255,196,0,.045));box-shadow:0 0 24px rgba(255,196,0,.06)!important}.passenger-app .moto-3d-badge{width:40px;height:40px;animation:homeMarkerFloat 2.8s ease-in-out infinite}.passenger-app .moto-3d-body{width:40px;height:40px;border:2px solid #07111d;background:linear-gradient(145deg,#ffdc28,#ffad00);box-shadow:0 8px 20px rgba(0,0,0,.5),0 0 0 4px rgba(255,196,0,.13)}.passenger-app .moto-3d-shadow{bottom:-7px;width:27px}.passenger-app .moto-vehicle-icon{display:grid;place-items:center;color:#07111d}.passenger-app .moto-vehicle-icon svg{width:19px;height:19px;stroke-width:2.2}.passenger-app .user-location-marker>div{width:22px!important;height:22px!important;border:3px solid #fff!important;background:#16c8ea!important;box-shadow:0 0 0 9px rgba(22,200,234,.13),0 0 22px rgba(22,200,234,.85)!important}@keyframes homeMarkerFloat{50%{transform:translateY(-4px)}}@media(max-height:740px){.passenger-app .vehicle-choice{height:66px}.passenger-app .gps-locate-btn{bottom:245px!important}}@media(max-width:360px){.passenger-app .top-search-bar{padding-inline:8px!important}.passenger-app .vehicle-choice{height:72px;padding-inline:7px}.passenger-app .vehicle-art{font-size:1.45rem}.passenger-app .gps-locate-btn{right:10px!important}}
