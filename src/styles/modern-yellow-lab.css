@@ -1,0 +1,545 @@
+/*
+ * +58Express — Modern Yellow Lab
+ * Local-only visual experiment. main.js enables this class exclusively on
+ * localhost/127.0.0.1. Add ?classic=1 to compare with the current UI.
+ */
+
+html.modern-yellow-lab {
+  --lab-bg: #0c0d12;
+  --lab-bg-soft: #12141b;
+  --lab-panel: rgba(25, 27, 36, .92);
+  --lab-panel-strong: #1a1c25;
+  --lab-panel-warm: #242116;
+  --lab-line: rgba(255, 255, 255, .105);
+  --lab-line-bright: rgba(255, 210, 31, .34);
+  --lab-yellow: #ffd21f;
+  --lab-yellow-2: #ffb800;
+  --lab-yellow-soft: rgba(255, 210, 31, .13);
+  --lab-white: #f7f7fa;
+  --lab-muted: #9699a6;
+  --lab-muted-2: #686b77;
+  --lab-green: #55e29a;
+  --lab-red: #ff6878;
+  --lab-blue: #63c9ff;
+  --lab-radius-xl: 30px;
+  --lab-radius-lg: 23px;
+  --lab-radius-md: 17px;
+  --lab-shadow: 0 24px 70px rgba(0, 0, 0, .42);
+  color-scheme: dark;
+  background: var(--lab-bg);
+}
+
+html.modern-yellow-lab,
+html.modern-yellow-lab body,
+html.modern-yellow-lab #app {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(255, 210, 31, .055), transparent 34%),
+    var(--lab-bg) !important;
+  color: var(--lab-white);
+}
+
+html.modern-yellow-lab body {
+  font-family: 'Outfit', system-ui, sans-serif;
+  letter-spacing: -.01em;
+}
+
+html.modern-yellow-lab * {
+  scrollbar-color: rgba(255, 210, 31, .28) transparent;
+}
+
+html.modern-yellow-lab :is(button, input, select, textarea) {
+  font: inherit;
+}
+
+html.modern-yellow-lab :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--lab-yellow) !important;
+  outline-offset: 3px;
+}
+
+html.modern-yellow-lab :is(.glass-panel, .diorama-card-3d, .ops-panel, .finance-card,
+  .wallet-real-history, .real-profile-card, .passenger-history-card,
+  .earnings-chart-card, .earnings-activity-card, .driver-history-card) {
+  background: linear-gradient(150deg, rgba(29, 31, 41, .98), rgba(16, 18, 24, .98)) !important;
+  border: 1px solid var(--lab-line) !important;
+  border-radius: var(--lab-radius-lg) !important;
+  box-shadow: 0 16px 46px rgba(0, 0, 0, .24) !important;
+}
+
+html.modern-yellow-lab :is(.primary-btn, .confirm-ride-btn, .incoming-accept,
+  .trip-primary-action, .driver-rating-submit, .wallet-payment-continue,
+  .wallet-topup-modal button[type='submit'], .finance-review, .topup-review-button) {
+  border: 0 !important;
+  border-radius: 17px !important;
+  background: linear-gradient(135deg, var(--lab-yellow), var(--lab-yellow-2)) !important;
+  color: #111216 !important;
+  box-shadow: 0 11px 28px rgba(255, 190, 0, .19) !important;
+  font-weight: 900 !important;
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+}
+
+html.modern-yellow-lab :is(.primary-btn, .confirm-ride-btn, .incoming-accept,
+  .trip-primary-action, .driver-rating-submit):active {
+  transform: translateY(1px) scale(.985);
+  box-shadow: 0 5px 14px rgba(255, 190, 0, .16) !important;
+}
+
+html.modern-yellow-lab :is(input, select, textarea, .search-input-wrapper,
+  .search-sheet-input, .fare-payment-selector) {
+  color: var(--lab-white) !important;
+  background: rgba(8, 9, 13, .82) !important;
+  border-color: var(--lab-line) !important;
+  border-radius: var(--lab-radius-md) !important;
+  box-shadow: none !important;
+}
+
+html.modern-yellow-lab :is(input, textarea)::placeholder { color: #656976 !important; }
+
+/* Local experiment badge, desktop only */
+@media (min-width: 900px) {
+  html.modern-yellow-lab body::before {
+    content: 'MODERN YELLOW · PRUEBA LOCAL';
+    position: fixed;
+    z-index: 200000;
+    right: 18px;
+    bottom: 18px;
+    padding: 8px 12px;
+    border: 1px solid var(--lab-line-bright);
+    border-radius: 999px;
+    background: rgba(12, 13, 18, .88);
+    color: var(--lab-yellow);
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .12em;
+    pointer-events: none;
+    backdrop-filter: blur(16px);
+  }
+}
+
+/* Landing and authentication */
+html.modern-yellow-lab .landing-container {
+  background:
+    radial-gradient(circle at 50% 6%, rgba(255, 210, 31, .12), transparent 24%),
+    linear-gradient(180deg, #101116, #090a0e 68%) !important;
+}
+
+html.modern-yellow-lab .landing-background .grid-pattern { opacity: .12; }
+html.modern-yellow-lab .landing-background .glow-orb { filter: blur(80px); opacity: .18; }
+
+html.modern-yellow-lab .landing-card-premium {
+  width: min(92vw, 510px) !important;
+  padding: clamp(24px, 4vw, 40px) !important;
+  border-radius: 36px !important;
+  background: linear-gradient(155deg, rgba(28, 30, 40, .96), rgba(14, 15, 21, .97)) !important;
+  border: 1px solid rgba(255, 255, 255, .12) !important;
+  box-shadow: 0 36px 100px rgba(0, 0, 0, .55) !important;
+}
+
+html.modern-yellow-lab .landing-brand-icon {
+  width: 94px !important;
+  height: 94px !important;
+  padding: 7px;
+  border-radius: 30px !important;
+  border-color: var(--lab-line-bright) !important;
+  background: #111218 !important;
+  box-shadow: 0 15px 36px rgba(0, 0, 0, .36), 0 0 34px rgba(255, 210, 31, .08) !important;
+}
+
+html.modern-yellow-lab .landing-header .logo-text {
+  margin-top: 20px !important;
+  font-size: clamp(2rem, 6vw, 2.6rem) !important;
+  letter-spacing: -.07em !important;
+}
+
+html.modern-yellow-lab .landing-header .tagline { color: var(--lab-muted) !important; }
+
+html.modern-yellow-lab .role-selection h2,
+html.modern-yellow-lab .login-form h2 {
+  margin: 30px 0 16px !important;
+  font-size: 1.25rem !important;
+  letter-spacing: -.035em;
+}
+
+html.modern-yellow-lab .role-btn {
+  min-height: 84px !important;
+  margin-bottom: 11px !important;
+  padding: 13px 17px !important;
+  border: 1px solid var(--lab-line) !important;
+  border-left: 1px solid var(--lab-line) !important;
+  border-radius: 22px !important;
+  background: rgba(12, 13, 18, .76) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, .025) !important;
+  transition: border-color .18s, transform .18s, background .18s;
+}
+
+html.modern-yellow-lab :is(.role-btn.passenger-btn, .role-btn.driver-btn, .role-btn.admin-btn) {
+  border-color: var(--lab-line) !important;
+  border-left-color: var(--lab-line) !important;
+}
+
+html.modern-yellow-lab :is(.role-btn.passenger-btn, .role-btn.driver-btn, .role-btn.admin-btn):hover {
+  border-color: var(--lab-line-bright) !important;
+}
+
+html.modern-yellow-lab .role-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--lab-line-bright) !important;
+  background: var(--lab-yellow-soft) !important;
+}
+
+html.modern-yellow-lab .role-btn .role-icon {
+  width: 51px !important;
+  height: 51px !important;
+  border-radius: 16px !important;
+  color: var(--lab-yellow) !important;
+  border-color: var(--lab-line-bright) !important;
+  background: rgba(255, 210, 31, .08) !important;
+}
+
+html.modern-yellow-lab .role-btn .role-arrow { color: var(--lab-yellow) !important; }
+html.modern-yellow-lab .role-copy small { color: var(--lab-muted) !important; }
+html.modern-yellow-lab .landing-install button { border-radius: 18px !important; }
+
+/* Shared mobile shells */
+html.modern-yellow-lab :is(.passenger-app, .driver-app) {
+  background: var(--lab-bg) !important;
+  color: var(--lab-white);
+}
+
+html.modern-yellow-lab :is(.passenger-app, .driver-app)::after {
+  background: linear-gradient(180deg, rgba(11, 12, 17, .08), transparent 43%, rgba(11, 12, 17, .58)) !important;
+}
+
+html.modern-yellow-lab :is(.passenger-app, .driver-app) .leaflet-tile-pane {
+  filter: saturate(.72) contrast(1.08) brightness(.82) !important;
+}
+
+html.modern-yellow-lab :is(.passenger-mobile-header, .driver-header) {
+  background: rgba(17, 18, 24, .9) !important;
+  border: 1px solid var(--lab-line) !important;
+  border-radius: 25px !important;
+  box-shadow: var(--lab-shadow) !important;
+  backdrop-filter: blur(26px) saturate(1.25) !important;
+}
+
+html.modern-yellow-lab :is(.passenger-profile-shortcut, .passenger-header-icon,
+  #header-notif-btn-driver, .driver-header-actions .theme-toggle-btn) {
+  border: 1px solid var(--lab-line) !important;
+  border-radius: 15px !important;
+  color: var(--lab-white) !important;
+  background: rgba(255, 255, 255, .035) !important;
+  box-shadow: none !important;
+}
+
+html.modern-yellow-lab :is(.passenger-profile-shortcut, .driver-avatar) {
+  border-color: rgba(255, 210, 31, .68) !important;
+  box-shadow: 0 0 0 4px rgba(255, 210, 31, .075) !important;
+}
+
+html.modern-yellow-lab :is(.bottom-nav, .driver-nav-tabs) {
+  height: 72px !important;
+  padding: 7px !important;
+  border: 1px solid var(--lab-line) !important;
+  border-radius: 25px !important;
+  background: rgba(18, 19, 26, .94) !important;
+  box-shadow: 0 22px 55px rgba(0, 0, 0, .48) !important;
+  backdrop-filter: blur(24px) !important;
+}
+
+html.modern-yellow-lab :is(.nav-btn, .nav-tab) {
+  min-height: 56px !important;
+  border-radius: 18px !important;
+  color: #747886 !important;
+  transition: color .2s, background .2s, transform .2s !important;
+}
+
+html.modern-yellow-lab :is(.nav-btn.active, .nav-tab.active) {
+  color: var(--lab-yellow) !important;
+  background: linear-gradient(145deg, rgba(255, 210, 31, .16), rgba(255, 210, 31, .045)) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 210, 31, .17), 0 8px 25px rgba(0, 0, 0, .15) !important;
+}
+
+html.modern-yellow-lab :is(.nav-btn.active, .nav-tab.active) svg { stroke: var(--lab-yellow) !important; }
+
+/* Passenger home */
+html.modern-yellow-lab .top-search-bar {
+  padding: 13px !important;
+  gap: 11px !important;
+  border-radius: 29px !important;
+  background: linear-gradient(155deg, rgba(27, 29, 39, .97), rgba(15, 16, 22, .98)) !important;
+  border: 1px solid var(--lab-line) !important;
+  box-shadow: 0 -16px 55px rgba(0, 0, 0, .48) !important;
+}
+
+html.modern-yellow-lab .passenger-dock-handle,
+html.modern-yellow-lab .trip-sheet-handle { background: #555865 !important; }
+
+html.modern-yellow-lab .passenger-search-title {
+  font-size: 1.32rem !important;
+  letter-spacing: -.045em !important;
+}
+
+html.modern-yellow-lab .search-input-wrapper {
+  height: 52px !important;
+  padding-inline: 15px !important;
+}
+
+html.modern-yellow-lab .search-icon { color: var(--lab-yellow) !important; }
+
+html.modern-yellow-lab .passenger-vehicle-selector { gap: 10px !important; }
+html.modern-yellow-lab .vehicle-choice {
+  min-height: 84px !important;
+  border: 1px solid var(--lab-line) !important;
+  border-radius: 20px !important;
+  background: rgba(10, 11, 16, .66) !important;
+}
+html.modern-yellow-lab .vehicle-choice.active {
+  border-color: rgba(255, 210, 31, .72) !important;
+  background: linear-gradient(145deg, rgba(255, 210, 31, .12), rgba(255, 210, 31, .025)) !important;
+  box-shadow: inset 0 0 24px rgba(255, 210, 31, .035) !important;
+}
+html.modern-yellow-lab .vehicle-choice em { color: var(--lab-yellow) !important; }
+
+html.modern-yellow-lab .search-sheet {
+  border-radius: 30px 30px 0 0 !important;
+  background: linear-gradient(155deg, #1c1e28, #101116) !important;
+  border-color: var(--lab-line) !important;
+}
+
+html.modern-yellow-lab .place-item {
+  min-height: 75px !important;
+  border-radius: 20px !important;
+  border-color: var(--lab-line) !important;
+  background: rgba(255,255,255,.028) !important;
+}
+
+html.modern-yellow-lab :is(.fare-confirm-card, .assigned-driver-shell, .searching-ride-shell,
+  .completion-card, .driver-card) {
+  border-radius: var(--lab-radius-xl) !important;
+  border: 1px solid var(--lab-line) !important;
+  background: linear-gradient(155deg, rgba(29, 31, 41, .99), rgba(14, 15, 21, .99)) !important;
+  box-shadow: var(--lab-shadow) !important;
+}
+
+html.modern-yellow-lab .ride-type-option {
+  border-radius: 20px !important;
+  background: rgba(255, 255, 255, .035) !important;
+  border-color: var(--lab-line) !important;
+}
+html.modern-yellow-lab .ride-type-option.active { border-color: var(--lab-yellow) !important; }
+html.modern-yellow-lab .fare-total strong { color: var(--lab-yellow) !important; }
+
+/* Passenger secondary pages */
+html.modern-yellow-lab :is(.wallet-real-page, .real-profile-page, .ride-history-page) {
+  width: min(100%, 560px) !important;
+  padding-top: 22px !important;
+}
+html.modern-yellow-lab :is(.wallet-real-heading h2, .real-profile-heading h2,
+  .passenger-history-heading h1) {
+  font-size: 1.75rem !important;
+  letter-spacing: -.055em !important;
+}
+html.modern-yellow-lab .wallet-real-balance {
+  border-radius: 29px !important;
+  background: linear-gradient(140deg, #ffe047, #ffae00) !important;
+  box-shadow: 0 22px 55px rgba(255, 174, 0, .15) !important;
+}
+html.modern-yellow-lab :is(.wallet-history-filters, .passenger-history-filters) button {
+  border-radius: 999px !important;
+}
+html.modern-yellow-lab :is(.wallet-history-filters, .passenger-history-filters) button.active {
+  color: #111216 !important;
+  background: var(--lab-yellow) !important;
+}
+html.modern-yellow-lab .real-profile-card { padding: 25px !important; }
+html.modern-yellow-lab .real-profile-avatar { box-shadow: 0 0 0 6px rgba(255,210,31,.08) !important; }
+
+/* Driver cockpit and pages */
+html.modern-yellow-lab .driver-top-container { gap: 8px !important; }
+html.modern-yellow-lab .stats-bar {
+  height: 73px !important;
+  padding: 7px !important;
+  border-radius: 24px !important;
+  border: 1px solid var(--lab-line) !important;
+  background: rgba(18, 19, 26, .94) !important;
+  box-shadow: 0 18px 46px rgba(0,0,0,.34) !important;
+}
+html.modern-yellow-lab .stat-item {
+  border-color: var(--lab-line) !important;
+  background: transparent !important;
+}
+html.modern-yellow-lab .stat-label { color: #737785 !important; }
+html.modern-yellow-lab .stat-value { color: var(--lab-white) !important; }
+html.modern-yellow-lab .stat-item:nth-child(2) .stat-value,
+html.modern-yellow-lab .stat-item:nth-child(3) .stat-value { color: var(--lab-yellow) !important; }
+
+html.modern-yellow-lab .offline-overlay {
+  border-radius: 30px !important;
+  background: linear-gradient(155deg, rgba(30, 32, 42, .98), rgba(14, 15, 21, .99)) !important;
+}
+html.modern-yellow-lab .btn-connect {
+  background: linear-gradient(135deg, var(--lab-yellow), var(--lab-yellow-2)) !important;
+  color: #101116 !important;
+}
+html.modern-yellow-lab .waiting-badge {
+  color: var(--lab-green) !important;
+  background: rgba(20, 36, 29, .92) !important;
+  border-color: rgba(85, 226, 154, .32) !important;
+}
+html.modern-yellow-lab :is(.driver-trip-sheet, .active-trip-panel, .incoming-request-card,
+  .driver-rating-premium) {
+  border-radius: 30px !important;
+  border-color: var(--lab-line) !important;
+  background: linear-gradient(155deg, #1d1f29, #101116) !important;
+  box-shadow: var(--lab-shadow) !important;
+}
+html.modern-yellow-lab .trip-passenger-row {
+  border-color: rgba(255, 210, 31, .22) !important;
+  background: var(--lab-yellow-soft) !important;
+}
+html.modern-yellow-lab .trip-passenger-row img { border-color: var(--lab-yellow) !important; }
+html.modern-yellow-lab .trip-stage-pill { border-radius: 999px !important; }
+html.modern-yellow-lab .incoming-countdown { color: var(--lab-yellow) !important; }
+html.modern-yellow-lab .countdown-progress { stroke: var(--lab-yellow) !important; }
+
+html.modern-yellow-lab :is(.earnings-premium, .driver-profile-premium, .driver-trips-page) {
+  width: min(100%, 560px) !important;
+  padding-top: 22px !important;
+}
+html.modern-yellow-lab :is(.earnings-title h2, .driver-profile-premium h2,
+  .driver-trips-header h2) {
+  font-size: 1.65rem !important;
+  letter-spacing: -.055em !important;
+}
+html.modern-yellow-lab .earnings-balance-card {
+  padding: 25px !important;
+  border-radius: 30px !important;
+  background: linear-gradient(140deg, #ffe047, #ffad00) !important;
+}
+html.modern-yellow-lab .driver-profile-identity-card,
+html.modern-yellow-lab .driver-profile-balance-card {
+  border-radius: 28px !important;
+  background: linear-gradient(155deg, #1d1f29, #111218) !important;
+}
+
+/* Modals, chat and notifications */
+html.modern-yellow-lab :is(.chat-modal, .notification-center-modal, .wallet-topup-modal,
+  .payment-modal, .topup-review-modal, .application-review-panel) {
+  border: 1px solid var(--lab-line) !important;
+  border-radius: 30px !important;
+  background: linear-gradient(155deg, #1d1f29, #101116) !important;
+  box-shadow: 0 36px 100px rgba(0,0,0,.62) !important;
+}
+html.modern-yellow-lab :is(.chat-modal-backdrop, .wallet-topup-backdrop,
+  .application-review-backdrop, .topup-review-backdrop) {
+  background: rgba(5, 6, 9, .8) !important;
+  backdrop-filter: blur(18px) !important;
+}
+html.modern-yellow-lab .chat-message.sent,
+html.modern-yellow-lab .message.sent {
+  background: linear-gradient(135deg, var(--lab-yellow), var(--lab-yellow-2)) !important;
+  color: #111216 !important;
+  border-radius: 20px 20px 6px 20px !important;
+}
+html.modern-yellow-lab .chat-message.received,
+html.modern-yellow-lab .message.received {
+  background: #252731 !important;
+  border-radius: 20px 20px 20px 6px !important;
+}
+
+/* Administration */
+html.modern-yellow-lab .admin-app {
+  --admin-bg: var(--lab-bg);
+  --admin-panel: var(--lab-panel);
+  --admin-panel-2: var(--lab-panel-strong);
+  --admin-line: var(--lab-line);
+  background: var(--lab-bg) !important;
+}
+html.modern-yellow-lab :is(.admin-sidebar, .admin-header) {
+  background: rgba(17, 18, 24, .93) !important;
+  border-color: var(--lab-line) !important;
+  backdrop-filter: blur(24px) !important;
+}
+html.modern-yellow-lab .admin-sidebar { padding: 16px 12px !important; }
+html.modern-yellow-lab .admin-logo { padding-bottom: 20px !important; }
+html.modern-yellow-lab .nav-item {
+  min-height: 52px !important;
+  margin-bottom: 6px !important;
+  border-radius: 17px !important;
+  color: #858997 !important;
+}
+html.modern-yellow-lab .nav-item.active {
+  color: var(--lab-yellow) !important;
+  background: linear-gradient(135deg, rgba(255, 210, 31, .14), rgba(255, 210, 31, .035)) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 210, 31, .21) !important;
+}
+html.modern-yellow-lab .admin-content {
+  background:
+    radial-gradient(circle at 62% 0, rgba(255, 210, 31, .035), transparent 29%),
+    var(--lab-bg) !important;
+  padding: 28px !important;
+}
+html.modern-yellow-lab .admin-header { height: 82px !important; }
+html.modern-yellow-lab .header-left h2 { font-size: 1.35rem !important; }
+html.modern-yellow-lab .ops-heading h1 { font-size: clamp(2rem, 3.6vw, 3.15rem) !important; letter-spacing: -.07em !important; }
+html.modern-yellow-lab .eyebrow { color: var(--lab-yellow) !important; }
+html.modern-yellow-lab .eyebrow i { background: var(--lab-green) !important; }
+html.modern-yellow-lab :is(.operations-map-card, .metric-card, .ops-panel,
+  .finance-card, .finance-metric, .topup-queue-card, .topup-kpis article,
+  .driver-admin-table-card, .driver-admin-toolbar, .data-table-container) {
+  border: 1px solid var(--lab-line) !important;
+  border-radius: 24px !important;
+  background: linear-gradient(150deg, rgba(29, 31, 41, .96), rgba(16, 18, 24, .98)) !important;
+  box-shadow: 0 18px 52px rgba(0, 0, 0, .22) !important;
+}
+html.modern-yellow-lab .metric-card { min-height: 135px !important; padding: 20px !important; }
+html.modern-yellow-lab .metric-icon { border-radius: 16px !important; }
+html.modern-yellow-lab .metric-card strong { font-size: 1.8rem !important; }
+html.modern-yellow-lab .data-table th { background: rgba(255, 255, 255, .035) !important; }
+html.modern-yellow-lab .data-table tbody tr:hover { background: rgba(255, 210, 31, .035) !important; }
+html.modern-yellow-lab :is(.finance-section-tabs, .driver-admin-filters, .topup-filters) {
+  padding: 7px !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.025) !important;
+}
+html.modern-yellow-lab :is(.finance-section-tabs, .driver-admin-filters, .topup-filters) button {
+  border-radius: 13px !important;
+}
+html.modern-yellow-lab :is(.finance-section-tabs, .driver-admin-filters, .topup-filters) button.active {
+  color: #111216 !important;
+  background: var(--lab-yellow) !important;
+}
+
+/* Responsive spacing */
+@media (max-width: 699px) {
+  html.modern-yellow-lab :is(.passenger-mobile-header, .driver-header) {
+    left: 10px !important;
+    right: 10px !important;
+    border-radius: 24px !important;
+  }
+  html.modern-yellow-lab :is(.bottom-nav, .driver-nav-tabs) {
+    left: 8px !important;
+    right: 8px !important;
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+  }
+  html.modern-yellow-lab .admin-content { padding: 18px 12px 90px !important; }
+}
+
+@media (max-width: 390px) {
+  html.modern-yellow-lab .top-search-bar { padding: 10px !important; border-radius: 24px !important; }
+  html.modern-yellow-lab .passenger-search-title { font-size: 1.12rem !important; }
+  html.modern-yellow-lab .vehicle-choice { min-height: 76px !important; }
+  html.modern-yellow-lab :is(.landing-card-premium, .fare-confirm-card,
+    .assigned-driver-shell, .driver-trip-sheet) { border-radius: 25px !important; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.modern-yellow-lab :is(.landing-card-premium, .top-search-bar, .driver-top-container,
+    .admin-content > :first-child) { animation: labSurfaceIn .48s cubic-bezier(.2,.8,.2,1) both; }
+  html.modern-yellow-lab :is(.role-btn, .metric-card, .finance-metric):hover { transform: translateY(-2px); }
+}
+
+@keyframes labSurfaceIn {
+  from { opacity: 0; transform: translateY(10px) scale(.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

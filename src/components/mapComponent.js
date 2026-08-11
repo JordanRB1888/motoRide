@@ -2,6 +2,59 @@ import { icon } from '../utils/icons.js';
 import { fareCalculator } from '../services/fareCalculator.js';
 import { showToast } from './toast.js';
 
+const normalizeVehicleType = (value = '') => {
+  const normalized = String(value).trim().toUpperCase();
+  return ['CAR', 'AUTO', 'AUTOMOVIL', 'AUTOMÓVIL'].includes(normalized) ? 'CAR' : 'MOTO';
+};
+
+const vehicleMarkerSvg = (vehicleType) => vehicleType === 'CAR'
+  ? `<svg class="live-vehicle-svg" viewBox="0 0 64 64" aria-hidden="true">
+      <g class="vehicle-artwork">
+        <path class="vehicle-tyre" d="M15 17h5v12h-5zM44 17h5v12h-5zM15 36h5v12h-5zM44 36h5v12h-5z"/>
+        <path class="vehicle-shell" d="M22 7h20l7 15v27c0 5-4 9-9 9H24c-5 0-9-4-9-9V22z"/>
+        <path class="vehicle-glass" d="m24 12 16 0 4 11H20zM20 29h24v15H20z"/>
+        <path class="vehicle-highlight" d="M24 8h7v49h-7c-5 0-9-4-9-9V22z"/>
+        <path class="vehicle-detail" d="M20 28h24M32 29v15M22 49h20"/>
+        <path class="vehicle-headlight" d="M21 8h7v4h-8zM36 8h7l1 4h-8z"/>
+        <path class="vehicle-taillight" d="M20 52h8v4h-6zM36 52h8l-2 4h-6z"/>
+      </g>
+    </svg>`
+  : `<svg class="live-vehicle-svg" viewBox="0 0 64 64" aria-hidden="true">
+      <g class="vehicle-artwork">
+        <ellipse class="vehicle-tyre" cx="32" cy="10" rx="7" ry="9"/>
+        <ellipse class="vehicle-tyre" cx="32" cy="54" rx="7" ry="9"/>
+        <path class="vehicle-detail" d="M21 17h22M24 17l8 13 8-13M32 30v18M25 45h14"/>
+        <path class="vehicle-shell" d="M26 26c0-5 2-9 6-9s6 4 6 9l4 17-10 7-10-7z"/>
+        <path class="vehicle-highlight" d="M27 27c0-4 1-7 4-8v29l-7-6z"/>
+        <circle class="vehicle-rider" cx="32" cy="29" r="7"/>
+        <path class="vehicle-glass" d="M27 27c1-6 9-6 10 0-3-2-7-2-10 0z"/>
+        <circle class="vehicle-headlight" cx="32" cy="8" r="3.5"/>
+        <path class="vehicle-taillight" d="M28 55h8v4h-8z"/>
+      </g>
+    </svg>`;
+
+const vehicleMarkerHtml = (vehicleType, heading = 0) => `
+  <div class="live-vehicle-marker live-vehicle-${vehicleType.toLowerCase()}" style="--vehicle-heading:${Number(heading) || 0}deg">
+    <span class="vehicle-heading-cone"></span>
+    <span class="vehicle-motion-trail"></span>
+    <span class="vehicle-ground-shadow"></span>
+    <div class="live-vehicle-rotor">${vehicleMarkerSvg(vehicleType)}</div>
+    <span class="vehicle-live-dot"></span>
+  </div>`;
+
+const waitingPassengerHtml = () => `
+  <div class="waiting-passenger-marker" role="img" aria-label="Pasajero esperando">
+    <span class="passenger-pulse-ring"></span>
+    <span class="passenger-ground-shadow"></span>
+    <svg class="waiting-passenger-svg" viewBox="0 0 48 58" aria-hidden="true">
+      <circle class="passenger-head" cx="24" cy="13" r="8"/>
+      <path class="passenger-hair" d="M17 13c0-7 4-10 8-10 5 0 9 4 9 10-4-3-12-3-17 0z"/>
+      <path class="passenger-body" d="M14 29c1-7 6-10 10-10s9 3 10 10l3 17H11z"/>
+      <path class="passenger-detail" d="M24 21v20M14 31l-5 9M34 31l5 9"/>
+    </svg>
+    <span class="passenger-status-label">Esperando</span>
+  </div>`;
+
 export class MapComponent {
   constructor(containerId, options = {}) {
     this.targetElement = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
@@ -201,23 +254,23 @@ export class MapComponent {
       return this.markers.get(id);
     }
     
-    const vehicleType = String(info.vehicleType || info.rideType || 'MOTO').toUpperCase();
-    const vehicleGlyph = vehicleType === 'CAR' ? icon('car', 19) : icon('bike', 19);
+    const vehicleType = normalizeVehicleType(info.vehicleType || info.rideType || info.vehicle?.type);
     const svgIcon = L.divIcon({
-      className: 'driver-3d-marker',
-      html: `
-        <div class="moto-3d-badge">
-          <div class="moto-3d-shadow"></div>
-          <div class="moto-3d-body" data-heading="${Number(heading) || 0}">
-            <span class="moto-vehicle-icon">${vehicleGlyph}</span>
-          </div>
-        </div>
-      `,
-      iconSize: [44, 44],
-      iconAnchor: [22, 22]
+      className: 'driver-3d-marker live-map-marker',
+      html: vehicleMarkerHtml(vehicleType, heading),
+      iconSize: [58, 58],
+      iconAnchor: [29, 29],
+      tooltipAnchor: [0, -26]
     });
     
-    const marker = L.marker([lat, lng], { icon: svgIcon }).addTo(this.map);
+    const marker = L.marker([lat, lng], { icon: svgIcon, riseOnHover: true }).addTo(this.map);
+    marker._vehicleType = vehicleType;
+    marker._lastHeading = Number(heading) || 0;
+    marker.bindTooltip(vehicleType === 'CAR' ? 'Automóvil en movimiento' : 'Mototaxi en movimiento', {
+      direction: 'top',
+      className: 'live-marker-tooltip',
+      opacity: 0.96
+    });
     this.markers.set(id, marker);
     return marker;
   }
@@ -253,29 +306,55 @@ export class MapComponent {
     const marker = this.markers.get(id);
     if (!marker) return;
 
-    const bodyEl = marker.getElement()?.querySelector('.moto-3d-body');
-    if (bodyEl) bodyEl.dataset.heading = String(Number(heading) || 0);
+    const start = marker.getLatLng();
+    const movementHeading = this._bearingBetween(start.lat, start.lng, Number(lat), Number(lng));
+    const resolvedHeading = Number.isFinite(Number(heading)) && Number(heading) !== 0
+      ? Number(heading)
+      : movementHeading;
+    marker._lastHeading = Number.isFinite(resolvedHeading) ? resolvedHeading : marker._lastHeading;
 
-    this._animateMarker(marker, [lat, lng], 1500);
+    const visual = marker.getElement()?.querySelector('.live-vehicle-marker');
+    if (visual) {
+      visual.style.setProperty('--vehicle-heading', `${marker._lastHeading || 0}deg`);
+      visual.classList.add('is-moving');
+      window.clearTimeout(marker._movementTimer);
+      marker._movementTimer = window.setTimeout(() => visual.classList.remove('is-moving'), 1250);
+    }
+
+    this._animateMarker(marker, [lat, lng], 900);
   }
 
-  _animateMarker(marker, newLatLng, duration = 1500) {
+  _bearingBetween(lat1, lng1, lat2, lng2) {
+    if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return 0;
+    const toRadians = value => value * Math.PI / 180;
+    const y = Math.sin(toRadians(lng2 - lng1)) * Math.cos(toRadians(lat2));
+    const x = Math.cos(toRadians(lat1)) * Math.sin(toRadians(lat2))
+      - Math.sin(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.cos(toRadians(lng2 - lng1));
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+
+  _animateMarker(marker, newLatLng, duration = 900) {
+    if (marker._animationFrame) cancelAnimationFrame(marker._animationFrame);
     const start = marker.getLatLng();
     const startTime = performance.now();
+    const endLat = Number(newLatLng[0]);
+    const endLng = Number(newLatLng[1]);
     
     const animate = (currentTime) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
       
-      const lat = start.lat + (newLatLng[0] - start.lat) * progress;
-      const lng = start.lng + (newLatLng[1] - start.lng) * progress;
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const lat = start.lat + (endLat - start.lat) * eased;
+      const lng = start.lng + (endLng - start.lng) * eased;
       
       marker.setLatLng([lat, lng]);
       
-      if (progress < 1) requestAnimationFrame(animate);
+      if (progress < 1) marker._animationFrame = requestAnimationFrame(animate);
+      else marker._animationFrame = null;
     };
     
-    requestAnimationFrame(animate);
+    marker._animationFrame = requestAnimationFrame(animate);
   }
 
   removeDriverMarker(id) {
@@ -289,23 +368,24 @@ export class MapComponent {
   setPickupMarker(lat, lng) {
     if (!this.map) return;
     if (this.pickupMarker) {
-      this.pickupMarker.setLatLng([lat, lng]);
+      this._animateMarker(this.pickupMarker, [lat, lng], 700);
       return;
     }
     
     const pickupIcon = L.divIcon({
-      className: 'pickup-beacon-marker',
-      html: `
-        <div class="beacon-3d-container">
-          <div class="beacon-head"></div>
-          <div class="beacon-pillar"></div>
-        </div>
-      `,
-      iconSize: [24, 64],
-      iconAnchor: [12, 64]
+      className: 'pickup-beacon-marker waiting-map-marker',
+      html: waitingPassengerHtml(),
+      iconSize: [58, 72],
+      iconAnchor: [29, 62],
+      tooltipAnchor: [0, -55]
     });
     
-    this.pickupMarker = L.marker([lat, lng], { icon: pickupIcon }).addTo(this.map);
+    this.pickupMarker = L.marker([lat, lng], { icon: pickupIcon, riseOnHover: true }).addTo(this.map);
+    this.pickupMarker.bindTooltip('Pasajero esperando aquí', {
+      direction: 'top',
+      className: 'live-marker-tooltip passenger-tooltip',
+      opacity: 0.96
+    });
   }
 
   setDestinationMarker(lat, lng) {

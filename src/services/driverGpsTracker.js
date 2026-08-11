@@ -121,6 +121,10 @@ class DriverGpsTracker {
 
     this.lastPosition = payload;
 
+    // Reuse the same GPS sample locally so the driver sees the exact vehicle
+    // position passengers receive, without starting a second location watcher.
+    window.dispatchEvent(new CustomEvent('58express:driver-position', { detail: payload }));
+
     // Emitir telemetría GPS continua sobre WebSocket real
     const socket = socketClient.getSocket();
     if (socket && socket.connected) {

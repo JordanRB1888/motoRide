@@ -3,267 +3,254 @@ import { apiService } from '../../services/apiService.js';
 import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 
+const escapeHtml = value => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;');
+
+const ACTIVE_TRIP_STATES = new Set(['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP']);
+
 export function renderFleetMap(container) {
-    container.innerHTML = `
-        <div class="fleet-view" style="padding: 0;">
-            <!-- Sleek Control Bar -->
-            <div style="
-                display: flex; justify-content: space-between; align-items: center; 
-                flex-wrap: wrap; gap: 14px; margin-bottom: 16px; background: var(--surface-card); 
-                padding: 16px 20px; border-radius: 20px; border: 1px solid var(--border-color);
-            ">
-                <div>
-                    <h3 style="color: var(--text-primary); font-size: 1.25rem; font-weight: 800; margin: 0; display:flex; align-items:center; gap:8px;">
-                        ${icon('mapPin', 20)} Monitoreo de Flota GPS en Tiempo Real
-                    </h3>
-                    <small style="color: var(--text-secondary);">Supervisión directa con Socket.IO y PostgreSQL</small>
-                </div>
+  container.innerHTML = `<div class="fleet-command-view">
+    <section class="fleet-command-bar">
+      <div class="fleet-command-title"><span>${icon('mapPin', 20)}</span><div><h2>Monitoreo de Flota GPS en Tiempo Real</h2><p>Supervisión directa con Socket.IO y PostgreSQL</p></div></div>
+      <div class="fleet-command-kpis">
+        <span class="total">TOTAL: <b id="tot-drv">0</b></span>
+        <span class="available">DISPONIBLES: <b id="on-drv">0</b></span>
+        <span class="trip">EN VIAJE: <b id="trp-drv">0</b></span>
+        <span class="offline">OFFLINE: <b id="off-drv">0</b></span>
+      </div>
+      <select id="status-filter" aria-label="Filtrar conductores por estado">
+        <option value="all">Todos los estados</option>
+        <option value="AVAILABLE">Solo disponibles</option>
+        <option value="IN_TRIP">Solo en viaje</option>
+        <option value="OFFLINE">Solo offline</option>
+      </select>
+    </section>
 
-                <!-- Compact Stat Pills Row -->
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                    <div style="
-                        background: var(--surface-elevated); padding: 8px 14px; border-radius: 12px; 
-                        border: 1px solid var(--border-color); display: flex; align-items: center; gap: 6px;
-                    ">
-                        <span style="color: var(--text-muted); font-size: 0.78rem; font-weight: 700; text-transform: uppercase;">Total:</span>
-                        <strong id="tot-drv" style="color: var(--text-primary); font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;">0</strong>
-                    </div>
+    <section class="fleet-map-shell">
+      <div id="fleet-map" class="fleet-map-canvas"></div>
+      <aside class="fleet-live-panel">
+        <header><strong>Actividad en vivo</strong><span>${icon('volume2', 16)}</span></header>
+        <div id="fleet-live-list" class="fleet-live-list"><p>Esperando telemetría GPS…</p></div>
+        <button id="show-all-fleet">Ver todos los movimientos ${icon('chevronRight', 14)}</button>
+      </aside>
+      <aside id="fleet-driver-panel" class="fleet-driver-panel hidden" aria-live="polite"></aside>
+      <div class="fleet-map-legend">
+        <span><i class="available"></i>Disponibles</span><span><i class="trip"></i>En viaje</span><span><i class="sos"></i>SOS activos</span><span><i class="offline"></i>Offline</span>
+      </div>
+    </section>
+  </div>`;
 
-                    <div style="
-                        background: rgba(0, 230, 118, 0.1); padding: 8px 14px; border-radius: 12px; 
-                        border: 1px solid rgba(0, 230, 118, 0.4); display: flex; align-items: center; gap: 6px;
-                    ">
-                        <span style="color: #00E676; font-size: 0.78rem; font-weight: 700; text-transform: uppercase;">Disponibles:</span>
-                        <strong id="on-drv" style="color: #00E676; font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;">0</strong>
-                    </div>
+  window.setTimeout(() => initializeFleetMap(container), 80);
+}
 
-                    <div style="
-                        background: rgba(0, 210, 255, 0.1); padding: 8px 14px; border-radius: 12px; 
-                        border: 1px solid rgba(0, 210, 255, 0.4); display: flex; align-items: center; gap: 6px;
-                    ">
-                        <span style="color: #00D2FF; font-size: 0.78rem; font-weight: 700; text-transform: uppercase;">En Viaje:</span>
-                        <strong id="trp-drv" style="color: #00D2FF; font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;">0</strong>
-                    </div>
+async function initializeFleetMap(container) {
+  const mapElement = container.querySelector('#fleet-map');
+  if (!mapElement || typeof L === 'undefined') return;
 
-                    <div style="
-                        background: var(--surface-elevated); padding: 8px 14px; border-radius: 12px; 
-                        border: 1px solid var(--border-color); display: flex; align-items: center; gap: 6px;
-                    ">
-                        <span style="color: var(--text-muted); font-size: 0.78rem; font-weight: 700; text-transform: uppercase;">Offline:</span>
-                        <strong id="off-drv" style="color: var(--text-muted); font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;">0</strong>
-                    </div>
-                </div>
+  const map = L.map(mapElement, { zoomControl: true, attributionControl: true }).setView([10.6427, -71.6125], 13);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap contributors © CARTO',
+    maxZoom: 19
+  }).addTo(map);
 
-                <!-- Filter Select Dropdown -->
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <select id="status-filter" style="
-                        padding: 8px 14px; border-radius: 12px; border: 1px solid var(--border-gold);
-                        background: var(--surface-elevated); color: var(--accent-primary); font-weight: 700; font-size: 0.85rem; outline: none; cursor: pointer;
-                    ">
-                        <option value="all">Todos los estados</option>
-                        <option value="AVAILABLE">Solo Disponibles</option>
-                        <option value="IN_TRIP">Solo En Viaje</option>
-                        <option value="OFFLINE">Solo Offline</option>
-                    </select>
-                </div>
-            </div>
+  const markers = new Map();
+  const drivers = new Map();
+  let trips = [];
+  let selectedDriverId = null;
+  let selectedFilter = 'all';
+  let activeRoute = null;
+  let disposed = false;
 
-            <!-- Full Screen Height GPS Map Container -->
-            <div style="position: relative; border-radius: 24px; overflow: hidden; border: 1.5px solid var(--border-gold);">
-                <div id="fleet-map" class="fleet-map-container" style="height: 620px;"></div>
-                
-                <!-- Map Legend Bar as shown in user screenshot -->
-                <div class="map-legend-bar" style="
-                    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-                    z-index: 1000; background: rgba(15, 20, 32, 0.92); backdrop-filter: blur(16px);
-                    border: 1.5px solid var(--border-gold, #FFC107); border-radius: 20px;
-                    padding: 8px 16px; display: flex; align-items: center; gap: 16px;
-                    box-shadow: 0 10px 25px rgba(0,0,0,0.6); pointer-events: auto;
-                ">
-                    <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
-                        <span style="width:10px; height:10px; border-radius:50%; background:#00E676; box-shadow:0 0 8px #00E676;"></span>
-                        Mi ubicación
-                    </div>
-                    <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
-                        <span style="width:10px; height:10px; border-radius:50%; background:#FFC107; box-shadow:0 0 8px #FFC107;"></span>
-                        Compañeros
-                    </div>
-                    <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
-                        <span style="width:10px; height:10px; border-radius:50%; background:#FF4D4D; box-shadow:0 0 8px #FF4D4D;"></span>
-                        SOS activos
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+  const driverId = driver => driver.userId || driver.driverId || driver.id;
+  const statusOf = driver => {
+    if (driver.sosActive || String(driver.status).toUpperCase() === 'SOS') return 'SOS';
+    const status = String(driver.status || '').toUpperCase();
+    if (['AVAILABLE', 'ONLINE'].includes(status) || driver.isAvailable) return 'AVAILABLE';
+    if (['BUSY', 'IN_TRIP', 'ON_TRIP', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(status)) return 'IN_TRIP';
+    return 'OFFLINE';
+  };
+  const nameOf = driver => driver.driverName || `${driver.firstName || driver.user?.firstName || 'Conductor'} ${driver.lastName || driver.user?.lastName || ''}`.trim();
+  const coordinatesOf = driver => {
+    const lat = Number(driver.lat ?? driver.latitude ?? driver.location?.lat);
+    const lng = Number(driver.lng ?? driver.longitude ?? driver.location?.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
+  };
+  const activeTripFor = id => trips.find(trip => (trip.driverId === id || trip.assignedDriverId === id) && ACTIVE_TRIP_STATES.has(String(trip.status).toUpperCase()));
+  const statusText = status => status === 'AVAILABLE' ? 'Disponible' : status === 'IN_TRIP' ? 'En viaje' : status === 'SOS' ? 'SOS activado' : 'Offline';
+  const relativeTime = value => {
+    const timestamp = new Date(value || 0).getTime();
+    if (!timestamp) return 'Sin registro';
+    const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+    if (seconds < 60) return `Hace ${seconds} segundos`;
+    const minutes = Math.floor(seconds / 60);
+    return minutes < 60 ? `Hace ${minutes} min` : `Hace ${Math.floor(minutes / 60)} h`;
+  };
 
-    setTimeout(async () => {
-        const mapElement = document.getElementById('fleet-map');
-        if (!mapElement || typeof L === 'undefined') return;
+  function markerIcon(driver) {
+    const status = statusOf(driver);
+    const vehicleIcon = driver.vehicleType === 'CAR' ? icon('car', 18) : icon('bike', 18);
+    return L.divIcon({
+      className: 'fleet-driver-leaflet-marker',
+      html: `<span class="${status.toLowerCase()}">${vehicleIcon}<i></i></span>`,
+      iconSize: [42, 50],
+      iconAnchor: [21, 44]
+    });
+  }
 
-        // Center on Maracaibo
-        const maracaiboCenter = [10.6427, -71.6125];
-        const map = L.map('fleet-map', {
-            zoomControl: true
-        }).setView(maracaiboCenter, 13);
+  function matchesFilter(driver) {
+    const status = statusOf(driver);
+    return selectedFilter === 'all' || status === selectedFilter;
+  }
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap contributors © CARTO',
-            maxZoom: 19
-        }).addTo(map);
+  function renderMarker(driver) {
+    const id = driverId(driver);
+    const coordinates = coordinatesOf(driver);
+    if (!id || !coordinates) return;
+    let marker = markers.get(id);
+    if (!marker) {
+      marker = L.marker(coordinates, { icon: markerIcon(driver), riseOnHover: true }).addTo(map);
+      marker.on('click', () => selectDriver(id, true));
+      markers.set(id, marker);
+    } else {
+      marker.setLatLng(coordinates);
+      marker.setIcon(markerIcon(driver));
+    }
+    if (matchesFilter(driver) && !map.hasLayer(marker)) marker.addTo(map);
+    if (!matchesFilter(driver) && map.hasLayer(marker)) marker.removeFrom(map);
+  }
 
-        setTimeout(() => map.invalidateSize(), 200);
+  function drawRoute(driver, fit = false) {
+    if (activeRoute) {
+      activeRoute.remove();
+      activeRoute = null;
+    }
+    const coordinates = coordinatesOf(driver);
+    const trip = activeTripFor(driverId(driver));
+    if (!coordinates || !trip) return;
+    const destination = ['IN_PROGRESS', 'IN_TRIP'].includes(String(trip.status).toUpperCase()) ? trip.destination : trip.pickup;
+    const target = [Number(destination?.lat), Number(destination?.lng)];
+    if (!Number.isFinite(target[0]) || !Number.isFinite(target[1])) return;
+    activeRoute = L.polyline([coordinates, target], { color: '#ffc400', weight: 5, opacity: .9, dashArray: '2 9', lineCap: 'round' }).addTo(map);
+    if (fit) map.fitBounds(activeRoute.getBounds(), { padding: [80, 80], maxZoom: 15 });
+  }
 
-        const markers = {};
-        const driversMap = new Map();
+  function selectDriver(id, center = false) {
+    const driver = drivers.get(id);
+    if (!driver) return;
+    selectedDriverId = id;
+    const status = statusOf(driver);
+    const trip = activeTripFor(id);
+    const panel = container.querySelector('#fleet-driver-panel');
+    const photo = driver.photoUrl || driver.user?.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(nameOf(driver))}`;
+    const routeLabel = trip ? `${trip.pickup?.address || 'Recogida'} → ${trip.destination?.address || 'Destino'}` : 'Sin viaje activo';
+    const battery = Number(driver.batteryLevel ?? driver.battery);
+    const speed = Number(driver.speed);
+    panel.innerHTML = `<header><img src="${escapeHtml(photo)}" alt=""><div><strong>${escapeHtml(nameOf(driver))}</strong><span class="${status.toLowerCase()}">${statusText(status)}</span></div><button id="close-fleet-driver">${icon('close', 18)}</button></header>
+      <div class="fleet-driver-facts">
+        <article><span>${icon(driver.vehicleType === 'CAR' ? 'car' : 'bike', 17)}</span><div><small>Vehículo</small><strong>${escapeHtml(`${driver.vehicleBrand || 'No disponible'} ${driver.vehicleModel || ''}`.trim())}</strong></div><code>${escapeHtml(driver.vehiclePlate || 'Sin placa')}</code></article>
+        <article><span>${icon('route', 17)}</span><div><small>Ruta actual</small><strong>${escapeHtml(routeLabel)}</strong></div></article>
+        <article><span>${icon('clock', 17)}</span><div><small>Última actualización GPS</small><strong class="fresh">${relativeTime(driver.updatedAt || driver.location?.updatedAt)}</strong></div></article>
+        <article><span>${icon('trending', 17)}</span><div><small>Velocidad actual</small><strong>${Number.isFinite(speed) ? `${Math.round(speed)} km/h` : 'No disponible'}</strong></div></article>
+        <article><span>${icon('zap', 17)}</span><div><small>Batería</small><strong class="fresh">${Number.isFinite(battery) ? `${Math.round(battery)}%` : 'No disponible'}</strong></div></article>
+      </div>
+      <footer><button id="fleet-view-trip" ${trip ? '' : 'disabled'}>${icon('map', 17)} Ver viaje</button><button id="fleet-contact-driver" ${driver.phone ? '' : 'disabled'}>${icon('phone', 17)} Contactar</button></footer>`;
+    panel.classList.remove('hidden');
+    panel.querySelector('#close-fleet-driver').onclick = () => {
+      selectedDriverId = null;
+      panel.classList.add('hidden');
+      if (activeRoute) activeRoute.remove();
+      activeRoute = null;
+    };
+    panel.querySelector('#fleet-view-trip').onclick = () => drawRoute(driver, true);
+    panel.querySelector('#fleet-contact-driver').onclick = () => {
+      if (!driver.phone) return showToast('Este conductor no tiene un teléfono registrado.', 'warning');
+      window.location.href = `tel:${String(driver.phone).replace(/[^+\d]/g, '')}`;
+    };
+    drawRoute(driver, false);
+    const coordinates = coordinatesOf(driver);
+    if (center && coordinates) map.flyTo(coordinates, Math.max(map.getZoom(), 14), { duration: .7 });
+  }
 
-        function createCustomIcon(status, heading = 0) {
-            const normalizedStatus = (status || '').toUpperCase();
-            let statusClass = 'offline';
-            let iconSymbol = '🏍️';
+  function updateCounters() {
+    const values = { AVAILABLE: 0, IN_TRIP: 0, OFFLINE: 0, SOS: 0 };
+    drivers.forEach(driver => values[statusOf(driver)]++);
+    const total = container.querySelector('#tot-drv');
+    const available = container.querySelector('#on-drv');
+    const trip = container.querySelector('#trp-drv');
+    const offline = container.querySelector('#off-drv');
+    if (total) total.textContent = drivers.size;
+    if (available) available.textContent = values.AVAILABLE;
+    if (trip) trip.textContent = values.IN_TRIP;
+    if (offline) offline.textContent = values.OFFLINE;
+  }
 
-            if (normalizedStatus === 'AVAILABLE' || normalizedStatus === 'ONLINE') {
-                statusClass = 'online';
-                iconSymbol = '🛵';
-            } else if (normalizedStatus === 'BUSY' || normalizedStatus === 'IN_TRIP' || normalizedStatus === 'ON_TRIP') {
-                statusClass = 'in_trip';
-                iconSymbol = '⚡';
-            }
+  function renderActivity() {
+    const list = container.querySelector('#fleet-live-list');
+    if (!list) return;
+    const recent = [...drivers.values()].sort((a, b) => new Date(b.updatedAt || b.location?.updatedAt || 0) - new Date(a.updatedAt || a.location?.updatedAt || 0)).slice(0, 5);
+    list.innerHTML = recent.map(driver => {
+      const id = driverId(driver);
+      const status = statusOf(driver);
+      return `<button data-driver-id="${escapeHtml(id)}"><i class="${status.toLowerCase()}"></i><span><strong>${escapeHtml(nameOf(driver))}</strong><small class="${status.toLowerCase()}">${statusText(status)}</small></span><time>${relativeTime(driver.updatedAt || driver.location?.updatedAt).replace('Hace ', '')}</time></button>`;
+    }).join('') || '<p>No hay conductores registrados.</p>';
+    list.querySelectorAll('[data-driver-id]').forEach(button => button.onclick = () => selectDriver(button.dataset.driverId, true));
+  }
 
-            return L.divIcon({
-                className: 'custom-driver-leaflet-icon',
-                html: `
-                    <div class="driver-marker-pulse ${statusClass}" style="transform: rotate(${heading}deg); transition: transform 0.3s ease;">
-                        <div class="pulse-ring"></div>
-                        <div class="marker-icon-box" style="font-size: 1.2rem;">${iconSymbol}</div>
-                    </div>
-                `,
-                iconSize: [44, 44],
-                iconAnchor: [22, 22],
-                popupAnchor: [0, -20]
-            });
-        }
+  function upsertDriver(payload) {
+    if (disposed) return;
+    const id = driverId(payload);
+    if (!id) return;
+    const current = drivers.get(id) || {};
+    const next = { ...current, ...payload, location: { ...(current.location || {}), ...(payload.location || {}) } };
+    drivers.set(id, next);
+    renderMarker(next);
+    updateCounters();
+    renderActivity();
+    if (selectedDriverId === id) selectDriver(id, false);
+  }
 
-        function renderDriverMarker(d) {
-            const status = (d.status || (d.isAvailable ? 'AVAILABLE' : d.isOnline ? 'ONLINE' : 'OFFLINE')).toUpperCase();
-            const lat = Number(d.lat ?? d.latitude);
-            const lng = Number(d.lng ?? d.longitude);
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-            const heading = d.heading || 0;
-            const speed = d.speed || 0;
-            const battery = d.batteryLevel !== undefined && d.batteryLevel !== null ? `${d.batteryLevel}%` : 'N/A';
-            const name = d.driverName || (d.user ? `${d.user.firstName} ${d.user.lastName}` : d.firstName ? `${d.firstName} ${d.lastName || ''}` : 'Conductor');
-            const phone = d.phone || d.user?.phone || '+58 414-000-0004';
-            const photo = d.photoUrl || d.user?.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
-            const brand = d.vehicleBrand || 'Bera';
-            const model = d.vehicleModel || 'SBR 150';
-            const plate = d.vehiclePlate || 'AC3M49P';
-            const color = d.vehicleColor || 'Negro';
+  try {
+    const [initialDrivers, initialTrips] = await Promise.all([apiService.get('/drivers/nearby'), apiService.get('/trips')]);
+    if (disposed) return;
+    trips = Array.isArray(initialTrips) ? initialTrips : [];
+    if (Array.isArray(initialDrivers)) initialDrivers.forEach(upsertDriver);
+    const located = [...drivers.values()].map(coordinatesOf).filter(Boolean);
+    if (located.length > 1) map.fitBounds(located, { padding: [70, 70], maxZoom: 14 });
+    else if (located.length === 1) map.setView(located[0], 14);
+  } catch {
+    showToast('No se pudo cargar toda la telemetría de la flota.', 'warning');
+  }
 
-            const icon = createCustomIcon(status, heading);
-            const popupContent = `
-                <div style="padding: 12px; min-width: 230px; font-family: 'Inter', sans-serif;">
-                    <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 10px;">
-                        <img src="${photo}" style="width: 44px; height: 44px; border-radius: 50%; border: 2.5px solid var(--accent-primary); object-fit: cover;">
-                        <div>
-                            <h4 style="margin: 0; color: white; font-size: 0.95rem; font-weight: 800;">${name}</h4>
-                            <small style="color: var(--text-secondary); font-weight: 600;">${phone}</small>
-                        </div>
-                    </div>
+  container.querySelector('#status-filter').onchange = event => {
+    selectedFilter = event.target.value;
+    drivers.forEach(renderMarker);
+  };
+  container.querySelector('#show-all-fleet').onclick = () => {
+    selectedFilter = 'all';
+    container.querySelector('#status-filter').value = 'all';
+    drivers.forEach(renderMarker);
+    const located = [...drivers.values()].map(coordinatesOf).filter(Boolean);
+    if (located.length) map.fitBounds(located, { padding: [70, 70], maxZoom: 14 });
+  };
 
-                    <div style="background: rgba(255,255,255,0.06); padding: 10px; border-radius: 14px; margin-bottom: 10px; font-size: 0.82rem; display: flex; flex-direction: column; gap: 5px;">
-                        <div><strong>Vehículo:</strong> ${brand} ${model} (${color})</div>
-                        <div><strong>Placa:</strong> <code style="color:var(--accent-primary); font-size:0.88rem; font-weight:800;">${plate}</code></div>
-                        <div><strong>Estado:</strong> 
-                            <span class="badge badge-${status === 'AVAILABLE' ? 'success' : status === 'BUSY' ? 'warning' : 'secondary'}">
-                                ${status}
-                            </span>
-                        </div>
-                        <div><strong>Velocidad:</strong> <span style="color:var(--accent-secondary); font-weight:800;">${speed} km/h</span></div>
-                        <div><strong>Batería:</strong> 🔋 ${battery}</div>
-                        <div><strong>Última Ubicación:</strong> hace unos segundos</div>
-                    </div>
-                </div>
-            `;
+  const onLocation = payload => payload && upsertDriver(payload);
+  const onUpdated = payload => payload && upsertDriver(payload);
+  socketClient.connect();
+  socketClient.on('admin:driver_location', onLocation);
+  socketClient.on('admin:driver_updated', onUpdated);
+  window.setTimeout(() => map.invalidateSize(), 180);
 
-            if (!markers[d.userId || d.id]) {
-                const marker = L.marker([lat, lng], { icon }).addTo(map);
-                marker.bindPopup(popupContent);
-                markers[d.userId || d.id] = marker;
-            } else {
-                markers[d.userId || d.id].setLatLng([lat, lng]);
-                markers[d.userId || d.id].setIcon(icon);
-                markers[d.userId || d.id].setPopupContent(popupContent);
-            }
-        }
-
-        function updateKpis() {
-            let tot = 0, avail = 0, busy = 0, off = 0;
-            driversMap.forEach((d) => {
-                tot++;
-                const st = (d.status || '').toUpperCase();
-                if (st === 'AVAILABLE' || d.isAvailable) avail++;
-                else if (st === 'BUSY' || st === 'IN_TRIP') busy++;
-                else off++;
-            });
-
-            const totEl = container.querySelector('#tot-drv');
-            const onEl = container.querySelector('#on-drv');
-            const trpEl = container.querySelector('#trp-drv');
-            const offEl = container.querySelector('#off-drv');
-
-            if (totEl) totEl.textContent = tot;
-            if (onEl) onEl.textContent = avail;
-            if (trpEl) trpEl.textContent = busy;
-            if (offEl) offEl.textContent = off;
-        }
-
-        // Fetch initial list of drivers from REST API
-        try {
-            const initialDrivers = await apiService.get('/drivers/nearby');
-            if (Array.isArray(initialDrivers)) {
-                initialDrivers.forEach(d => {
-                    const id = d.userId || d.id;
-                    driversMap.set(id, d);
-                    renderDriverMarker(d);
-                });
-                updateKpis();
-            }
-        } catch (err) {
-            // Default seed
-        }
-
-        // Subscribe to real-time Socket.IO telemetry events
-        const socket = socketClient.connect();
-        
-        socket.on('admin:driver_location', (data) => {
-            if (data && data.userId) {
-                driversMap.set(data.userId, { ...driversMap.get(data.userId), ...data });
-                renderDriverMarker(data);
-                updateKpis();
-            }
-        });
-
-        socket.on('admin:driver_updated', (data) => {
-            if (data && (data.userId || data.id)) {
-                const id = data.userId || data.id;
-                driversMap.set(id, { ...driversMap.get(id), ...data });
-                renderDriverMarker(driversMap.get(id));
-                updateKpis();
-            }
-        });
-
-        container.querySelector('#status-filter')?.addEventListener('change', event => {
-            const selected = event.target.value;
-            driversMap.forEach((driver, id) => {
-                const status = String(driver.status || 'OFFLINE').toUpperCase();
-                const visible = selected === 'all' || status === selected || (selected === 'IN_TRIP' && status === 'BUSY');
-                const marker = markers[id];
-                if (!marker) return;
-                if (visible && !map.hasLayer(marker)) marker.addTo(map);
-                if (!visible && map.hasLayer(marker)) marker.removeFrom(map);
-            });
-        });
-
-    }, 150);
+  const observer = new MutationObserver(() => {
+    if (document.body.contains(container) && container.contains(mapElement)) return;
+    disposed = true;
+    socketClient.off('admin:driver_location', onLocation);
+    socketClient.off('admin:driver_updated', onUpdated);
+    map.remove();
+    observer.disconnect();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }

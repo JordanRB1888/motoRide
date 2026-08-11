@@ -47,6 +47,7 @@ export function renderPassengerApp(container) {
   let activeRatingModal = null;
   let tripStatusPollId = null;
   let selectedRideType = 'MOTO';
+  let brandRideAnimationTimer = null;
   const notifiedTripEvents = new Set();
 
   const user = authService.getCurrentUser();
@@ -155,6 +156,7 @@ export function renderPassengerApp(container) {
   if (themeSlot) {
     themeSlot.appendChild(initThemeToggle());
   }
+  requestAnimationFrame(() => animatePassengerHomeBrand());
   container.querySelector('.passenger-profile-shortcut')?.addEventListener('click', () => handleNavigation('profile'));
   container.querySelector('#passenger-support-shortcut')?.addEventListener('click', () => document.body.appendChild(createAdminSupportChat(user)));
 
@@ -201,7 +203,9 @@ export function renderPassengerApp(container) {
     } else {
       bottomSheet.expand();
       persistentChatBtn.classList.add('hidden');
-      passengerTripToggle.classList.toggle('hidden', Boolean(currentDriver));
+      // Expanded cards contain their own minimize control. The floating toggle
+      // is only needed to restore a card after it has been collapsed.
+      passengerTripToggle.classList.add('hidden');
     }
   }
 
@@ -217,6 +221,7 @@ export function renderPassengerApp(container) {
   }
 
   passengerTripToggle.addEventListener('click', () => setPassengerTripPanelCollapsed(!passengerTripPanelCollapsed));
+  window.addEventListener('58express:minimize-passenger-trip', () => setPassengerTripPanelCollapsed(true));
   const notificationBadge = container.querySelector('#notif-badge-passenger');
   const updateNotificationBadge = () => {
     const count = notificationService.getUnreadCount(user.id || 'p1');
@@ -452,6 +457,7 @@ export function renderPassengerApp(container) {
     if (tab === 'home') {
       overlay.innerHTML = '';
       overlay.classList.remove('active');
+      animatePassengerHomeBrand();
     } else {
       if (bottomSheet) bottomSheet.close();
       const wrapper = document.createElement('div');
@@ -463,6 +469,20 @@ export function renderPassengerApp(container) {
       else if (tab === 'wallet') renderWallet(wrapper);
       else if (tab === 'profile') renderProfile(wrapper);
     }
+  }
+
+  function animatePassengerHomeBrand() {
+    const brand = container.querySelector('.passenger-brand-lockup');
+    if (!brand || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    window.clearTimeout(brandRideAnimationTimer);
+    brand.classList.remove('passenger-brand-ride-in');
+    // Reinicia la animación incluso si el usuario vuelve a tocar Inicio.
+    void brand.offsetWidth;
+    brand.classList.add('passenger-brand-ride-in');
+    brandRideAnimationTimer = window.setTimeout(() => {
+      brand.classList.remove('passenger-brand-ride-in');
+    }, 950);
   }
 
   function openProfileMenu() {
@@ -658,10 +678,11 @@ export function renderPassengerApp(container) {
     }).catch(err => console.warn('Map route draw info:', err));
   }
 
-  function openPaymentModal(destName, routeInfo, fareData, destCoords) {
+  async function openPaymentModal(destName, routeInfo, fareData, destCoords) {
+    const latestWallet = await apiService.get('/wallet/me');
     const modal = createPaymentModal({
       currentMethod: selectedPaymentMethod,
-      walletBalance: user.walletBalance || 25.0,
+      walletBalance: latestWallet?.balance ?? Number(user.walletBalance || 0),
       onSelect: (method) => {
         selectedPaymentMethod = method;
         showToast(`Método de pago: ${method.toUpperCase().replace('_', ' ')} seleccionado`, 'success');
@@ -744,7 +765,7 @@ export function renderPassengerApp(container) {
     setState('SEARCHING');
     bottomSheet.setContent(renderSearchingState(() => cancelSearch(), fareData?.rideType));
     showPassengerTripToggle(true);
-    showToast('📡 Transmitiendo solicitud de mototaxi en tiempo real...', 'info');
+    showToast('Solicitud enviada en tiempo real', 'info');
     
     const fareUSD = fareData?.totalUSD || fareData?.fareUSD || 4.50;
     // A driver is assigned only after the backend matching flow accepts the ride.
@@ -782,12 +803,20 @@ export function renderPassengerApp(container) {
     // search after the server accepts (or safely queues) the authenticated request.
     const result = await apiService.createTrip(currentTrip);
     if (!result?.trip) {
+      const insufficientWallet = apiService.lastError?.error === 'INSUFFICIENT_WALLET_BALANCE';
+      const required = Number(apiService.lastError?.required || currentTrip?.fareUSD || 0);
+      const balance = Number(apiService.lastError?.balance || 0);
       currentTrip = null;
       setState('IDLE');
       showPassengerTripToggle(false);
       bottomSheet.setContent('');
       bottomSheet.collapse();
-      showToast('No se pudo registrar la carrera. Comprueba tu conexión e inténtalo nuevamente.', 'error');
+      showToast(
+        insufficientWallet
+          ? `Saldo insuficiente en Wallet: tienes $${balance.toFixed(2)} y la carrera cuesta $${required.toFixed(2)}.`
+          : 'No se pudo registrar la carrera. Comprueba tu conexión e inténtalo nuevamente.',
+        'error'
+      );
       return;
     }
     currentTrip = result.trip;
@@ -1093,16 +1122,28 @@ export function renderPassengerApp(container) {
     if (driverId !== currentDriver.id) return;
     if (locData.tripId && locData.tripId !== currentTrip.id) return;
 
-    mapComponent.addDriverMarker(currentDriver.id, lat, lng, locData.heading || 0, currentDriver);
-    if (currentTrip?.pickup?.lat && currentTrip?.pickup?.lng) {
+    mapComponent.addDriverMarker(currentDriver.id, lat, lng, locData.heading || 0, {
+      ...currentDriver,
+      vehicleType: currentTrip.rideType || currentDriver.vehicleType
+    });
+    const passengerOnBoard = ['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status);
+    const liveTarget = passengerOnBoard ? currentTrip.destination : currentTrip.pickup;
+    if (passengerOnBoard) {
+      mapComponent.clearMarkers('pickup');
+      if (currentTrip.destination?.lat && currentTrip.destination?.lng) {
+        mapComponent.setDestinationMarker(currentTrip.destination.lat, currentTrip.destination.lng);
+      }
+    } else if (currentTrip?.pickup?.lat && currentTrip?.pickup?.lng) {
       mapComponent.setPickupMarker(currentTrip.pickup.lat, currentTrip.pickup.lng);
+    }
+    if (liveTarget?.lat && liveTarget?.lng) {
       const now = Date.now();
       if (now - lastRouteRefreshAt > 10000) {
         lastRouteRefreshAt = now;
         mapComponent.drawRoute(
           { lat, lng },
-          currentTrip.pickup,
-          '#FFC107'
+          liveTarget,
+          passengerOnBoard ? '#00E676' : '#FFC107'
         );
       }
     }

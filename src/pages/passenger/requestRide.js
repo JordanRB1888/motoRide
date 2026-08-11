@@ -200,91 +200,117 @@ function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelR
 
 export function renderSearchingState(onCancel, rideType = 'MOTO') {
   const div = document.createElement('div');
-  div.className = 'searching-animation fade-in';
-  div.style.cssText = 'padding: 16px 12px 32px; text-align: center; max-width: 440px; margin: 0 auto;';
+  const isCar = rideType === 'CAR';
+  div.className = 'searching-animation searching-ride-card fade-in';
   
   div.innerHTML = `
-    <div class="diorama-card-3d" style="padding: 28px 20px 28px; border-radius: 24px; background: var(--surface-card); border: 1.5px solid var(--border-gold);">
-      <div class="ripple-container" style="position:relative; width: 120px; height: 120px; margin: 0 auto 20px; display:flex; align-items:center; justify-content:center;">
-        <div class="ripple"></div>
-        <div class="ripple delay-1"></div>
-        <div class="ripple delay-2"></div>
-        <div style="color: var(--accent-primary); position:relative; z-index:2; animation: bounce 1s infinite alternate;">
-          ${icon(rideType === 'CAR' ? 'car' : 'bike', 48)}
+    <section class="searching-ride-shell" aria-live="polite">
+      <div class="searching-ride-main">
+        <div class="searching-radar" aria-hidden="true">
+          <span class="searching-radar-ring ring-one"></span>
+          <span class="searching-radar-ring ring-two"></span>
+          <span class="searching-radar-sweep"></span>
+          <div class="searching-vehicle-art ${isCar ? 'is-car' : 'is-moto'}">
+            ${isCar ? `
+              <svg viewBox="0 0 96 72"><path class="search-tyre" d="M16 25h8v22h-8zM72 25h8v22h-8z"/><path class="search-shell" d="M25 12h46l10 19v22c0 5-4 9-9 9H24c-5 0-9-4-9-9V31z"/><path class="search-glass" d="m31 17 34 0 8 16H23z"/><path class="search-detail" d="M21 38h54M48 18v39"/><circle class="search-light" cx="27" cy="17" r="4"/><circle class="search-light" cx="69" cy="17" r="4"/></svg>
+            ` : `
+              <svg viewBox="0 0 112 76"><circle class="search-tyre" cx="24" cy="55" r="14"/><circle class="search-tyre" cx="88" cy="55" r="14"/><path class="search-detail" d="M24 55h27l16-28h19M50 55 38 29h25l25 26M42 25h16"/><path class="search-shell" d="M42 36h25l10 18H49z"/><circle class="search-rider" cx="61" cy="17" r="9"/><path class="search-rider-body" d="m58 27-8 18h20l-3-17z"/><circle class="search-light" cx="90" cy="43" r="4"/></svg>
+            `}
+          </div>
+        </div>
+        <div class="searching-ride-copy">
+          <span class="searching-live-label"><i></i> BÚSQUEDA EN TIEMPO REAL</span>
+          <h3>Buscando conductor</h3>
+          <p>Contactando ${isCar ? 'automóviles' : 'mototaxistas'} cercanos</p>
+          <div class="searching-ride-meta">
+            <span>${icon(isCar ? 'car' : 'bike', 18)} <b>${isCar ? 'Automóvil' : 'Moto'}</b></span>
+            <span>${icon('clock', 18)} <small>Tiempo estimado</small><b>2–5 min</b></span>
+          </div>
         </div>
       </div>
-      
-      <h3 style="color: var(--text-primary); font-size: 1.3rem; font-weight: 800; margin-bottom: 6px;">Buscando ${rideType === 'CAR' ? 'automóvil' : 'moto'} en Maracaibo...</h3>
-      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 24px;">Conectando con conductores cercanos en tiempo real</p>
-      
-      <button class="btn btn-danger btn-outline cancel-btn" style="
-        width: 100%; padding: 14px; border-radius: 14px; font-weight: 800; font-size:0.95rem;
-        border: 1.5px solid var(--danger); color: var(--danger); background: rgba(255,77,77,0.15); cursor:pointer;
-        display:flex; align-items:center; justify-content:center; gap:8px;
-      ">
-        ${icon('close', 18)} Cancelar Solicitud y Cambiar Ruta
+      <button type="button" class="searching-minimize-btn" aria-label="Minimizar búsqueda">
+        ${icon('chevronDown', 18)} Minimizar
       </button>
-    </div>
+      <button type="button" class="searching-cancel-btn cancel-btn">
+        ${icon('close', 18)} Cancelar solicitud
+      </button>
+    </section>
   `;
 
   div.querySelector('.cancel-btn').addEventListener('click', onCancel);
+  div.querySelector('.searching-minimize-btn').addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('58express:minimize-passenger-trip'));
+  });
 
   return div;
 }
 
 export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onMinimize) {
   const div = document.createElement('div');
-  div.className = 'driver-card fade-in';
-  div.style.cssText = 'padding: 16px; max-width: 440px; margin: 0 auto;';
+  div.className = 'driver-card assigned-driver-card fade-in';
+  const driverName = `${driver.firstName || 'Conductor'} ${driver.lastName || ''}`.trim();
+  const driverInitials = driverName.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+  const fallbackAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverName)}`;
+  const driverAvatar = driver.photoUrl || fallbackAvatar;
+  const etaMinutes = Math.max(1, Math.round(Number(trip?.pickupEtaMin ?? trip?.etaMin ?? 3)));
+  const driverArrived = trip?.status === 'ARRIVED';
   
   div.innerHTML = `
-    <div class="diorama-card-3d" style="padding: 20px; border-radius: 24px; background: var(--surface-card); border: 2px solid var(--accent-secondary);">
-      <div class="passenger-trip-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
-        <div style="display:flex; align-items:center; gap: 12px;">
-          <img src="${driver.photoUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (driver.firstName || 'Driver')}" 
-               style="width: 56px; height: 56px; border-radius: 50%; border: 3px solid var(--accent-secondary); box-shadow: 0 0 15px rgba(0,210,255,0.4);">
-          <div>
-            <h4 style="color: var(--text-primary); font-size: 1.1rem; font-weight: 800; margin: 0;">${driver.firstName} ${driver.lastName || ''}</h4>
-            <div style="color: var(--accent-primary); font-size: 0.85rem; font-weight: 700; margin-top: 2px; display:flex; align-items:center; gap:4px;">
-              ${icon('star', 14, 'fill-star')} ${driver.rating || 4.9} (${driver.totalTrips || 120} viajes)
-            </div>
+    <section class="assigned-driver-shell">
+      <header class="assigned-driver-header passenger-trip-card-header">
+        <div class="assigned-driver-identity">
+          <div class="assigned-driver-avatar">
+            <span>${driverInitials}</span>
+            <img src="${driverAvatar}" alt="Foto de ${driverName}">
+            <i aria-label="Conductor conectado"></i>
+          </div>
+          <div class="assigned-driver-name">
+            <small>TU CONDUCTOR</small>
+            <h4>${driverName}</h4>
+            <div>${icon('starFilled', 14)} <strong>${driver.rating || 4.9}</strong> <span>(${driver.totalTrips || 120} viajes)</span></div>
           </div>
         </div>
         <div class="passenger-trip-card-actions">
-          <button class="trip-card-minimize-btn" type="button" aria-label="Minimizar información del viaje">⌄</button>
+          <button class="trip-card-minimize-btn" type="button" aria-label="Minimizar información del viaje">${icon('chevronDown', 18)}</button>
         </div>
-      </div>
-      
-      <!-- Vehicle Pill -->
-      <div style="display:flex; justify-content:space-between; align-items:center; background: var(--surface-elevated); padding: 12px 16px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 16px;">
+      </header>
+
+      <div class="assigned-vehicle-row">
         <div>
-          <small style="color:var(--text-secondary); display:block;">Vehículo</small>
-          <strong style="color:var(--text-primary); font-size:0.95rem;">${driver.vehicleBrand || 'Bera'} ${driver.vehicleModel || 'SBR'} (${driver.vehicleColor || 'Negro'})</strong>
+          <small>Vehículo</small>
+          <strong>${driver.vehicleBrand || 'Bera'} ${driver.vehicleModel || 'SBR'} <span>· ${driver.vehicleColor || 'Negro'}</span></strong>
         </div>
-        <div style="background: var(--accent-primary); color: #121824; font-weight: 900; padding: 6px 12px; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;">
-          ${driver.vehiclePlate || 'AC3M49P'}
-        </div>
+        <b>${driver.vehiclePlate || 'AC3M49P'}</b>
       </div>
-      
-      <!-- Actions Call & Chat -->
-      <div style="display:flex; gap: 12px; margin-bottom: 12px;">
-        <button class="btn call-btn" style="flex:1; padding: 12px; border-radius: 14px; background: rgba(0,210,255,0.15); border: 1px solid var(--accent-secondary); color: var(--accent-secondary); font-weight: 800; display:flex; align-items:center; justify-content:center; gap:8px;">
-          ${icon('phone', 18)} Llamar
+
+      <div class="assigned-driver-status ${driverArrived ? 'has-arrived' : ''}">
+        <span><i></i> ${driverArrived ? 'Conductor en el punto' : 'Conductor en camino'}</span>
+        <strong>${driverArrived ? 'Llegó' : `${etaMinutes} min`}</strong>
+      </div>
+
+      <div class="assigned-driver-actions">
+        <button type="button" class="call-btn">
+          ${icon('phone', 19)} Llamar
         </button>
-        <button class="btn chat-btn" style="flex:1; padding: 12px; border-radius: 14px; background: rgba(255,193,7,0.15); border: 1px solid var(--accent-primary); color: var(--accent-primary); font-weight: 800; display:flex; align-items:center; justify-content:center; gap:8px;">
-          ${icon('message', 18)} Chat Interno
+        <button type="button" class="chat-btn">
+          ${icon('message', 19)} Chat interno
         </button>
       </div>
 
-      <!-- Cancel Order Button (Before driver accepts/starts trip) -->
-      <button class="btn cancel-driver-trip-btn" style="
-        width: 100%; padding: 12px; border-radius: 14px; background: rgba(255,77,77,0.1); border: 1.5px solid var(--danger);
-        color: var(--danger); font-weight: 800; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
-      ">
-        ${icon('close', 16)} Cancelar Orden y Elegir Otra Ruta
+      <button type="button" class="cancel-driver-trip-btn">
+        ${icon('close', 17)} Cancelar viaje
       </button>
-    </div>
+    </section>
   `;
+
+  const avatarImage = div.querySelector('.assigned-driver-avatar img');
+  avatarImage.addEventListener('error', () => {
+    if (avatarImage.src !== fallbackAvatar) {
+      avatarImage.src = fallbackAvatar;
+      return;
+    }
+    avatarImage.hidden = true;
+  });
 
   div.querySelector('.call-btn').addEventListener('click', onCall);
   div.querySelector('.chat-btn').addEventListener('click', onChat);

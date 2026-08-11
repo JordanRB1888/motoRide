@@ -165,11 +165,14 @@ export class BottomSheet {
     const isFarePreview = html instanceof HTMLElement && html.classList.contains('fare-preview-premium');
     const isDestinationSearch = typeof html === 'string' && html.includes('class="search-sheet"');
     const isActiveTrip = html instanceof HTMLElement && (html.classList.contains('driver-card') || html.classList.contains('active-ride'));
+    const isSearchingRide = html instanceof HTMLElement && html.classList.contains('searching-ride-card');
     this.sheet.classList.toggle('fare-preview-sheet', isFarePreview);
     this.sheet.classList.toggle('destination-search-sheet', isDestinationSearch);
     this.sheet.classList.toggle('passenger-active-trip-sheet', isActiveTrip);
+    this.sheet.classList.toggle('searching-ride-sheet', isSearchingRide);
     this.overlay.classList.toggle('fare-preview-overlay', isFarePreview);
     this.overlay.classList.toggle('destination-search-overlay', isDestinationSearch);
+    this.overlay.classList.toggle('searching-ride-overlay', isSearchingRide);
     if (typeof html === 'string') {
       this.content.innerHTML = html;
     } else if (html instanceof HTMLElement) {
@@ -185,7 +188,7 @@ export class BottomSheet {
     const vh = this.options.snapPoints[index];
     const translateY = 100 - vh;
     
-    this.sheet.style.transform = this.sheet.classList.contains('fare-preview-sheet') || this.sheet.classList.contains('destination-search-sheet') || this.sheet.classList.contains('passenger-active-trip-sheet')
+    this.sheet.style.transform = this.sheet.classList.contains('fare-preview-sheet') || this.sheet.classList.contains('destination-search-sheet') || this.sheet.classList.contains('passenger-active-trip-sheet') || this.sheet.classList.contains('searching-ride-sheet')
       ? 'translate(-50%, 0)'
       : `translate(-50%, ${translateY}vh)`;
     this._notifyStateChange();

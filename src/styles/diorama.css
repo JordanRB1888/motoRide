@@ -170,6 +170,173 @@
 }
 
 /* ============================================================
+   LIVE RIDE MARKERS — lightweight, heading-aware vector vehicles
+   ============================================================ */
+.live-map-marker,
+.waiting-map-marker {
+  background: transparent !important;
+  border: 0 !important;
+  overflow: visible !important;
+}
+
+.live-vehicle-marker {
+  --vehicle-heading: 0deg;
+  position: relative;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+  filter: drop-shadow(0 7px 8px rgba(0, 0, 0, .48));
+}
+
+.live-vehicle-rotor {
+  position: relative;
+  z-index: 3;
+  width: 50px;
+  height: 50px;
+  padding: 5px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(11, 23, 38, .98), rgba(2, 9, 17, .98));
+  border: 1.5px solid rgba(255, 196, 0, .94);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .12), 0 0 0 4px rgba(255, 196, 0, .11), 0 0 22px rgba(255, 196, 0, .26);
+  transform: rotate(var(--vehicle-heading));
+  transition: transform .42s cubic-bezier(.2, .75, .25, 1), box-shadow .25s ease;
+  will-change: transform;
+}
+
+.live-vehicle-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.vehicle-shell { fill: #ffc400; stroke: #fff0a6; stroke-width: 1.1; }
+.vehicle-highlight { fill: rgba(255, 245, 180, .38); }
+.vehicle-glass { fill: #17354a; stroke: #7ddfff; stroke-width: .8; }
+.vehicle-tyre { fill: #02070d; stroke: #718096; stroke-width: 1; }
+.vehicle-detail { fill: none; stroke: #08111c; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.vehicle-rider { fill: #202a38; stroke: #f8fafc; stroke-width: 1.2; }
+.vehicle-headlight { fill: #fff6b8; filter: drop-shadow(0 -2px 3px #fff4a0); }
+.vehicle-taillight { fill: #ff405a; filter: drop-shadow(0 2px 2px rgba(255, 64, 90, .8)); }
+
+.vehicle-ground-shadow {
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  bottom: 1px;
+  width: 37px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .58);
+  filter: blur(4px);
+  transform: translateX(-50%);
+}
+
+.vehicle-heading-cone {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: -17px;
+  width: 32px;
+  height: 42px;
+  opacity: .28;
+  background: linear-gradient(to top, rgba(255, 226, 72, .68), transparent 78%);
+  clip-path: polygon(43% 100%, 57% 100%, 100% 0, 0 0);
+  transform-origin: 50% 46px;
+  transform: translateX(-50%) rotate(var(--vehicle-heading));
+  transition: transform .42s cubic-bezier(.2, .75, .25, 1), opacity .2s ease;
+  pointer-events: none;
+}
+
+.vehicle-motion-trail {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: -11px;
+  width: 3px;
+  height: 25px;
+  border-radius: 999px;
+  background: linear-gradient(to bottom, rgba(255, 196, 0, .65), transparent);
+  opacity: 0;
+  transform-origin: 50% -18px;
+  transform: translateX(-50%) rotate(var(--vehicle-heading));
+  transition: transform .42s cubic-bezier(.2, .75, .25, 1), opacity .2s ease;
+}
+
+.live-vehicle-marker.is-moving .vehicle-motion-trail { opacity: .8; animation: vehicleTrailPulse .55s ease-in-out infinite alternate; }
+.live-vehicle-marker.is-moving .live-vehicle-rotor { box-shadow: inset 0 1px rgba(255,255,255,.14), 0 0 0 5px rgba(255,196,0,.14), 0 0 28px rgba(255,196,0,.42); }
+.live-vehicle-marker.is-moving .vehicle-artwork { animation: vehicleRoadVibration .26s ease-in-out infinite alternate; transform-origin: center; }
+
+.vehicle-live-dot {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  top: 1px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #07111d;
+  border-radius: 50%;
+  background: #00e676;
+  box-shadow: 0 0 9px #00e676;
+}
+
+.waiting-passenger-marker {
+  position: relative;
+  width: 58px;
+  height: 72px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  filter: drop-shadow(0 8px 9px rgba(0, 0, 0, .45));
+}
+
+.waiting-passenger-svg {
+  position: relative;
+  z-index: 3;
+  width: 43px;
+  height: 52px;
+  padding: 5px;
+  overflow: visible;
+  border-radius: 19px 19px 15px 15px;
+  border: 2px solid #13d8ff;
+  background: linear-gradient(145deg, rgba(10, 32, 49, .98), rgba(3, 13, 23, .98));
+  box-shadow: inset 0 1px rgba(255,255,255,.12), 0 0 0 4px rgba(19,216,255,.12), 0 0 22px rgba(19,216,255,.34);
+  animation: waitingPersonBreathe 2.3s ease-in-out infinite;
+}
+
+.passenger-head { fill: #e6aa7b; stroke: #ffe0c1; stroke-width: 1; }
+.passenger-hair { fill: #263242; }
+.passenger-body { fill: #13c8ee; stroke: #a8f2ff; stroke-width: 1; }
+.passenger-detail { fill: none; stroke: #07111d; stroke-width: 2; stroke-linecap: round; }
+.passenger-ground-shadow { position: absolute; z-index: 0; bottom: 9px; width: 33px; height: 11px; border-radius: 50%; background: rgba(0,0,0,.6); filter: blur(4px); }
+.passenger-pulse-ring { position: absolute; z-index: 1; top: 15px; width: 40px; height: 40px; border: 2px solid rgba(19,216,255,.82); border-radius: 50%; animation: passengerLocationPulse 1.9s ease-out infinite; }
+.passenger-status-label { position: absolute; z-index: 4; bottom: 0; padding: 3px 7px; border-radius: 999px; background: #07111d; border: 1px solid #13d8ff; color: #dffaff; font-size: 8px; font-weight: 900; line-height: 1; letter-spacing: .02em; box-shadow: 0 3px 9px rgba(0,0,0,.4); }
+
+.live-marker-tooltip {
+  padding: 6px 9px !important;
+  border: 1px solid rgba(255, 196, 0, .62) !important;
+  border-radius: 10px !important;
+  background: rgba(5, 15, 27, .96) !important;
+  color: #f8fafc !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35) !important;
+}
+.live-marker-tooltip::before { border-top-color: rgba(255,196,0,.75) !important; }
+.passenger-tooltip { border-color: rgba(19,216,255,.68) !important; }
+
+@keyframes vehicleTrailPulse { to { height: 34px; opacity: .25; } }
+@keyframes vehicleRoadVibration { to { transform: translateY(-1px) scale(1.015); } }
+@keyframes waitingPersonBreathe { 50% { transform: translateY(-3px); } }
+@keyframes passengerLocationPulse { 0% { transform: scale(.68); opacity: .75; } 100% { transform: scale(1.65); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-vehicle-marker *,
+  .waiting-passenger-marker * { animation: none !important; transition-duration: .01ms !important; }
+}
+
+/* ============================================================
    DIORAMA CARDS & TACTILE 3D UX PANELS
    ============================================================ */
 

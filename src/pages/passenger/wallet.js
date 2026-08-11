@@ -31,6 +31,12 @@ const paymentDataMarkup = () => `<div class="wallet-payment-data">
   <button type="button" data-copy-payment>${icon('copy', 15)} Copiar datos</button>
 </div>`;
 
+const transactionPresentation = transaction => {
+  if (transaction.type === 'TOP_UP') return { label: 'Recarga por Pago Móvil', iconName: 'plus' };
+  if (transaction.type === 'RIDE_PAYMENT') return { label: 'Pago de viaje', iconName: 'mapPin' };
+  return { label: String(transaction.type || 'Movimiento'), iconName: 'dollarSign' };
+};
+
 export function renderWallet(container) {
   const user = authService.getCurrentUser();
   if (!user) return;
@@ -134,11 +140,15 @@ export function renderWallet(container) {
           <button class="${filter === 'topups' ? 'active' : ''}" data-wallet-filter="topups">Recargas</button>
         </div>
         <div class="wallet-history-list">
-          ${visibleTransactions.map(transaction => `<article>
-            <span class="wallet-tx-icon ${escapeHtml(String(transaction.status).toLowerCase())}">${icon(transaction.type === 'TOP_UP' ? 'plus' : 'dollarSign', 17)}</span>
-            <div><strong>${transaction.type === 'TOP_UP' ? 'Recarga por Pago Móvil' : escapeHtml(transaction.type)}</strong><small>${new Date(transaction.createdAt).toLocaleString('es-VE')} · Ref. ${escapeHtml(transaction.reference || '—')}</small></div>
-            <b>$${Number(transaction.amount).toFixed(2)}<small>${escapeHtml(transaction.status)}</small></b>
-          </article>`).join('') || `<div class="wallet-empty">
+          ${visibleTransactions.map(transaction => {
+            const presentation = transactionPresentation(transaction);
+            const amount = Number(transaction.amount || 0);
+            return `<article>
+            <span class="wallet-tx-icon ${escapeHtml(String(transaction.status).toLowerCase())}">${icon(presentation.iconName, 17)}</span>
+            <div><strong>${escapeHtml(presentation.label)}</strong><small>${new Date(transaction.createdAt).toLocaleString('es-VE')} · ${transaction.reference ? `Ref. ${escapeHtml(transaction.reference)}` : `Viaje ${escapeHtml(transaction.tripId || '—')}`}</small></div>
+            <b>${amount < 0 ? '−' : '+'}$${Math.abs(amount).toFixed(2)}<small>${escapeHtml(transaction.status)}</small></b>
+          </article>`;
+          }).join('') || `<div class="wallet-empty">
             <span>${icon('fileText', 34)}</span><strong>Aún no tienes movimientos</strong><p>Tus recargas y pagos aparecerán aquí.</p>
           </div>`}
         </div>

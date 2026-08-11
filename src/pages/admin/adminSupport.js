@@ -1,26 +1,248 @@
 import { apiService } from '../../services/apiService.js';
 import { socket } from '../../services/socketClient.js';
 import { showToast } from '../../components/toast.js';
+import { icon } from '../../utils/icons.js';
 
-const escapeHtml = value => String(value || '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+const fullName = user => `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Usuario +58Express';
+const initials = user => `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`.toUpperCase() || '58';
+const dateValue = value => Number.isNaN(new Date(value).getTime()) ? new Date(0) : new Date(value);
+const shortTime = value => dateValue(value).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+const fullDate = value => dateValue(value).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' });
+const tripStatus = status => ({ SEARCHING: 'Buscando conductor', DRIVER_ASSIGNED: 'Conductor asignado', EN_ROUTE: 'En camino', ARRIVED: 'En recogida', IN_PROGRESS: 'En viaje', IN_TRIP: 'En viaje', COMPLETED: 'Completado', CANCELLED: 'Cancelado', SCHEDULED: 'Programado' }[status] || status || 'Sin actividad');
+const ACTIVE_TRIP_STATUSES = new Set(['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP']);
+const QUICK_REPLIES = ['Voy a revisar tu caso', '¿Puedes compartir más detalles?', 'Estamos asignando otro conductor'];
+
+function averageResponseTime(threads) {
+  const samples = [];
+  threads.forEach(thread => {
+    const ordered = thread.messages || [];
+    ordered.forEach((message, index) => {
+      if (message.senderRole === 'admin') {
+        const previous = ordered.slice(0, index).reverse().find(item => item.senderRole !== 'admin');
+        if (previous) samples.push(Math.max(0, dateValue(message.createdAt) - dateValue(previous.createdAt)));
+      }
+    });
+  });
+  if (!samples.length) return '—';
+  const seconds = Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length / 1000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function latestTripFor(userId, trips) {
+  return trips
+    .filter(trip => trip.passengerId === userId || trip.driverId === userId || trip.assignedDriverId === userId)
+    .sort((a, b) => dateValue(b.updatedAt || b.createdAt) - dateValue(a.updatedAt || a.createdAt))[0] || null;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export async function renderAdminSupport(container) {
-  let threads = await apiService.get('/support/threads') || [];
-  let activeId = threads[0]?.user?.id || null;
-  const reload = async () => { threads = await apiService.get('/support/threads') || []; if (!activeId) activeId = threads[0]?.user?.id || null; draw(); };
+  let disposed = false;
+  let threads = [];
+  let trips = [];
+  let activeId = localStorage.getItem('58express_support_focus') || null;
+  let search = '';
+  let filter = 'all';
+  let pendingImage = null;
+  let loading = true;
+  const resolvedIds = new Set(JSON.parse(localStorage.getItem('58express_support_resolved') || '[]'));
+
+  const load = async ({ preserveActive = true } = {}) => {
+    const [threadData, tripData] = await Promise.all([
+      apiService.get('/support/threads'),
+      apiService.get('/trips')
+    ]);
+    if (disposed) return;
+    threads = Array.isArray(threadData) ? threadData : [];
+    trips = Array.isArray(tripData) ? tripData : [];
+    if (!preserveActive || !threads.some(thread => thread.user?.id === activeId)) activeId = threads[0]?.user?.id || null;
+    localStorage.removeItem('58express_support_focus');
+    loading = false;
+    draw();
+  };
+
+  const saveResolved = () => localStorage.setItem('58express_support_resolved', JSON.stringify([...resolvedIds]));
+
+  const visibleThreads = () => threads
+    .filter(thread => {
+      if (filter === 'unread' && !thread.unread) return false;
+      if (filter === 'resolved' && !resolvedIds.has(thread.user?.id)) return false;
+      if (filter === 'open' && resolvedIds.has(thread.user?.id)) return false;
+      const haystack = `${fullName(thread.user)} ${thread.user?.email || ''} ${thread.user?.phone || ''} ${thread.messages?.at(-1)?.text || ''}`.toLowerCase();
+      return haystack.includes(search.toLowerCase());
+    })
+    .sort((a, b) => dateValue(b.messages?.at(-1)?.createdAt) - dateValue(a.messages?.at(-1)?.createdAt));
+
+  const threadCard = thread => {
+    const user = thread.user || {};
+    const last = thread.messages?.at(-1);
+    const resolved = resolvedIds.has(user.id);
+    return `<button class="support-thread ${user.id === activeId ? 'active' : ''}" data-thread-id="${escapeHtml(user.id)}" type="button">
+      <span class="support-avatar ${user.role === 'driver' ? 'driver' : ''}">${user.avatar ? `<img src="${escapeHtml(user.avatar)}" alt="">` : escapeHtml(initials(user))}<i></i></span>
+      <span class="support-thread-copy"><span><strong>${escapeHtml(fullName(user))}</strong><time>${last ? shortTime(last.createdAt) : ''}</time></span><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} · ID ${escapeHtml(String(user.id || '').slice(-10))}</small><em>${escapeHtml(last?.text || (last?.image ? 'Archivo adjunto' : 'Nueva conversación'))}</em></span>
+      ${thread.unread ? `<b class="support-unread">${thread.unread > 9 ? '9+' : thread.unread}</b>` : resolved ? `<b class="support-resolved">${icon('check', 12)}</b>` : ''}
+    </button>`;
+  };
+
+  const messageBubble = message => `<article class="support-message ${message.senderRole === 'admin' ? 'admin' : 'customer'}">
+    ${message.image ? `<a href="${escapeHtml(message.image)}" target="_blank" rel="noopener"><img src="${escapeHtml(message.image)}" alt="Adjunto de soporte"></a>` : ''}
+    ${message.text ? `<p>${escapeHtml(message.text)}</p>` : ''}
+    <small>${fullDate(message.createdAt)} ${message.senderRole === 'admin' ? icon('check', 11) : ''}</small>
+  </article>`;
+
   const draw = () => {
-    const active = threads.find(item => item.user?.id === activeId);
-    container.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px"><div><h2 style="margin:0">Centro de soporte real</h2><small style="color:var(--text-secondary)">Conversaciones persistentes con pasajeros y conductores.</small></div><button id="broadcast" class="btn btn-3d primary-btn">📢 Nuevo comunicado</button></div>
-    <div style="display:grid;grid-template-columns:minmax(250px,320px) 1fr;gap:18px;min-height:620px"><aside class="diorama-card-3d" style="padding:14px;border-radius:20px;background:var(--surface-card);overflow:auto"><b>Conversaciones (${threads.length})</b><div style="display:grid;gap:9px;margin-top:13px">${threads.map(t=>`<button class="thread" data-id="${t.user.id}" style="text-align:left;padding:13px;border-radius:14px;border:1px solid ${t.user.id===activeId?'var(--accent-primary)':'var(--border-color)'};background:var(--surface-elevated);color:var(--text-primary);cursor:pointer"><b>${escapeHtml(`${t.user.firstName||''} ${t.user.lastName||''}`)}</b><small style="display:block;color:var(--accent-secondary)">${t.user.role==='driver'?'Conductor':'Pasajero'} · ${escapeHtml(t.user.phone||'')}</small><span style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-secondary);margin-top:5px">${escapeHtml(t.messages.at(-1)?.text||'Adjunto')}</span>${t.unread?`<span class="badge badge-warning">${t.unread} nuevo</span>`:''}</button>`).join('')||'<p style="color:var(--text-secondary)">No hay solicitudes abiertas.</p>'}</div></aside>
-    <section class="diorama-card-3d" style="border-radius:20px;background:var(--surface-card);display:flex;flex-direction:column;overflow:hidden">${active?`<header style="padding:16px 20px;background:var(--surface-elevated);border-bottom:1px solid var(--border-color)"><b>${escapeHtml(`${active.user.firstName} ${active.user.lastName||''}`)}</b><small style="display:block;color:var(--text-secondary)">${escapeHtml(active.user.email||active.user.phone||'')}</small></header><div id="support-messages" style="flex:1;padding:18px;overflow:auto;display:flex;flex-direction:column;gap:10px">${active.messages.map(m=>`<div style="align-self:${m.senderRole==='admin'?'flex-end':'flex-start'};max-width:78%;padding:11px 14px;border-radius:16px;background:${m.senderRole==='admin'?'var(--accent-primary)':'var(--surface-elevated)'};color:${m.senderRole==='admin'?'#121824':'var(--text-primary)'}">${m.image?`<img src="${m.image}" alt="Adjunto" style="max-width:100%;max-height:180px;border-radius:10px">`:''}<div>${escapeHtml(m.text)}</div><small>${new Date(m.createdAt).toLocaleString('es-VE')}</small></div>`).join('')}</div><form id="reply-form" style="display:flex;gap:9px;padding:14px;border-top:1px solid var(--border-color)"><input id="reply" required placeholder="Escribe una respuesta oficial…" style="flex:1;padding:12px;border-radius:14px;border:1px solid var(--border-color);background:var(--surface-input);color:var(--text-primary)"><button class="btn primary-btn" type="submit">Enviar</button></form>`:'<div style="margin:auto;color:var(--text-secondary)">Selecciona una conversación.</div>'}</section></div>`;
-    container.querySelectorAll('.thread').forEach(button=>button.addEventListener('click', async()=>{activeId=button.dataset.id; await apiService.patch(`/support/threads/${activeId}/read`,{}); draw();}));
-    container.querySelector('#reply-form')?.addEventListener('submit',async event=>{event.preventDefault();const input=container.querySelector('#reply');const sent=await apiService.post('/support/messages',{recipientId:activeId,text:input.value.trim()});if(sent){const thread=threads.find(t=>t.user.id===activeId);thread.messages.push(sent);draw();}else showToast('No se pudo enviar la respuesta','error');});
-    container.querySelector('#broadcast').addEventListener('click', openBroadcast);
-    requestAnimationFrame(()=>{const body=container.querySelector('#support-messages');if(body)body.scrollTop=body.scrollHeight;});
+    if (disposed) return;
+    const active = threads.find(thread => thread.user?.id === activeId) || null;
+    const user = active?.user;
+    const latestTrip = user ? latestTripFor(user.id, trips) : null;
+    const unread = threads.reduce((sum, thread) => sum + Number(thread.unread || 0), 0);
+    const open = threads.filter(thread => !resolvedIds.has(thread.user?.id)).length;
+    const resolved = threads.filter(thread => resolvedIds.has(thread.user?.id)).length;
+    const filtered = visibleThreads();
+    const activeTrip = latestTrip && ACTIVE_TRIP_STATUSES.has(latestTrip.status);
+    const routeFrom = latestTrip?.pickup?.address || latestTrip?.pickupAddress || 'Origen no disponible';
+    const routeTo = latestTrip?.destination?.address || latestTrip?.destinationAddress || 'Destino no disponible';
+
+    container.innerHTML = `<div class="support-command-view">
+      <header class="support-command-head">
+        <div><div class="support-title-line"><h1>Centro de Soporte</h1><span><i></i> Operación en tiempo real</span></div><p>Conversaciones persistentes con pasajeros y conductores.</p></div>
+        <div class="support-head-tools"><span class="support-operators"><i></i><small>Operadores en línea</small><strong>1</strong></span><label class="support-global-search">${icon('search', 17)}<input id="support-global-search" value="${escapeHtml(search)}" placeholder="Buscar conversación, pasajero o ID…"></label><button class="support-filter-trigger" type="button">${icon('filter', 16)} Filtros</button><button id="broadcast" class="support-broadcast" type="button">${icon('volume2', 17)} Nuevo comunicado</button></div>
+      </header>
+
+      <section class="support-metrics">
+        <article class="amber"><span>${icon('message', 23)}</span><div><small>Conversaciones</small><strong>${open}</strong><em>Abiertas ahora</em></div></article>
+        <article class="cyan"><span>${icon('bell', 23)}</span><div><small>Sin leer</small><strong>${unread}</strong><em>Requieren atención</em></div></article>
+        <article class="green"><span>${icon('clock', 23)}</span><div><small>Tiempo medio</small><strong>${averageResponseTime(threads)}</strong><em>Primera respuesta</em></div></article>
+        <article class="lime"><span>${icon('checkCircle', 23)}</span><div><small>Resueltos</small><strong>${resolved}</strong><em>Casos cerrados</em></div></article>
+      </section>
+
+      <section class="support-workspace ${active ? '' : 'no-active'}">
+        <aside class="support-inbox">
+          <header><h2>Conversaciones</h2><span>${threads.length}</span></header>
+          <nav>${[['all','Todas',threads.length],['unread','Sin leer',unread],['open','Abiertas',open],['resolved','Resueltas',resolved]].map(([id,label,count]) => `<button class="${filter === id ? 'active' : ''}" data-support-filter="${id}" type="button">${label}<b>${count}</b></button>`).join('')}</nav>
+          <label class="support-list-search">${icon('search', 15)}<input id="support-list-search" value="${escapeHtml(search)}" placeholder="Buscar conversación"></label>
+          <div class="support-thread-list">${loading ? '<div class="support-empty">Cargando conversaciones…</div>' : filtered.map(threadCard).join('') || '<div class="support-empty">No hay conversaciones con este filtro.</div>'}</div>
+        </aside>
+
+        <main class="support-chat-panel">
+          ${active ? `<header class="support-chat-head"><div class="support-avatar ${user.role === 'driver' ? 'driver' : ''}">${user.avatar ? `<img src="${escapeHtml(user.avatar)}" alt="">` : escapeHtml(initials(user))}<i></i></div><div><strong>${escapeHtml(fullName(user))}</strong><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} · ID ${escapeHtml(String(user.id).slice(-10))}</small></div><div class="support-chat-actions"><button data-copy-user title="Copiar datos">${icon('info',17)}</button>${user.phone ? `<a href="tel:${escapeHtml(user.phone)}" title="Llamar">${icon('phone',17)}</a>` : ''}</div></header>
+          <div id="support-messages" class="support-messages"><time class="support-day">Conversación de soporte</time>${active.messages?.map(messageBubble).join('') || '<div class="support-empty">Aún no hay mensajes en esta conversación.</div>'}</div>
+          <div class="support-quick-replies">${QUICK_REPLIES.map(reply => `<button data-quick-reply="${escapeHtml(reply)}" type="button">${escapeHtml(reply)}</button>`).join('')}</div>
+          <form id="reply-form" class="support-composer"><label class="support-attach" title="Adjuntar imagen">${icon('upload',18)}<input id="support-image" type="file" accept="image/jpeg,image/png,image/webp"></label><button class="support-template" type="button">Respuestas rápidas ${icon('chevronDown',13)}</button><label class="support-reply-wrap">${pendingImage ? `<span>Imagen lista ${icon('check',12)}</span>` : ''}<input id="reply" placeholder="Escribe una respuesta oficial…" autocomplete="off"></label><button class="support-send" type="submit">Enviar ${icon('send',16)}</button></form>` : '<div class="support-no-selection"><span>'+icon('message',30)+'</span><h3>Selecciona una conversación</h3><p>Los mensajes aparecerán aquí en tiempo real.</p></div>'}
+        </main>
+
+        ${active ? `<aside class="support-context">
+          <section><header><h3>Información del ${user.role === 'driver' ? 'conductor' : 'pasajero'}</h3></header><div class="support-profile-row"><span class="support-avatar large ${user.role === 'driver' ? 'driver' : ''}">${user.avatar ? `<img src="${escapeHtml(user.avatar)}" alt="">` : escapeHtml(initials(user))}</span><div><strong>${escapeHtml(fullName(user))}</strong><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} verificado</small></div></div><dl><div><dt>${icon('phone',13)} Teléfono</dt><dd>${escapeHtml(user.phone || 'No disponible')}</dd></div><div><dt>${icon('message',13)} Correo</dt><dd>${escapeHtml(user.email || 'No disponible')}</dd></div></dl></section>
+          <section class="support-trip-context"><header><h3>${activeTrip ? 'Viaje activo' : 'Último viaje'}</h3><span class="${activeTrip ? 'live' : ''}">${tripStatus(latestTrip?.status)}</span></header>${latestTrip ? `<code>#${escapeHtml(String(latestTrip.id).slice(-12))}</code><div class="support-route"><p><i class="pickup"></i><span>${escapeHtml(routeFrom)}</span></p><p><i class="destination"></i><span>${escapeHtml(routeTo)}</span></p></div><footer><span>${fullDate(latestTrip.updatedAt || latestTrip.createdAt)}</span><strong>$${Number(latestTrip.fareUSD || latestTrip.fareEUR || latestTrip.pricing?.fareUSD || 0).toFixed(2)}</strong></footer>` : '<p class="support-context-empty">Este usuario no tiene viajes registrados.</p>'}</section>
+          <section class="support-case"><header><h3>Información del caso</h3><span>${active.unread ? 'Prioridad media' : resolvedIds.has(user.id) ? 'Resuelto' : 'En seguimiento'}</span></header><dl><div><dt>Estado</dt><dd>${resolvedIds.has(user.id) ? 'Resuelto' : 'En progreso'}</dd></div><div><dt>Asignado a</dt><dd>Admin Soporte</dd></div><div><dt>Última actividad</dt><dd>${shortTime(active.messages?.at(-1)?.createdAt)}</dd></div></dl><div class="support-tags"><span>soporte</span><span>${user.role === 'driver' ? 'conductor' : 'pasajero'}</span>${activeTrip ? '<span>viaje activo</span>' : ''}</div></section>
+          <section class="support-context-actions"><button id="support-resolve" class="${resolvedIds.has(user.id) ? 'resolved' : ''}" type="button">${icon(resolvedIds.has(user.id) ? 'history' : 'checkCircle',17)} ${resolvedIds.has(user.id) ? 'Reabrir caso' : 'Marcar como resuelto'}</button><button data-copy-user type="button">${icon('copy',17)} Copiar datos</button></section>
+        </aside>` : ''}
+      </section>
+    </div>`;
+
+    bindEvents();
+    requestAnimationFrame(() => { const body = container.querySelector('#support-messages'); if (body) body.scrollTop = body.scrollHeight; });
   };
+
+  const bindEvents = () => {
+    container.querySelectorAll('[data-thread-id]').forEach(button => button.addEventListener('click', async () => {
+      activeId = button.dataset.threadId;
+      pendingImage = null;
+      await apiService.patch(`/support/threads/${encodeURIComponent(activeId)}/read`, {});
+      const thread = threads.find(item => item.user?.id === activeId);
+      if (thread) thread.unread = 0;
+      draw();
+    }));
+    container.querySelectorAll('[data-support-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.supportFilter; draw(); }));
+    ['support-global-search', 'support-list-search'].forEach(id => container.querySelector(`#${id}`)?.addEventListener('input', event => {
+      search = event.target.value;
+      const cursor = search.length;
+      draw();
+      const next = container.querySelector(`#${id}`);
+      next?.focus(); next?.setSelectionRange(cursor, cursor);
+    }));
+    container.querySelectorAll('[data-quick-reply]').forEach(button => button.addEventListener('click', () => { const input = container.querySelector('#reply'); if (input) { input.value = button.dataset.quickReply; input.focus(); } }));
+    container.querySelector('#support-image')?.addEventListener('change', async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (file.size > 700_000) return showToast('La imagen debe pesar menos de 700 KB', 'error');
+      pendingImage = await readFileAsDataUrl(file);
+      draw();
+    });
+    container.querySelector('#reply-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const input = container.querySelector('#reply');
+      const text = input?.value.trim() || '';
+      if (!text && !pendingImage) return showToast('Escribe un mensaje o adjunta una imagen', 'info');
+      const submit = event.currentTarget.querySelector('[type="submit"]');
+      submit.disabled = true;
+      const sent = await apiService.post('/support/messages', { recipientId: activeId, text, image: pendingImage });
+      if (!sent) { submit.disabled = false; return showToast('No se pudo enviar la respuesta', 'error'); }
+      const thread = threads.find(item => item.user?.id === activeId);
+      if (thread && !thread.messages.some(message => message.id === sent.id)) thread.messages.push(sent);
+      pendingImage = null;
+      resolvedIds.delete(activeId); saveResolved();
+      draw();
+    });
+    container.querySelectorAll('[data-copy-user]').forEach(button => button.addEventListener('click', async () => {
+      const active = threads.find(thread => thread.user?.id === activeId);
+      if (!active) return;
+      await navigator.clipboard?.writeText(`${fullName(active.user)}\n${active.user.phone || ''}\n${active.user.email || ''}`);
+      showToast('Datos copiados', 'success');
+    }));
+    container.querySelector('#support-resolve')?.addEventListener('click', () => {
+      if (resolvedIds.has(activeId)) resolvedIds.delete(activeId); else resolvedIds.add(activeId);
+      saveResolved(); draw();
+      showToast(resolvedIds.has(activeId) ? 'Caso marcado como resuelto' : 'Caso reabierto', 'success');
+    });
+    container.querySelector('#broadcast')?.addEventListener('click', openBroadcast);
+  };
+
   const openBroadcast = () => {
-    const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:#000a;display:grid;place-items:center;padding:16px';overlay.innerHTML=`<form id="broadcast-form" style="width:min(480px,100%);display:grid;gap:13px;padding:24px;border-radius:22px;background:var(--surface-card);border:1px solid var(--accent-primary)"><h3 style="margin:0">Comunicado de plataforma</h3><select id="role" style="padding:12px"><option value="all">Toda la plataforma</option><option value="passenger">Solo pasajeros</option><option value="driver">Solo conductores</option></select><input id="title" required placeholder="Título" style="padding:12px"><textarea id="message" required rows="4" placeholder="Mensaje" style="padding:12px"></textarea><div style="display:flex;justify-content:flex-end;gap:10px"><button type="button" id="cancel">Cancelar</button><button class="btn primary-btn">Emitir ahora</button></div></form>`;overlay.querySelector('#cancel').onclick=()=>overlay.remove();overlay.querySelector('form').onsubmit=async event=>{event.preventDefault();const result=await apiService.post('/admin/broadcasts',{role:overlay.querySelector('#role').value,title:overlay.querySelector('#title').value,message:overlay.querySelector('#message').value});showToast(result?'Comunicado entregado en tiempo real':'No se pudo emitir',result?'success':'error');if(result)overlay.remove();};document.body.appendChild(overlay);
+    const overlay = document.createElement('div');
+    overlay.className = 'support-broadcast-overlay';
+    overlay.innerHTML = `<form class="support-broadcast-modal"><header><span>${icon('volume2',22)}</span><div><h3>Nuevo comunicado</h3><p>Envía una notificación en tiempo real.</p></div><button id="broadcast-close" type="button">${icon('close',18)}</button></header><label>Destinatarios<select id="role"><option value="all">Toda la plataforma</option><option value="passenger">Solo pasajeros</option><option value="driver">Solo conductores</option></select></label><label>Título<input id="title" required maxlength="120" placeholder="Título del comunicado"></label><label>Mensaje<textarea id="message" required maxlength="1000" rows="5" placeholder="Escribe el mensaje oficial"></textarea></label><footer><button id="broadcast-cancel" type="button">Cancelar</button><button class="support-broadcast-submit" type="submit">${icon('send',16)} Emitir ahora</button></footer></form>`;
+    const close = () => overlay.remove();
+    overlay.querySelector('#broadcast-close').onclick = close;
+    overlay.querySelector('#broadcast-cancel').onclick = close;
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+    overlay.querySelector('form').onsubmit = async event => {
+      event.preventDefault();
+      const submit = event.currentTarget.querySelector('[type="submit"]'); submit.disabled = true;
+      const result = await apiService.post('/admin/broadcasts', { role: overlay.querySelector('#role').value, title: overlay.querySelector('#title').value, message: overlay.querySelector('#message').value });
+      showToast(result ? 'Comunicado entregado en tiempo real' : 'No se pudo emitir', result ? 'success' : 'error');
+      if (result) close(); else submit.disabled = false;
+    };
+    document.body.appendChild(overlay);
   };
-  socket.on('support:message', reload);
+
+  const onSupportMessage = payload => {
+    if (disposed) return;
+    const thread = threads.find(item => item.user?.id === payload?.conversationUserId);
+    if (thread && !thread.messages.some(message => message.id === payload.id)) {
+      thread.messages.push(payload);
+      if (payload.senderRole !== 'admin' && payload.conversationUserId !== activeId) thread.unread = Number(thread.unread || 0) + 1;
+      if (payload.senderRole !== 'admin') { resolvedIds.delete(payload.conversationUserId); saveResolved(); }
+      draw();
+    } else load();
+  };
+
+  socket.on('support:message', onSupportMessage);
+  const observer = new MutationObserver(() => {
+    if (document.body.contains(container) && container.querySelector('.support-command-view')) return;
+    disposed = true;
+    socket.off('support:message', onSupportMessage);
+    observer.disconnect();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
   draw();
+  await load({ preserveActive: false });
 }
