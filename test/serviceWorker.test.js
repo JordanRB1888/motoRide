@@ -35,16 +35,21 @@ function makeRequest(url, { method = 'GET', mode = 'no-cors', headers = {} } = {
 const keyOf = request => (typeof request === 'string' ? `${ORIGIN}${request}` : request.url);
 
 /** Carga public/sw.js en un contexto aislado con dobles de la Cache API. */
-function loadServiceWorker({ networkResponses = {}, networkFailsFor = [] } = {}) {
+function loadServiceWorker({ networkResponses = {}, networkFailsFor = [], putDelayMs = 0 } = {}) {
   const code = fs.readFileSync(swPath, 'utf8');
   const listeners = new Map();
   const store = new Map();
   const fetchCalls = [];
+  // Se marca cuándo termina de verdad cada escritura, para comprobar que las
+  // estrategias esperan al cache.put y no lo dejan suelto en segundo plano.
+  const writes = { completed: 0 };
 
   const makeCache = name => ({
     async put(request, response) {
+      if (putDelayMs) await new Promise(resolve => setTimeout(resolve, putDelayMs));
       if (!store.has(name)) store.set(name, new Map());
       store.get(name).set(keyOf(request), response);
+      writes.completed += 1;
     },
     async match(request) {
       return store.get(name)?.get(keyOf(request)) ?? undefined;
@@ -101,15 +106,18 @@ function loadServiceWorker({ networkResponses = {}, networkFailsFor = [] } = {})
     const pending = [];
     const wrapped = {
       ...event,
+      pending,
       waitUntil: promise => pending.push(promise),
       respondWith: promise => { wrapped.response = promise; }
     };
     handler(wrapped);
+    // `waitUntil` puede registrarse más tarde, ya dentro de la estrategia
+    // asíncrona, así que `pending` se expone para esperarlo desde la prueba.
     await Promise.allSettled(pending);
     return wrapped;
   };
 
-  return { listeners, store, caches, fetchCalls, self, dispatch };
+  return { listeners, store, caches, fetchCalls, self, dispatch, writes };
 }
 
 const CURRENT_CACHE = '58express-pwa-v11-modern-ui';
@@ -253,4 +261,129 @@ test('se conservan los listeners de push y notificationclick', () => {
   const sw = loadServiceWorker();
   assert.ok(sw.listeners.has('push'), 'falta el listener de push');
   assert.ok(sw.listeners.has('notificationclick'), 'falta el listener de notificationclick');
+});
+
+// --- Escrituras vinculadas al ciclo de vida ---
+
+test('la navegación no resuelve hasta que la escritura del fallback termina', async () => {
+  const sw = loadServiceWorker({ putDelayMs: 40 });
+  const evento = await sw.dispatch('fetch', { request: makeRequest('/', { mode: 'navigate' }) });
+  await evento.response;
+  assert.equal(sw.writes.completed, 1, 'el cache.put debía haber terminado antes de responder');
+  assert.ok(sw.store.get(CURRENT_CACHE).has(`${ORIGIN}/index.html`));
+});
+
+test('el bundle inmutable no resuelve hasta que la escritura termina', async () => {
+  const sw = loadServiceWorker({ putDelayMs: 40 });
+  const evento = await sw.dispatch('fetch', { request: makeRequest('/assets/index-abc123.js') });
+  await evento.response;
+  assert.equal(sw.writes.completed, 1, 'el cache.put debía haber terminado antes de responder');
+  assert.ok(sw.store.get(CURRENT_CACHE).has(`${ORIGIN}/assets/index-abc123.js`));
+});
+
+test('una imagen sin copia previa espera la escritura antes de completar', async () => {
+  const sw = loadServiceWorker({ putDelayMs: 40 });
+  const evento = await sw.dispatch('fetch', { request: makeRequest('/vehicles/car-real.png') });
+  await evento.response;
+  assert.equal(sw.writes.completed, 1, 'el cache.put debía haber terminado antes de responder');
+});
+
+test('la promesa de waitUntil incluye la escritura, no solo la descarga', async () => {
+  const sw = loadServiceWorker({
+    putDelayMs: 40,
+    networkResponses: { '/vehicles/moto-real.png': makeResponse({ body: 'nueva' }) }
+  });
+  await (await sw.caches.open(CURRENT_CACHE)).put('/vehicles/moto-real.png', makeResponse({ body: 'guardada' }));
+  const escriturasIniciales = sw.writes.completed;
+
+  const evento = await sw.dispatch('fetch', { request: makeRequest('/vehicles/moto-real.png') });
+  const respuesta = await evento.response;
+  assert.equal(respuesta.body, 'guardada', 'debe responder de inmediato con lo almacenado');
+
+  assert.equal(sw.pendingCount ?? evento.pending.length, 1, 'la revalidación debía entregarse a waitUntil');
+  // Al resolver lo entregado a waitUntil, la escritura ya tiene que estar hecha.
+  await Promise.all(evento.pending);
+  assert.equal(sw.writes.completed, escriturasIniciales + 1, 'waitUntil debe cubrir el cache.put');
+  assert.equal(sw.store.get(CURRENT_CACHE).get(`${ORIGIN}/vehicles/moto-real.png`).body, 'nueva');
+});
+
+// --- Exclusiones antes de cualquier estrategia ---
+
+test('una navegación a /api/private no se intercepta ni toca el fallback', async () => {
+  const sw = loadServiceWorker();
+  await (await sw.caches.open(CURRENT_CACHE)).put('/index.html', makeResponse({ body: 'original' }));
+  const evento = await sw.dispatch('fetch', { request: makeRequest('/api/private', { mode: 'navigate' }) });
+  assert.equal(evento.response, undefined, 'no debía interceptarse');
+  assert.equal(sw.fetchCalls.length, 0, 'el worker no debía tocar la red');
+  assert.equal(sw.store.get(CURRENT_CACHE).get(`${ORIGIN}/index.html`).body, 'original');
+});
+
+test('las rutas exactas /api y /socket.io quedan excluidas', async () => {
+  for (const ruta of ['/api', '/socket.io', '/api/', '/socket.io/']) {
+    const sw = loadServiceWorker();
+    const evento = await sw.dispatch('fetch', { request: makeRequest(ruta, { mode: 'navigate' }) });
+    assert.equal(evento.response, undefined, `${ruta} no debía interceptarse`);
+    assert.equal(sw.store.size, 0, `${ruta} no debía almacenarse`);
+  }
+});
+
+test('una navegación con Authorization no se intercepta ni sustituye el fallback', async () => {
+  const sw = loadServiceWorker();
+  await (await sw.caches.open(CURRENT_CACHE)).put('/index.html', makeResponse({ body: 'original' }));
+  const request = makeRequest('/panel', { mode: 'navigate', headers: { Authorization: 'Bearer token' } });
+  const evento = await sw.dispatch('fetch', { request });
+  assert.equal(evento.response, undefined);
+  assert.equal(sw.store.get(CURRENT_CACHE).get(`${ORIGIN}/index.html`).body, 'original');
+});
+
+test('una navegación hacia otro origen no se intercepta ni sustituye el fallback', async () => {
+  const sw = loadServiceWorker();
+  await (await sw.caches.open(CURRENT_CACHE)).put('/index.html', makeResponse({ body: 'original' }));
+  const request = makeRequest('https://otro-sitio.test/pagina', { mode: 'navigate' });
+  const evento = await sw.dispatch('fetch', { request });
+  assert.equal(evento.response, undefined);
+  assert.equal(sw.fetchCalls.length, 0);
+  assert.equal(sw.store.get(CURRENT_CACHE).get(`${ORIGIN}/index.html`).body, 'original');
+});
+
+test('una navegación por POST no se intercepta', async () => {
+  const sw = loadServiceWorker();
+  const request = makeRequest('/formulario', { mode: 'navigate', method: 'POST' });
+  const evento = await sw.dispatch('fetch', { request });
+  assert.equal(evento.response, undefined);
+  assert.equal(sw.store.size, 0);
+});
+
+// --- Alcance de las imágenes públicas ---
+
+test('solo son públicas las rutas de marca y los archivos de la raíz', async () => {
+  const publicas = ['/vehicles/moto-real.png', '/vehicles/car-map-real.png', '/icons/pin.svg', '/app-icon-brand-192.png', '/logo.png', '/favicon.svg'];
+  for (const ruta of publicas) {
+    const sw = loadServiceWorker({ networkResponses: { [ruta]: makeResponse({ body: 'img' }) } });
+    const evento = await sw.dispatch('fetch', { request: makeRequest(ruta) });
+    await evento.response;
+    assert.ok(
+      sw.store.get(CURRENT_CACHE)?.has(`${ORIGIN}${ruta}`),
+      `${ruta} debía tratarse como imagen pública`
+    );
+  }
+});
+
+test('una ruta anidada desconocida no es pública por terminar en .png o .jpg', async () => {
+  const privadas = ['/uploads/private-document.png', '/documents/cedula.jpg', '/private-uploads/licencia.webp', '/users/driver_9/photo.png'];
+  for (const ruta of privadas) {
+    const sw = loadServiceWorker();
+    const evento = await sw.dispatch('fetch', { request: makeRequest(ruta) });
+    await evento.response;
+    const cache = sw.store.get(CURRENT_CACHE);
+    assert.ok(!cache || !cache.has(`${ORIGIN}${ruta}`), `${ruta} no debía almacenarse`);
+  }
+});
+
+test('/api/users/photo.png no se intercepta pese a parecer una imagen', async () => {
+  const sw = loadServiceWorker();
+  const evento = await sw.dispatch('fetch', { request: makeRequest('/api/users/photo.png') });
+  assert.equal(evento.response, undefined, 'no debía interceptarse');
+  assert.equal(sw.fetchCalls.length, 0);
+  assert.equal(sw.store.size, 0);
 });

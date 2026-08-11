@@ -18,8 +18,13 @@ const ASSETS_TO_CACHE = [
 ];
 
 // Imágenes públicas de ruta fija: no dependen del despliegue ni de la sesión.
+// Solo las carpetas de recursos de marca y los archivos sueltos de la raíz
+// pública. Una carpeta desconocida como /uploads/ o /documents/ puede
+// contener material privado, así que la extensión por sí sola no basta.
 const PUBLIC_IMAGE_PREFIXES = ['/vehicles/', '/icons/'];
-const PUBLIC_IMAGE_PATTERN = /\.(?:png|jpe?g|gif|webp|svg|ico)$/i;
+const IMAGE_EXTENSION_PATTERN = /\.(?:png|jpe?g|gif|webp|svg|ico)$/i;
+// Un único segmento en la raíz: /logo.png sí, /documents/cedula.jpg no.
+const ROOT_IMAGE_PATTERN = /^\/[^/]+\.(?:png|jpe?g|gif|webp|svg|ico)$/i;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -58,8 +63,10 @@ function isCacheable(request) {
   if (url.origin !== self.location.origin) return false;
 
   const path = url.pathname;
-  if (path.startsWith('/api/')) return false;
-  if (path.startsWith('/socket.io/')) return false;
+  // Ruta exacta y descendientes: `/api` sin barra final es tan dinámico como
+  // `/api/trips`.
+  if (path === '/api' || path.startsWith('/api/')) return false;
+  if (path === '/socket.io' || path.startsWith('/socket.io/')) return false;
   if (path === '/sw.js') return false;
 
   return true;
@@ -75,12 +82,21 @@ function isStorableResponse(response) {
   );
 }
 
-function putInCache(request, response) {
-  if (!isStorableResponse(response)) return;
-  const copy = response.clone();
-  caches.open(CACHE_NAME)
-    .then((cache) => cache.put(request, copy))
-    .catch(() => { /* Cuota agotada o almacenamiento no disponible. */ });
+/**
+ * Escribe en la caché y devuelve una promesa que solo resuelve cuando el
+ * `cache.put` ha terminado de verdad. Nunca se lanza una escritura suelta en
+ * segundo plano: quien llama debe poder esperarla o entregarla a waitUntil.
+ * Falla en silencio ante cuota agotada o almacenamiento no disponible.
+ */
+async function putInCache(request, response) {
+  if (!isStorableResponse(response)) return false;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response.clone());
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isImmutableBundle(url) {
@@ -89,17 +105,22 @@ function isImmutableBundle(url) {
 }
 
 function isPublicImage(url) {
-  if (PUBLIC_IMAGE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return true;
-  return PUBLIC_IMAGE_PATTERN.test(url.pathname);
+  const path = url.pathname;
+  // Los recursos precargados en la instalación siempre son públicos.
+  if (ASSETS_TO_CACHE.includes(path)) return true;
+  if (PUBLIC_IMAGE_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    return IMAGE_EXTENSION_PATTERN.test(path);
+  }
+  return ROOT_IMAGE_PATTERN.test(path);
 }
 
 /** HTML: red primero, con la última copia buena como respaldo sin conexión. */
 async function handleNavigation(request) {
   try {
     const networkResponse = await fetch(request);
-    if (isStorableResponse(networkResponse)) {
-      putInCache('/index.html', networkResponse);
-    }
+    // La copia de respaldo queda escrita antes de responder: si el worker se
+    // detiene justo después, el fallback offline ya está en disco.
+    await putInCache('/index.html', networkResponse);
     return networkResponse;
   } catch (error) {
     const fallback = await caches.match('/index.html');
@@ -115,27 +136,27 @@ async function handleImmutableBundle(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
   const networkResponse = await fetch(request);
-  putInCache(request, networkResponse);
+  await putInCache(request, networkResponse);
   return networkResponse;
 }
 
 /** Imágenes públicas: respuesta inmediata y actualización en segundo plano. */
 async function handlePublicImage(request, event) {
   const cached = await caches.match(request);
-  const networkFetch = fetch(request)
-    .then((networkResponse) => {
-      putInCache(request, networkResponse);
+  // La promesa incluye la escritura, no solo la descarga: así waitUntil
+  // mantiene vivo el worker hasta que el cache.put haya terminado.
+  const revalidation = fetch(request)
+    .then(async (networkResponse) => {
+      await putInCache(request, networkResponse);
       return networkResponse;
     })
     .catch(() => null);
 
   if (cached) {
-    // La revalidación continúa aunque ya se haya respondido: sin waitUntil el
-    // navegador puede detener el worker antes de que termine.
-    event?.waitUntil(networkFetch);
+    event?.waitUntil(revalidation);
     return cached;
   }
-  const networkResponse = await networkFetch;
+  const networkResponse = await revalidation;
   if (networkResponse) return networkResponse;
   throw new Error('IMAGE_UNAVAILABLE');
 }
@@ -157,13 +178,15 @@ async function handleOtherSameOrigin(request) {
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
+  // Las exclusiones se aplican antes que cualquier estrategia, incluida la de
+  // navegación: una navegación a /api/private o hacia otro origen no debe
+  // interceptarse ni acabar sustituyendo el fallback /index.html.
+  if (!isCacheable(request)) return;
+
   if (request.mode === 'navigate') {
     event.respondWith(handleNavigation(request));
     return;
   }
-
-  // Todo lo no cacheable sigue su curso normal hacia la red, sin intervención.
-  if (!isCacheable(request)) return;
 
   const url = new URL(request.url);
 
