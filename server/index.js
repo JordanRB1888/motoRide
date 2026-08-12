@@ -14,6 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
 import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
+import { passengerPublicProfile, driverPublicProfile, sanitizeEmbeddedTripDriver } from './domain/userProjections.js';
 import { createPrivateStorage } from './services/privateStorage.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
@@ -223,23 +224,47 @@ function publicUser(user) {
   return safeUser;
 }
 
-// Representación mínima del conductor para el pasajero: solo lo que la tarjeta
-// de viaje necesita. Deja fuera correo, cédula, documentos, saldo y ubicación.
+// Representación mínima del conductor para el pasajero durante un viaje.
+// Delega en la proyección compartida para que exista una sola lista blanca.
 function driverPublicSummary(driver) {
-  if (!driver) return null;
+  return driverPublicProfile(driver, { includePhone: true });
+}
+
+// Estados en los que dos participantes todavía necesitan poder llamarse.
+// Se comparan en su forma canónica para cubrir los alias históricos
+// (EN_ROUTE, DRIVER_ARRIVED, IN_TRIP).
+const CONTACTABLE_TRIP_STATUSES = new Set([
+  TRIP_STATUS.DRIVER_ASSIGNED,
+  TRIP_STATUS.ARRIVED,
+  TRIP_STATUS.IN_PROGRESS
+]);
+
+function isContactableTrip(trip) {
+  return CONTACTABLE_TRIP_STATUSES.has(normalizeTripStatus(trip?.status));
+}
+
+/**
+ * Construye la vista de un viaje según quién pregunta.
+ *
+ * El solicitante recibe su propio perfil sin recortar y el del otro
+ * participante proyectado. El teléfono del conductor solo viaja mientras el
+ * viaje sigue vivo. Un administrador conserva la vista completa: el panel se
+ * revisa en una fase posterior.
+ */
+function tripParticipantsView(trip, viewer) {
+  const passenger = database.users.find(user => user.id === trip.passengerId);
+  const driver = database.users.find(user => user.id === trip.driverId);
+  const contactable = isContactableTrip(trip);
+
+  if (viewer?.role === 'admin') {
+    return { trip, passenger: publicUser(passenger), driver: publicUser(driver) };
+  }
+
+  const isPassenger = viewer?.id === trip.passengerId;
   return {
-    id: driver.id,
-    firstName: driver.firstName || '',
-    lastName: driver.lastName || '',
-    phone: driver.phone || '',
-    photoUrl: driver.photoUrl || null,
-    rating: Number(driver.rating || 0),
-    totalTrips: Number(driver.totalTrips || 0),
-    vehicleType: driver.vehicleType || 'MOTO',
-    vehicleBrand: driver.vehicleBrand || '',
-    vehicleModel: driver.vehicleModel || '',
-    vehiclePlate: driver.vehiclePlate || '',
-    vehicleColor: driver.vehicleColor || ''
+    trip: sanitizeEmbeddedTripDriver(trip, { includePhone: contactable }),
+    passenger: isPassenger ? publicUser(passenger) : passengerPublicProfile(passenger),
+    driver: isPassenger ? driverPublicProfile(driver, { includePhone: contactable }) : publicUser(driver)
   };
 }
 
@@ -992,7 +1017,10 @@ app.get('/api/trips/me/history', requireAuth, (req, res) => {
   if (!['passenger', 'driver'].includes(req.user.role)) return res.status(403).json({ error: 'FORBIDDEN' });
   const trips = database.trips
     .filter(item => req.user.role === 'passenger' ? item.passengerId === req.user.id : item.driverId === req.user.id || item.assignedDriverId === req.user.id)
-    .sort((a, b) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0) - new Date(a.completedAt || a.updatedAt || a.createdAt || 0));
+    .sort((a, b) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0) - new Date(a.completedAt || a.updatedAt || a.createdAt || 0))
+    // Los viajes guardados antes de cafc7e8 incrustaron el registro completo
+    // del conductor. Se proyecta al leer; la base de datos no se toca.
+    .map(trip => sanitizeEmbeddedTripDriver(trip, { includePhone: isContactableTrip(trip) }));
   res.json(trips);
 });
 
@@ -1005,13 +1033,7 @@ app.get('/api/trips/active/me', requireAuth, (req, res) => {
     (item.passengerId === req.user.id || item.driverId === req.user.id)
   );
   if (!trip) return res.status(204).end();
-  const passenger = database.users.find(user => user.id === trip.passengerId);
-  const driver = database.users.find(user => user.id === trip.driverId);
-  res.json({
-    trip,
-    passenger: publicUser(passenger),
-    driver: publicUser(driver)
-  });
+  res.json(tripParticipantsView(trip, req.user));
 });
 
 app.get('/api/trips/pending-review/me', requireAuth, requireRole('passenger'), (req, res) => {
@@ -1023,18 +1045,14 @@ app.get('/api/trips/pending-review/me', requireAuth, requireRole('passenger'), (
     Date.now() - new Date(item.closedAt || item.updatedAt || item.createdAt || 0).getTime() < reviewWindowMs
   );
   if (!trip) return res.status(204).end();
-  const passenger = database.users.find(user => user.id === trip.passengerId);
-  const driver = database.users.find(user => user.id === trip.driverId);
-  res.json({ trip, passenger: publicUser(passenger), driver: publicUser(driver) });
+  res.json(tripParticipantsView(trip, req.user));
 });
 
 app.get('/api/trips/:id', requireAuth, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id);
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
   if (!userCanAccessTrip(req.user.id, req.user.role, trip)) return res.status(403).json({ error: 'FORBIDDEN' });
-  const passenger = database.users.find(user => user.id === trip.passengerId);
-  const driver = database.users.find(user => user.id === trip.driverId);
-  res.json({ trip, passenger: publicUser(passenger), driver: publicUser(driver) });
+  res.json(tripParticipantsView(trip, req.user));
 });
 
 app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
@@ -1101,7 +1119,7 @@ app.post('/api/trips/scheduled', requireAuth, requireRole('passenger'), (req, re
 });
 
 app.get('/api/trips/scheduled/available', requireAuth, requireApprovedDriver, (req, res) => {
-  const trips = database.trips.filter(item => item.status==='SCHEDULED' && item.rideType===(req.user.vehicleType||'MOTO') && (!item.assignedDriverId || item.assignedDriverId===req.user.id) && new Date(item.scheduledAt)>new Date()).map(trip=>({...trip,passenger:publicUser(database.users.find(user=>user.id===trip.passengerId))}));
+  const trips = database.trips.filter(item => item.status==='SCHEDULED' && item.rideType===(req.user.vehicleType||'MOTO') && (!item.assignedDriverId || item.assignedDriverId===req.user.id) && new Date(item.scheduledAt)>new Date()).map(trip=>({...trip,passenger:passengerPublicProfile(database.users.find(user=>user.id===trip.passengerId))}));
   res.json(trips);
 });
 
@@ -1109,7 +1127,7 @@ app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, (
   const trip = database.trips.find(item=>item.id===req.params.id && item.status==='SCHEDULED');
   if(!trip)return res.status(404).json({error:'SCHEDULED_TRIP_NOT_FOUND'});
   if(trip.assignedDriverId && trip.assignedDriverId!==req.user.id)return res.status(409).json({error:'ALREADY_ASSIGNED'});
-  trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=new Date().toISOString();persistDatabase();io.to(`user:${trip.passengerId}`).to('admins').emit('scheduled_trip:claimed',{tripId:trip.id,driver:publicUser(req.user)});res.json(trip);
+  trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=new Date().toISOString();persistDatabase();io.to(`user:${trip.passengerId}`).to('admins').emit('scheduled_trip:claimed',{tripId:trip.id,driver:driverPublicProfile(req.user)});res.json(trip);
 });
 
 app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), (req, res) => {
