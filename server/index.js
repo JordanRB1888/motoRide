@@ -457,6 +457,18 @@ function normalizeLocation(location) {
   return { ...location, lat: coordinates.lat, lng: coordinates.lng };
 }
 
+/** Proyección de una ubicación de viaje: nada más que el recorrido. */
+function tripLocation(location) {
+  if (!location) return null;
+  return {
+    address: sanitizeText(location.address, 240),
+    lat: location.lat,
+    lng: location.lng,
+    accuracy: Number.isFinite(Number(location.accuracy)) ? Number(location.accuracy) : null,
+    source: sanitizeText(location.source, 20) || 'gps'
+  };
+}
+
 // Un conductor solo existe para administración, para sí mismo y para el
 // pasajero con el que comparte un viaje activo. Ese es el alcance máximo de
 // cualquier evento de flota.
@@ -1068,19 +1080,37 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   const requestedId = req.body.id || req.headers['idempotency-key'];
   const existing = requestedId && database.trips.find(item => item.id === requestedId && item.passengerId === req.user.id);
   if (existing) return res.json({ status: 'existing', trip: existing });
-  const trip = { ...req.body };
-  const pickup = normalizeLocation(trip.pickup);
-  const destination = normalizeLocation(trip.destination);
+
+  // Lista blanca: el cliente solo aporta el recorrido y las preferencias de
+  // la carrera. Identidad, estado y asignación los fija el servidor, de modo
+  // que un cuerpo manipulado no puede inyectar campos ni suplantar a nadie.
+  const pickup = normalizeLocation(req.body.pickup);
+  const destination = normalizeLocation(req.body.destination);
   if (!pickup || !destination) {
     return res.status(400).json({ error: 'VALID_GPS_COORDINATES_REQUIRED' });
   }
-  trip.pickup = pickup;
-  trip.destination = destination;
-  trip.rideType = trip.rideType === 'CAR' ? 'CAR' : 'MOTO';
+  const trip = {
+    pickup: tripLocation(pickup),
+    destination: tripLocation(destination),
+    rideType: req.body.rideType === 'CAR' ? 'CAR' : 'MOTO',
+    paymentMethod: sanitizeText(req.body.paymentMethod, 30) || 'CASH',
+    exchangeRateType: req.body.exchangeRateType === 'PARALLEL' ? 'PARALLEL' : 'BCV',
+    distanceKm: Number.isFinite(Number(req.body.distanceKm)) ? Number(req.body.distanceKm) : undefined,
+    durationMin: Number.isFinite(Number(req.body.durationMin)) ? Number(req.body.durationMin) : undefined
+  };
+  // Estimación de tarifa del cliente: solo se conserva como respaldo. Si la
+  // ruta trae distancia y duración, el servidor la recalcula más abajo y su
+  // cálculo prevalece.
+  const estimatedFare = Number(req.body.fareUSD ?? req.body.fareEUR);
+  if (Number.isFinite(estimatedFare) && estimatedFare >= 0) trip.fareUSD = roundMoney(estimatedFare);
+
+  // Identidad derivada siempre del usuario autenticado.
   trip.passengerId = req.user.id;
+  trip.passengerName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Pasajero';
+  trip.passengerAvatar = req.user.photoUrl || null;
+  trip.passengerRating = Number(req.user.rating || 0);
   trip.driverId = null;
-  delete trip.driver;
-  trip.id = trip.id || 'trip_' + Date.now();
+  trip.id = typeof req.body.id === 'string' && req.body.id.trim() ? sanitizeText(req.body.id, 80) : 'trip_' + Date.now();
   trip.status = TRIP_STATUS.SEARCHING;
   trip.createdAt = new Date().toISOString();
   trip.updatedAt = trip.createdAt;
