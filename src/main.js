@@ -14,6 +14,7 @@ import { renderLanding } from './pages/landing.js';
 import { renderPassengerApp } from './pages/passenger/passengerApp.js';
 import { renderDriverApp } from './pages/driver/driverApp.js';
 import { renderAdminApp } from './pages/admin/adminApp.js';
+import { disposeAllPrivateDocumentViewers } from './pages/admin/driverApplicationsManagement.js';
 import { notificationService } from './services/notificationService.js';
 import {
     MODERN_EXPERIENCE_CLASS,
@@ -70,6 +71,10 @@ async function dismissAppSplash() {
 }
 
 function clearApp() {
+    // Vaciar el contenedor desconecta el DOM pero no libera las Blob URLs de
+    // los documentos protegidos. Toda salida interna del panel administrativo
+    // —logout, navegación por hash o cualquier cambio de ruta— pasa por aquí.
+    disposeAllPrivateDocumentViewers();
     appContainer.innerHTML = '';
 }
 

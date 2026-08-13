@@ -91,7 +91,7 @@ test('pulsar un documento pide exactamente su endpoint por identificador', async
   assert.deepEqual(requested, ['/driver-documents/driver_document_abc-123/content']);
   assert.equal(documentContentEndpoint('driver_document_abc-123'), requested[0]);
   assert.equal(viewer.openCount, 1);
-  assert.equal(openedInTab.length, 1, 'el documento se presenta al administrador');
+  assert.deepEqual(openedInTab, [], 'la descarga no abre pestaña por sí sola');
 });
 
 test('no se solicita ningún documento que no se haya pulsado', async () => {
@@ -119,7 +119,8 @@ test('pulsar dos veces el mismo documento no lo descarga otra vez', async () => 
 
   assert.equal(requested.length, 1, 'una sola descarga mientras siga abierto');
   assert.equal(created.length, 1, 'una sola Blob URL');
-  assert.equal(openedInTab.length, 3, 'pero se puede volver a mostrar');
+  // La primera pulsación solo descarga; las siguientes abren lo ya almacenado.
+  assert.deepEqual(openedInTab, ['blob:documento-1', 'blob:documento-1']);
 });
 
 test('dos pulsaciones simultáneas comparten una única petición', async () => {
@@ -135,6 +136,55 @@ test('dos pulsaciones simultáneas comparten una única petición', async () => 
 
   assert.equal(requested.length, 1, 'la segunda pulsación se suma a la petición en curso');
   assert.equal(created.length, 1);
+});
+
+test('una petición invalidada no arrastra consigo a la que ocupó su lugar', async () => {
+  // Secuencia exacta de la auditoría: A empieza, releaseAll la invalida, B
+  // empieza para el mismo documento, A termina tarde. Si el `finally` de A
+  // borrase la entrada de B, un tercer clic lanzaría una C innecesaria y una
+  // de las Blob URLs quedaría sin dueño que la revocara.
+  const esperaA = deferred();
+  const esperaB = deferred();
+  const respuestas = [esperaA.promise, esperaB.promise];
+  const { viewer, requested, created, revoked } = makeHarness({
+    responder: () => respuestas.shift() ?? Promise.resolve('blob:C-NO-DEBERIA-EXISTIR')
+  });
+  const boton = makeButton({ id: 'same-id' });
+  viewer.attach(boton);
+
+  // 1. Empieza A.
+  const A = viewer.open(boton);
+  // 2. releaseAll invalida A.
+  viewer.releaseAll();
+  // 3. Empieza B para el mismo documento.
+  const B = viewer.open(boton);
+  assert.equal(requested.length, 2, 'A y B, cada una con su petición');
+
+  // 4. Termina A: su finally no debe retirar la entrada de B.
+  esperaA.resolve('blob:A');
+  assert.equal(await A, null, 'A pertenece a una generación cerrada');
+  assert.deepEqual(revoked, ['blob:A'], 'A se revoca al llegar tarde');
+
+  // 5. Un tercer clic debe sumarse a B, no lanzar una C.
+  const C = viewer.open(boton);
+  assert.equal(requested.length, 2, 'solo se realizan dos peticiones, A y B');
+  assert.equal(C, B, 'el tercer clic comparte exactamente la promesa de B');
+
+  esperaB.resolve('blob:B');
+  assert.equal(await B, 'blob:B');
+  assert.equal(await C, 'blob:B');
+
+  assert.equal(viewer.openCount, 1, 'B queda como única URL viva');
+  assert.deepEqual(created, ['blob:A', 'blob:B']);
+
+  // 6. Al cerrar, B también se revoca.
+  viewer.releaseAll();
+  assert.deepEqual(revoked.slice().sort(), ['blob:A', 'blob:B']);
+  assert.equal(viewer.openCount, 0);
+
+  // Ninguna URL creada queda sin revocar, y ninguna se revoca dos veces.
+  assert.deepEqual(created.slice().sort(), revoked.slice().sort());
+  assert.equal(new Set(revoked).size, revoked.length, 'cada URL se revoca una sola vez');
 });
 
 test('cerrar el expediente revoca las Blob URLs abiertas', async () => {
@@ -264,7 +314,7 @@ test('un botón desconectado sin cierre explícito tampoco conserva la URL', asy
   assert.equal(viewer.openCount, 0);
 });
 
-test('el flujo de imagen pinta la vista previa con la Blob URL autorizada', async () => {
+test('el flujo de imagen pinta la vista previa sin abrir pestaña tras el await', async () => {
   const { viewer, openedInTab } = makeHarness();
   const imagen = makeButton({ id: 'doc_imagen', mime: 'image/jpeg' });
   viewer.attach(imagen);
@@ -275,10 +325,11 @@ test('el flujo de imagen pinta la vista previa con la Blob URL autorizada', asyn
   assert.equal(imagen.children[0].tag, 'img');
   assert.equal(imagen.children[0].src, 'blob:documento-1');
   assert.equal(imagen.children[0].alt, 'Documento privado');
-  assert.deepEqual(openedInTab, ['blob:documento-1']);
+  // El navegador bloquearía una ventana abierta después de resolver la promesa.
+  assert.deepEqual(openedInTab, [], 'no se abre pestaña tras la resolución asíncrona');
 });
 
-test('el flujo de PDF ofrece abrirlo sin insertar una imagen', async () => {
+test('el flujo de PDF ofrece abrirlo sin insertar una imagen ni abrir pestaña', async () => {
   const { viewer, requested, openedInTab } = makeHarness();
   const pdf = makeButton({ id: 'doc_pdf', mime: 'application/pdf' });
   viewer.attach(pdf);
@@ -288,7 +339,49 @@ test('el flujo de PDF ofrece abrirlo sin insertar una imagen', async () => {
   assert.deepEqual(requested, ['/driver-documents/doc_pdf/content']);
   assert.equal(pdf.textContent, 'Abrir PDF protegido');
   assert.equal(pdf.children.length, 0, 'un PDF no se pinta como imagen');
+  assert.deepEqual(openedInTab, [], 'la primera pulsación solo descarga');
+});
+
+test('la segunda pulsación abre la URL almacenada de forma síncrona', async () => {
+  const { viewer, requested, openedInTab } = makeHarness();
+  const pdf = makeButton({ id: 'doc_dos_pasos', mime: 'application/pdf' });
+  viewer.attach(pdf);
+
+  await pdf.click();                       // paso 1: descarga
+  assert.deepEqual(openedInTab, []);
+
+  // Paso 2: sin ningún await por medio, dentro del propio gesto del usuario.
+  const antes = openedInTab.length;
+  viewer.open(pdf);
+  assert.equal(openedInTab.length, antes + 1, 'la apertura ocurre en el mismo turno');
   assert.deepEqual(openedInTab, ['blob:documento-1']);
+  assert.equal(requested.length, 1, 'y sin volver a descargar');
+});
+
+test('openStored no abre nada mientras no haya URL almacenada', async () => {
+  const { viewer, openedInTab, requested } = makeHarness();
+  const boton = makeButton({ id: 'doc_sin_descargar' });
+  viewer.attach(boton);
+
+  assert.equal(viewer.openStored(boton), null, 'todavía no hay nada que abrir');
+  assert.deepEqual(openedInTab, []);
+  assert.deepEqual(requested, [], 'y consultar no dispara ninguna descarga');
+
+  await boton.click();
+  assert.equal(viewer.openStored(boton), 'blob:documento-1');
+  assert.deepEqual(openedInTab, ['blob:documento-1']);
+});
+
+test('tras destruir, openStored deja de abrir la URL almacenada', async () => {
+  const { viewer, openedInTab } = makeHarness();
+  const boton = makeButton({ id: 'doc_destruido_stored' });
+  viewer.attach(boton);
+  await boton.click();
+
+  viewer.destroy();
+
+  assert.equal(viewer.openStored(boton), null);
+  assert.deepEqual(openedInTab, [], 'nunca se abrió ni antes ni después');
 });
 
 test('un 401 o un 404 no crea Blob URL ni rompe la pantalla', async () => {
