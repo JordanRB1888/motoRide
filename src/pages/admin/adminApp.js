@@ -6,7 +6,7 @@ import { renderTariffsConfig } from './tariffsConfig.js';
 import { renderFinances } from './finances.js';
 import { renderWalletTopups } from './walletTopups.js';
 import { renderAdminSupport } from './adminSupport.js';
-import { renderDriverApplicationsManagement } from './driverApplicationsManagement.js';
+import { renderDriverApplicationsManagement, disposeDriverApplicationsManagement } from './driverApplicationsManagement.js';
 import { initThemeToggle } from '../../utils/themeToggle.js';
 import { createNotificationCenterModal } from '../../components/notificationCenterModal.js';
 import { notificationService } from '../../services/notificationService.js';
@@ -64,7 +64,9 @@ export function renderAdminApp(container) {
   };
 
   const renderers={dashboard,fleet:()=>renderFleetMap(content),applications:()=>renderDriverApplicationsManagement(content),users:()=>renderUsersManagement(content),tariffs:()=>renderTariffsConfig(content),topups:()=>renderWalletTopups(content),finances:()=>renderFinances(content),support:()=>renderAdminSupport(content)};
-  const switchTab=id=>{if(dashboardMap){dashboardMap.remove();dashboardMap=null;}container.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.target===id));title.textContent=nav.find(item=>item[0]===id)?.[2]||id;content.innerHTML='';renderers[id]?.();};
+  // Vaciar el contenido desconecta el DOM pero no libera las Blob URLs de los
+  // documentos protegidos: hay que cerrar la pantalla antes de sustituirla.
+  const switchTab=id=>{if(dashboardMap){dashboardMap.remove();dashboardMap=null;}disposeDriverApplicationsManagement(content);container.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.target===id));title.textContent=nav.find(item=>item[0]===id)?.[2]||id;content.innerHTML='';renderers[id]?.();};
   window.addEventListener('58express:admin-tab', event => switchTab(event.detail));
   container.querySelectorAll('.nav-item').forEach(button=>button.onclick=()=>switchTab(button.dataset.target));
   const refresh=async()=>{const [users,trips,stats]=await Promise.all([apiService.get('/users'),apiService.get('/trips'),apiService.get('/admin/overview')]);if(Array.isArray(users))db.setCollection('users',users);if(Array.isArray(trips))db.setCollection('trips',trips);overview=stats;const applicationsButton=container.querySelector('[data-target="applications"]');if(applicationsButton)applicationsButton.dataset.count=stats?.driverApplications?.pending?String(stats.driverApplications.pending):'';const topupsButton=container.querySelector('[data-target="topups"]');if(topupsButton)topupsButton.dataset.count=stats?.walletRequests?.pendingTopups?String(stats.walletRequests.pendingTopups):'';if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();};

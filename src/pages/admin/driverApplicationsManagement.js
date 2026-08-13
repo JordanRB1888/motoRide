@@ -1,17 +1,65 @@
 import { apiService } from '../../services/apiService.js';
 import { icon } from '../../utils/icons.js';
 import { showToast } from '../../components/toast.js';
+import { createPrivateDocumentViewer } from './privateDocumentViewer.js';
+
+/**
+ * Los eventos de Socket.IO vuelven a montar esta pantalla sobre el mismo
+ * contenedor. Sin registro, cada remontaje abandonaría las Blob URLs y los
+ * controladores de la instancia anterior, que ya nadie podría revocar.
+ */
+const instances = new WeakMap();
+const liveViewers = new Set();
+let unloadHooked = false;
+
+function hookUnloadOnce() {
+  if (unloadHooked || typeof window === 'undefined') return;
+  unloadHooked = true;
+  // Abandonar la aplicación administrativa libera cuanto quedara abierto.
+  window.addEventListener('pagehide', () => { liveViewers.forEach(viewer => viewer.destroy()); });
+}
+
+/** Destruye la instancia montada sobre un contenedor, si la hubiera. */
+export function disposeDriverApplicationsManagement(container) {
+  const previous = instances.get(container);
+  if (!previous) return;
+  instances.delete(container);
+  previous.destroy();
+}
 
 const STATUS = { draft:'Incompleta', pending:'Pendiente', approved:'Aprobada', rejected:'Rechazada', needs_changes:'Requiere cambios', suspended:'Suspendida' };
 const DOCS = { identity_front:'Cédula (frente)',identity_back:'Cédula (reverso)',driver_license:'Licencia de conducir',vehicle_registration:'Registro del vehículo',vehicle_insurance:'Seguro del vehículo',vehicle_photo:'Foto del vehículo',plate_photo:'Foto de la placa',driver_selfie:'Selfie del conductor' };
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 export function renderDriverApplicationsManagement(container) {
+  // Un remontaje sustituye a la instancia previa: primero se cierra la vieja.
+  disposeDriverApplicationsManagement(container);
+  hookUnloadOnce();
+
   let status = 'pending';
   let query = '';
   let data = { applications: [], counts: {} };
   let selected = null;
-  let previewUrls = [];
+
+  const viewer = createPrivateDocumentViewer({
+    loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint),
+    onError: () => showToast('No se pudo abrir el documento protegido.', 'error')
+  });
+  liveViewers.add(viewer);
+  const instance = {
+    destroy() {
+      liveViewers.delete(viewer);
+      viewer.destroy();
+    }
+  };
+  instances.set(container, instance);
+
+  const closeDetail = () => {
+    selected = null;
+    // Salir del expediente revoca lo que se hubiera abierto en él.
+    viewer.releaseAll();
+    render();
+  };
 
   const load = async () => {
     container.innerHTML = '<div class="admin-loading">Consultando solicitudes reales…</div>';
@@ -21,18 +69,16 @@ export function renderDriverApplicationsManagement(container) {
   };
 
   const openDetail = async id => {
-    selected = await apiService.get(`/admin/driver-applications/${id}`);
-    if (!selected) return showToast('No se pudo abrir el expediente.', 'error');
+    // Cambiar de expediente invalida las Blob URLs del anterior antes de pedir
+    // nada nuevo, aunque la petición del detalle acabe fallando.
+    viewer.releaseAll();
+    const detail = await apiService.get(`/admin/driver-applications/${id}`);
+    if (!detail) return showToast('No se pudo abrir el expediente.', 'error');
+    selected = detail;
     render();
-    const previews = container.querySelectorAll('[data-private-document]');
-    await Promise.all([...previews].map(async element => {
-      const url = await apiService.getPrivateFileUrl(element.dataset.privateDocument);
-      if (!url) return;
-      previewUrls.push(url);
-      if (element.dataset.mime === 'application/pdf') element.innerHTML = `<span>${icon('file',24)}</span><strong>Abrir PDF protegido</strong>`;
-      else element.innerHTML = `<img src="${url}" alt="Documento privado">`;
-      element.onclick = () => window.open(url, '_blank', 'noopener');
-    }));
+    // Abrir el expediente solo trae metadatos: los botones quedan preparados,
+    // pero el contenido protegido no se pide hasta que alguien los pulse.
+    container.querySelectorAll('[data-private-document]').forEach(element => viewer.attach(element));
   };
 
   const decide = async action => {
@@ -51,7 +97,8 @@ export function renderDriverApplicationsManagement(container) {
   };
 
   const render = () => {
-    previewUrls.forEach(URL.revokeObjectURL); previewUrls = [];
+    // Cualquier repintado desconecta los botones anteriores: sus URLs mueren aquí.
+    viewer.releaseAll();
     const apps = data.applications || [];
     container.innerHTML = `<div class="driver-admin-page">
       <header class="driver-admin-heading"><div><span class="eyebrow"><i></i> VERIFICACIÓN OPERATIVA</span><h1>Solicitudes de conductores</h1><p>Identidad, vehículo y documentos protegidos en un solo expediente.</p></div><b>${Number(data.counts?.pending || 0)} pendientes</b></header>
@@ -65,7 +112,7 @@ export function renderDriverApplicationsManagement(container) {
     container.querySelectorAll('[data-filter]').forEach(button => button.onclick = () => { status=button.dataset.filter; selected=null; load(); });
     container.querySelector('#driver-application-search').onsubmit = event => { event.preventDefault(); query=event.currentTarget.querySelector('input').value.trim(); selected=null; load(); };
     container.querySelectorAll('[data-review]').forEach(button => button.onclick = () => openDetail(button.dataset.review));
-    container.querySelector('[data-close-application]')?.addEventListener('click',()=>{selected=null;render();});
+    container.querySelector('[data-close-application]')?.addEventListener('click',closeDetail);
     container.querySelectorAll('[data-decision]').forEach(button=>button.onclick=()=>decide(button.dataset.decision));
   };
 
@@ -73,7 +120,7 @@ export function renderDriverApplicationsManagement(container) {
     <header><div><small>EXPEDIENTE ${escape(app.id.slice(-8).toUpperCase())}</small><h2>${escape(app.personal.firstName)} ${escape(app.personal.lastName)}</h2><span class="application-status-badge ${app.status}">${STATUS[app.status]}</span></div><button data-close-application>${icon('close',20)}</button></header>
     <div class="application-review-scroll"><section><h3>Información personal</h3><div class="review-data-grid">${[['Cédula',app.personal.identityNumber],['Nacimiento',app.personal.birthDate],['Teléfono',app.personal.phone],['Correo',app.personal.email],['Dirección',app.personal.address],['Ciudad / región',`${app.personal.city}, ${app.personal.region}`]].map(([a,b])=>`<label><small>${a}</small><strong>${escape(b)}</strong></label>`).join('')}</div></section>
     <section><h3>Vehículo</h3><div class="review-data-grid">${[['Tipo',app.vehicle.type],['Marca / modelo',`${app.vehicle.brand} ${app.vehicle.model}`],['Año',app.vehicle.year],['Color',app.vehicle.color],['Placa',app.vehicle.plate],['Información adicional',app.vehicle.additionalInfo||'—']].map(([a,b])=>`<label><small>${a}</small><strong>${escape(b)}</strong></label>`).join('')}</div></section>
-    <section><h3>Documentos privados</h3><p class="security-note">${icon('shield',15)} Solo administradores autorizados y el propietario pueden abrir estos archivos.</p><div class="private-documents-grid">${app.documents.map(doc=>`<label class="private-document-card"><input type="checkbox" data-doc-change value="${doc.type}"><button type="button" data-private-document="/driver-documents/${doc.id}/content" data-mime="${doc.mimeType}"><span>${icon('file',24)}</span><strong>Cargando archivo protegido…</strong></button><span>${escape(DOCS[doc.type]||doc.type)}</span><small>${Math.round(doc.size/1024)} KB · ${escape(doc.status)}</small></label>`).join('')}</div></section>
+    <section><h3>Documentos privados</h3><p class="security-note">${icon('shield',15)} Solo administradores autorizados y el propietario pueden abrir estos archivos.</p><div class="private-documents-grid">${app.documents.map(doc=>`<label class="private-document-card"><input type="checkbox" data-doc-change value="${doc.type}"><button type="button" class="private-document-open" data-private-document="${escape(doc.id)}" data-mime="${escape(doc.mimeType)}">Ver documento protegido</button><span>${escape(DOCS[doc.type]||doc.type)}</span><small>${Math.round(doc.size/1024)} KB · ${escape(doc.status)}</small></label>`).join('')}</div></section>
     ${app.decisionReason?`<section class="previous-decision"><h3>Última observación</h3><p>${escape(app.decisionReason)}</p></section>`:''}</div>
     <footer>${app.status==='suspended'?`<button class="approve" data-decision="reactivate">Reactivar conductor</button>`:`<button class="approve" data-decision="approve">${icon('check',16)} Aprobar conductor</button><button class="changes" data-decision="needs_changes">Solicitar cambios</button><button class="reject" data-decision="reject">Rechazar</button>${app.status==='approved'?'<button class="reject" data-decision="suspend">Suspender</button>':''}`}</footer>
   </article></div>`;
