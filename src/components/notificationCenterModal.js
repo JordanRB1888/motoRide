@@ -74,7 +74,7 @@ export function createNotificationCenterModal(user, onClose) {
                         </div>
                         <div class="notification-item-copy">
                             <div class="notification-item-heading">
-                                <strong>${item.title.replace(/[^\w\s.,+\-/:()áéíóúñÁÉÍÓÚÑ]/gi, '')}</strong>
+                                <strong>${escapeHtml(item.title)}</strong>
                                 <time>${new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
                             </div>
                             <p>${escapeHtml(item.message)}</p>
