@@ -28,7 +28,9 @@ import {
 const appContainer = document.getElementById('app');
 const appSplash = document.getElementById('app-splash');
 const modernExperienceEnabled = isModernExperienceEnabled(window.location.search);
+const motionExperienceEnabled = new URLSearchParams(window.location.search).get('motionPreview') !== '0';
 document.documentElement.classList.toggle(MODERN_EXPERIENCE_CLASS, modernExperienceEnabled);
+document.documentElement.classList.toggle('um-motion-preview', motionExperienceEnabled);
 // El tema se resuelve con el helper compartido y nunca se sobrescribe la
 // preferencia guardada: sin preferencia se arranca en oscuro, y quien haya
 // elegido modo claro lo conserva entre recargas.
@@ -46,6 +48,16 @@ if (modernExperienceEnabled) {
     import('./styles/modern-yellow-lab.css').catch(error => {
         console.warn('[+58express] No se pudo cargar la experiencia visual moderna:', error?.message);
         document.documentElement.classList.remove('modern-yellow-lab');
+    });
+}
+
+// Lenguaje visual aprobado para +58Express. Sigue siendo una capa separada de
+// la lógica y puede desactivarse temporalmente con ?motionPreview=0 para
+// diagnóstico sin alterar viajes, pagos, mapas ni comunicación en tiempo real.
+if (motionExperienceEnabled) {
+    import('./styles/um-motion-preview.css').catch(error => {
+        console.warn('[+58express] No se pudo cargar la experiencia visual aprobada:', error?.message);
+        document.documentElement.classList.remove('um-motion-preview');
     });
 }
 
