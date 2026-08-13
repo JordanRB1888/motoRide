@@ -16,6 +16,7 @@ import { renderDriverApp } from './pages/driver/driverApp.js';
 import { renderAdminApp } from './pages/admin/adminApp.js';
 import { disposeAllPrivateDocumentViewers } from './pages/admin/driverApplicationsManagement.js';
 import { notificationService } from './services/notificationService.js';
+import { captureMonitoringError, identifyMonitoringUser, initMonitoring } from './services/monitoring.js';
 import {
     MODERN_EXPERIENCE_CLASS,
     applyTheme,
@@ -27,6 +28,7 @@ import {
 const appContainer = document.getElementById('app');
 const appSplash = document.getElementById('app-splash');
 const modernExperienceEnabled = isModernExperienceEnabled(window.location.search);
+initMonitoring();
 document.documentElement.classList.toggle(MODERN_EXPERIENCE_CLASS, modernExperienceEnabled);
 // El tema se resuelve con el helper compartido y nunca se sobrescribe la
 // preferencia guardada: sin preferencia se arranca en oscuro, y quien haya
@@ -74,6 +76,7 @@ async function router() {
     clearApp();
     const hash = window.location.hash || '#/';
     const user = authService.getCurrentUser();
+    identifyMonitoringUser(user);
 
     if (hash === '#/') {
         if (user) {
@@ -115,6 +118,9 @@ async function initApp() {
             else await notificationService.syncFromServer(refreshedUser.id);
         }
         await router();
+    } catch (error) {
+        captureMonitoringError(error, { phase: 'application_boot' });
+        throw error;
     } finally {
         await dismissAppSplash();
     }

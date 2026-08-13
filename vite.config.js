@@ -10,5 +10,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     minify: 'esbuild'
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '1.0.0')
   }
 });

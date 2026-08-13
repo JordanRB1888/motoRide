@@ -1,3 +1,4 @@
+import { Sentry, sentryEnabled } from './instrument.js';
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -1673,6 +1674,8 @@ io.on('connection', (socket) => {
     console.log(`[+58express Socket.IO] Client disconnected: ${socket.id}`);
   });
 });
+
+if (sentryEnabled) Sentry.setupExpressErrorHandler(app);
 
 app.use((error, _req, res, _next) => {
   if (error instanceof multer.MulterError) {
