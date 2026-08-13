@@ -3,6 +3,12 @@ import multer from 'multer';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {
+  driverApplicationListItem,
+  driverApplicationAdminDetail,
+  driverApplicationOwnerView,
+  driverApplicationEvent
+} from '../domain/driverApplicationProjections.js';
+import {
   DRIVER_APPLICATION_STATUS,
   DRIVER_DOCUMENT_TYPES,
   REQUIRED_DRIVER_DOCUMENTS,
@@ -194,14 +200,14 @@ export function createDriverApplicationsRouter({
       status: 'created',
       user: publicUser(user),
       token: signToken(user),
-      application: safeApplication(application, stored, user)
+      application: driverApplicationOwnerView(application, stored)
     });
   });
 
   router.get('/driver-applications/me', requireAuth, (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
-    res.json(safeApplication(application, getApplicationDocuments(application.id), req.user));
+    res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
   router.patch('/driver-applications/me', requireAuth, (req, res) => {
@@ -228,7 +234,7 @@ export function createDriverApplicationsRouter({
     application.status = DRIVER_APPLICATION_STATUS.DRAFT;
     application.updatedAt = new Date().toISOString();
     persistDatabase();
-    res.json(safeApplication(application, getApplicationDocuments(application.id), req.user));
+    res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
   router.put('/driver-applications/me/documents/:type', requireAuth, singleDocumentUpload, (req, res) => {
@@ -251,7 +257,7 @@ export function createDriverApplicationsRouter({
     application.status = DRIVER_APPLICATION_STATUS.DRAFT;
     application.updatedAt = new Date().toISOString();
     persistDatabase();
-    res.json(safeApplication(application, getApplicationDocuments(application.id), req.user));
+    res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
   router.post('/driver-applications/me/submit', requireAuth, (req, res) => {
@@ -268,7 +274,7 @@ export function createDriverApplicationsRouter({
     application.decisionReason = null;
     persistDatabase();
     io.to('admins').emit('driver_application:new', safeApplication(application, getApplicationDocuments(application.id), req.user));
-    res.json(safeApplication(application, getApplicationDocuments(application.id), req.user));
+    res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
   router.get('/admin/driver-applications', requireAuth, requireRole('admin'), (req, res) => {
@@ -284,7 +290,7 @@ export function createDriverApplicationsRouter({
           .filter(Boolean).some(value => String(value).toLowerCase().includes(query));
       })
       .sort((a, b) => new Date(b.submittedAt || b.createdAt) - new Date(a.submittedAt || a.createdAt))
-      .map(application => safeApplication(application, getApplicationDocuments(application.id), database.users.find(user => user.id === application.userId)));
+      .map(application => driverApplicationListItem(application, getApplicationDocuments(application.id), database.users.find(user => user.id === application.userId)));
     const counts = Object.fromEntries(Object.values(DRIVER_APPLICATION_STATUS).map(item => [item, database.driverApplications.filter(application => application.status === item).length]));
     res.json({ applications: result, counts });
   });
@@ -292,7 +298,7 @@ export function createDriverApplicationsRouter({
   router.get('/admin/driver-applications/:id', requireAuth, requireRole('admin'), (req, res) => {
     const application = database.driverApplications.find(item => item.id === req.params.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
-    res.json(safeApplication(application, getApplicationDocuments(application.id), database.users.find(user => user.id === application.userId)));
+    res.json(driverApplicationAdminDetail(application, getApplicationDocuments(application.id), database.users.find(user => user.id === application.userId)));
   });
 
   router.patch('/admin/driver-applications/:id/decision', requireAuth, requireRole('admin'), (req, res) => {
@@ -384,7 +390,7 @@ export function createDriverApplicationsRouter({
     io.to(`user:${user.id}`).emit('driver_application:updated', safeApplication(application, getApplicationDocuments(application.id), user));
     io.to(`user:${user.id}`).emit('platform:notification', notification);
     io.to('admins').emit('driver_application:updated', safeApplication(application, getApplicationDocuments(application.id), user));
-    res.json({ application: safeApplication(application, getApplicationDocuments(application.id), user), user: publicUser(user), audit });
+    res.json({ application: driverApplicationAdminDetail(application, getApplicationDocuments(application.id), user), user: publicUser(user), audit });
   });
 
   router.get('/admin/actions', requireAuth, requireRole('admin'), (req, res) => {
