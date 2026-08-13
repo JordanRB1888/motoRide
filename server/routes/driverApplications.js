@@ -378,11 +378,16 @@ export function createDriverApplicationsRouter({
   });
 
   router.get('/driver-documents/:id/content', requireAuth, (req, res) => {
+    // Una respuesta única para todo lo que no sea un acceso legítimo: quien no
+    // es el propietario ni administrador no puede distinguir un documento
+    // ajeno de uno inexistente, ni deducir a quién pertenece.
+    const documentNotAvailable = () => res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+
     const document = database.driverDocuments.find(item => item.id === req.params.id);
-    if (!document) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
-    if (req.user.role !== 'admin' && document.userId !== req.user.id) return res.status(403).json({ error: 'FORBIDDEN' });
+    if (!document) return documentNotAvailable();
+    if (req.user.role !== 'admin' && document.userId !== req.user.id) return documentNotAvailable();
     const absolutePath = privateStorage.resolve(document.storageKey);
-    if (!absolutePath) return res.status(404).json({ error: 'FILE_NOT_FOUND' });
+    if (!absolutePath) return documentNotAvailable();
     res.setHeader('Content-Type', document.mimeType);
     res.setHeader('Content-Length', String(document.size));
     res.setHeader('Content-Disposition', `inline; filename="${String(document.originalName).replace(/["\r\n]/g, '_')}"`);
