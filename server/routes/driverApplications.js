@@ -31,26 +31,6 @@ const upload = multer({
 const uploadFields = upload.fields(DRIVER_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
 const singleDocumentUpload = upload.single('file');
 
-function safeApplication(application, documents, user) {
-  return {
-    ...application,
-    user: user ? {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      phone: user.phone,
-      photoUrl: user.photoUrl || null,
-      role: user.role,
-      accountStatus: user.accountStatus
-    } : null,
-    documents: documents.map(({ storageKey, ...document }) => ({
-      ...document,
-      contentUrl: `/driver-documents/${document.id}/content`
-    }))
-  };
-}
-
 export function createDriverApplicationsRouter({
   database,
   persistDatabase,
@@ -194,7 +174,7 @@ export function createDriverApplicationsRouter({
       message: `${personal.firstName} ${personal.lastName} envió una solicitud con vehículo ${vehicle.type === 'CAR' ? 'automóvil' : 'moto'}.`
     });
     persistDatabase();
-    io.to('admins').emit('driver_application:new', safeApplication(application, stored, user));
+    io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
     io.to('admins').emit('platform:notification', adminNotification);
     res.status(201).json({
       status: 'created',
@@ -273,7 +253,7 @@ export function createDriverApplicationsRouter({
     application.updatedAt = application.submittedAt;
     application.decisionReason = null;
     persistDatabase();
-    io.to('admins').emit('driver_application:new', safeApplication(application, getApplicationDocuments(application.id), req.user));
+    io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
@@ -387,9 +367,9 @@ export function createDriverApplicationsRouter({
     database.adminActions.push(audit);
     const notification = createNotification({ userId: user.id, title: notificationTitle, message: notificationMessage });
     persistDatabase();
-    io.to(`user:${user.id}`).emit('driver_application:updated', safeApplication(application, getApplicationDocuments(application.id), user));
+    io.to(`user:${user.id}`).emit('driver_application:updated', driverApplicationEvent(application));
     io.to(`user:${user.id}`).emit('platform:notification', notification);
-    io.to('admins').emit('driver_application:updated', safeApplication(application, getApplicationDocuments(application.id), user));
+    io.to('admins').emit('driver_application:updated', driverApplicationEvent(application));
     res.json({ application: driverApplicationAdminDetail(application, getApplicationDocuments(application.id), user), user: publicUser(user), audit });
   });
 
