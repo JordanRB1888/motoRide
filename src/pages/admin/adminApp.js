@@ -33,7 +33,9 @@ export function renderAdminApp(container) {
   const toggleSidebar = () => container.querySelector('#sidebar').classList.toggle('collapsed');
   container.querySelector('#menu-btn').onclick=toggleSidebar;
   container.querySelector('#sidebar-collapse').onclick=toggleSidebar;
-  container.querySelector('#logout').onclick=()=>{authService.logout();window.navigateTo('#/');};
+  // Salir destruye el visor antes de borrar la sesión y de navegar: ninguna
+  // Blob URL de un documento protegido puede sobrevivir al cierre de sesión.
+  container.querySelector('#logout').onclick=()=>{disposeDriverApplicationsManagement(content);authService.logout();window.navigateTo('#/');};
   const updateBadge=()=>{const count=notificationService.getUnreadCount(admin.id),badge=container.querySelector('#admin-badge');badge.textContent=count>99?'99+':count;badge.hidden=!count;};
   updateBadge(); window.addEventListener('58express:notifications-updated',updateBadge);
   container.querySelector('#admin-bell').onclick=()=>container.appendChild(createNotificationCenterModal(admin));

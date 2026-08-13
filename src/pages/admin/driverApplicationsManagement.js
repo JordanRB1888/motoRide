@@ -16,7 +16,9 @@ function hookUnloadOnce() {
   if (unloadHooked || typeof window === 'undefined') return;
   unloadHooked = true;
   // Abandonar la aplicación administrativa libera cuanto quedara abierto.
-  window.addEventListener('pagehide', () => { liveViewers.forEach(viewer => viewer.destroy()); });
+  // Un único listener para toda la vida del módulo: remontar el panel no puede
+  // acumular manejadores globales duplicados.
+  window.addEventListener('pagehide', disposeAllPrivateDocumentViewers);
 }
 
 /** Destruye la instancia montada sobre un contenedor, si la hubiera. */
@@ -25,6 +27,16 @@ export function disposeDriverApplicationsManagement(container) {
   if (!previous) return;
   instances.delete(container);
   previous.destroy();
+}
+
+/**
+ * Cierre incondicional, sin necesidad de conocer el contenedor. El enrutador
+ * vacía #app al cambiar de ruta, así que ni el logout ni una navegación por
+ * hash pasan por `disposeDriverApplicationsManagement`: este es su punto único.
+ */
+export function disposeAllPrivateDocumentViewers() {
+  for (const viewer of [...liveViewers]) viewer.destroy();
+  liveViewers.clear();
 }
 
 const STATUS = { draft:'Incompleta', pending:'Pendiente', approved:'Aprobada', rejected:'Rechazada', needs_changes:'Requiere cambios', suspended:'Suspendida' };

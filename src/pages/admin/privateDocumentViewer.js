@@ -70,59 +70,82 @@ export function createPrivateDocumentViewer({
     return true;
   };
 
-  async function open(element) {
+  /**
+   * Se llama en el propio manejador del clic, sin `await` previo, para que el
+   * navegador siga considerando la apertura parte del gesto del usuario.
+   * Devuelve la URL ya almacenada o null si todavía hay que descargarla.
+   */
+  function openStored(element) {
     const documentId = element?.dataset?.privateDocument;
-    if (!documentId || destroyed) return null;
+    const already = documentId && !destroyed ? opened.get(documentId) : null;
+    if (!already) return null;
+    openUrl(already);
+    return already;
+  }
 
-    const already = opened.get(documentId);
-    if (already) {
-      // Ya descargado y todavía vigente: se reutiliza, no se vuelve a pedir.
-      openUrl(already);
-      return already;
-    }
-    if (pending.has(documentId)) return pending.get(documentId);
+  function open(element) {
+    const documentId = element?.dataset?.privateDocument;
+    if (!documentId || destroyed) return Promise.resolve(null);
+
+    // Segunda pulsación: la URL ya está descargada y se abre de forma síncrona.
+    const already = openStored(element);
+    if (already) return Promise.resolve(already);
+
+    const inFlight = pending.get(documentId);
+    if (inFlight) return inFlight;
 
     const requestedAt = generation;
-    const request = (async () => {
-      setLabel(element, LABEL_BUSY);
-      // Un fallo de red se trata como contenido no disponible: nunca se propaga
-      // una excepción al manejador del clic.
-      const url = await loadUrl(documentContentEndpoint(documentId)).catch(() => null);
+    let request;
+    request = (async () => {
+      try {
+        setLabel(element, LABEL_BUSY);
+        // Un fallo de red se trata como contenido no disponible: nunca se
+        // propaga una excepción al manejador del clic.
+        const url = await loadUrl(documentContentEndpoint(documentId)).catch(() => null);
 
-      // Respuesta tardía: la pantalla murió o lo abierto ya se invalidó.
-      if (destroyed || requestedAt !== generation) {
-        if (url) revokeUrl(url);
-        return null;
-      }
-      // El botón ya no está en el documento: nada que actualizar.
-      if (!element.isConnected) {
-        if (url) revokeUrl(url);
-        return null;
-      }
-      if (!url) {
-        // 401, 404 o red caída: no hay Blob URL que registrar ni que revocar.
-        setLabel(element, LABEL_FAILED);
-        onError(documentId);
-        return null;
-      }
+        // Respuesta tardía: la pantalla murió o lo abierto ya se invalidó.
+        if (destroyed || requestedAt !== generation) {
+          if (url) revokeUrl(url);
+          return null;
+        }
+        // El botón ya no está en el documento: nada que actualizar.
+        if (!element.isConnected) {
+          if (url) revokeUrl(url);
+          return null;
+        }
+        if (!url) {
+          // 401, 404 o red caída: no hay Blob URL que registrar ni revocar.
+          setLabel(element, LABEL_FAILED);
+          onError(documentId);
+          return null;
+        }
 
-      opened.set(documentId, url);
-      if (!present(element, url)) {
-        // Se desconectó entre la comprobación y el pintado.
-        opened.delete(documentId);
-        revokeUrl(url);
-        return null;
+        // Defensa: si algo dejara una URL previa bajo la misma clave, se revoca
+        // antes de sustituirla para que ninguna quede sin dueño.
+        const displaced = opened.get(documentId);
+        if (displaced && displaced !== url) revokeUrl(displaced);
+
+        opened.set(documentId, url);
+        if (!present(element, url)) {
+          // Se desconectó entre la comprobación y el pintado.
+          opened.delete(documentId);
+          revokeUrl(url);
+          return null;
+        }
+        // No se abre pestaña aquí: el gesto del usuario ya expiró y el
+        // navegador bloquearía la ventana. La vista previa queda dentro del
+        // expediente y una pulsación posterior la abre de forma síncrona.
+        return url;
+      } finally {
+        // Solo el dueño de la entrada puede retirarla. Si `releaseAll` vació el
+        // registro y otra petición del mismo documento ya ocupa el hueco, esta
+        // no debe borrarla al terminar tarde.
+        if (pending.get(documentId) === request) pending.delete(documentId);
       }
-      openUrl(url);
-      return url;
     })();
 
     pending.set(documentId, request);
-    try {
-      return await request;
-    } finally {
-      pending.delete(documentId);
-    }
+    return request;
   }
 
   return {
@@ -135,6 +158,7 @@ export function createPrivateDocumentViewer({
       element.addEventListener('click', () => open(element));
     },
     open,
+    openStored,
     releaseAll,
     destroy() {
       releaseAll();
