@@ -8,143 +8,106 @@ function initToastContainer() {
   toastContainer.className = 'toast-container-master';
   Object.assign(toastContainer.style, {
     position: 'fixed',
-    top: '24px',
+    top: 'max(12px, env(safe-area-inset-top))',
     left: '50%',
     transform: 'translateX(-50%)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '7px',
     zIndex: 99999,
-    width: 'calc(100% - 32px)',
-    maxWidth: '420px',
+    width: 'min(calc(100% - 28px), 356px)',
     pointerEvents: 'none'
   });
   document.body.appendChild(toastContainer);
 }
 
 const typeConfigs = {
-  success: { color: '#00E676', bgGlow: 'rgba(0, 230, 118, 0.18)', badge: '✅', border: 'rgba(0, 230, 118, 0.4)' },
-  error: { color: '#FF4D4D', bgGlow: 'rgba(255, 77, 77, 0.18)', badge: '🚨', border: 'rgba(255, 77, 77, 0.4)' },
-  warning: { color: '#FFC107', bgGlow: 'rgba(255, 193, 7, 0.18)', badge: '⚡', border: 'rgba(255, 193, 7, 0.4)' },
-  info: { color: '#00D2FF', bgGlow: 'rgba(0, 210, 255, 0.18)', badge: 'ℹ️', border: 'rgba(0, 210, 255, 0.4)' }
+  success: { color: '#24D781', glow: 'rgba(36, 215, 129, 0.13)', icon: 'check', border: 'rgba(36, 215, 129, 0.32)' },
+  error: { color: '#FF596B', glow: 'rgba(255, 89, 107, 0.13)', icon: 'alertCircle', border: 'rgba(255, 89, 107, 0.32)' },
+  warning: { color: '#FFC400', glow: 'rgba(255, 196, 0, 0.12)', icon: 'alertTriangle', border: 'rgba(255, 196, 0, 0.34)' },
+  info: { color: '#FFC400', glow: 'rgba(255, 196, 0, 0.10)', icon: 'info', border: 'rgba(255, 196, 0, 0.28)' }
 };
 
 export function showToast(message, type = 'info', duration = 3200) {
   initToastContainer();
-
-  // Enforce max 3 toasts
-  if (toastContainer.children.length >= 3) {
-    const oldestToast = toastContainer.firstElementChild;
-    if (oldestToast) closeToast(oldestToast);
-  }
+  if (toastContainer.children.length >= 3) closeToast(toastContainer.firstElementChild);
 
   const config = typeConfigs[type] || typeConfigs.info;
-
   const toast = document.createElement('div');
   toast.className = 'custom-toast-pill-master';
+  toast.dataset.toastType = type;
+  toast.style.setProperty('--toast-tone', config.color);
+  toast.style.setProperty('--toast-glow', config.glow);
+  toast.style.setProperty('--toast-border', config.border);
   Object.assign(toast.style, {
-    background: '#121824',
     color: '#FFFFFF',
-    border: `1.5px solid ${config.border}`,
-    borderRadius: '20px',
-    padding: '14px 18px',
+    border: `1px solid ${config.border}`,
+    borderRadius: '14px',
+    padding: '8px 10px',
+    minHeight: '44px',
     display: 'flex',
     alignItems: 'center',
-    gap: '14px',
-    boxShadow: `0 15px 35px rgba(0,0,0,0.8), 0 0 20px ${config.bgGlow}`,
+    gap: '9px',
     position: 'relative',
     overflow: 'hidden',
-    transform: 'translateY(-30px) scale(0.92)',
+    transform: 'translateY(-18px) scale(0.96)',
     opacity: '0',
-    transition: 'all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
     pointerEvents: 'auto'
   });
 
-  const badgeElem = document.createElement('div');
-  badgeElem.style.cssText = `
-    width: 38px; height: 38px; border-radius: 50%;
-    background: ${config.bgGlow}; color: ${config.color};
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.2rem; flex-shrink: 0; box-shadow: 0 0 10px ${config.color}33;
-  `;
-  badgeElem.innerHTML = config.badge;
+  const badge = document.createElement('div');
+  badge.className = 'custom-toast-icon';
+  badge.style.cssText = `width:27px;height:27px;border-radius:8px;background:${config.glow};color:${config.color};display:grid;place-items:center;flex:none;box-shadow:0 0 10px ${config.color}22`;
+  badge.innerHTML = icon(config.icon, 15);
 
-  const textElem = document.createElement('div');
-  Object.assign(textElem.style, {
+  const text = document.createElement('div');
+  text.className = 'custom-toast-copy';
+  Object.assign(text.style, {
     flex: '1',
-    color: '#FFFFFF',
-    fontSize: '0.95rem',
-    fontWeight: '800',
-    lineHeight: '1.35',
+    fontSize: '0.76rem',
+    fontWeight: '750',
+    lineHeight: '1.3',
     fontFamily: "'Outfit', 'Inter', sans-serif"
   });
-  textElem.textContent = message;
+  text.textContent = message;
 
-  const closeBtn = document.createElement('button');
-  Object.assign(closeBtn.style, {
-    background: 'none',
-    border: 'none',
-    color: '#94A3B8',
-    cursor: 'pointer',
-    padding: '4px',
-    fontSize: '1.1rem',
-    fontWeight: '900',
-    display: 'flex',
-    alignItems: 'center'
-  });
-  closeBtn.innerHTML = '✕';
-  closeBtn.onclick = () => closeToast(toast);
+  const close = document.createElement('button');
+  close.className = 'custom-toast-close';
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Cerrar aviso');
+  close.innerHTML = icon('close', 15);
+  close.onclick = () => closeToast(toast);
 
-  // Bottom animated countdown timer bar
   const progress = document.createElement('div');
+  progress.className = 'custom-toast-progress';
   Object.assign(progress.style, {
     position: 'absolute',
     bottom: '0',
     left: '0',
-    height: '3px',
+    height: '2px',
     background: config.color,
     width: '100%',
     transition: `width ${duration}ms linear`
   });
 
-  toast.appendChild(badgeElem);
-  toast.appendChild(textElem);
-  toast.appendChild(closeBtn);
-  toast.appendChild(progress);
-  
+  toast.append(badge, text, close, progress);
   toastContainer.appendChild(toast);
-
-  // Trigger entrance animation
   requestAnimationFrame(() => {
     toast.style.transform = 'translateY(0) scale(1)';
     toast.style.opacity = '1';
-    
-    requestAnimationFrame(() => {
-      progress.style.width = '0%';
-    });
+    requestAnimationFrame(() => { progress.style.width = '0%'; });
   });
 
-  const timeoutId = setTimeout(() => {
-    closeToast(toast);
-  }, duration);
-
-  toast.dataset.timeoutId = timeoutId;
-  return {
-    close: () => closeToast(toast)
-  };
+  toast.dataset.timeoutId = setTimeout(() => closeToast(toast), duration);
+  return { close: () => closeToast(toast) };
 }
 
 function closeToast(toast) {
-  if (toast.dataset.closing) return;
+  if (!toast || toast.dataset.closing) return;
   toast.dataset.closing = 'true';
-  clearTimeout(parseInt(toast.dataset.timeoutId));
-  
-  toast.style.transform = 'translateY(-20px) scale(0.95)';
+  clearTimeout(Number(toast.dataset.timeoutId));
+  toast.style.transform = 'translateY(-12px) scale(0.97)';
   toast.style.opacity = '0';
-  
-  setTimeout(() => {
-    if (toast.parentElement) {
-      toast.remove();
-    }
-  }, 350);
+  setTimeout(() => toast.remove(), 300);
 }

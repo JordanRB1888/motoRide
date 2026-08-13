@@ -1,4 +1,5 @@
 import { showToast } from '../components/toast.js';
+import { icon } from './icons.js';
 import {
     applyTheme,
     oppositeTheme,
@@ -9,6 +10,7 @@ import {
 } from './themePreference.js';
 
 const themeLabel = theme => (theme === 'light' ? 'Modo Día' : 'Modo Noche');
+const themeIcon = theme => icon(theme === 'light' ? 'sun' : 'moon', 18, 'theme-state-icon');
 
 export function initThemeToggle(containerId = null) {
     // Misma resolución que main.js: una sola regla para toda la aplicación.
@@ -24,7 +26,9 @@ export function initThemeToggle(containerId = null) {
     toggleBtn.className = 'theme-toggle-btn';
     toggleBtn.title = 'Alternar Modo Día / Noche';
     // El botón anuncia el tema que está pintado de verdad, no el guardado.
-    toggleBtn.textContent = themeLabel(appliedTheme);
+    toggleBtn.innerHTML = themeIcon(appliedTheme);
+    toggleBtn.setAttribute('aria-label', themeLabel(appliedTheme));
+    toggleBtn.title = themeLabel(appliedTheme);
     toggleBtn.setAttribute('aria-pressed', String(appliedTheme === 'light'));
 
     Object.assign(toggleBtn.style, {
@@ -51,7 +55,9 @@ export function initThemeToggle(containerId = null) {
         const activeTheme = applyTheme(nextTheme, document.documentElement);
         persistTheme(activeTheme, window.localStorage);
         window.dispatchEvent(new CustomEvent('58express:theme-change', { detail: { theme: activeTheme } }));
-        toggleBtn.textContent = themeLabel(activeTheme);
+        toggleBtn.innerHTML = themeIcon(activeTheme);
+        toggleBtn.setAttribute('aria-label', themeLabel(activeTheme));
+        toggleBtn.title = themeLabel(activeTheme);
         toggleBtn.setAttribute('aria-pressed', String(activeTheme === 'light'));
         showToast(activeTheme === 'light' ? 'Modo Día activado' : 'Modo Noche activado', 'info');
     });
