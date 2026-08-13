@@ -1,5 +1,6 @@
 import { icon } from '../../utils/icons.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
+import { paymentLabel } from '../../utils/paymentLabels.js';
 
 export function renderIncomingRide(trip, passenger, onAccept, onReject) {
     const overlay = document.createElement('div');
@@ -13,7 +14,7 @@ export function renderIncomingRide(trip, passenger, onAccept, onReject) {
     const name = passenger?.name || trip?.passengerName || 'Cliente Pruebas';
     const rating = passenger?.rating || 4.9;
     const avatar = passenger?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
-    const payment = ({ cash_usd: 'Efectivo USD', cash_ves: 'Efectivo Bs.', pago_movil: 'Pago móvil', wallet: 'Wallet' })[trip?.paymentMethod] || 'Efectivo USD';
+    const payment = paymentLabel(trip?.paymentMethod);
     const rideType = trip?.rideType === 'CAR' ? 'Automóvil' : 'Moto';
 
     overlay.innerHTML = `

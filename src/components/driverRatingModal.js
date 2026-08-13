@@ -1,5 +1,6 @@
 import { showToast } from './toast.js';
 import { icon } from '../utils/icons.js';
+import { paymentLabel } from '../utils/paymentLabels.js';
 
 export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas', onSubmit }) {
     const overlay = document.createElement('div');
@@ -15,7 +16,7 @@ export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas
     const tags = ['Puntual', 'Amable y respetuoso', 'Buena comunicación', 'Pago rápido y exacto', 'Excelente pasajero'];
     const labels = ['', 'Debe mejorar', 'Regular', 'Bien', 'Muy bien', 'Excelente'];
     const fare = Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fare ?? 0).toFixed(2);
-    const payment = ({ cash_usd: 'Efectivo USD', cash_ves: 'Efectivo Bs.', pago_movil: 'Pago móvil', wallet: 'Wallet' })[trip?.paymentMethod] || 'Efectivo USD';
+    const payment = paymentLabel(trip?.paymentMethod);
     const avatar = trip?.passengerAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(passengerName)}`;
 
     const finish = payload => {

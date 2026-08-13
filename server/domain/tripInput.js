@@ -53,7 +53,25 @@ export function normalizePaymentMethod(value) {
 // Límites derivados de reglas que ya existen en el servidor, no inventados:
 // el radio máximo de despacho acota el área operativa, y la ventana de 12 h
 // con la que /trips/active/me considera vivo un viaje acota su duración.
-export const MAX_DISPATCH_RADIUS_KM = Number(process.env.MAX_DISPATCH_RADIUS_KM || 15);
+export const DEFAULT_DISPATCH_RADIUS_KM = 15;
+
+/**
+ * Un radio mal configurado no puede desactivar las comprobaciones: `NaN`,
+ * `Infinity`, cero o un valor negativo harían que ninguna distancia superara
+ * el límite. Ante cualquiera de esos casos se vuelve al valor por defecto.
+ */
+export function resolveDispatchRadiusKm(rawValue) {
+  // Solo número o cadena numérica: `Number(true)` vale 1 y `Number([])` vale 0,
+  // así que el tipo se comprueba antes de convertir.
+  const isNumeric = typeof rawValue === 'number';
+  const isNumericText = typeof rawValue === 'string' && rawValue.trim() !== '';
+  if (!isNumeric && !isNumericText) return DEFAULT_DISPATCH_RADIUS_KM;
+  const radius = Number(rawValue);
+  if (!Number.isFinite(radius) || radius <= 0) return DEFAULT_DISPATCH_RADIUS_KM;
+  return radius;
+}
+
+export const MAX_DISPATCH_RADIUS_KM = resolveDispatchRadiusKm(process.env.MAX_DISPATCH_RADIUS_KM);
 export const MAX_TRIP_DISTANCE_KM = MAX_DISPATCH_RADIUS_KM * 10;
 export const MAX_TRIP_DURATION_MIN = 12 * 60;
 

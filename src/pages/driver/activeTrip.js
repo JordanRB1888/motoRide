@@ -1,7 +1,7 @@
 import { icon } from '../../utils/icons.js';
+import { paymentLabel } from '../../utils/paymentLabels.js';
 
 const fareOf = trip => Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fareEUR ?? trip?.fare ?? 0);
-const paymentLabel = method => ({ cash_usd: 'Efectivo USD', cash_ves: 'Efectivo Bs.', pago_movil: 'Pago móvil', wallet: 'Wallet' }[method] || 'Efectivo USD');
 
 function createTripSheet({ trip, passenger, stage, title, status, actionLabel, onAction, onChat, onCall, timer = false }) {
     const container = document.createElement('div');
