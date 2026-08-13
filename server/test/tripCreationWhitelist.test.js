@@ -92,6 +92,7 @@ test('un cliente no puede inyectar identidad ni estado al crear un viaje', async
       destination: DESTINATION,
       rideType: 'MOTO',
       paymentMethod: 'efectivo',
+      fareUSD: 5,
       // Todo lo siguiente debe descartarse o derivarse del servidor.
       passengerId: victima.user.id,
       passengerName: 'Nombre Suplantado',
@@ -159,7 +160,8 @@ test('las ubicaciones se proyectan y no arrastran campos extra', async (t) => {
       id: 'trip_ubicacion',
       pickup: { ...PICKUP, notaInterna: 'campo intruso', ownerId: 'otro' },
       destination: { ...DESTINATION, secreto: 'x' },
-      rideType: 'MOTO'
+      rideType: 'MOTO',
+      fareUSD: 5
     })
   })).json();
 

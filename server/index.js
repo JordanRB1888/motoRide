@@ -15,6 +15,13 @@ import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
 import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
 import { passengerPublicProfile, driverPublicProfile, sanitizeEmbeddedTripDriver } from './domain/userProjections.js';
+import {
+  PAYMENT_METHODS,
+  normalizeTripId,
+  normalizePaymentMethod,
+  normalizeRouteMetrics,
+  normalizeClientFareEstimate
+} from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
@@ -1077,9 +1084,24 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
 });
 
 app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) => {
-  const requestedId = req.body.id || req.headers['idempotency-key'];
-  const existing = requestedId && database.trips.find(item => item.id === requestedId && item.passengerId === req.user.id);
-  if (existing) return res.json({ status: 'existing', trip: existing });
+  // Identificador: lo aporta el cliente por compatibilidad, pero con forma
+  // acotada. `Idempotency-Key` sirve cuando el cuerpo no trae `id`, que es lo
+  // que ocurre al reenviar desde la cola sin conexión.
+  const rawId = req.body.id ?? req.headers['idempotency-key'];
+  const requestedId = rawId === undefined || rawId === null ? null : normalizeTripId(rawId);
+  if (rawId !== undefined && rawId !== null && !requestedId) {
+    return res.status(400).json({ error: 'INVALID_TRIP_ID' });
+  }
+  if (requestedId) {
+    const claimed = database.trips.find(item => item.id === requestedId);
+    // Repetir la propia solicitud devuelve el viaje ya creado; usar la clave
+    // de otra persona se rechaza con un código genérico que no revela de quién
+    // es el viaje.
+    if (claimed) {
+      if (claimed.passengerId !== req.user.id) return res.status(409).json({ error: 'TRIP_ID_UNAVAILABLE' });
+      return res.json({ status: 'existing', trip: claimed });
+    }
+  }
 
   // Lista blanca: el cliente solo aporta el recorrido y las preferencias de
   // la carrera. Identidad, estado y asignación los fija el servidor, de modo
@@ -1089,20 +1111,29 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   if (!pickup || !destination) {
     return res.status(400).json({ error: 'VALID_GPS_COORDINATES_REQUIRED' });
   }
+  const paymentMethod = req.body.paymentMethod === undefined || req.body.paymentMethod === null
+    ? PAYMENT_METHODS.CASH
+    : normalizePaymentMethod(req.body.paymentMethod);
+  if (!paymentMethod) return res.status(400).json({ error: 'INVALID_PAYMENT_METHOD' });
+
+  let routeMetrics;
+  try {
+    routeMetrics = normalizeRouteMetrics(req.body);
+  } catch (error) {
+    return res.status(400).json({ error: error.code });
+  }
+
   const trip = {
     pickup: tripLocation(pickup),
     destination: tripLocation(destination),
     rideType: req.body.rideType === 'CAR' ? 'CAR' : 'MOTO',
-    paymentMethod: sanitizeText(req.body.paymentMethod, 30) || 'CASH',
-    exchangeRateType: req.body.exchangeRateType === 'PARALLEL' ? 'PARALLEL' : 'BCV',
-    distanceKm: Number.isFinite(Number(req.body.distanceKm)) ? Number(req.body.distanceKm) : undefined,
-    durationMin: Number.isFinite(Number(req.body.durationMin)) ? Number(req.body.durationMin) : undefined
+    paymentMethod,
+    exchangeRateType: req.body.exchangeRateType === 'PARALLEL' ? 'PARALLEL' : 'BCV'
   };
-  // Estimación de tarifa del cliente: solo se conserva como respaldo. Si la
-  // ruta trae distancia y duración, el servidor la recalcula más abajo y su
-  // cálculo prevalece.
-  const estimatedFare = Number(req.body.fareUSD ?? req.body.fareEUR);
-  if (Number.isFinite(estimatedFare) && estimatedFare >= 0) trip.fareUSD = roundMoney(estimatedFare);
+  if (routeMetrics) {
+    trip.distanceKm = routeMetrics.distanceKm;
+    trip.durationMin = routeMetrics.durationMin;
+  }
 
   // Identidad derivada siempre del usuario autenticado.
   trip.passengerId = req.user.id;
@@ -1110,20 +1141,33 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   trip.passengerAvatar = req.user.photoUrl || null;
   trip.passengerRating = Number(req.user.rating || 0);
   trip.driverId = null;
-  trip.id = typeof req.body.id === 'string' && req.body.id.trim() ? sanitizeText(req.body.id, 80) : 'trip_' + Date.now();
+  trip.id = requestedId || `trip_${crypto.randomUUID()}`;
   trip.status = TRIP_STATUS.SEARCHING;
   trip.createdAt = new Date().toISOString();
   trip.updatedAt = trip.createdAt;
   trip.statusHistory = [{ status: trip.status, at: trip.createdAt, actorId: req.user.id }];
-  if (Number.isFinite(Number(trip.distanceKm)) && Number.isFinite(Number(trip.durationMin))) {
+  if (routeMetrics) {
+    // Con métricas de ruta utilizables manda el cálculo del servidor: la
+    // tarifa que envíe el cliente se descarta por completo.
     trip.pricing = calculateFare({
-      distanceKm: Number(trip.distanceKm),
-      durationMin: Number(trip.durationMin),
+      distanceKm: routeMetrics.distanceKm,
+      durationMin: routeMetrics.durationMin,
       exchangeRateType: trip.exchangeRateType || 'BCV',
       rideType: trip.rideType
     }, pricingConfig);
     trip.fareUSD = trip.pricing.fareUSD;
     trip.fareVES = trip.pricing.fareVES;
+    trip.fareSource = 'SERVER_CALCULATED';
+  } else {
+    // RIESGO PENDIENTE (alta): sin métricas de ruta el servidor no tiene una
+    // fuente propia para calcular la tarifa —distancia y duración las produce
+    // el navegador— así que conserva la estimación del cliente, acotada. Es la
+    // única vía por la que un pasajero todavía influye en el importe. Cerrarlo
+    // exige cotizaciones firmadas o cálculo de ruta en el servidor: fase aparte.
+    const estimate = normalizeClientFareEstimate(req.body.fareUSD ?? req.body.fareEUR);
+    if (estimate === null) return res.status(400).json({ error: 'INVALID_FARE_ESTIMATE' });
+    trip.fareUSD = estimate;
+    trip.fareSource = 'CLIENT_ESTIMATE';
   }
   try {
     ensureWalletCanCoverTrip(trip, req.user);
