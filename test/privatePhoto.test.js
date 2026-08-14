@@ -95,7 +95,7 @@ test('dos cargas simultáneas comparten la petición', async () => {
 
 test('una ruta que no es de fotografía privada no dispara ninguna petición', async () => {
   const { loader, requested, created } = makeHarness();
-  assert.equal(await loader.load('https://api.dicebear.com/7.x/avataaars/svg?seed=Ana'), null);
+  assert.equal(await loader.load('https://ejemplo.test/avatar.png'), null);
   assert.equal(await loader.load(''), null);
   assert.equal(await loader.load(null), null);
   assert.deepEqual(requested, []);

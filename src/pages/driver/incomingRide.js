@@ -3,6 +3,7 @@ import { vehicleImage } from '../../utils/vehicleMedia.js';
 import { paymentLabel } from '../../utils/paymentLabels.js';
 
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
+import { localAvatarHtml } from '../../utils/localAvatar.js';
 export function renderIncomingRide(trip, passenger, onAccept, onReject) {
     const overlay = document.createElement('div');
     overlay.className = 'incoming-ride-modal';
@@ -14,7 +15,7 @@ export function renderIncomingRide(trip, passenger, onAccept, onReject) {
     const destination = trip?.destination?.address || 'Basílica de Nuestra Señora de Chiquinquirá, Maracaibo';
     const name = passenger?.name || trip?.passengerName || 'Cliente Pruebas';
     const rating = passenger?.rating || 4.9;
-    const avatar = neutralizePrivatePhoto(passenger?.avatar) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
+    const avatar = localAvatarHtml({ name, role: 'passenger', label: name });
     const payment = paymentLabel(trip?.paymentMethod);
     const rideType = trip?.rideType === 'CAR' ? 'Automóvil' : 'Moto';
 
@@ -46,7 +47,7 @@ export function renderIncomingRide(trip, passenger, onAccept, onReject) {
             </div>
 
             <div class="incoming-passenger">
-                <img src="${avatar}" alt="${name}">
+                ${avatar}
                 <div><strong>${name}</strong><span>★ ${rating}</span></div>
                 <em>Pasajero VIP</em>
             </div>

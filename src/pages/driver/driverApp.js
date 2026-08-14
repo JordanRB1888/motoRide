@@ -22,6 +22,7 @@ import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 import { notificationService } from '../../services/notificationService.js';
 import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
 
+import { localAvatarHtml } from '../../utils/localAvatar.js';
 export function renderDriverApp(container) {
   // Dueno unico del object URL de la fotografia propia. Se revoca al
   // reemplazarla y en cualquier salida (clearApp cierra todos los cargadores).
@@ -36,7 +37,7 @@ export function renderDriverApp(container) {
     const driverFullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Carlos Mendoza';
     // Avatar neutro primero; la fotografia real llega despues de una peticion
     // autenticada, porque el navegador no envia la sesion al resolver un `src`.
-    const driverAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
+    const driverAvatarLocal = localAvatarHtml({ name: driverFullName, role: 'driver', className: 'driver-avatar', label: driverFullName });
 
     container.innerHTML = `
         <div class="driver-app">
@@ -45,7 +46,7 @@ export function renderDriverApp(container) {
             <div class="driver-top-container">
                 <div class="driver-header glass-header">
                     <div class="driver-avatar-info" id="driver-header-btn">
-                        <img id="driver-avatar" src="${driverAvatarUrl}" alt="${driverFullName}" class="driver-avatar" />
+                        ${driverAvatarLocal}<img id="driver-avatar" alt="${driverFullName}" class="driver-avatar" hidden />
                         <div class="driver-details">
                             <span id="driver-name" class="driver-name">${driverFullName}</span>
                             <div class="driver-status-text" id="driver-status-text">Desconectado</div>
@@ -447,7 +448,7 @@ export function renderDriverApp(container) {
             firstName: user.firstName || 'Carlos',
             lastName: user.lastName || 'Mendoza',
             phone: user.phone || '+58 414-000-0004',
-            photoUrl: user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos`,
+            photoUrl: user.photoUrl || null,
             vehicleBrand: user.vehicleBrand || 'Bera',
             vehicleModel: user.vehicleModel || 'SBR 150',
             vehiclePlate: user.vehiclePlate || 'AC3M49P',
@@ -584,7 +585,7 @@ export function renderDriverApp(container) {
             id: tripData.passengerId,
             name: tripData.passengerName || 'Jordan Pérez',
             rating: tripData.passengerRating || 4.9,
-            avatar: tripData.passengerAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(tripData.passengerName || 'Jordan')}`,
+            avatar: tripData.passengerAvatar || null,
             phone: tripData.passengerPhone
         };
 

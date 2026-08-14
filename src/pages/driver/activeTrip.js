@@ -2,6 +2,7 @@ import { icon } from '../../utils/icons.js';
 import { paymentLabel } from '../../utils/paymentLabels.js';
 
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
+import { localAvatarHtml } from '../../utils/localAvatar.js';
 const fareOf = trip => Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fareEUR ?? trip?.fare ?? 0);
 
 function createTripSheet({ trip, passenger, stage, title, status, actionLabel, onAction, onChat, onCall, timer = false }) {
@@ -10,7 +11,7 @@ function createTripSheet({ trip, passenger, stage, title, status, actionLabel, o
     const distance = Number(trip?.distanceKm ?? trip?.distance ?? 0);
     const duration = Number(trip?.durationMin ?? trip?.duration ?? 0);
     const name = passenger?.name || trip?.passengerName || 'Cliente Pruebas';
-    const avatar = neutralizePrivatePhoto(passenger?.avatar) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
+    const avatar = localAvatarHtml({ name, role: 'passenger', label: name });
     const pickup = trip?.pickup?.address || 'Mi ubicación actual';
     const destination = trip?.destination?.address || 'Basílica de Nuestra Señora de Chiquinquirá, Maracaibo';
 
@@ -23,7 +24,7 @@ function createTripSheet({ trip, passenger, stage, title, status, actionLabel, o
         </header>
 
         <div class="trip-passenger-row">
-            <img src="${avatar}" alt="${name}">
+            ${avatar}
             <div><strong>${name}</strong><span>★ ${passenger?.rating || 4.9} · Pasajero VIP</span></div>
             <button class="trip-contact-btn btn-driver-chat" type="button" aria-label="Abrir chat">${icon('message', 19)}</button>
             <button class="trip-contact-btn call btn-driver-call" type="button" aria-label="Llamar pasajero">${icon('phone', 19)}</button>

@@ -75,7 +75,7 @@ test('safeImageUrl rechaza esquemas ofuscados con caracteres de control', () => 
 
 test('safeImageUrl acepta http y https válidos', () => {
   const validas = [
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos',
+    'https://ejemplo.test/avatar.svg',
     'http://localhost:4000/api/users/driver_1/photo',
     'https://plus58express.vercel.app/logo.png',
     'HTTPS://EJEMPLO.COM/foto.jpg'

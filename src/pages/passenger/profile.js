@@ -1,4 +1,5 @@
 import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
+import { localAvatarHtml } from '../../utils/localAvatar.js';
 import { icon } from '../../utils/icons.js';
 import { authService } from '../../services/authService.js';
 import { apiService } from '../../services/apiService.js';
@@ -6,7 +7,11 @@ import { showToast } from '../../components/toast.js';
 import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 import { renderDriverApplicationStatus } from '../../components/driverApplicationStatus.js';
 
-const avatarFallback = user => `https://ui-avatars.com/api/?name=${encodeURIComponent(`${user.firstName || 'Cliente'} ${user.lastName || ''}`)}&background=FFC107&color=07111d&size=192&bold=true`;
+const avatarFallback = user => localAvatarHtml({
+  name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+  role: user.role,
+  label: user.firstName || 'Cliente'
+});
 
 export function renderProfile(container) {
   const user = authService.getCurrentUser();
@@ -37,7 +42,7 @@ export function renderProfile(container) {
       <section class="real-profile-card">
         <div class="real-profile-accent"></div>
         <div class="real-profile-avatar">
-          <img id="profile-avatar-img" src="${String(user.photoUrl || '').startsWith('http') ? user.photoUrl : avatarFallback(user)}" alt="Foto de perfil">
+          ${avatarFallback(user)}<img id="profile-avatar-img" hidden alt="Foto de perfil">
           <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
           <button id="profile-photo-button" type="button">${icon('camera',15)} Cambiar foto</button>
         </div>

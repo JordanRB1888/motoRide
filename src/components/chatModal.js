@@ -4,6 +4,7 @@ import { apiService } from '../services/apiService.js';
 import { formatTime } from '../utils/helpers.js';
 
 import { neutralizePrivatePhoto } from '../utils/privatePhoto.js';
+import { localAvatarHtml } from '../utils/localAvatar.js';
 export function createChatModal({ tripId, currentUser, recipientUser }) {
     const storageKey = `58express_chat_${tripId}`;
     
@@ -38,7 +39,7 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         <div class="chat-modal-content glass-panel" style="max-width: 460px;">
             <header class="chat-header">
                 <div class="recipient-info">
-                    <img src="${neutralizePrivatePhoto(recipientUser.photoUrl) || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + recipientUser.firstName}" alt="${recipientUser.firstName}" class="recipient-avatar">
+                    ${localAvatarHtml({ name: recipientUser.firstName, role: recipientUser.role, className: 'recipient-avatar', label: recipientUser.firstName })}
                     <div>
                         <h4 class="recipient-name">${recipientUser.firstName} ${recipientUser.lastName || ''}</h4>
                         <span class="recipient-role-badge">${isDriver ? 'Pasajero' : 'Conductor'}</span>

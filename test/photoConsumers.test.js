@@ -111,7 +111,9 @@ test('reemplazar la foto revoca la copia de la cabecera del conductor', () => {
 test('la tarjeta del conductor asignado se hidrata en vez de exponer la ruta', () => {
   const tarjeta = leer('src/pages/passenger/requestRide.js');
   assert.ok(tarjeta.includes('data-private-photo='), 'marca la imagen para hidratación');
-  assert.ok(tarjeta.includes('neutralizePrivatePhoto(driver.photoUrl)'), 'y el src nace neutro');
+  // Desde 2B-2-2 el estado neutro es el avatar local, no una URL externa.
+  assert.ok(tarjeta.includes('localAvatarHtml('), 'y el hueco nace con el avatar local');
+  assert.ok(!/src="\$\{[^"]*photoUrl/.test(tarjeta), 'sin la ruta privada en el src');
 
   const app = leer('src/pages/passenger/passengerApp.js');
   const i = app.indexOf('renderDriverCard(currentDriver');

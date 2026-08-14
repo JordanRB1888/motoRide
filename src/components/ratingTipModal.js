@@ -2,6 +2,7 @@ import { formatVes } from '../utils/bcvRates.js';
 import { showToast } from './toast.js';
 
 import { neutralizePrivatePhoto } from '../utils/privatePhoto.js';
+import { localAvatarHtml } from '../utils/localAvatar.js';
 export function createRatingTipModal({ trip, driver, onSubmit }) {
   const overlay = document.createElement('div');
   overlay.className = 'passenger-rating-overlay fade-in';
@@ -25,7 +26,7 @@ export function createRatingTipModal({ trip, driver, onSubmit }) {
         <small>#${String(trip?.id || 'viaje').slice(-7)}</small>
       </header>
       <div class="passenger-rating-driver">
-        <img src="${neutralizePrivatePhoto(driver?.photoUrl) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driver?.firstName || 'Carlos')}`}" alt="Conductor ${driver?.firstName || 'Carlos'}">
+        ${localAvatarHtml({ name: driver?.firstName, role: 'driver', label: `Conductor ${driver?.firstName || ''}`.trim() })}
         <div><small>CALIFICA A TU CONDUCTOR</small><h2>¿Cómo estuvo tu viaje con ${driver?.firstName || 'Carlos'}?</h2><p>${driver?.vehicleBrand || 'Bera'} ${driver?.vehicleModel || 'SBR 150'} · ${driver?.vehiclePlate || 'AC3M49P'}</p></div>
       </div>
       <div class="passenger-rating-stars" aria-label="Calificación de ${selectedRating} estrellas">

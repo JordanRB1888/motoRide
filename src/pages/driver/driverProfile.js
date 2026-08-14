@@ -6,6 +6,7 @@ import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 import { getBcvEuroRate, formatVes } from '../../utils/bcvRates.js';
 
 import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
+import { localAvatarHtml } from '../../utils/localAvatar.js';
 export function renderDriverProfile(container, options = {}) {
   // Aviso para que la cabecera de la aplicacion revoque su copia y la renueve.
   const notifyPhotoChanged = photoUrl => options.onPhotoChanged?.(photoUrl);
@@ -23,7 +24,7 @@ export function renderDriverProfile(container, options = {}) {
 
   const renderView = () => {
     const driverFullName = `${user.firstName || 'Carlos'} ${user.lastName || 'Mendoza'}`;
-    const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
+    const avatarLocal = localAvatarHtml({ name: driverFullName, role: 'driver', label: driverFullName });
 
     container.innerHTML = `
       <div class="driver-profile-page driver-profile-premium fade-in" style="padding: 24px 16px 120px; max-width: 440px; margin: 0 auto;">
@@ -54,7 +55,7 @@ export function renderDriverProfile(container, options = {}) {
           <!-- Avatar Container -->
           <div class="driver-profile-avatar-wrap" style="position: relative; width: 108px; height: 108px; margin: 0 auto 16px;">
             <input type="file" id="driver-photo-input" accept="image/*" style="display: none;" />
-            <img src="${avatarUrl}" id="driver-avatar-img" style="
+            ${avatarLocal}<img id="driver-avatar-img" hidden style="
               width: 100%; height: 100%; border-radius: 50%;
               border: 3.5px solid var(--accent-secondary);
               box-shadow: 0 0 25px rgba(0,210,255,0.35);

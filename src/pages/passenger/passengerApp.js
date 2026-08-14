@@ -817,7 +817,7 @@ export function renderPassengerApp(container) {
       exchangeRateType: fareData?.exchangeRateType || 'BCV',
       rideType: fareData?.rideType === 'CAR' ? 'CAR' : 'MOTO',
       passengerName: `${user.firstName || 'Jordan'} ${user.lastName || 'Pérez'}`.trim(),
-      passengerAvatar: neutralizePrivatePhoto(user.photoUrl) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.firstName || 'Jordan')}`,
+      passengerAvatar: neutralizePrivatePhoto(user.photoUrl) || null,
       createdAt: new Date().toISOString()
     };
 

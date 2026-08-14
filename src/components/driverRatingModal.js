@@ -3,6 +3,7 @@ import { icon } from '../utils/icons.js';
 import { paymentLabel } from '../utils/paymentLabels.js';
 
 import { neutralizePrivatePhoto } from '../utils/privatePhoto.js';
+import { localAvatarHtml } from '../utils/localAvatar.js';
 export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas', onSubmit }) {
     const overlay = document.createElement('div');
     overlay.className = 'driver-rating-overlay fade-in';
@@ -18,7 +19,7 @@ export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas
     const labels = ['', 'Debe mejorar', 'Regular', 'Bien', 'Muy bien', 'Excelente'];
     const fare = Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fare ?? 0).toFixed(2);
     const payment = paymentLabel(trip?.paymentMethod);
-    const avatar = neutralizePrivatePhoto(trip?.passengerAvatar) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(passengerName)}`;
+    const avatar = localAvatarHtml({ name: trip?.passengerName, role: 'passenger' });
 
     const finish = payload => {
         overlay.remove();
@@ -32,7 +33,7 @@ export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas
                 <div class="rating-completed">${icon('check', 18)} Viaje completado</div>
                 <small>$${fare} · ${payment}</small>
             </header>
-            <div class="rating-passenger-avatar"><img src="${avatar}" alt="${passengerName}"></div>
+            <div class="rating-passenger-avatar">${avatar}</div>
             <h2>${passengerName}</h2>
             <p>Califica tu experiencia con el pasajero</p>
             <div class="driver-rating-stars" id="star-bar-driver">
