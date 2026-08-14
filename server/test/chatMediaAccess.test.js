@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { canViewChatMedia, findMessageByMediaId, isChatMediaId } from '../domain/chatMediaAccess.js';
 
 const ID = '9f1c7e2a-4b6d-4a1e-9c3f-2d8e5a7b1c04';
-const OTRO_ID = '11111111-2222-3333-4444-555555555555';
+// Ambos son UUID v4 reales: version 4 y variante 8-b.
+const OTRO_ID = '11111111-2222-4333-8444-555555555555';
 
 const PASAJERO = { id: 'user_pasajero', role: 'passenger' };
 const CONDUCTOR = { id: 'user_conductor', role: 'driver' };
@@ -44,6 +46,44 @@ test('solo un UUID opaco cuenta como identificador de adjunto', () => {
   }
 });
 
+test('solo se acepta UUID v4 de RFC 4122: version y variante', () => {
+  // Positivos: version 4 y variante 8, 9, a o b, en ambas cajas.
+  for (const bueno of [
+    '9f1c7e2a-4b6d-4a1e-9c3f-2d8e5a7b1c04',
+    '11111111-2222-4333-8444-555555555555',
+    'aaaaaaaa-bbbb-4ccc-9ddd-eeeeeeeeeeee',
+    'FFFFFFFF-0000-4FFF-AFFF-000000000000',
+    '9F1C7E2A-4B6D-4A1E-BC3F-2D8E5A7B1C04'
+  ]) {
+    assert.equal(isChatMediaId(bueno), true, `debía admitirse: ${bueno}`);
+  }
+  // Y lo que genera el propio sistema siempre pasa.
+  assert.equal(isChatMediaId(crypto.randomUUID()), true);
+});
+
+test('se rechazan otras versiones, variante inválida y texto añadido', () => {
+  const base = '9f1c7e2a-4b6d-4a1e-9c3f-2d8e5a7b1c04';
+  // Otras versiones: 1, 2, 3, 5 y 0 en el tercer grupo.
+  for (const version of ['1', '2', '3', '5', '0', 'a']) {
+    const malo = `9f1c7e2a-4b6d-${version}a1e-9c3f-2d8e5a7b1c04`;
+    assert.equal(isChatMediaId(malo), false, `versión ${version} no es v4`);
+  }
+  // Variante fuera de 8-b.
+  for (const variante of ['0', '1', '7', 'c', 'd', 'e', 'f']) {
+    const malo = `9f1c7e2a-4b6d-4a1e-${variante}c3f-2d8e5a7b1c04`;
+    assert.equal(isChatMediaId(malo), false, `variante ${variante} inválida`);
+  }
+  // Texto adicional por delante o por detrás, y espacios internos.
+  for (const malo of [`x${base}`, `${base}x`, `${base} extra`, `${base}
+${base}`, base.replace('-', '')]) {
+    assert.equal(isChatMediaId(malo), false, `no debía admitirse: ${malo.slice(0, 45)}`);
+  }
+  // Malformados por longitud o por carácter.
+  assert.equal(isChatMediaId(base.slice(0, -1)), false);
+  assert.equal(isChatMediaId(`${base}0`), false);
+  assert.equal(isChatMediaId(base.replace('c', 'g')), false);
+});
+
 test('el identificador nunca se usa como ruta', () => {
   // Un id con forma de ruta ni siquiera pasa la validación, así que no puede
   // llegar a componer una clave de almacenamiento.
@@ -67,7 +107,7 @@ test('la búsqueda es por igualdad exacta en ambas colecciones', () => {
   assert.equal(enSoporte.message.id, 'support_1');
 
   // Un id que no existe, y uno que solo coincide parcialmente.
-  assert.equal(findMessageByMediaId({ id: '00000000-0000-0000-0000-000000000000', messages: [mensajeViaje] }), null);
+  assert.equal(findMessageByMediaId({ id: 'aaaaaaaa-bbbb-4ccc-9ddd-eeeeeeeeeeee', messages: [mensajeViaje] }), null);
   assert.equal(findMessageByMediaId({ id: ID.slice(0, -1) + 'f', messages: [mensajeViaje] }), null);
   assert.equal(findMessageByMediaId({ id: ID, messages: null, supportMessages: null }), null);
 });

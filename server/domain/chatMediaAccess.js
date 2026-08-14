@@ -9,8 +9,15 @@
  * en aislamiento del transporte.
  */
 
-/** Identificador de adjunto admisible: UUID opaco, nunca una ruta. */
-const REFERENCE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * Identificador de adjunto admisible: UUID v4 de RFC 4122, nunca una ruta.
+ *
+ * Se exige versión y variante, no solo la forma: el tercer grupo empieza por
+ * `4` y el cuarto por `8`, `9`, `a` o `b`. Aceptar cualquier UUID con forma
+ * correcta admitiría valores que este sistema nunca genera —`crypto.randomUUID`
+ * produce siempre v4— y ensancharía sin motivo lo que se acepta desde fuera.
+ */
+const REFERENCE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function isChatMediaId(value) {
   return typeof value === 'string' && REFERENCE_ID.test(value.trim());
