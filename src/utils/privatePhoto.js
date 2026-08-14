@@ -68,6 +68,16 @@ export function createPrivatePhotoLoader({
    * devolver el hueco a su estado neutro.
    */
   const bindings = new Map();
+  /**
+   * clave -> numero de generacion de esa clave.
+   *
+   * `releaseAll` invalida todo de golpe subiendo la generacion global, pero
+   * `release(key)` solo puede invalidar lo suyo: sin esto, una peticion en
+   * curso para esa clave sobrevivia y `applyTo` pintaba la respuesta vieja
+   * despues de haberla soltado.
+   */
+  const keyGenerations = new Map();
+  const keyGeneration = key => keyGenerations.get(key) || 0;
   let generation = 0;
   let destroyed = false;
 
@@ -96,11 +106,15 @@ export function createPrivatePhotoLoader({
     opened.clear();
     pending.clear();
     bindings.clear();
+    for (const key of [...keyGenerations.keys()]) keyGenerations.set(key, keyGeneration(key) + 1);
     generation += 1;
   };
 
   /** Libera una sola, por ejemplo al sustituir la fotografía propia. */
   const release = (key) => {
+    // Invalida lo que siga descargándose para esta clave, sin tocar las demás.
+    keyGenerations.set(key, keyGeneration(key) + 1);
+    pending.delete(key);
     const url = opened.get(key);
     restoreKey(key);
     if (!url) return;
@@ -125,12 +139,14 @@ export function createPrivatePhotoLoader({
     if (inFlight) return inFlight;
 
     const requestedAt = generation;
+    const keyRequestedAt = keyGeneration(key);
     let request;
     request = (async () => {
       try {
         const url = await loadUrl(endpoint).catch(() => null);
-        // Respuesta tardía: la vista se cerró o cambió de persona.
-        if (destroyed || requestedAt !== generation) {
+        // Respuesta tardía: la vista se cerró, cambió de persona o esta clave
+        // concreta se soltó mientras la descarga seguía en curso.
+        if (destroyed || requestedAt !== generation || keyRequestedAt !== keyGeneration(key)) {
           if (url) revokeUrl(url);
           return null;
         }
@@ -210,6 +226,31 @@ export function hydratePrivatePhotos(container, loader) {
 }
 
 /**
+ * Registro de object URLs sueltas que no pertenecen a un cargador.
+ *
+ * Las vistas previas de un formulario no son fotografías privadas, pero
+ * comparten el mismo problema: si la pantalla desaparece mientras el modal
+ * sigue abierto, nadie las revoca. Se apuntan aquí para que el cierre global
+ * las alcance igual.
+ */
+const looseObjectUrls = new Set();
+
+/** Crea una object URL con dueño: queda registrada hasta que se revoque. */
+export function createOwnedObjectUrl(blob) {
+  const url = URL.createObjectURL(blob);
+  looseObjectUrls.add(url);
+  return url;
+}
+
+/** Revoca una URL registrada. Repetirlo no hace nada: nunca se revoca dos veces. */
+export function revokeOwnedObjectUrl(url) {
+  if (!url || !looseObjectUrls.has(url)) return false;
+  looseObjectUrls.delete(url);
+  URL.revokeObjectURL(url);
+  return true;
+}
+
+/**
  * Cierra todos los cargadores vivos.
  *
  * El enrutador vacía el contenedor en cada cambio de ruta, y eso desconecta el
@@ -219,4 +260,5 @@ export function hydratePrivatePhotos(container, loader) {
 export function disposeAllPrivatePhotos() {
   for (const loader of [...liveLoaders]) loader.destroy();
   liveLoaders.clear();
+  for (const url of [...looseObjectUrls]) revokeOwnedObjectUrl(url);
 }

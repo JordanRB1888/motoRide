@@ -3,6 +3,7 @@ import { apiService } from '../services/apiService.js';
 import { showToast } from './toast.js';
 import { icon } from '../utils/icons.js';
 
+import { createOwnedObjectUrl, revokeOwnedObjectUrl } from '../utils/privatePhoto.js';
 const DOCUMENTS = [
   ['identity_front', 'Cédula por delante', true],
   ['identity_back', 'Cédula por detrás', true],
@@ -33,7 +34,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
   const files = new Map();
 
   const close = () => {
-    files.forEach(item => item.preview && URL.revokeObjectURL(item.preview));
+    files.forEach(item => item.preview && revokeOwnedObjectUrl(item.preview));
     overlay.remove();
     onClose?.();
   };
@@ -133,8 +134,8 @@ export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
       if (file.size > 5 * 1024 * 1024) return showToast('El archivo supera el máximo de 5 MB.', 'error');
       if (!['image/jpeg','image/png','image/webp','application/pdf'].includes(file.type)) return showToast('Formato de archivo no permitido.', 'error');
       const previous = files.get(event.target.dataset.document);
-      if (previous?.preview) URL.revokeObjectURL(previous.preview);
-      files.set(event.target.dataset.document, { file, preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null });
+      if (previous?.preview) revokeOwnedObjectUrl(previous.preview);
+      files.set(event.target.dataset.document, { file, preview: file.type.startsWith('image/') ? createOwnedObjectUrl(file) : null });
       render();
     }));
     overlay.querySelector('[data-submit]')?.addEventListener('click', submit);
@@ -164,7 +165,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
     }
     authService.acceptSession(result.user, result.token);
     showToast('Solicitud enviada. El equipo de +58Express comenzará la revisión.', 'success', 6000);
-    files.forEach(item => item.preview && URL.revokeObjectURL(item.preview));
+    files.forEach(item => item.preview && revokeOwnedObjectUrl(item.preview));
     overlay.remove();
     onSuccess?.(result);
   };
