@@ -29,6 +29,7 @@ import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createConnectionLimiter } from './services/connectionLimit.js';
 import { resolveTrustProxy } from './services/trustProxy.js';
 import { addressKey, createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from './services/httpRateLimit.js';
+import { createChatMediaStorage, resolveChatMediaRoot } from './services/chatMediaStorage.js';
 import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagination.js';
 import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
@@ -182,6 +183,13 @@ app.set('trust proxy', trustProxy.value);
 console.log(`[+58express HTTP] trust proxy = ${String(trustProxy.value)} (${trustProxy.source})`);
 const privateStorage = createPrivateStorage({
   rootDirectory: process.env.UPLOAD_DIR || path.join(path.dirname(dataFile), 'private-uploads')
+});
+// Raiz propia para los adjuntos de chat y soporte, dentro del mismo volumen
+// persistente. Se valida al arrancar: si no esta contenida, no es escribible o
+// falta en produccion, el proceso no arranca antes que aceptar imagenes que
+// desapareceran en el siguiente despliegue.
+const chatMediaStorage = createChatMediaStorage({
+  rootDirectory: resolveChatMediaRoot({ dataFile, isProduction })
 });
 let pricingConfig = {
   ...DEFAULT_PRICING,
