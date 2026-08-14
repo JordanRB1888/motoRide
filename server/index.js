@@ -24,6 +24,7 @@ import {
   normalizeClientFareEstimate
 } from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
+import { createChatMediaStorage, resolveChatMediaRoot } from './services/chatMediaStorage.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -59,6 +60,13 @@ if (isProduction && (!process.env.JWT_SECRET || jwtSecret.length < 32)) {
 }
 const privateStorage = createPrivateStorage({
   rootDirectory: process.env.UPLOAD_DIR || path.join(path.dirname(dataFile), 'private-uploads')
+});
+// Raiz propia para los adjuntos de chat y soporte, dentro del mismo volumen
+// persistente. Se valida al arrancar: si no esta contenida, no es escribible o
+// falta en produccion, el proceso no arranca antes que aceptar imagenes que
+// desapareceran en el siguiente despliegue.
+const chatMediaStorage = createChatMediaStorage({
+  rootDirectory: resolveChatMediaRoot({ dataFile, isProduction })
 });
 let pricingConfig = {
   ...DEFAULT_PRICING,
