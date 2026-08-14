@@ -124,6 +124,88 @@ test('el centinela de escritura no queda residual', (t) => {
   assert.deepEqual(restos, [], `no debía quedar ningún archivo: ${restos.join(', ')}`);
 });
 
+// ------------------------------------------- cero efectos fuera de la raíz
+
+test('una ruta externa rechazada no crea nada en el destino', (t) => {
+  const { dataFile } = volumen(t, 'externo-');
+  // Destino fuera del volumen que NO existe: debe seguir sin existir.
+  const fuera = path.join(os.tmpdir(), `chat-media-nunca-${Date.now()}-${process.pid}`);
+  assert.equal(fs.existsSync(fuera), false, 'precondición: no existe');
+
+  assert.throws(
+    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: fuera } }),
+    error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
+  );
+
+  assert.equal(fs.existsSync(fuera), false, 'el rechazo no debe haberlo creado');
+});
+
+test('un hermano del volumen rechazado no queda creado', (t) => {
+  const { base, dataFile } = volumen(t, 'hermano-limpio-');
+  const falso = path.join(base, 'data-falso', 'chat-media');
+  assert.equal(fs.existsSync(path.join(base, 'data-falso')), false);
+
+  assert.throws(
+    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: falso } }),
+    error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
+  );
+
+  assert.equal(fs.existsSync(path.join(base, 'data-falso')), false, 'ni el padre debe crearse');
+  assert.equal(fs.existsSync(falso), false);
+});
+
+test('un ascenso rechazado no crea el directorio de destino', (t) => {
+  const { base, dataFile } = volumen(t, 'ascenso-limpio-');
+  const escapa = path.join(base, 'data', '..', 'fuera');
+  assert.throws(
+    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: escapa } }),
+    error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
+  );
+  assert.equal(fs.existsSync(path.join(base, 'fuera')), false);
+});
+
+test('un symlink que sale del volumen no deja nada dentro del destino', (t) => {
+  const { dataDir, dataFile } = volumen(t, 'symlink-limpio-');
+  const destinoFuera = temporal(t, 'destino-limpio-');
+  const enlace = path.join(dataDir, 'chat-media');
+  try {
+    fs.symlinkSync(destinoFuera, enlace, 'junction');
+  } catch {
+    t.skip('el entorno no permite crear enlaces simbólicos');
+    return;
+  }
+  const antes = fs.readdirSync(destinoFuera);
+
+  assert.throws(
+    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: enlace } }),
+    error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
+  );
+
+  assert.deepEqual(fs.readdirSync(destinoFuera), antes, 'el destino externo queda intacto');
+  assert.deepEqual(antes, [], 'y sigue vacío: ni centinela ni subdirectorios');
+});
+
+test('un ancestro intermedio que sale del volumen se rechaza sin escribir', (t) => {
+  const { dataDir, dataFile } = volumen(t, 'intermedio-');
+  const destinoFuera = temporal(t, 'intermedio-destino-');
+  const puente = path.join(dataDir, 'puente');
+  try {
+    fs.symlinkSync(destinoFuera, puente, 'junction');
+  } catch {
+    t.skip('el entorno no permite crear enlaces simbólicos');
+    return;
+  }
+  // La ruta es léxicamente interna, pero pasa por un enlace que sale.
+  const candidato = path.join(puente, 'chat-media');
+
+  assert.throws(
+    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: candidato } }),
+    error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
+  );
+
+  assert.deepEqual(fs.readdirSync(destinoFuera), [], 'nada se creó a través del enlace');
+});
+
 // ------------------------------------------------------------- saveBuffer
 
 function almacen(t, opciones = {}) {
@@ -225,4 +307,25 @@ test('un archivo alterado en disco deja de leerse', (t) => {
   const key = storage.saveBuffer(PNG, 'image/png', 'u');
   fs.writeFileSync(storage.resolve(key), TEXTO);
   assert.equal(storage.readImage(key, 'image/png'), null, 'la firma se revalida al leer');
+});
+
+test('un fallo al consultar el espacio no se confunde con falta de reserva', (t) => {
+  const storage = almacen(t);
+  const original = fs.statfsSync;
+  fs.statfsSync = () => { const e = new Error('EIO'); e.code = 'EIO'; throw e; };
+  t.after(() => { fs.statfsSync = original; });
+
+  assert.throws(
+    () => storage.saveBuffer(PNG, 'image/png', 'u'),
+    error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE',
+    'no saber cuánto queda no es lo mismo que no quedar sitio'
+  );
+});
+
+test('CHAT_MEDIA_STORAGE_FULL se reserva para la falta real de reserva', (t) => {
+  const storage = almacen(t, { minFreeBytes: Number.MAX_SAFE_INTEGER });
+  assert.throws(
+    () => storage.saveBuffer(PNG, 'image/png', 'u'),
+    error => error.code === 'CHAT_MEDIA_STORAGE_FULL'
+  );
 });
