@@ -30,7 +30,7 @@ export function renderActiveRide(trip, driver, onSOS, onChat, onMinimize) {
       <!-- Driver info row -->
       <div style="display:flex; justify-content:space-between; align-items:center; background: var(--surface-elevated); padding: 14px 16px; border-radius: 18px; border: 1px solid var(--border-color); margin-bottom: 16px;">
         <div style="display:flex; align-items:center; gap: 12px;">
-          <img src="${'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (driver?.firstName || 'Driver')}" data-private-photo="${canonicalPhotoPath(driver?.photoUrl) || ''}" 
+          <img src="${'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (driver?.firstName || 'Driver')}" data-private-photo="${canonicalPhotoPath(driver?.photoUrl) || ''}"
                style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--accent-primary);">
           <div>
             <strong style="display:block; color:var(--text-primary); font-size:0.95rem;">${driver?.firstName || 'Conductores'} ${driver?.lastName || ''}</strong>
@@ -88,7 +88,7 @@ export function renderTripComplete(trip, driver, onRate, onTip, onDone) {
 
       <!-- Rating Section -->
       <div style="margin-bottom: 24px;">
-        <img src="${neutralizePrivatePhoto(driver?.photoUrl) || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (driver?.firstName || 'Driver')}" 
+        <img src="${neutralizePrivatePhoto(driver?.photoUrl) || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (driver?.firstName || 'Driver')}"
              style="width: 70px; height: 70px; border-radius: 50%; border: 3px solid var(--accent-secondary); margin-bottom: 8px;">
         <h4 style="color: var(--text-primary); margin-bottom: 4px;">¿Cómo calificas a ${driver?.firstName || 'tu conductor'}?</h4>
         <div class="interactive-rating-stars" style="font-size: 2.2rem; cursor: pointer; color: #FFC107; display: flex; justify-content: center; gap: 8px; margin-top: 8px;">
