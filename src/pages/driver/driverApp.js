@@ -20,8 +20,12 @@ import { eventLogger } from '../../utils/logger.js';
 import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 import { notificationService } from '../../services/notificationService.js';
+import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
 
 export function renderDriverApp(container) {
+  // Dueno unico del object URL de la fotografia propia. Se revoca al
+  // reemplazarla y en cualquier salida (clearApp cierra todos los cargadores).
+  const privatePhotos = createPrivatePhotoLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
     const user = authService.getCurrentUser();
     if (!user || user.role !== 'driver' || !user.isVerified) {
         authService.logout();
@@ -30,7 +34,9 @@ export function renderDriverApp(container) {
     }
 
     const driverFullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Carlos Mendoza';
-    const driverAvatarUrl = user.photoUrl ? apiService.resolveUrl(user.photoUrl) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
+    // Avatar neutro primero; la fotografia real llega despues de una peticion
+    // autenticada, porque el navegador no envia la sesion al resolver un `src`.
+    const driverAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
 
     container.innerHTML = `
         <div class="driver-app">
@@ -132,6 +138,11 @@ export function renderDriverApp(container) {
             <div id="page-overlay" class="page-overlay hidden"></div>
         </div>
     `;
+
+    // Solo despues de pintar el estado neutro se pide la fotografia propia,
+    // con la sesion en la cabecera. Si no hay, o el acceso no corresponde,
+    // el avatar neutro se queda.
+    privatePhotos.applyTo(container.querySelector('#driver-avatar'), user.photoUrl, { key: 'propia' });
 
     let isOnline = false;
     let currentTrip = null;
@@ -264,7 +275,14 @@ export function renderDriverApp(container) {
         overlay.classList.add('active');
         overlay.style.display = 'block';
         overlay.innerHTML = '';
-        renderDriverProfile(overlay, { onOpenDocuments: () => switchTab('documentos') });
+        renderDriverProfile(overlay, {
+          onOpenDocuments: () => switchTab('documentos'),
+          // Reemplazar la foto invalida la copia de la cabecera.
+          onPhotoChanged: photoUrl => {
+            privatePhotos.release('propia');
+            privatePhotos.applyTo(container.querySelector('#driver-avatar'), photoUrl, { key: 'propia' });
+          }
+        });
     }
 
     function animateDriverHome() {

@@ -984,6 +984,9 @@ export function renderPassengerApp(container) {
         () => setPassengerTripPanelCollapsed(true)
       ));
       bottomSheet.expand();
+      // La fotografia del conductor asignado se pide solo aqui, con el viaje
+      // abierto. Si ya hay una carga en curso para la misma ruta, se comparte.
+      hydratePrivatePhotos(container, privatePhotos);
     } else if (state === 'IN_TRIP') {
       bottomSheet.setContent(renderActiveRide(currentTrip, currentDriver, 
         () => openSosModal(),

@@ -3,6 +3,7 @@ import { createStatusBadge } from '../../components/statusBadge.js';
 import { createRatingStars } from '../../components/ratingStars.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 import { escapeHtml, safeImageUrl, safeNumber } from '../../utils/safeDom.js';
+import { canonicalPhotoPath, neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 
 export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancelRoute, onScheduleRide, onRideTypeChange) {
   const methodLabels = {
@@ -250,7 +251,11 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
   const driverName = `${driver.firstName || 'Conductor'} ${driver.lastName || ''}`.trim();
   const driverInitials = driverName.split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase();
   const fallbackAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverName)}`;
-  const driverAvatar = safeImageUrl(driver.photoUrl, fallbackAvatar);
+  // `safeImageUrl` acepta rutas de la propia aplicacion, asi que devolvia la
+  // ruta privada y acababa en un `src` sin sesion. El avatar nace neutro y la
+  // fotografia real se hidrata despues con una peticion autenticada.
+  const driverAvatar = safeImageUrl(neutralizePrivatePhoto(driver.photoUrl), fallbackAvatar);
+  const driverPrivatePhoto = canonicalPhotoPath(driver.photoUrl) || '';
   const driverRating = safeNumber(driver.rating, { fallback: 4.9, min: 0, max: 5, decimals: 1 });
   const driverTrips = Math.round(safeNumber(driver.totalTrips, { fallback: 120, min: 0 }));
   const vehicleBrand = driver.vehicleBrand || 'Bera';
@@ -266,7 +271,7 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
         <div class="assigned-driver-identity">
           <div class="assigned-driver-avatar">
             <span>${escapeHtml(driverInitials)}</span>
-            <img src="${escapeHtml(driverAvatar)}" alt="Foto de ${escapeHtml(driverName)}">
+            <img src="${escapeHtml(driverAvatar)}" data-private-photo="${escapeHtml(driverPrivatePhoto)}" alt="Foto de ${escapeHtml(driverName)}">
             <i aria-label="Conductor conectado"></i>
           </div>
           <div class="assigned-driver-name">

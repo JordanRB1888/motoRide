@@ -7,6 +7,8 @@ import { getBcvEuroRate, formatVes } from '../../utils/bcvRates.js';
 
 import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
 export function renderDriverProfile(container, options = {}) {
+  // Aviso para que la cabecera de la aplicacion revoque su copia y la renueve.
+  const notifyPhotoChanged = photoUrl => options.onPhotoChanged?.(photoUrl);
   // Dueno unico de la object URL de la fotografia propia.
   const privatePhotos = createPrivatePhotoLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
   const user = authService.getCurrentUser();
@@ -290,6 +292,7 @@ export function renderDriverProfile(container, options = {}) {
           // Antes se creaba una object URL que nunca se revocaba.
           privatePhotos.release('propia');
           await privatePhotos.applyTo(container.querySelector('#driver-avatar-img'), updated.photoUrl, { key: 'propia' });
+          notifyPhotoChanged(updated.photoUrl);
           showToast('Foto guardada de forma segura.', 'success');
         }
       });
