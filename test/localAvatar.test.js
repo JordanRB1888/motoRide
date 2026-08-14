@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPrivatePhotoLoader, hydratePrivatePhotos } from '../src/utils/privatePhoto.js';
+import { createPrivatePhotoScope } from '../src/utils/privatePhotoScope.js';
 import {
   LOCAL_AVATAR_CLASS,
   applyLocalAvatar,
@@ -152,9 +153,22 @@ test('ningún dato personal aparece dentro de una URL de avatar', () => {
 
 function makeSlot(photoPath) {
   const local = { hidden: false, dataset: { localAvatar: '' }, textContent: 'AP' };
-  const img = { hidden: true, src: '', isConnected: true, dataset: { privatePhoto: photoPath } };
+  const img = {
+    hidden: true,
+    src: '',
+    isConnected: true,
+    dataset: { privatePhoto: photoPath },
+    removeAttribute(nombre) { if (nombre === 'src') this.src = ''; }
+  };
   img.parentElement = { querySelector: sel => (sel === '[data-local-avatar]' ? local : null) };
   return { local, img, container: { querySelectorAll: () => [img] } };
+}
+
+/** Un hueco está en estado neutro cuando no hay imagen y sí avatar local. */
+function assertNeutro(s, mensaje) {
+  assert.equal(s.img.src, '', `${mensaje}: el src debe quedar vacío`);
+  assert.equal(s.img.hidden, true, `${mensaje}: la imagen debe ocultarse`);
+  assert.equal(s.local.hidden, false, `${mensaje}: el avatar local debe reaparecer`);
 }
 
 const arnes = ({ responder } = {}) => {
@@ -189,16 +203,96 @@ test('ante 401, 403, 404 o red caída permanece el avatar local', async () => {
   }
 });
 
-test('al revocar la fotografía no queda ninguna object URL viva', async () => {
+test('releaseAll revoca la URL y devuelve el hueco a su estado neutro', async () => {
   const { loader, revoked } = arnes();
   const s = makeSlot('/api/users/driver_1/photo');
   await hydratePrivatePhotos(s.container, loader);
   assert.equal(loader.openCount, 1);
+  assert.equal(s.local.hidden, true, 'el avatar local estaba oculto');
 
   loader.releaseAll();
 
   assert.deepEqual(revoked, ['blob:foto-1']);
   assert.equal(loader.openCount, 0);
+  assertNeutro(s, 'releaseAll');
+});
+
+test('release(key) restaura solo el hueco de esa clave', async () => {
+  const { loader, revoked } = arnes();
+  const uno = makeSlot('/api/users/driver_1/photo');
+  const dos = makeSlot('/api/users/driver_2/photo');
+  await hydratePrivatePhotos(uno.container, loader);
+  await hydratePrivatePhotos(dos.container, loader);
+
+  loader.release('/api/users/driver_1/photo');
+
+  assert.deepEqual(revoked, ['blob:foto-1']);
+  assertNeutro(uno, 'release');
+  assert.equal(dos.img.hidden, false, 'el otro hueco no se toca');
+  assert.equal(dos.local.hidden, true);
+});
+
+test('destroy restaura todos los huecos', async () => {
+  const { loader } = arnes();
+  const uno = makeSlot('/api/users/driver_1/photo');
+  const dos = makeSlot('/api/users/driver_2/photo');
+  await hydratePrivatePhotos(uno.container, loader);
+  await hydratePrivatePhotos(dos.container, loader);
+
+  loader.destroy();
+
+  assertNeutro(uno, 'destroy');
+  assertNeutro(dos, 'destroy');
+  assert.equal(loader.openCount, 0);
+});
+
+test('completar, cancelar o cambiar de viaje devuelve el avatar local', async () => {
+  const { loader } = arnes();
+  const scope = createPrivatePhotoScope({ loader });
+  const viaje = { id: 'trip_1' };
+  const conductor = { id: 'driver_1', photoUrl: '/api/users/driver_1/photo' };
+
+  for (const cierre of ['COMPLETED', 'CANCELLED', 'IDLE']) {
+    const s = makeSlot('/api/users/driver_1/photo');
+    scope.sync('IN_TRIP', viaje, conductor);
+    await hydratePrivatePhotos(s.container, loader);
+    assert.equal(s.local.hidden, true, `${cierre}: la fotografía se mostraba`);
+
+    scope.sync(cierre, viaje, conductor);
+
+    assertNeutro(s, cierre);
+  }
+});
+
+test('una respuesta tardía nunca oculta el avatar local', async () => {
+  let resolver;
+  const { loader } = arnes({ responder: () => new Promise(r => { resolver = r; }) });
+  const s = makeSlot('/api/users/driver_1/photo');
+
+  const enVuelo = hydratePrivatePhotos(s.container, loader);
+  loader.releaseAll();
+  resolver('blob:tardia');
+  await enVuelo;
+
+  assertNeutro(s, 'respuesta tardía');
+});
+
+test('reemplazar la fotografía no deja dos imágenes ni dos fallbacks visibles', async () => {
+  const { loader } = arnes();
+  const s = makeSlot('/api/users/driver_1/photo');
+  await hydratePrivatePhotos(s.container, loader);
+  assert.equal(s.img.hidden, false);
+  assert.equal(s.local.hidden, true);
+
+  // Se sustituye la fotografía: primero se suelta, luego se vuelve a pedir.
+  loader.release('/api/users/driver_1/photo');
+  assertNeutro(s, 'tras soltar');
+  await hydratePrivatePhotos(s.container, loader);
+
+  // Exactamente uno visible en cada momento.
+  assert.equal(s.img.hidden, false, 'la nueva fotografía se ve');
+  assert.equal(s.local.hidden, true, 'y el avatar local no');
+  assert.notEqual(s.img.src, '', 'con una única imagen');
 });
 
 // -------------------------------------------------- integración por pantalla

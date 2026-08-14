@@ -60,20 +60,49 @@ export function createPrivatePhotoLoader({
   const opened = new Map();
   /** clave -> petición en curso, para no descargar dos veces lo mismo. */
   const pending = new Map();
+  /**
+   * clave -> huecos del DOM que muestran esa fotografía.
+   *
+   * Revocar el object URL no basta: el `<img>` seguiría apuntando a una URL
+   * muerta y el avatar local seguiría oculto. Al soltar una clave hay que
+   * devolver el hueco a su estado neutro.
+   */
+  const bindings = new Map();
   let generation = 0;
   let destroyed = false;
 
-  /** Libera todo e invalida lo que siga en vuelo. */
+  /**
+   * Devuelve un hueco a su estado neutro: sin imagen y con el avatar local
+   * visible. Tolera elementos ya desconectados del documento.
+   */
+  const restoreSlot = (element) => {
+    if (!element) return;
+    element.removeAttribute?.('src');
+    if ('src' in element) element.src = '';
+    element.hidden = true;
+    const local = element.parentElement?.querySelector?.('[data-local-avatar]');
+    if (local) local.hidden = false;
+  };
+
+  const restoreKey = (key) => {
+    for (const element of bindings.get(key) || []) restoreSlot(element);
+    bindings.delete(key);
+  };
+
+  /** Libera todo, restaura los huecos e invalida lo que siga en vuelo. */
   const releaseAll = () => {
     for (const url of opened.values()) revokeUrl(url);
+    for (const key of [...bindings.keys()]) restoreKey(key);
     opened.clear();
     pending.clear();
+    bindings.clear();
     generation += 1;
   };
 
   /** Libera una sola, por ejemplo al sustituir la fotografía propia. */
   const release = (key) => {
     const url = opened.get(key);
+    restoreKey(key);
     if (!url) return;
     revokeUrl(url);
     opened.delete(key);
@@ -139,6 +168,11 @@ export function createPrivatePhotoLoader({
     if (element.hidden) element.hidden = false;
     const local = element.parentElement?.querySelector?.('[data-local-avatar]');
     if (local) local.hidden = true;
+    // Se recuerda el hueco para poder devolverlo a su estado neutro al soltar.
+    const clave = options.key ?? photoPath;
+    const huecos = bindings.get(clave) || new Set();
+    huecos.add(element);
+    bindings.set(clave, huecos);
     return url;
   }
 
