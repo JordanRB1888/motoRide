@@ -250,7 +250,6 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
   div.className = 'driver-card assigned-driver-card fade-in';
   // Todo lo que viene del perfil del conductor se trata como dato externo.
   const driverName = `${driver.firstName || 'Conductor'} ${driver.lastName || ''}`.trim();
-  const driverInitials = driverName.split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase();
   const fallbackAvatar = localAvatarHtml({ name: driverName, role: 'driver', label: driverName });
   // `safeImageUrl` acepta rutas de la propia aplicacion, asi que devolvia la
   // ruta privada y acababa en un `src` sin sesion. El avatar nace neutro y la
@@ -270,7 +269,6 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
       <header class="assigned-driver-header passenger-trip-card-header">
         <div class="assigned-driver-identity">
           <div class="assigned-driver-avatar">
-            <span>${escapeHtml(driverInitials)}</span>
             ${fallbackAvatar}<img hidden data-private-photo="${escapeHtml(driverPrivatePhoto)}" alt="Foto de ${escapeHtml(driverName)}">
             <i aria-label="Conductor conectado"></i>
           </div>
@@ -314,12 +312,12 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
   `;
 
   const avatarImage = div.querySelector('.assigned-driver-avatar img');
+  // Si la imagen autorizada no carga, se oculta y reaparece el avatar local.
   avatarImage.addEventListener('error', () => {
-    if (avatarImage.src !== fallbackAvatar) {
-      avatarImage.src = fallbackAvatar;
-      return;
-    }
+    avatarImage.removeAttribute('src');
     avatarImage.hidden = true;
+    const local = avatarImage.parentElement?.querySelector('[data-local-avatar]');
+    if (local) local.hidden = false;
   });
 
   div.querySelector('.call-btn').addEventListener('click', onCall);
