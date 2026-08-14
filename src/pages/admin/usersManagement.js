@@ -2,6 +2,7 @@ import { apiService, db } from '../../services/apiService.js';
 import { icon } from '../../utils/icons.js';
 import { showToast } from '../../components/toast.js';
 
+import { canonicalPhotoPath, createPrivatePhotoLoader, neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const fullName = user => `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Usuario +58Express';
 const initials = user => `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`.toUpperCase() || '58';
@@ -9,13 +10,19 @@ const formatDate = value => value ? new Date(value).toLocaleDateString('es-VE', 
 const tripDate = trip => new Date(trip.completedAt || trip.updatedAt || trip.createdAt || 0);
 const isSuspended = user => user.status === 'SUSPENDED' || user.accountStatus === 'DISABLED';
 const isVerified = user => user.role === 'passenger' ? user.accountStatus !== 'DISABLED' : Boolean(user.isVerified);
-const avatarSource = user => user.photoUrl || user.avatar || user.profilePhoto || '';
+// El listado nunca pide fotografias: mostraria iniciales igual y dispararia
+// una peticion autenticada por fila. El detalle la carga bajo demanda.
+const avatarSource = user => neutralizePrivatePhoto(user.avatar || user.profilePhoto || '');
 const statusText = user => isSuspended(user) ? 'Suspendido' : isVerified(user) ? 'Cuenta habilitada' : 'Pendiente';
 const vehicleText = user => user.role === 'driver' ? `${user.vehicleBrand || 'Vehículo'} ${user.vehicleModel || ''}`.trim() : 'Pasajero';
 const documentEntries = user => Object.entries(user.documents || {}).map(([key, status]) => ({ key, status }));
 const documentName = key => ({ cedula: 'Cédula', licencia: 'Licencia', rcv: 'RCV', certificadoMedico: 'Certificado', carnetCirculacion: 'Circulación' }[key] || key);
 
 export function renderUsersManagement(container) {
+  // El listado muestra iniciales; solo el detalle pide la fotografia, y con
+  // una peticion autenticada. Su object URL muere al cerrar el panel, al
+  // cambiar de persona y en cualquier cambio de ruta.
+  const privatePhotos = createPrivatePhotoLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
   let disposed = false;
   let users = db.getCollection('users') || [];
   let trips = db.getCollection('trips') || [];
@@ -71,7 +78,7 @@ export function renderUsersManagement(container) {
     const photo = avatarSource(user);
     return `<aside class="user-detail-drawer">
       <button id="close-user-detail" class="user-detail-close" type="button">${icon('close', 18)}</button>
-      <header><span class="user-command-avatar large">${photo ? `<img src="${escape(photo)}" alt="">` : escape(initials(user))}<i class="${isSuspended(user) ? 'offline' : ''}"></i></span><div><div><h2>${escape(fullName(user))}</h2><span class="user-state ${isSuspended(user) ? 'suspended' : isVerified(user) ? 'enabled' : 'pending'}">${statusText(user)}</span></div><p>ID: ${escape(String(user.id).slice(-12))}</p><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} registrado el ${formatDate(user.createdAt)}</small></div></header>
+      <header><span class="user-command-avatar large">${photo ? `<img src="${escape(photo)}" alt="">` : `<span class="avatar-initials">${escape(initials(user))}</span><img class="private-photo" alt="" hidden data-private-photo="${escape(canonicalPhotoPath(user.photoUrl) || '')}">`}<i class="${isSuspended(user) ? 'offline' : ''}"></i></span><div><div><h2>${escape(fullName(user))}</h2><span class="user-state ${isSuspended(user) ? 'suspended' : isVerified(user) ? 'enabled' : 'pending'}">${statusText(user)}</span></div><p>ID: ${escape(String(user.id).slice(-12))}</p><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} registrado el ${formatDate(user.createdAt)}</small></div></header>
       <section><h3>Contacto</h3><dl><div><dt>${icon('phone', 15)} Teléfono</dt><dd>${escape(user.phone || 'No registrado')}</dd></div><div><dt>${icon('message', 15)} Correo</dt><dd>${escape(user.email || 'No registrado')}</dd></div></dl></section>
       ${user.role === 'driver' ? `<section class="user-detail-vehicle"><h3>Vehículo</h3><div><span>${icon(user.vehicleType === 'CAR' ? 'car' : 'bike', 25)}</span><p><strong>${escape(vehicleText(user))}</strong><small>Placa: ${escape(user.vehiclePlate || 'Sin registrar')}</small></p></div></section>
       <section><div class="user-section-heading"><h3>Documentos</h3><span>${documents.filter(item => item.status === 'approved').length}/${documents.length || 0}</span></div><div class="user-documents">${documents.length ? documents.slice(0, 5).map(item => `<span class="${item.status}">${icon(item.status === 'approved' ? 'checkCircle' : item.status === 'rejected' ? 'close' : 'clock', 14)}<b>${escape(documentName(item.key))}</b><small>${item.status === 'approved' ? 'Verificado' : item.status === 'rejected' ? 'Rechazado' : 'Pendiente'}</small></span>`).join('') : '<p>Sin documentos registrados.</p>'}</div></section>` : ''}
@@ -79,6 +86,17 @@ export function renderUsersManagement(container) {
       <section class="user-wallet-summary"><div><span>${icon('wallet', 19)}</span><p><small>Saldo disponible</small><strong>$${Number(user.walletBalance || 0).toFixed(2)}</strong></p></div><span>${Number(user.totalTrips || relatedTrips.length)} servicios totales</span></section>
       <footer><button id="contact-user" type="button">${icon('message', 16)} Contactar</button>${user.phone ? `<a href="tel:${escape(user.phone)}">${icon('phone', 16)} Llamar</a>` : ''}${user.role === 'driver' ? `<button id="toggle-user-state" class="${isSuspended(user) ? 'reactivate' : 'suspend'}" type="button">${icon(isSuspended(user) ? 'checkCircle' : 'alertCircle', 16)} ${isSuspended(user) ? 'Reactivar cuenta' : 'Suspender cuenta'}</button>` : ''}</footer>
     </aside>`;
+  };
+
+  const hydrateDetailPhoto = async () => {
+    const element = container.querySelector('[data-private-photo]');
+    const path = element?.dataset.privatePhoto;
+    if (!element || !path) return;
+    const url = await privatePhotos.load(path, { key: path });
+    if (!url || !element.isConnected) return;
+    element.src = url;
+    element.hidden = false;
+    element.previousElementSibling?.setAttribute('hidden', '');
   };
 
   const render = () => {
@@ -135,7 +153,10 @@ export function renderUsersManagement(container) {
     container.querySelector('#user-command-search').oninput = event => { query = event.target.value; page = 1; const cursor = query.length; render(); const input = container.querySelector('#user-command-search'); input?.focus(); input?.setSelectionRange(cursor, cursor); };
     container.querySelectorAll('[data-user-row]').forEach(rowElement => rowElement.onclick = event => { if (event.target.closest('button')) return; selectedId = rowElement.dataset.userRow; render(); });
     container.querySelectorAll('[data-select-user]').forEach(button => button.onclick = () => { selectedId = button.dataset.selectUser; render(); });
-    container.querySelector('#close-user-detail')?.addEventListener('click', () => { selectedId = null; render(); });
+    container.querySelector('#close-user-detail')?.addEventListener('click', () => { selectedId = null; privatePhotos.releaseAll(); render(); });
+    // Cambiar de persona invalida la anterior antes de pedir la nueva, y el
+    // listado nunca dispara ninguna peticion.
+    hydrateDetailPhoto();
     container.querySelectorAll('[data-user-page]').forEach(button => button.onclick = () => { page = Number(button.dataset.userPage); render(); });
     container.querySelector('#users-prev')?.addEventListener('click', () => { page = Math.max(1, page - 1); render(); });
     container.querySelector('#users-next')?.addEventListener('click', () => { page += 1; render(); });

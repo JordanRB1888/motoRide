@@ -2,6 +2,7 @@ import { getBcvEuroRate, formatVes } from '../utils/bcvRates.js';
 import { showToast } from './toast.js';
 import { icon } from '../utils/icons.js';
 
+import { neutralizePrivatePhoto } from '../utils/privatePhoto.js';
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const nameOf = person => `${person?.firstName || person?.name || ''} ${person?.lastName || ''}`.trim() || 'No disponible';
 const numberFrom = (...values) => values.map(Number).find(Number.isFinite) || 0;
@@ -24,8 +25,9 @@ export function createDigitalReceiptModal({ trip, driver, passenger, onClose }) 
     const passengerName = nameOf(passenger);
     const vehicle = `${driver?.vehicleBrand || 'Vehículo'} ${driver?.vehicleModel || ''}`.trim();
     const plate = driver?.vehiclePlate || 'Sin placa';
-    const driverPhoto = driver?.photoUrl || driver?.avatar || '';
-    const passengerPhoto = passenger?.photoUrl || passenger?.avatar || '';
+    // Recibo histórico: nunca la fotografía privada, solo avatar neutro.
+    const driverPhoto = neutralizePrivatePhoto(driver?.photoUrl || driver?.avatar || '');
+    const passengerPhoto = neutralizePrivatePhoto(passenger?.photoUrl || passenger?.avatar || '');
     const driverInitials = `${driver?.firstName?.[0] || 'C'}${driver?.lastName?.[0] || ''}`.toUpperCase();
     const passengerInitials = `${passenger?.firstName?.[0] || passenger?.name?.[0] || 'P'}${passenger?.lastName?.[0] || ''}`.toUpperCase();
 

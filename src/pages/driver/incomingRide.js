@@ -2,6 +2,7 @@ import { icon } from '../../utils/icons.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 import { paymentLabel } from '../../utils/paymentLabels.js';
 
+import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 export function renderIncomingRide(trip, passenger, onAccept, onReject) {
     const overlay = document.createElement('div');
     overlay.className = 'incoming-ride-modal';
@@ -13,7 +14,7 @@ export function renderIncomingRide(trip, passenger, onAccept, onReject) {
     const destination = trip?.destination?.address || 'Basílica de Nuestra Señora de Chiquinquirá, Maracaibo';
     const name = passenger?.name || trip?.passengerName || 'Cliente Pruebas';
     const rating = passenger?.rating || 4.9;
-    const avatar = passenger?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
+    const avatar = neutralizePrivatePhoto(passenger?.avatar) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
     const payment = paymentLabel(trip?.paymentMethod);
     const rideType = trip?.rideType === 'CAR' ? 'Automóvil' : 'Moto';
 

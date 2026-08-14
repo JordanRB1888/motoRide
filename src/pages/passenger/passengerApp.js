@@ -9,6 +9,7 @@ import { socket } from '../../services/socketClient.js';
 import { fareCalculator } from '../../services/fareCalculator.js';
 import { renderFarePreview, renderSearchingState, renderDriverCard } from './requestRide.js';
 import { renderActiveRide, renderTripComplete } from './activeRide.js';
+import { createPrivatePhotoLoader, hydratePrivatePhotos, neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 import { renderRideHistory } from './rideHistory.js';
 import { renderWallet } from './wallet.js';
 import { renderProfile } from './profile.js';
@@ -32,6 +33,7 @@ export function renderPassengerApp(container) {
   let currentState = 'IDLE';
   let mapComponent = null;
   let bottomSheet = null;
+  let privatePhotos = null;
   let currentTrip = null;
   let currentDriver = null;
   let searchTimeout = null;
@@ -187,6 +189,8 @@ export function renderPassengerApp(container) {
   // Initialize Bottom Sheet
   const sheetEl = container.querySelector('#bottom-sheet-container');
   bottomSheet = new BottomSheet(sheetEl);
+    // Dueno unico de las object URLs de fotografias de esta pantalla.
+    privatePhotos = createPrivatePhotoLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
   const persistentChatBtn = container.querySelector('#passenger-active-chat-btn');
   const passengerTripToggle = container.querySelector('#passenger-trip-panel-toggle');
   const chatUnreadBadge = container.querySelector('#passenger-chat-unread');
@@ -808,7 +812,7 @@ export function renderPassengerApp(container) {
       exchangeRateType: fareData?.exchangeRateType || 'BCV',
       rideType: fareData?.rideType === 'CAR' ? 'CAR' : 'MOTO',
       passengerName: `${user.firstName || 'Jordan'} ${user.lastName || 'Pérez'}`.trim(),
-      passengerAvatar: user.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.firstName || 'Jordan')}`,
+      passengerAvatar: neutralizePrivatePhoto(user.photoUrl) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.firstName || 'Jordan')}`,
       createdAt: new Date().toISOString()
     };
 
@@ -987,6 +991,10 @@ export function renderPassengerApp(container) {
         () => setPassengerTripPanelCollapsed(true)
       ));
       bottomSheet.expand();
+      // La fotografia del conductor se pide solo aqui, con el viaje abierto y
+      // una peticion autenticada. Su object URL muere al cerrar la pantalla o
+      // al cambiar de ruta.
+      hydratePrivatePhotos(container, privatePhotos);
     } else if (state === 'COMPLETED') {
       bottomSheet.collapse();
       mapComponent.clearRoute();

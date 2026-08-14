@@ -4,6 +4,7 @@ import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 
+import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 const escapeHtml = value => String(value ?? '')
   .replaceAll('&', '&amp;')
   .replaceAll('<', '&lt;')
@@ -146,7 +147,7 @@ async function initializeFleetMap(container) {
     const status = statusOf(driver);
     const trip = activeTripFor(id);
     const panel = container.querySelector('#fleet-driver-panel');
-    const photo = driver.photoUrl || driver.user?.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(nameOf(driver))}`;
+    const photo = neutralizePrivatePhoto(driver.photoUrl || driver.user?.photoUrl) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(nameOf(driver))}`;
     const routeLabel = trip ? `${trip.pickup?.address || 'Recogida'} → ${trip.destination?.address || 'Destino'}` : 'Sin viaje activo';
     const battery = Number(driver.batteryLevel ?? driver.battery);
     const speed = Number(driver.speed);

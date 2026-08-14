@@ -1,3 +1,4 @@
+import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
 import { icon } from '../../utils/icons.js';
 import { authService } from '../../services/authService.js';
 import { apiService } from '../../services/apiService.js';
@@ -11,17 +12,16 @@ export function renderProfile(container) {
   const user = authService.getCurrentUser();
   if (!user) return;
   let editing = false;
-  let privateAvatarUrl = null;
+  // Dueno unico de la object URL de la fotografia propia: la revoca al
+  // reemplazarla, al cerrar la vista y en cualquier cambio de ruta.
+  const privatePhotos = createPrivatePhotoLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
 
-  const hydrateAvatar = async () => {
-    if (!String(user.photoUrl || '').startsWith('/')) return;
-    const url = await apiService.getPrivateFileUrl(user.photoUrl);
-    if (!url) return;
-    if (privateAvatarUrl) URL.revokeObjectURL(privateAvatarUrl);
-    privateAvatarUrl = url;
-    const image = container.querySelector('#profile-avatar-img');
-    if (image) image.src = url;
-  };
+  // El marcado nace con el avatar neutro; la fotografia real llega despues.
+  const hydrateAvatar = () => privatePhotos.applyTo(
+    container.querySelector('#profile-avatar-img'),
+    user.photoUrl,
+    { key: 'propia' }
+  );
 
   const render = () => {
     const fullName = `${user.firstName || 'Pasajero'} ${user.lastName || ''}`.trim();
@@ -89,8 +89,10 @@ export function renderProfile(container) {
       if (!updated) return showToast('No se pudo guardar la foto.', 'error');
       authService.acceptSession(updated, authService.getSession().token);
       Object.assign(user, updated);
-      const preview = URL.createObjectURL(file);
-      container.querySelector('#profile-avatar-img').src = preview;
+      // Se descarta la anterior y se vuelve a pedir la ya almacenada, en vez de
+      // crear una object URL suelta que nadie revocaba.
+      privatePhotos.release('propia');
+      await hydrateAvatar();
       showToast('Foto guardada de forma segura.', 'success');
     };
     container.querySelector('#profile-edit-form')?.addEventListener('submit', async event => {

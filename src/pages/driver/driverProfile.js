@@ -5,7 +5,10 @@ import { showToast } from '../../components/toast.js';
 import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 import { getBcvEuroRate, formatVes } from '../../utils/bcvRates.js';
 
+import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
 export function renderDriverProfile(container, options = {}) {
+  // Dueno unico de la object URL de la fotografia propia.
+  const privatePhotos = createPrivatePhotoLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
   const user = authService.getCurrentUser();
   if (!user) return;
 
@@ -18,7 +21,7 @@ export function renderDriverProfile(container, options = {}) {
 
   const renderView = () => {
     const driverFullName = `${user.firstName || 'Carlos'} ${user.lastName || 'Mendoza'}`;
-    const avatarUrl = user.photoUrl ? apiService.resolveUrl(user.photoUrl) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
+    const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(driverFullName)}`;
 
     container.innerHTML = `
       <div class="driver-profile-page driver-profile-premium fade-in" style="padding: 24px 16px 120px; max-width: 440px; margin: 0 auto;">
@@ -266,6 +269,9 @@ export function renderDriverProfile(container, options = {}) {
       </div>
     `;
 
+      // Solo despues de pintar el estado neutro se pide la fotografia real.
+      privatePhotos.applyTo(container.querySelector('#driver-avatar-img'), user.photoUrl, { key: 'propia' });
+
     // Photo Upload Triggers
     const driverPhotoInput = container.querySelector('#driver-photo-input');
     const driverPhotoBtn = container.querySelector('#btn-trigger-driver-photo');
@@ -281,7 +287,9 @@ export function renderDriverProfile(container, options = {}) {
           if (!updated) return showToast('No se pudo guardar la foto.', 'error');
           authService.acceptSession(updated, authService.getSession().token);
           Object.assign(user, updated);
-          container.querySelector('#driver-avatar-img').src = URL.createObjectURL(file);
+          // Antes se creaba una object URL que nunca se revocaba.
+          privatePhotos.release('propia');
+          await privatePhotos.applyTo(container.querySelector('#driver-avatar-img'), updated.photoUrl, { key: 'propia' });
           showToast('Foto guardada de forma segura.', 'success');
         }
       });

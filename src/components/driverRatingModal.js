@@ -2,6 +2,7 @@ import { showToast } from './toast.js';
 import { icon } from '../utils/icons.js';
 import { paymentLabel } from '../utils/paymentLabels.js';
 
+import { neutralizePrivatePhoto } from '../utils/privatePhoto.js';
 export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas', onSubmit }) {
     const overlay = document.createElement('div');
     overlay.className = 'driver-rating-overlay fade-in';
@@ -17,7 +18,7 @@ export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas
     const labels = ['', 'Debe mejorar', 'Regular', 'Bien', 'Muy bien', 'Excelente'];
     const fare = Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fare ?? 0).toFixed(2);
     const payment = paymentLabel(trip?.paymentMethod);
-    const avatar = trip?.passengerAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(passengerName)}`;
+    const avatar = neutralizePrivatePhoto(trip?.passengerAvatar) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(passengerName)}`;
 
     const finish = payload => {
         overlay.remove();

@@ -3,6 +3,7 @@ import { socket } from '../services/socketClient.js';
 import { apiService } from '../services/apiService.js';
 import { formatTime } from '../utils/helpers.js';
 
+import { neutralizePrivatePhoto } from '../utils/privatePhoto.js';
 export function createChatModal({ tripId, currentUser, recipientUser }) {
     const storageKey = `58express_chat_${tripId}`;
     
@@ -37,7 +38,7 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         <div class="chat-modal-content glass-panel" style="max-width: 460px;">
             <header class="chat-header">
                 <div class="recipient-info">
-                    <img src="${recipientUser.photoUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + recipientUser.firstName}" alt="${recipientUser.firstName}" class="recipient-avatar">
+                    <img src="${neutralizePrivatePhoto(recipientUser.photoUrl) || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + recipientUser.firstName}" alt="${recipientUser.firstName}" class="recipient-avatar">
                     <div>
                         <h4 class="recipient-name">${recipientUser.firstName} ${recipientUser.lastName || ''}</h4>
                         <span class="recipient-role-badge">${isDriver ? 'Pasajero' : 'Conductor'}</span>

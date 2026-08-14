@@ -1,6 +1,7 @@
 import { icon } from '../../utils/icons.js';
 import { paymentLabel } from '../../utils/paymentLabels.js';
 
+import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 const fareOf = trip => Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fareEUR ?? trip?.fare ?? 0);
 
 function createTripSheet({ trip, passenger, stage, title, status, actionLabel, onAction, onChat, onCall, timer = false }) {
@@ -9,7 +10,7 @@ function createTripSheet({ trip, passenger, stage, title, status, actionLabel, o
     const distance = Number(trip?.distanceKm ?? trip?.distance ?? 0);
     const duration = Number(trip?.durationMin ?? trip?.duration ?? 0);
     const name = passenger?.name || trip?.passengerName || 'Cliente Pruebas';
-    const avatar = passenger?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
+    const avatar = neutralizePrivatePhoto(passenger?.avatar) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
     const pickup = trip?.pickup?.address || 'Mi ubicación actual';
     const destination = trip?.destination?.address || 'Basílica de Nuestra Señora de Chiquinquirá, Maracaibo';
 
