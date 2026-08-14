@@ -16,6 +16,7 @@ import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } f
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
 import { passengerPublicProfile, driverPublicProfile, sanitizeEmbeddedTripDriver } from './domain/userProjections.js';
 import { canViewUserPhoto, userPhotoUrl } from './domain/photoAccess.js';
+import { canViewChatMedia, findMessageByMediaId } from './domain/chatMediaAccess.js';
 import {
   PAYMENT_METHODS,
   normalizeTripId,
@@ -815,6 +816,41 @@ app.get('/api/users/:id/photo', requireAuth, limitadores.archivos, (req, res) =>
   res.setHeader('Content-Type', image.mimeType);
   res.setHeader('Content-Length', String(image.buffer.length));
   // Contenido privado: nunca en caché de disco, de memoria ni de intermediarios.
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Disposition', 'inline');
+  res.end(image.buffer);
+});
+
+app.get('/api/chat-media/:id/content', requireAuth, (req, res) => {
+  // Una unica respuesta para todo lo que no sea un acceso legitimo: un
+  // identificador inexistente, uno malformado y uno ajeno son indistinguibles.
+  const accessDenied = () => res.status(403).json({ error: 'CHAT_MEDIA_FORBIDDEN' });
+
+  // Se localiza el mensaje por igualdad exacta de imageRef.id. El identificador
+  // publico nunca se convierte en una ruta: la clave la aporta el registro.
+  const encontrado = findMessageByMediaId({
+    id: req.params.id,
+    messages: database.messages,
+    supportMessages: database.supportMessages
+  });
+  if (!encontrado) return accessDenied();
+
+  // La autorizacion se decide antes de tocar imageStorageKey.
+  const autorizado = canViewChatMedia({
+    viewer: req.user,
+    message: encontrado.message,
+    channel: encontrado.channel,
+    trips: database.trips
+  });
+  if (!autorizado) return accessDenied();
+
+  // A partir de aqui quien pregunta si tiene derecho a saber que no hay archivo.
+  const image = chatMediaStorage.readImage(encontrado.message.imageStorageKey, encontrado.message.imageRef?.mimeType);
+  if (!image) return res.status(404).json({ error: 'CHAT_MEDIA_NOT_FOUND' });
+
+  res.setHeader('Content-Type', image.mimeType);
+  res.setHeader('Content-Length', String(image.buffer.length));
   res.setHeader('Cache-Control', 'private, no-store, max-age=0');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Disposition', 'inline');
