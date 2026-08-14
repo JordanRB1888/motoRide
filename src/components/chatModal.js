@@ -130,18 +130,30 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
      * ninguna via -MIME, codificacion, charset, mayusculas ni parametros- y la
      * extension nunca decide nada.
      */
-    const RASTER_DATA_URL = /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+    /**
+     * Fuente admisible para una imagen de chat.
+     *
+     * Exactamente el mismo contrato que acepta el backend: data URL raster en
+     * base64, y solo JPEG, PNG o WebP. Nada mas.
+     *
+     * No se admite ninguna URL remota, ni siquiera https con apariencia de
+     * imagen: quien la sirve decide el `Content-Type` en el momento de la
+     * respuesta, puede redirigir a otra cosa y, solo por cargarse, filtra la IP
+     * y el Referer de quien lee el chat. Con una data URL el contenido viaja en
+     * el propio valor y no se pide nada a nadie.
+     *
+     * Tampoco `blob:`, ni rutas relativas, ni GIF o `image/jpg`, que el
+     * servidor rechaza; ni parametros adicionales en el MIME.
+     */
+    const CHAT_IMAGE_DATA_URL = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
 
     function safeImageSrc(value) {
         if (typeof value !== 'string') return '';
         const limpio = value.trim();
         if (!limpio) return '';
-        // Cualquier rastro de SVG descarta el valor entero, venga como venga.
-        if (/svg/i.test(limpio)) return '';
-        if (RASTER_DATA_URL.test(limpio)) return limpio;
-        if (/^https:\/\//i.test(limpio) && !/[\s<>"']/.test(limpio)) return limpio;
-        return '';
+        return CHAT_IMAGE_DATA_URL.test(limpio) ? limpio : '';
     }
+
 
 
     /**

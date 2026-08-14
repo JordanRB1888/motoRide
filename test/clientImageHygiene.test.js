@@ -21,7 +21,7 @@ const leer = r => fs.readFileSync(path.join(raiz, r), 'utf8');
  */
 function cargarSafeImageSrc() {
   const fuente = leer('src/components/chatModal.js');
-  const i = fuente.indexOf('const RASTER_DATA_URL');
+  const i = fuente.indexOf('const CHAT_IMAGE_DATA_URL');
   const fin = fuente.indexOf('\n    }', fuente.indexOf('function safeImageSrc')) + 6;
   assert.ok(i !== -1 && fin > i, 'debe existir la validación de imágenes del chat');
   // eslint-disable-next-line no-new-func
@@ -59,7 +59,6 @@ test('se rechazan esquemas activos y HTML disfrazado', () => {
     'data:image/png,<script>alert(1)</script>',
     'data:image/png;base64,<script>',
     'http://ejemplo.test/a.png',
-    'https://ejemplo.test/a.png onerror=alert(1)',
     '//ejemplo.test/a.png',
     'file:///etc/passwd'
   ];
@@ -68,13 +67,46 @@ test('se rechazan esquemas activos y HTML disfrazado', () => {
   }
 });
 
-test('solo se acepta raster con base64 bien formado', () => {
-  for (const tipo of ['png', 'jpeg', 'jpg', 'webp', 'gif']) {
+test('solo se aceptan JPEG, PNG y WebP en base64, el contrato del servidor', () => {
+  for (const tipo of ['jpeg', 'png', 'webp']) {
     const valor = `data:image/${tipo};base64,iVBORw0KGgo=`;
     assert.equal(safeImageSrc(valor), valor, `${tipo} debía aceptarse`);
   }
-  const https = 'https://ejemplo.test/foto.png';
-  assert.equal(safeImageSrc(https), https);
+});
+
+test('se rechaza lo que el servidor no acepta: GIF e image/jpg', () => {
+  for (const tipo of ['gif', 'jpg', 'bmp', 'avif', 'tiff']) {
+    const valor = `data:image/${tipo};base64,iVBORw0KGgo=`;
+    assert.equal(safeImageSrc(valor), '', `${tipo} no forma parte del contrato`);
+  }
+  // Ni un MIME con parámetros añadidos.
+  assert.equal(safeImageSrc('data:image/png;charset=utf-8;base64,iVBORw0KGgo='), '');
+  assert.equal(safeImageSrc('data:image/png;base64;foo=bar,iVBORw0KGgo='), '');
+  // Ni base64 malformado.
+  assert.equal(safeImageSrc('data:image/png;base64,no válido!'), '');
+  assert.equal(safeImageSrc('data:image/png,sin-base64'), '');
+});
+
+test('ninguna URL remota es aceptable, ni siquiera https con apariencia de imagen', () => {
+  const remotas = [
+    'https://ejemplo.test/foto.png',
+    'https://ejemplo.test/foto.jpeg',
+    'https://ejemplo.test/foto.webp',
+    'https://ejemplo.test/sin-extension',
+    'https://ejemplo.test/redirige?to=https://otro.test/x.svg',
+    'https://ejemplo.test/r/301',
+    'https://ejemplo.test:8443/a.png',
+    'https://usuario:clave@ejemplo.test/a.png',
+    'http://ejemplo.test/a.png',
+    'blob:https://ejemplo.test/9c1f-uuid',
+    '/assets/a.png',
+    './a.png',
+    '../a.png',
+    '//ejemplo.test/a.png'
+  ];
+  for (const valor of remotas) {
+    assert.equal(safeImageSrc(valor), '', `no debía aceptarse: ${valor}`);
+  }
 });
 
 test('un valor inválido produce un hueco vacío, no rompe el chat', () => {
