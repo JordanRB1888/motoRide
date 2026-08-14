@@ -10,6 +10,7 @@ import { fareCalculator } from '../../services/fareCalculator.js';
 import { renderFarePreview, renderSearchingState, renderDriverCard } from './requestRide.js';
 import { renderActiveRide, renderTripComplete } from './activeRide.js';
 import { createPrivatePhotoLoader, hydratePrivatePhotos, neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
+import { createPrivatePhotoScope } from '../../utils/privatePhotoScope.js';
 import { renderRideHistory } from './rideHistory.js';
 import { renderWallet } from './wallet.js';
 import { renderProfile } from './profile.js';
@@ -34,6 +35,7 @@ export function renderPassengerApp(container) {
   let mapComponent = null;
   let bottomSheet = null;
   let privatePhotos = null;
+  let photoScope = null;
   let currentTrip = null;
   let currentDriver = null;
   let searchTimeout = null;
@@ -191,6 +193,9 @@ export function renderPassengerApp(container) {
   bottomSheet = new BottomSheet(sheetEl);
     // Dueno unico de las object URLs de fotografias de esta pantalla.
     privatePhotos = createPrivatePhotoLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
+    // El alcance decide cuando muere la fotografia del conductor: al cambiar
+    // de viaje, de conductor o de foto, y al cerrarse el viaje.
+    photoScope = createPrivatePhotoScope({ loader: privatePhotos });
   const persistentChatBtn = container.querySelector('#passenger-active-chat-btn');
   const passengerTripToggle = container.querySelector('#passenger-trip-panel-toggle');
   const chatUnreadBadge = container.querySelector('#passenger-chat-unread');
@@ -850,6 +855,9 @@ export function renderPassengerApp(container) {
   }
 
   function cancelRouteAndSelectNew() {
+    // Se revoca antes de tocar la interfaz: si el repintado fallara, la
+    // fotografia del conductor anterior no puede quedar viva.
+    photoScope?.close();
     if (searchTimeout) clearTimeout(searchTimeout);
     
     if (currentTrip && currentTrip.id) {
@@ -968,6 +976,9 @@ export function renderPassengerApp(container) {
 
   function setState(state) {
     currentState = state;
+    // Punto unico del ciclo de vida de la fotografia del conductor. Repetir el
+    // mismo estado no revoca ni vuelve a descargar nada.
+    photoScope?.sync(state, currentTrip, currentDriver);
     const topSearchBar = container.querySelector('#top-search-bar');
     // The destination bar is a permanent navigation control. Hiding it during
     // asynchronous trip restoration caused it to flash and disappear.

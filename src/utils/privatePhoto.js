@@ -29,7 +29,9 @@ export function userPhotoEndpoint(userId) {
  * ambas formas y siempre se pide la canónica.
  */
 export function isPrivatePhotoPath(value) {
-  return typeof value === 'string' && /^\/(?:api\/)?users\/[^/]+\/photo$/.test(value.trim());
+  // Se admite una version en la query (`?v=2`): un reemplazo de la fotografia
+  // debe poder distinguirse aunque el identificador no cambie.
+  return typeof value === 'string' && /^\/(?:api\/)?users\/[^/?#]+\/photo(?:\?[^#]*)?$/.test(value.trim());
 }
 
 /** Normaliza cualquiera de las dos formas a la ruta autenticada. */
