@@ -1,10 +1,11 @@
 import { eventLogger } from '../utils/logger.js';
 import { db as clientCache } from './clientCache.js';
 import { offlineRequestQueue } from './offlineRequestQueue.js';
+import { composeApiUrl, normalizeBaseUrl } from './apiUrl.js';
 
 class ApiService {
   constructor() {
-    const configuredUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
+    const configuredUrl = normalizeBaseUrl(import.meta.env.VITE_API_URL || '') || null;
     this.baseUrl = configuredUrl || (typeof window !== 'undefined' && ['localhost','127.0.0.1'].includes(window.location.hostname)
       ? 'http://localhost:4000/api'
       : 'https://motoride-production-4ce4.up.railway.app/api');
@@ -25,7 +26,7 @@ class ApiService {
   async request(endpoint, { method = 'GET', body = null } = {}) {
     try {
       const isFormData = body instanceof FormData;
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const response = await fetch(this.resolveUrl(endpoint), {
         method,
         headers: { ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}), ...this.getAuthHeaders() },
         body: body ? (isFormData ? body : JSON.stringify(body)) : undefined
@@ -45,7 +46,8 @@ class ApiService {
   }
 
   get(endpoint) { return this.request(endpoint); }
-  resolveUrl(endpoint) { return String(endpoint || '').startsWith('http') ? endpoint : `${this.baseUrl}${endpoint}`; }
+  // Punto unico de composicion: ninguna pantalla concatena por su cuenta.
+  resolveUrl(endpoint) { return composeApiUrl(this.baseUrl, endpoint); }
   post(endpoint, data) { return this.request(endpoint, { method: 'POST', body: data }); }
   postForm(endpoint, formData) { return this.post(endpoint, formData); }
   patch(endpoint, data) { return this.request(endpoint, { method: 'PATCH', body: data }); }
@@ -54,7 +56,9 @@ class ApiService {
 
   async getPrivateFileUrl(endpoint) {
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, { headers: this.getAuthHeaders() });
+      // Sin normalizar, `/api/users/:id/photo` sobre una base que ya termina
+      // en `/api` produciria `/api/api/users/...` y la peticion fallaria.
+      const response = await fetch(this.resolveUrl(endpoint), { headers: this.getAuthHeaders() });
       if (!response.ok) return null;
       return URL.createObjectURL(await response.blob());
     } catch { return null; }
