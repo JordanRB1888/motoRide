@@ -122,23 +122,45 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
+    /**
+     * Fuente admisible para una imagen de chat.
+     *
+     * Solo formatos raster. Un SVG es contenido activo y llega desde el
+     * mensaje, es decir, desde una fuente que no controlamos: no se acepta por
+     * ninguna via -MIME, codificacion, charset, mayusculas ni parametros- y la
+     * extension nunca decide nada.
+     */
+    const RASTER_DATA_URL = /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+
     function safeImageSrc(value) {
         if (typeof value !== 'string') return '';
-        if (value.startsWith('data:image/svg+xml;utf8,<svg')) {
-            const svg = value.slice('data:image/svg+xml;utf8,'.length).replace(/%23/g, '#');
-            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-        }
-        if (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value)) return value;
-        if (/^data:image\/svg\+xml(;charset=utf-8)?,/i.test(value)) return value;
-        if (/^https:\/\//i.test(value)) return value;
+        const limpio = value.trim();
+        if (!limpio) return '';
+        // Cualquier rastro de SVG descarta el valor entero, venga como venga.
+        if (/svg/i.test(limpio)) return '';
+        if (RASTER_DATA_URL.test(limpio)) return limpio;
+        if (/^https:\/\//i.test(limpio) && !/[\s<>"']/.test(limpio)) return limpio;
         return '';
     }
 
-    function createSampleReceipt() {
+
+    /**
+     * Comprobante de ejemplo como texto estructurado.
+     *
+     * Antes se generaba un SVG y se enviaba como data URL, lo que obligaba a
+     * abrir una excepcion en la validacion de imagenes. Sin SVG no hace falta
+     * excepcion alguna: viaja como texto y se escapa al pintarlo.
+     */
+    function createSampleReceiptText() {
         const reference = Math.floor(100000 + Math.random() * 900000);
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><rect width="600" height="300" fill="#182232" rx="30"/><text x="40" y="70" fill="#00E676" font-size="28" font-weight="bold">✓ PAGO MÓVIL EXITOSO</text><text x="40" y="130" fill="#FFFFFF" font-size="24">Banco: Banesco (0134)</text><text x="40" y="175" fill="#FFC107" font-size="28" font-weight="bold">Monto: Bs. 3.935,25</text><text x="40" y="225" fill="#94A3B8" font-size="22">Ref: #${reference}</text><text x="40" y="265" fill="#94A3B8" font-size="20">+58express Maracaibo</text></svg>`;
-        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        return [
+            'Comprobante de Pago Movil',
+            'Referencia: ' + reference,
+            'Estado: confirmado',
+            'Tasa: BCV'
+        ].join(' | ');
     }
+
 
     function sendMessage(text, imageDataUrl = null) {
         if (!text.trim() && !imageDataUrl) return;
@@ -182,8 +204,8 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         chip.addEventListener('click', () => {
             const text = chip.dataset.text;
             if (text.includes('Comprobante')) {
-                const sampleReceiptSvg = createSampleReceipt();
-                sendMessage('🧾 Adjunto Comprobante de Pago Móvil en Bs. VES (Tasa BCV)', sampleReceiptSvg);
+                // Texto, no imagen: no se adjunta ningun contenido activo.
+                  sendMessage('🧾 ' + createSampleReceiptText());
             } else {
                 sendMessage(text);
             }
