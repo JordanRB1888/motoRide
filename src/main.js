@@ -7,6 +7,7 @@ import './styles/fleet.css';
 import './styles/support.css';
 import './styles/users.css';
 import './styles/receipt.css';
+import './styles/local-avatar.css';
 import './styles/diorama.css';
 import { seedDatabase } from './services/clientCache.js';
 import { authService } from './services/authService.js';

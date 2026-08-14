@@ -1,0 +1,59 @@
+/*
+ * Avatar neutral local.
+ *
+ * Sustituye al avatar externo que antes se pedía a un tercero con el nombre de
+ * la persona en la URL. Ocupa exactamente el hueco del `<img>` al que reemplaza,
+ * de modo que las dimensiones, bordes y disposición del diseño aprobado no
+ * cambian: hereda el tamaño de su contenedor y acepta las mismas clases y
+ * estilos en línea que llevaba la imagen.
+ */
+
+.local-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
+  width: 100%;
+  height: 100%;
+  /* Sin decoración propia: el borde y el radio los aporta la clase del diseño. */
+  font-weight: 700;
+  font-size: 0.9em;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  user-select: none;
+  background: var(--local-avatar-bg, #2a2d3a);
+  color: var(--local-avatar-fg, #f7f7fa);
+}
+
+.local-avatar--passenger {
+  --local-avatar-bg: #26304a;
+  --local-avatar-fg: #cfe0ff;
+}
+
+.local-avatar--driver {
+  --local-avatar-bg: #3a3212;
+  --local-avatar-fg: #ffe08a;
+}
+
+.local-avatar--admin {
+  --local-avatar-bg: #2b2340;
+  --local-avatar-fg: #e0d0ff;
+}
+
+:root.theme-light .local-avatar--passenger {
+  --local-avatar-bg: #dce6ff;
+  --local-avatar-fg: #1c2b4d;
+}
+
+:root.theme-light .local-avatar--driver {
+  --local-avatar-bg: #fff0c2;
+  --local-avatar-fg: #4a3c05;
+}
+
+:root.theme-light .local-avatar--admin {
+  --local-avatar-bg: #e9dfff;
+  --local-avatar-fg: #33235c;
+}

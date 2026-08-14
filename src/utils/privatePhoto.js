@@ -133,6 +133,12 @@ export function createPrivatePhotoLoader({
     const url = await load(photoPath, options);
     if (!url || destroyed || !element.isConnected) return null;
     element.src = url;
+    // El hueco se pinta con el avatar local y la imagen nace oculta: al llegar
+    // la fotografia autorizada, una sustituye visualmente al otro. Si nunca
+    // llega, el avatar local se queda donde esta.
+    if (element.hidden) element.hidden = false;
+    const local = element.parentElement?.querySelector?.('[data-local-avatar]');
+    if (local) local.hidden = true;
     return url;
   }
 
