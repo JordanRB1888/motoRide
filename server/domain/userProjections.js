@@ -9,6 +9,8 @@
 // Funciones puras, sin dependencias del servidor, para poder probarlas en
 // aislamiento. Toleran null, undefined y objetos incompletos.
 
+import { userPhotoUrl } from './photoAccess.js';
+
 const text = value => (typeof value === 'string' ? value : '');
 const numeric = value => {
   const parsed = Number(value);
@@ -28,7 +30,7 @@ export function passengerPublicProfile(passenger) {
     id: passenger.id ?? null,
     firstName: text(passenger.firstName),
     lastName: text(passenger.lastName),
-    photoUrl: passenger.photoUrl ?? null,
+    photoUrl: userPhotoUrl(passenger),
     rating: numeric(passenger.rating)
   };
 }
@@ -46,7 +48,7 @@ export function driverPublicProfile(driver, { includePhone = false } = {}) {
     id: driver.id ?? null,
     firstName: text(driver.firstName),
     lastName: text(driver.lastName),
-    photoUrl: driver.photoUrl ?? null,
+    photoUrl: userPhotoUrl(driver),
     rating: numeric(driver.rating),
     totalTrips: numeric(driver.totalTrips),
     vehicleType: text(driver.vehicleType) || 'MOTO',

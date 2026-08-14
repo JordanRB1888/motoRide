@@ -9,7 +9,20 @@ const MIME_EXTENSIONS = Object.freeze({
   'application/pdf': '.pdf'
 });
 
-function hasValidSignature(buffer, mimeType) {
+/**
+ * Tipos que puede tener una fotografía de perfil. El PDF queda fuera a
+ * propósito: sirve para documentos, no para imágenes. El SVG no aparece en
+ * ninguna lista porque no tiene firma binaria y es contenido activo.
+ */
+const IMAGE_MIME_TYPES = Object.freeze(['image/jpeg', 'image/png', 'image/webp']);
+
+/** MIME canónico para una fotografía, o null si el valor no es admisible. */
+export function canonicalImageMimeType(value) {
+  const normalized = String(value || '').trim().toLowerCase().split(';')[0];
+  return IMAGE_MIME_TYPES.includes(normalized) ? normalized : null;
+}
+
+export function hasValidSignature(buffer, mimeType) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
   if (mimeType === 'image/jpeg') return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
   if (mimeType === 'image/png') return buffer.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]));
@@ -59,5 +72,25 @@ export function createPrivateStorage({ rootDirectory }) {
     return path.relative(root, absolutePath).split(path.sep).join('/');
   }
 
-  return { root, save, resolve, remove, clone };
+  /**
+   * Lee una imagen ya almacenada comprobando de nuevo su firma binaria.
+   *
+   * La validación en la subida no basta: el MIME que acompaña al registro
+   * podría haberse alterado, y servir bytes cuyo contenido real no coincide con
+   * la cabecera declarada abre la puerta al sniffing y a los polyglots.
+   * Devuelve null ante cualquier discrepancia, sin distinguir la causa.
+   */
+  function readImage(storageKey, declaredMimeType) {
+    const mimeType = canonicalImageMimeType(declaredMimeType);
+    if (!mimeType) return null;
+    const absolutePath = resolve(storageKey);
+    if (!absolutePath) return null;
+    let buffer;
+    try { buffer = fs.readFileSync(absolutePath); }
+    catch { return null; }
+    if (!hasValidSignature(buffer, mimeType)) return null;
+    return { buffer, mimeType };
+  }
+
+  return { root, save, resolve, remove, clone, readImage };
 }

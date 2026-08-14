@@ -312,7 +312,7 @@ export function createDriverApplicationsRouter({
         photoStorageKey: selfie ? privateStorage.clone(selfie.storageKey, user.id) : user.photoStorageKey,
         photoMimeType: selfie?.mimeType || user.photoMimeType,
         photoSize: selfie?.size || user.photoSize,
-        photoUrl: `/users/${user.id}/photo`
+        photoUrl: `/api/users/${user.id}/photo`
       });
       getApplicationDocuments(application.id).forEach(document => { document.status = 'approved'; document.reviewedAt = now; });
       notificationTitle = 'Tu solicitud como conductor fue aprobada';

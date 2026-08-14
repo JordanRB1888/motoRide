@@ -15,6 +15,7 @@ import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
 import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
 import { passengerPublicProfile, driverPublicProfile, sanitizeEmbeddedTripDriver } from './domain/userProjections.js';
+import { canViewUserPhoto, userPhotoUrl } from './domain/photoAccess.js';
 import {
   PAYMENT_METHODS,
   normalizeTripId,
@@ -228,6 +229,10 @@ ensureSeedCredentials();
 function publicUser(user) {
   if (!user) return null;
   const { passwordHash, photoStorageKey, ...safeUser } = user;
+  // La ruta de la fotografía se deriva del almacenamiento real: los registros
+  // antiguos guardan una ruta sin el prefijo /api, y cualquier valor externo
+  // heredado dejaría de ser contenido privado de la aplicación.
+  safeUser.photoUrl = userPhotoUrl(user);
   return safeUser;
 }
 
@@ -648,22 +653,38 @@ app.post('/api/auth/me/photo', requireAuth, profilePhotoUpload, (req, res) => {
   req.user.photoStorageKey = storageKey;
   req.user.photoMimeType = req.file.mimetype;
   req.user.photoSize = req.file.size;
-  req.user.photoUrl = `/users/${req.user.id}/photo`;
+  req.user.photoUrl = userPhotoUrl(req.user);
   req.user.updatedAt = new Date().toISOString();
   persistDatabase();
   res.json(publicUser(req.user));
 });
 
-app.get('/api/users/:id/photo', (req, res) => {
+app.get('/api/users/:id/photo', requireAuth, (req, res) => {
+  // Una única respuesta para todo lo que no sea un acceso legítimo. Quien no
+  // está autorizado no puede distinguir si la persona existe, si tiene
+  // fotografía o si compartió alguna vez un viaje: un identificador
+  // inexistente, uno malformado y uno ajeno responden exactamente igual.
+  const accessDenied = () => res.status(403).json({ error: 'PHOTO_FORBIDDEN' });
+
   const user = database.users.find(item => item.id === req.params.id);
-  if (!user?.photoStorageKey) return res.status(404).json({ error: 'PHOTO_NOT_FOUND' });
-  const absolutePath = privateStorage.resolve(user.photoStorageKey);
-  if (!absolutePath) return res.status(404).json({ error: 'PHOTO_NOT_FOUND' });
-  res.setHeader('Content-Type', user.photoMimeType || 'image/jpeg');
-  res.setHeader('Content-Length', String(user.photoSize || fs.statSync(absolutePath).size));
-  res.setHeader('Cache-Control', 'private, max-age=300');
+  const decision = canViewUserPhoto({
+    viewer: req.user,
+    targetId: user?.id,
+    trips: database.trips
+  });
+  if (!decision.allowed) return accessDenied();
+
+  // A partir de aquí quien pregunta sí tiene derecho a saber que no hay foto.
+  const image = privateStorage.readImage(user.photoStorageKey, user.photoMimeType);
+  if (!image) return res.status(404).json({ error: 'PHOTO_NOT_FOUND' });
+
+  res.setHeader('Content-Type', image.mimeType);
+  res.setHeader('Content-Length', String(image.buffer.length));
+  // Contenido privado: nunca en caché de disco, de memoria ni de intermediarios.
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  fs.createReadStream(absolutePath).pipe(res);
+  res.setHeader('Content-Disposition', 'inline');
+  res.end(image.buffer);
 });
 
 app.get('/api/users', requireAuth, requireRole('admin'), (req, res) => {
@@ -719,7 +740,6 @@ app.get('/api/drivers/nearby', requireAuth, (req, res) => {
       id: driver.id,
       driverId: driver.id,
       firstName: driver.firstName || 'Conductor',
-      photoUrl: driver.photoUrl || null,
       rating: Number(driver.rating || 0),
       vehicleType: driver.vehicleType || 'MOTO',
       status: driver.status,
@@ -1138,7 +1158,10 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   // Identidad derivada siempre del usuario autenticado.
   trip.passengerId = req.user.id;
   trip.passengerName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Pasajero';
-  trip.passengerAvatar = req.user.photoUrl || null;
+  // La fotografía no se copia en el viaje: la contraparte la pide bajo
+  // demanda mientras el viaje siga abierto, y las pantallas históricas
+  // muestran un avatar neutro.
+  trip.passengerAvatar = null;
   trip.passengerRating = Number(req.user.rating || 0);
   trip.driverId = null;
   trip.id = requestedId || `trip_${crypto.randomUUID()}`;
