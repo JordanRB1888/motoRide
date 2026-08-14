@@ -35,9 +35,10 @@ function fuentesRastreadas() {
 // ------------------------------------------------------ ausencia de terceros
 
 test('no queda ninguna referencia a DiceBear en el código rastreado', () => {
-  const esteArchivo = fileURLToPath(import.meta.url);
+  // Solo el codigo de la aplicacion: las pruebas que imponen la regla la
+  // nombran por fuerza, y contarlas como infraccion seria absurdo.
   const ofensores = fuentesRastreadas()
-    .filter(f => f !== esteArchivo)
+    .filter(f => !f.includes(path.sep + 'test' + path.sep))
     .filter(f => /dicebear/i.test(fs.readFileSync(f, 'utf8')));
   assert.deepEqual(ofensores.map(f => path.relative(raiz, f)), []);
 });
