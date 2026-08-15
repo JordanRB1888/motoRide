@@ -108,6 +108,11 @@ async function router() {
             return;
         }
         renderDriverApp(appContainer);
+    } else if (hash === '#/maps-check') {
+        // Pantalla temporal de verificacion de Google Maps. No requiere sesion
+        // porque no muestra ningun dato: solo comprueba clave y APIs.
+        const { renderMapsCheck } = await import('./pages/mapsCheck.js');
+        renderMapsCheck(appContainer);
     } else if (hash === '#/admin') {
         if (!user || user.role !== 'admin') {
             window.navigateTo('#/');
