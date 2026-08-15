@@ -24,6 +24,7 @@ import {
   normalizeClientFareEstimate
 } from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
+import { createGoogleRoutesService } from './services/googleRoutes.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -59,6 +60,18 @@ if (isProduction && (!process.env.JWT_SECRET || jwtSecret.length < 32)) {
 }
 const privateStorage = createPrivateStorage({
   rootDirectory: process.env.UPLOAD_DIR || path.join(path.dirname(dataFile), 'private-uploads')
+});
+
+// Ruta calculada por el servidor. Sin GOOGLE_MAPS_SERVER_KEY queda inactivo y
+// el sistema se comporta exactamente como antes: es una mejora de la tarifa,
+// no un requisito para pedir un viaje.
+const googleRoutes = createGoogleRoutesService({
+  // El diagnostico no lleva coordenadas: seria un rastro de por donde viaja
+  // cada persona.
+  onDiagnostic: ({ code, status }) => {
+    if (code === 'OK' || code === 'NOT_CONFIGURED') return;
+    console.warn(`[routes] ${code}${status ? ` (${status})` : ''}`);
+  }
 });
 let pricingConfig = {
   ...DEFAULT_PRICING,
@@ -1103,7 +1116,7 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   res.json(database.messages.filter(message => message.tripId === trip.id));
 });
 
-app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) => {
+app.post('/api/trips/create', requireAuth, requireRole('passenger'), async (req, res) => {
   // Identificador: lo aporta el cliente por compatibilidad, pero con forma
   // acotada. `Idempotency-Key` sirve cuando el cuerpo no trae `id`, que es lo
   // que ocurre al reenviar desde la cola sin conexión.
@@ -1143,6 +1156,15 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
     return res.status(400).json({ error: error.code });
   }
 
+  // La ruta que calcula el servidor manda sobre cualquier metrica del cuerpo:
+  // hasta ahora el cliente fijaba la distancia y con ella el importe.
+  const rutaDelServidor = await googleRoutes.computeRoute({
+    origin: pickup,
+    destination,
+    rideType: req.body.rideType
+  });
+  if (rutaDelServidor) routeMetrics = rutaDelServidor;
+
   const trip = {
     pickup: tripLocation(pickup),
     destination: tripLocation(destination),
@@ -1180,13 +1202,12 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
     }, pricingConfig);
     trip.fareUSD = trip.pricing.fareUSD;
     trip.fareVES = trip.pricing.fareVES;
-    trip.fareSource = 'SERVER_CALCULATED';
+    trip.fareSource = rutaDelServidor ? 'SERVER_ROUTED' : 'SERVER_CALCULATED';
   } else {
-    // RIESGO PENDIENTE (alta): sin métricas de ruta el servidor no tiene una
-    // fuente propia para calcular la tarifa —distancia y duración las produce
-    // el navegador— así que conserva la estimación del cliente, acotada. Es la
-    // única vía por la que un pasajero todavía influye en el importe. Cerrarlo
-    // exige cotizaciones firmadas o cálculo de ruta en el servidor: fase aparte.
+    // Ultimo recurso: ni el servidor pudo calcular la ruta ni el cuerpo trajo
+    // metricas utilizables. Se conserva la estimacion del cliente, acotada. Con
+    // GOOGLE_MAPS_SERVER_KEY configurada este camino solo se toma si Google no
+    // responde, y entonces la tarifa queda marcada como estimada.
     const estimate = normalizeClientFareEstimate(req.body.fareUSD ?? req.body.fareEUR);
     if (estimate === null) return res.status(400).json({ error: 'INVALID_FARE_ESTIMATE' });
     trip.fareUSD = estimate;
