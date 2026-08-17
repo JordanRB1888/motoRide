@@ -69,6 +69,17 @@ export async function renderAdminSupport(container) {
 
   // El endpoint devuelve del más reciente al más antiguo; se invierte para
   // mostrar la conversación en su orden natural.
+  // De los viajes solo hace falta el último de quien tiene el hilo abierto,
+  // para la ficha de contexto. Pedir la colección entera para quedarse con uno
+  // era descargar todo el histórico de la plataforma por cada apertura.
+  const loadActiveTrip = async () => {
+    trips = [];
+    if (!activeId) return;
+    const pagina = await apiService.get(`/trips?userId=${encodeURIComponent(activeId)}&limit=1`);
+    if (disposed) return;
+    trips = Array.isArray(pagina?.items) ? pagina.items : [];
+  };
+
   const loadActiveMessages = async () => {
     messagesCursor = null;
     if (!activeId) { activeMessages = []; return; }
@@ -145,19 +156,17 @@ export async function renderAdminSupport(container) {
   };
 
   const load = async ({ preserveActive = true } = {}) => {
-    const [threadData, tripData] = await Promise.all([
-      apiService.get(consultaHilos()),
-      apiService.get('/trips')
+    const [threadData] = await Promise.all([
+      apiService.get(consultaHilos())
     ]);
     if (disposed) return;
     threads = Array.isArray(threadData?.items) ? threadData.items : [];
     threadsCursor = threadData?.nextCursor || null;
     threadTotal = Number(threadData?.total) || threads.length;
     averageResponseMs = Number.isFinite(threadData?.averageResponseMs) ? threadData.averageResponseMs : null;
-    trips = Array.isArray(tripData) ? tripData : [];
     if (!preserveActive || !threads.some(thread => thread.user?.id === activeId)) activeId = threads[0]?.user?.id || null;
     localStorage.removeItem('58express_support_focus');
-    await loadActiveMessages();
+    await Promise.all([loadActiveMessages(), loadActiveTrip()]);
     if (disposed) return;
     loading = false;
     draw();
@@ -258,7 +267,7 @@ export async function renderAdminSupport(container) {
       await apiService.patch(`/support/threads/${encodeURIComponent(activeId)}/read`, {});
       const thread = threads.find(item => item.user?.id === activeId);
       if (thread) thread.unread = 0;
-      await loadActiveMessages();
+      await Promise.all([loadActiveMessages(), loadActiveTrip()]);
       draw();
     }));
     container.querySelector('#support-more-threads')?.addEventListener('click', loadMoreThreads);

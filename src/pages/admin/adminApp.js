@@ -23,6 +23,7 @@ export function renderAdminApp(container) {
   const admin = authService.getCurrentUser();
   if (!admin) return;
   let overview = null;
+  let tripTotal = 0;
   let dashboardMap = null;
   const nav = [['dashboard','grid','Centro de Operaciones'],['fleet','map','Mapa de Flota'],['applications','shield','Solicitudes'],['users','users','Usuarios'],['tariffs','dollarSign','Tarifas'],['topups','wallet','Recargas'],['finances','trending','Finanzas'],['support','message','Soporte']];
 
@@ -56,12 +57,12 @@ export function renderAdminApp(container) {
 
   const dashboard = () => {
     const trips=db.getCollection('trips')||[],users=db.getCollection('users')||[];
-    const recent=trips.slice().reverse().slice(0,8),active=overview?.activeTrips??trips.filter(t=>ACTIVE_STATUSES.includes(t.status)).length;
+    const recent=trips.slice(0,TRIPS_ON_DASHBOARD),active=overview?.activeTrips??trips.filter(t=>ACTIVE_STATUSES.includes(t.status)).length;
     const available=overview?.drivers?.available??users.filter(u=>u.role==='driver'&&['AVAILABLE','ONLINE'].includes(u.status)).length;
     const busy=overview?.drivers?.busy??users.filter(u=>u.role==='driver'&&['BUSY','IN_TRIP'].includes(u.status)).length;
     const gross=Number(overview?.grossToday||0),bcv=Number(overview?.bcvRate||0),rating=overview?.averageRating??'—';
     const activities=recent.slice(0,6).map(trip=>({trip,type:trip.status==='COMPLETED'?'success':trip.status==='CANCELLED'?'danger':trip.status==='SEARCHING'?'warning':'info',title:trip.status==='COMPLETED'?'Viaje completado':trip.status==='CANCELLED'?'Viaje cancelado':trip.status==='SEARCHING'?'Nueva solicitud':'Viaje actualizado'}));
-    content.innerHTML=`<div class="dashboard-view ops-dashboard"><div class="ops-heading"><div><span class="eyebrow"><i></i> OPERACIÓN EN VIVO</span><h1>Movilidad bajo control.</h1><p>Maracaibo, Zulia · ${new Date().toLocaleString('es-VE',{dateStyle:'medium',timeStyle:'short'})}</p></div><div class="ops-heading-actions"><span class="ops-health"><i></i> Todos los sistemas operativos</span><span class="ops-rate">BCV <strong>Bs. ${bcv.toFixed(2)}</strong></span></div></div><div class="ops-overview"><section class="operations-map-card"><div class="map-card-head"><div><strong>Mapa operativo</strong><small>Ubicación actual de la flota</small></div><button class="map-expand" data-open-fleet>${icon('maximize',17)} Abrir mapa</button></div><div id="operations-map"></div><div class="map-overlay-stats"><div><small>Disponibles</small><strong class="green">${available}</strong></div><div><small>En servicio</small><strong class="cyan">${busy}</strong></div><div><small>Solicitudes</small><strong class="amber">${trips.filter(t=>t.status==='SEARCHING').length}</strong></div></div></section><div class="ops-kpis"><article class="metric-card cyan"><span class="metric-icon">${icon('navigation',20)}</span><div><small>Viajes activos</small><strong>${active}</strong><p>Ahora mismo</p></div></article><article class="metric-card green"><span class="metric-icon">${icon('users',20)}</span><div><small>Conductores disponibles</small><strong>${available}</strong><p>${busy} prestando servicio</p></div></article><article class="metric-card amber"><span class="metric-icon">${icon('dollarSign',20)}</span><div><small>Facturación hoy</small><strong>$${gross.toFixed(2)}</strong><p>Bs. ${(gross*bcv).toFixed(2)}</p></div></article><article class="metric-card orange"><span class="metric-icon">${icon('star',20)}</span><div><small>Calificación</small><strong>${rating}</strong><p>Experiencia promedio</p></div></article></div></div><div class="ops-lower"><section class="ops-panel trips-panel"><header><div><h3>Viajes recientes</h3><p>Seguimiento de la operación</p></div><span>${trips.length} registros</span></header><div class="ops-table-wrap"><table class="data-table"><thead><tr><th>Viaje</th><th>Pasajero</th><th>Conductor</th><th>Ruta</th><th>Tarifa</th><th>Estado</th></tr></thead><tbody>${recent.map(t=>{const passenger=users.find(u=>u.id===t.passengerId),driver=users.find(u=>u.id===t.driverId);return `<tr><td><code>#${escapeHtml(t.id.slice(-7))}</code></td><td>${escapeHtml(passenger?.firstName||'Cliente')}</td><td>${escapeHtml(driver?.firstName||'Sin asignar')}</td><td class="route-cell"><span>${escapeHtml(t.pickup?.address||'Origen')}</span>${icon('arrowRight',14)}<span>${escapeHtml(t.destination?.address||'Destino')}</span></td><td><strong>$${Number(t.fareUSD||t.fareEUR||t.pricing?.fareUSD||0).toFixed(2)}</strong></td><td><span class="trip-status status-${String(t.status).toLowerCase()}">${statusLabel(t.status)}</span></td></tr>`}).join('')||'<tr><td colspan="6" class="empty-cell">No hay viajes registrados todavía.</td></tr>'}</tbody></table></div></section><aside class="ops-panel activity-panel"><header><div><h3>Actividad reciente</h3><p>Eventos de plataforma</p></div><span class="live-dot"></span></header><div class="activity-list">${activities.map(({trip,type,title})=>`<article><span class="activity-icon ${type}">${icon(type==='success'?'check':type==='danger'?'close':type==='warning'?'bell':'navigation',15)}</span><div><strong>${title}</strong><p>${escapeHtml(trip.destination?.address||statusLabel(trip.status))}</p></div><time>${new Date(trip.updatedAt||trip.createdAt||Date.now()).toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'})}</time></article>`).join('')||'<div class="empty-activity">La actividad aparecerá aquí en tiempo real.</div>'}</div></aside></div></div>`;
+    content.innerHTML=`<div class="dashboard-view ops-dashboard"><div class="ops-heading"><div><span class="eyebrow"><i></i> OPERACIÓN EN VIVO</span><h1>Movilidad bajo control.</h1><p>Maracaibo, Zulia · ${new Date().toLocaleString('es-VE',{dateStyle:'medium',timeStyle:'short'})}</p></div><div class="ops-heading-actions"><span class="ops-health"><i></i> Todos los sistemas operativos</span><span class="ops-rate">BCV <strong>Bs. ${bcv.toFixed(2)}</strong></span></div></div><div class="ops-overview"><section class="operations-map-card"><div class="map-card-head"><div><strong>Mapa operativo</strong><small>Ubicación actual de la flota</small></div><button class="map-expand" data-open-fleet>${icon('maximize',17)} Abrir mapa</button></div><div id="operations-map"></div><div class="map-overlay-stats"><div><small>Disponibles</small><strong class="green">${available}</strong></div><div><small>En servicio</small><strong class="cyan">${busy}</strong></div><div><small>Solicitudes</small><strong class="amber">${trips.filter(t=>t.status==='SEARCHING').length}</strong></div></div></section><div class="ops-kpis"><article class="metric-card cyan"><span class="metric-icon">${icon('navigation',20)}</span><div><small>Viajes activos</small><strong>${active}</strong><p>Ahora mismo</p></div></article><article class="metric-card green"><span class="metric-icon">${icon('users',20)}</span><div><small>Conductores disponibles</small><strong>${available}</strong><p>${busy} prestando servicio</p></div></article><article class="metric-card amber"><span class="metric-icon">${icon('dollarSign',20)}</span><div><small>Facturación hoy</small><strong>$${gross.toFixed(2)}</strong><p>Bs. ${(gross*bcv).toFixed(2)}</p></div></article><article class="metric-card orange"><span class="metric-icon">${icon('star',20)}</span><div><small>Calificación</small><strong>${rating}</strong><p>Experiencia promedio</p></div></article></div></div><div class="ops-lower"><section class="ops-panel trips-panel"><header><div><h3>Viajes recientes</h3><p>Seguimiento de la operación</p></div><span>${tripTotal} registros</span></header><div class="ops-table-wrap"><table class="data-table"><thead><tr><th>Viaje</th><th>Pasajero</th><th>Conductor</th><th>Ruta</th><th>Tarifa</th><th>Estado</th></tr></thead><tbody>${recent.map(t=>{const passenger=users.find(u=>u.id===t.passengerId),driver=users.find(u=>u.id===t.driverId);return `<tr><td><code>#${escapeHtml(t.id.slice(-7))}</code></td><td>${escapeHtml(passenger?.firstName||'Cliente')}</td><td>${escapeHtml(driver?.firstName||'Sin asignar')}</td><td class="route-cell"><span>${escapeHtml(t.pickup?.address||'Origen')}</span>${icon('arrowRight',14)}<span>${escapeHtml(t.destination?.address||'Destino')}</span></td><td><strong>$${Number(t.fareUSD||t.fareEUR||t.pricing?.fareUSD||0).toFixed(2)}</strong></td><td><span class="trip-status status-${String(t.status).toLowerCase()}">${statusLabel(t.status)}</span></td></tr>`}).join('')||'<tr><td colspan="6" class="empty-cell">No hay viajes registrados todavía.</td></tr>'}</tbody></table></div></section><aside class="ops-panel activity-panel"><header><div><h3>Actividad reciente</h3><p>Eventos de plataforma</p></div><span class="live-dot"></span></header><div class="activity-list">${activities.map(({trip,type,title})=>`<article><span class="activity-icon ${type}">${icon(type==='success'?'check':type==='danger'?'close':type==='warning'?'bell':'navigation',15)}</span><div><strong>${title}</strong><p>${escapeHtml(trip.destination?.address||statusLabel(trip.status))}</p></div><time>${new Date(trip.updatedAt||trip.createdAt||Date.now()).toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'})}</time></article>`).join('')||'<div class="empty-activity">La actividad aparecerá aquí en tiempo real.</div>'}</div></aside></div></div>`;
     container.querySelector('[data-open-fleet]')?.addEventListener('click',()=>switchTab('fleet'));
     initDashboardMap(users);
   };
@@ -94,6 +95,16 @@ export function renderAdminApp(container) {
   // reciente. Se piden los que estan en servicio y se recorre el cursor hasta
   // agotarlo, de modo que no queda ninguno sin dibujar; el volumen lo acota la
   // realidad --cuantos hay conectados a la vez-- y no una constante.
+  // El panel solo enseña ocho viajes recientes. Se guardan algunos más para
+  // que los avisos de socket tengan dónde encajar sin volver a pedir nada.
+  const TRIPS_ON_DASHBOARD=8;
+  const TRIPS_IN_MEMORY=40;
+  const recencia=t=>new Date(t?.completedAt||t?.closedAt||t?.updatedAt||t?.createdAt||0).getTime()||0;
+  // Un aviso de socket puede traer un viaje más reciente que los que hay: se
+  // reordena y se recorta, o la tabla acabaría mostrando los ocho primeros que
+  // llegaron en vez de los ocho últimos.
+  const ordenarViajes=lista=>[...lista].sort((a,b)=>recencia(b)-recencia(a)).slice(0,TRIPS_IN_MEMORY);
+
   const ESTADOS_EN_SERVICIO='AVAILABLE,ONLINE,BUSY,IN_TRIP';
   const DRIVERS_PAGE=100;
   // Cortafuegos por si el cursor no avanzara: 50 paginas son 5 000 conductores
@@ -134,7 +145,7 @@ export function renderAdminApp(container) {
   const ensureParticipants=trips=>{
     const conocidos=new Set((db.getCollection('users')||[]).map(u=>u.id));
     // Los mismos ocho viajes que muestra la tabla.
-    for(const trip of (trips||[]).slice().reverse().slice(0,8)){
+    for(const trip of (trips||[]).slice(0,TRIPS_ON_DASHBOARD)){
       for(const id of [trip?.passengerId,trip?.driverId]){
         if(id&&!conocidos.has(id))faltantes.add(id);
       }
@@ -143,13 +154,15 @@ export function renderAdminApp(container) {
   };
 
   const loadAll=async()=>{
-    const [conductores,trips,stats]=await Promise.all([
+    const [conductores,pagina,stats]=await Promise.all([
       loadOperationalDrivers(),
-      apiService.get('/trips'),
+      apiService.get(`/trips?limit=${TRIPS_ON_DASHBOARD}`),
       apiService.get('/admin/overview')
     ]);
     if(Array.isArray(conductores))db.setCollection('users',conductores);
-    if(Array.isArray(trips))db.setCollection('trips',trips);
+    const trips=Array.isArray(pagina?.items)?pagina.items:[];
+    tripTotal=Number(pagina?.total)||trips.length;
+    db.setCollection('trips',trips);
     applyOverview(stats);
     ensureParticipants(trips);
     redrawIfDashboard();
@@ -166,7 +179,7 @@ export function renderAdminApp(container) {
 
   // El registro que cambio viene dentro del propio evento, asi que se aplica
   // sobre lo que ya esta en memoria en lugar de volver a descargar la lista.
-  const patchTrip=patch=>{const normalizado=withCanonicalId(patch,['id','tripId']);if(!normalizado)return;const trips=mergeById(db.getCollection('trips'),normalizado);db.setCollection('trips',trips);ensureParticipants(trips);redrawIfDashboard();};
+  const patchTrip=patch=>{const normalizado=withCanonicalId(patch,['id','tripId']);if(!normalizado)return;const previos=db.getCollection('trips')||[];if(!previos.some(t=>t.id===normalizado.id))tripTotal+=1;const trips=ordenarViajes(mergeById(previos,normalizado));db.setCollection('trips',trips);ensureParticipants(trips);redrawIfDashboard();};
   const patchUser=patch=>{const normalizado=withCanonicalId(patch,['id','userId','driverId']);if(!normalizado)return;db.setCollection('users',mergeById(db.getCollection('users'),normalizado));redrawIfDashboard();};
   socket.on('rideRequested',data=>{notificationService.notify(admin.id,{title:'Nueva solicitud de viaje',message:`Solicitud #${data?.id?.slice(-6)||''}`,category:'TRIP',icon:'🏍️'});patchTrip(data);refreshOverview();});
   socket.on('tripStatusUpdated',data=>{patchTrip(data);refreshOverview();});socket.on('admin:driver_updated',data=>{patchUser(data);refreshOverview();});socket.on('admin:driver_location',data=>{const users=db.getCollection('users')||[],driver=users.find(u=>u.id===(data.userId||data.driverId));if(driver)driver.location={...(driver.location||{}),...data};if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();});socket.on('finance:payout_updated',refreshOverview);

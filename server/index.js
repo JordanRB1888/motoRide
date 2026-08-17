@@ -32,6 +32,7 @@ import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagina
 import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
 import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch.js';
+import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_TRIP_USER_IDS } from './domain/tripFilters.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -880,6 +881,9 @@ app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), (req
 const USERS_PAGE = { defaultLimit: 25, maxLimit: 100 };
 const SUPPORT_THREADS_PAGE = { defaultLimit: 25, maxLimit: 100 };
 const SUPPORT_MESSAGES_PAGE = { defaultLimit: 30, maxLimit: 50 };
+// El panel pinta ocho viajes recientes y el mapa de flota los activos, que
+// son pocos por definicion. El maximo acota lo que puede pedir cualquiera.
+const TRIPS_PAGE = { defaultLimit: 25, maxLimit: 100 };
 
 // Un hilo de soporte se resume para el listado: el texto completo y, sobre
 // todo, la imagen en base64 se quedan fuera. Devolver el historial entero de
@@ -1229,8 +1233,47 @@ app.post('/api/admin/drivers', requireAuth, requireRole('admin'), async (req, re
   res.status(201).json({ user: publicUser(driver), temporaryPassword });
 });
 
+// Devolvia la coleccion entera. Cuatro pantallas la pedian y ninguna la queria
+// completa: el panel usa los ocho mas recientes, el mapa de flota solo los
+// activos, soporte el ultimo de una persona y la gestion de usuarios los de
+// quien este seleccionado. Ahora cada una pide lo suyo.
 app.get('/api/trips', requireAuth, requireRole('admin'), (req, res) => {
-  res.json(database.trips);
+  let limit;
+  let page;
+  let filters;
+  try {
+    limit = parseLimit(req.query.limit, TRIPS_PAGE);
+    page = parsePage(req.query.page);
+    filters = parseTripFilters(req.query);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_QUERY' });
+  }
+
+  const filtrados = filterTrips(database.trips, filters);
+  try {
+    const cursor = req.query.cursor;
+    const pagina = cursor
+      ? paginate(filtrados, { limit, cursor, sortKeyOf: trip => String(tripRecency(trip)) })
+      : paginateByPage(filtrados, { limit, page, sortKeyOf: trip => String(tripRecency(trip)) });
+    return res.json(pagina);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
+});
+
+// Recuento de viajes por persona. La columna «N viajes» del listado de usuarios
+// solo enseña el numero: traer los viajes para contarlos seria descargar la
+// coleccion con otro nombre.
+app.get('/api/trips/summary', requireAuth, requireRole('admin'), (req, res) => {
+  const bruto = req.query.userId;
+  if (bruto === undefined || bruto === null || bruto === '') {
+    return res.status(400).json({ error: 'INVALID_USER_ID' });
+  }
+  const userIds = String(bruto).split(',').map(valor => valor.trim()).filter(Boolean);
+  if (!userIds.length) return res.status(400).json({ error: 'INVALID_USER_ID' });
+  if (userIds.length > MAX_TRIP_USER_IDS) return res.status(400).json({ error: 'TOO_MANY_USER_IDS' });
+
+  return res.json({ items: summarizeTripsByUser(database.trips, userIds) });
 });
 
 app.get('/api/trips/me/history', requireAuth, (req, res) => {

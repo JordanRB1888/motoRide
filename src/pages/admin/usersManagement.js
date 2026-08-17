@@ -29,7 +29,10 @@ export function renderUsersManagement(container) {
   // 25 000 usuarios para buscar por placa costaba 7 MB medidos contra el
   // servidor real.
   let users = [];
-  let trips = db.getCollection('trips') || [];
+  // Viajes del detalle abierto, no la colección entera.
+  let trips = [];
+  // Recuento por persona de la página actual: userId -> { total, completed }.
+  let tripCounts = new Map();
   let role = 'all';
   let status = 'all';
   let query = '';
@@ -41,9 +44,14 @@ export function renderUsersManagement(container) {
   let counts = { total: 0, drivers: 0, passengers: 0, suspended: 0 };
   const pageSize = 8;
 
+  // La fila solo enseña «N viajes»: eso llega como recuento, sin traer ni un
+  // viaje. El detalle de la persona seleccionada sí los necesita, y se piden
+  // aparte y acotados.
   const userTrips = userId => trips
     .filter(trip => trip.passengerId === userId || trip.driverId === userId || trip.assignedDriverId === userId)
     .sort((a, b) => tripDate(b) - tripDate(a));
+
+  const completedFor = userId => Number(tripCounts.get(userId)?.completed || 0);
 
   // La pantalla nunca muestra administradores.
   const consulta = () => {
@@ -73,6 +81,7 @@ export function renderUsersManagement(container) {
     }
     if (selectedId && !users.some(user => user.id === selectedId)) selectedId = null;
     render();
+    await loadTripCounts();
   };
 
   // Las cuatro cifras de cabecera son globales: solo cambian cuando cambia el
@@ -84,20 +93,31 @@ export function renderUsersManagement(container) {
     render();
   };
 
-  // Los viajes alimentan el recuento por persona y el detalle. El panel ya los
-  // trae al abrirse, asi que normalmente no hace falta pedirlos.
-  const loadTrips = async () => {
-    if (trips.length) return;
-    const freshTrips = await apiService.get('/trips');
-    if (disposed || !Array.isArray(freshTrips)) return;
-    trips = freshTrips;
-    db.setCollection('trips', freshTrips);
+  // Un solo recuento para las ocho personas de la página, nunca una petición
+  // por fila. Traer sus viajes para contarlos sería descargar la colección con
+  // otro nombre.
+  const loadTripCounts = async () => {
+    const ids = users.map(user => user.id).filter(Boolean);
+    if (!ids.length) { tripCounts = new Map(); return; }
+    const resumen = await apiService.get(`/trips/summary?userId=${encodeURIComponent(ids.join(','))}`);
+    if (disposed || !Array.isArray(resumen?.items)) return;
+    tripCounts = new Map(resumen.items.map(item => [item.userId, item]));
+    render();
+  };
+
+  // Los viajes de verdad solo hacen falta para la ficha abierta.
+  const loadSelectedTrips = async () => {
+    trips = [];
+    if (!selectedId) return;
+    const pagina = await apiService.get(`/trips?userId=${encodeURIComponent(selectedId)}&limit=20`);
+    if (disposed) return;
+    trips = Array.isArray(pagina?.items) ? pagina.items : [];
     render();
   };
 
   // Al montar la pantalla y despues de una accion que cambia el censo.
   const load = async () => {
-    await Promise.all([loadPage(), loadCounts(), loadTrips()]);
+    await Promise.all([loadPage(), loadCounts()]);
   };
 
   // La busqueda se escribe letra a letra: sin agrupar seria una peticion por
@@ -109,8 +129,7 @@ export function renderUsersManagement(container) {
   };
 
   const row = user => {
-    const relatedTrips = userTrips(user.id);
-    const completed = relatedTrips.filter(trip => trip.status === 'COMPLETED').length;
+    const completed = completedFor(user.id);
     const photo = avatarSource(user);
     return `<tr class="${selectedId === user.id ? 'selected' : ''}" data-user-row="${escape(user.id)}">
       <td><div class="user-command-person"><span class="user-command-avatar">${photo ? `<img src="${escape(photo)}" alt="">` : escape(initials(user))}<i class="${isSuspended(user) ? 'offline' : ''}"></i></span><div><strong>${escape(fullName(user))}</strong><small>ID: ${escape(String(user.id).slice(-10))}</small></div></div></td>
@@ -205,9 +224,9 @@ export function renderUsersManagement(container) {
     // consulta al servidor se agrupa: sin agrupar seria una peticion por
     // pulsacion de tecla.
     container.querySelector('#user-command-search').oninput = event => { query = event.target.value; page = 1; const cursor = query.length; render(); const input = container.querySelector('#user-command-search'); input?.focus(); input?.setSelectionRange(cursor, cursor); loadDiferido(); };
-    container.querySelectorAll('[data-user-row]').forEach(rowElement => rowElement.onclick = event => { if (event.target.closest('button')) return; selectedId = rowElement.dataset.userRow; render(); });
-    container.querySelectorAll('[data-select-user]').forEach(button => button.onclick = () => { selectedId = button.dataset.selectUser; render(); });
-    container.querySelector('#close-user-detail')?.addEventListener('click', () => { selectedId = null; privatePhotos.releaseAll(); render(); });
+    container.querySelectorAll('[data-user-row]').forEach(rowElement => rowElement.onclick = event => { if (event.target.closest('button')) return; selectedId = rowElement.dataset.userRow; render(); loadSelectedTrips(); });
+    container.querySelectorAll('[data-select-user]').forEach(button => button.onclick = () => { selectedId = button.dataset.selectUser; render(); loadSelectedTrips(); });
+    container.querySelector('#close-user-detail')?.addEventListener('click', () => { selectedId = null; trips = []; privatePhotos.releaseAll(); render(); });
     // Cambiar de persona invalida la anterior antes de pedir la nueva, y el
     // listado nunca dispara ninguna peticion.
     hydrateDetailPhoto();

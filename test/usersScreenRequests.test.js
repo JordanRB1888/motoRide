@@ -60,8 +60,8 @@ function navegacion() {
   });
 }
 
-test('las tres cargas estan separadas', () => {
-  for (const nombre of ['loadPage', 'loadCounts', 'loadTrips']) {
+test('las cargas estan separadas por lo que cada una necesita', () => {
+  for (const nombre of ['loadPage', 'loadCounts', 'loadTripCounts', 'loadSelectedTrips']) {
     assert.ok(cuerpoDe(nombre).length > 0, `falta ${nombre}`);
   }
 });
@@ -92,12 +92,21 @@ test('navegar solo dispara la carga de pagina', () => {
   }
 });
 
-test('los viajes solo se piden si no estan ya cargados', () => {
-  // El panel los trae al abrirse, asi que en el caso normal no hay peticion.
-  const cuerpo = cuerpoDe('loadTrips');
-  assert.match(cuerpo, /if \(trips\.length\) return;/, 'debe salir si ya estan');
-  const veces = fuente.split("apiService.get('/trips')").length - 1;
-  assert.equal(veces, 1, `/trips se pide en ${veces} sitios, deberia ser uno`);
+test('la columna de viajes se resuelve con un recuento, no trayendo viajes', () => {
+  // Traer los viajes de las ocho personas para contarlos seria descargar la
+  // coleccion con otro nombre.
+  const cuerpo = cuerpoDe('loadTripCounts');
+  assert.match(cuerpo, /\/trips\/summary\?userId=/, 'debe pedir el recuento');
+  assert.ok(!/apiService\.get\('\/trips'\)/.test(fuente), 'no debe quedar la descarga completa');
+
+  // Y una sola peticion para toda la pagina, nunca una por fila.
+  assert.match(cuerpo, /ids\.join\(','\)/, 'las personas van juntas en una peticion');
+});
+
+test('los viajes de verdad solo se piden para la ficha abierta', () => {
+  const cuerpo = cuerpoDe('loadSelectedTrips');
+  assert.match(cuerpo, /if \(!selectedId\) return;/, 'sin ficha abierta no se pide nada');
+  assert.match(cuerpo, /\/trips\?userId=\$\{encodeURIComponent\(selectedId\)\}&limit=\d+/, 'acotado a esa persona');
 });
 
 test('las cifras globales se refrescan cuando cambia el censo, no al navegar', () => {

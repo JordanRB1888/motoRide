@@ -157,7 +157,7 @@ test('un conductor que no recibió la oferta no puede aceptar la carrera', async
   const usersAfterRejection = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
   assert.equal(findUser(usersAfterRejection, outsider.user.id).status, 'AVAILABLE');
   assert.equal(findUser(usersAfterRejection, offered.user.id).status, 'AVAILABLE');
-  const tripsAfterRejection = await (await asJson(`${url}/api/trips`, adminToken)).json();
+  const tripsAfterRejection = (await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items;
   const pending = tripsAfterRejection.find(trip => trip.id === 'trip_oferta');
   assert.equal(pending.status, 'SEARCHING');
   assert.equal(pending.driverId, null);
@@ -176,7 +176,7 @@ test('un conductor que no recibió la oferta no puede aceptar la carrera', async
   assert.equal(findUser(usersAfterAssignment, outsider.user.id).status, 'AVAILABLE');
 
   // El estado difundido coincide con el estado persistido.
-  const persisted = await (await asJson(`${url}/api/trips`, adminToken)).json();
+  const persisted = (await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items;
   const persistedTrip = persisted.find(trip => trip.id === 'trip_oferta');
   assert.equal(assigned.canonicalStatus, persistedTrip.status);
   assert.equal(persistedTrip.status, 'DRIVER_ASSIGNED');
@@ -277,7 +277,7 @@ test('los eventos malformados o sobre viajes cerrados no detienen el servidor', 
   assert.equal((await health.json()).status, 'ok');
 
   // El viaje cerrado quedó exactamente como estaba.
-  const trips = await (await asJson(`${url}/api/trips`, adminToken)).json();
+  const trips = (await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items;
   const closed = trips.find(trip => trip.id === 'trip_cerrado');
   assert.equal(closed.status, 'COMPLETED');
   assert.equal(closed.driverId, driver.user.id);
@@ -316,7 +316,7 @@ test('un pasajero no puede crear ni redespachar viajes emitiendo rideRequested',
   await pause(300);
 
   // No se creó nada y ningún conductor fue molestado.
-  const tripsAfterGhost = await (await asJson(`${url}/api/trips`, adminToken)).json();
+  const tripsAfterGhost = (await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items;
   assert.equal(tripsAfterGhost.find(trip => trip.id === 'trip_fantasma'), undefined);
   assert.deepEqual(driverOffers, [], 'No debió despacharse ninguna oferta');
 
@@ -325,7 +325,7 @@ test('un pasajero no puede crear ni redespachar viajes emitiendo rideRequested',
   await createTripByRest(url, passenger.token, 'trip_legitimo');
   await offerReceived;
   const offersBefore = driverOffers.length;
-  const snapshotBefore = (await (await asJson(`${url}/api/trips`, adminToken)).json()).find(trip => trip.id === 'trip_legitimo');
+  const snapshotBefore = ((await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items).find(trip => trip.id === 'trip_legitimo');
 
   const redispatchFailure = waitFor(passengerSocket, 'rideRequestFailed', {
     predicate: payload => payload.tripId === 'trip_legitimo',
@@ -343,7 +343,7 @@ test('un pasajero no puede crear ni redespachar viajes emitiendo rideRequested',
   await pause(400);
 
   // El viaje no fue modificado ni redespachado.
-  const snapshotAfter = (await (await asJson(`${url}/api/trips`, adminToken)).json()).find(trip => trip.id === 'trip_legitimo');
+  const snapshotAfter = ((await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items).find(trip => trip.id === 'trip_legitimo');
   assert.equal(driverOffers.length, offersBefore, 'No debió emitirse una nueva oferta');
   assert.equal(snapshotAfter.status, snapshotBefore.status);
   assert.equal(snapshotAfter.fareUSD, snapshotBefore.fareUSD);
@@ -412,7 +412,7 @@ test('tripStatusUpdated difunde un payload canónico sin campos del cliente', as
 
   // El estado difundido es exactamente el que quedó persistido.
   const update = await passengerUpdate;
-  const trips = await (await asJson(`${url}/api/trips`, adminToken)).json();
+  const trips = (await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items;
   const persisted = trips.find(trip => trip.id === 'trip_canonico');
   assert.equal(update.status, persisted.status);
   assert.equal(update.canonicalStatus, persisted.status);

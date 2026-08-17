@@ -160,7 +160,7 @@ test('un pasajero no puede cancelar la carrera de otro pasajero', async (t) => {
   await cancelled;
   await new Promise(resolve => setTimeout(resolve, 120));
 
-  const trips = await (await asJson(`${url}/api/trips`, adminToken)).json();
+  const trips = (await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items;
   assert.equal(trips.find(trip => trip.id === 'trip_propiedad').status, 'CANCELLED');
 
   // Y no puede volver a cancelar un viaje ya cerrado.

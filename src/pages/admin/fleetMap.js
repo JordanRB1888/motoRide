@@ -217,9 +217,11 @@ async function initializeFleetMap(container) {
   }
 
   try {
-    const [initialDrivers, initialTrips] = await Promise.all([apiService.get('/drivers/nearby'), apiService.get('/trips')]);
+    // El mapa solo casa conductores con carreras en curso: los viajes cerrados
+    // no pintan nada y eran la inmensa mayoria de la coleccion.
+    const [initialDrivers, initialTrips] = await Promise.all([apiService.get('/drivers/nearby'), apiService.get('/trips?status=active&limit=100')]);
     if (disposed) return;
-    trips = Array.isArray(initialTrips) ? initialTrips : [];
+    trips = Array.isArray(initialTrips?.items) ? initialTrips.items : [];
     if (Array.isArray(initialDrivers)) initialDrivers.forEach(upsertDriver);
     const located = [...drivers.values()].map(coordinatesOf).filter(Boolean);
     if (located.length > 1) map.fitBounds(located, { padding: [70, 70], maxZoom: 14 });

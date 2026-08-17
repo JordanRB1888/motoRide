@@ -54,9 +54,17 @@ test('ningun evento de socket vuelve a pedir las listas completas', () => {
 });
 
 test('la carga inicial no pide colecciones enteras', () => {
-  // `/trips` sigue sin paginar y se pide una sola vez, al abrir el panel.
-  const viajes = fuente.split("apiService.get('/trips')").length - 1;
-  assert.equal(viajes, 1, `/trips deberia pedirse una sola vez, se pide ${viajes}`);
+  // El listado de viajes tampoco se pide entero: el panel solo pinta los ocho
+  // mas recientes, y el total lo da el servidor.
+  assert.ok(
+    !/apiService\.get\('\/trips'\)/.test(fuente),
+    'no debe quedar ninguna peticion de la coleccion completa de viajes'
+  );
+  const viajes = [...fuente.matchAll(/\/trips\?/g)].map(m => fuente.slice(m.index, m.index + 120));
+  assert.ok(viajes.length > 0, 'el panel debe seguir pidiendo viajes');
+  for (const tramo of viajes) {
+    assert.match(tramo, /limit=(\d+|\$\{)/, `viajes sin limite: ${tramo.slice(0, 70)}`);
+  }
 
   // El listado de usuarios nunca se pide entero: siempre acotado. Se mira un
   // tramo de texto tras cada peticion en vez de intentar delimitar la cadena,

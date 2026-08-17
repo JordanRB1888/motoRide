@@ -142,7 +142,7 @@ test('un cliente no puede inyectar identidad ni estado al crear un viaje', async
   }
 
   // Y tampoco quedan en la base: se relee por la API de administración.
-  const todos = await (await asJson(`${url}/api/trips`, adminToken)).json();
+  const todos = (await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items;
   const persistido = todos.find(item => item.id === 'trip_inyeccion');
   assert.ok(persistido);
   assert.equal(persistido.passengerId, atacante.user.id);
