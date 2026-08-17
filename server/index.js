@@ -220,6 +220,14 @@ function persistDatabase() {
   persistence.persist();
 }
 
+// Para los eventos que modifican exactamente un registro ya conocido. Ver el
+// contrato en services/databasePersistence.js: no guarda otros cambios
+// pendientes, así que solo debe usarse cuando el manejador toca un único
+// registro y nada más.
+function persistRecord(table, item) {
+  persistence.persistRecord(table, item);
+}
+
 ensureSeedCredentials();
 
 function publicUser(user) {
@@ -1372,7 +1380,7 @@ io.on('connection', (socket) => {
     driver.status = requestedStatus;
     driver.socketId = socket.id;
     driverRegistry.set(driver.id, socket.id);
-    persistDatabase();
+    persistRecord('users', driver);
     socket.emit('driver:connected', { success: true, socketId: socket.id, driver: publicUser(driver) });
     emitDriverPresence(driver);
   });
@@ -1393,7 +1401,9 @@ io.on('connection', (socket) => {
     // Reportar GPS no reactiva a un conductor suspendido ni cambia su estado:
     // solo cubre el caso de una cuenta sin estado previo.
     if (!driver.status) driver.status = DRIVER_STATUS.AVAILABLE;
-    persistDatabase();
+    // La ruta más caliente de la aplicación: se dispara con cada lectura de
+    // GPS de cada moto en marcha, y solo cambia este conductor.
+    persistRecord('users', driver);
     emitDriverLocation(driverId, { ...driver.location });
   };
 
@@ -1413,7 +1423,8 @@ io.on('connection', (socket) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     trip.pickup = { ...(trip.pickup || {}), lat, lng };
     trip.passengerLocation = { lat, lng, heading: Number(data.heading || 0), updatedAt: Date.now() };
-    persistDatabase();
+    // Un evento por cada movimiento del pasajero: solo cambia este viaje.
+    persistRecord('trips', trip);
     const payload = { ...trip.passengerLocation, passengerId, tripId: trip.id };
     io.to(`user:${trip.driverId}`).to('admins').emit('passengerLocationUpdated', payload);
   });
@@ -1430,7 +1441,7 @@ io.on('connection', (socket) => {
     const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
     if (!driver) return;
     driver.status = status;
-    persistDatabase();
+    persistRecord('users', driver);
     emitDriverPresence(driver);
   };
 
@@ -1652,7 +1663,7 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString()
     };
     database.messages.push(message);
-    persistDatabase();
+    persistRecord('messages', message);
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', message);
   });
 
@@ -1671,7 +1682,7 @@ io.on('connection', (socket) => {
     if (role === 'passenger' && data.targetRole === 'driver') {
       trip.driverReview = { ...review, tipEUR: Math.max(0, Number(data.tipEUR) || 0) };
     }
-    persistDatabase();
+    persistRecord('trips', trip);
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripRatingUpdated', { tripId: trip.id, role, review });
   });
 
@@ -1682,7 +1693,7 @@ io.on('connection', (socket) => {
         const driver = database.users.find(u => u.id === driverId);
         if (driver) {
           driver.status = DRIVER_STATUS.OFFLINE;
-          persistDatabase();
+          persistRecord('users', driver);
           emitDriverPresence(driver);
         } else {
           io.to('admins').emit('admin:driver_updated', { userId: driverId, status: DRIVER_STATUS.OFFLINE });
