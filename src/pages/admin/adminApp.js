@@ -1,5 +1,5 @@
 import { db, apiService } from '../../services/apiService.js';
-import { mergeById, createCoalescer, withCanonicalId } from '../../utils/liveUpdates.js';
+import { mergeById, createCoalescer, withCanonicalId, accumulatePage } from '../../utils/liveUpdates.js';
 import { authService } from '../../services/authService.js';
 import { renderFleetMap } from './fleetMap.js';
 import { renderUsersManagement } from './usersManagement.js';
@@ -87,7 +87,34 @@ export function renderAdminApp(container) {
   // El panel no necesita el censo entero: el mapa dibuja conductores y la
   // tabla nombra a los participantes de los ocho viajes mas recientes. Pedir
   // los 25 000 usuarios eran 7 MB medidos contra el servidor real.
-  const DRIVERS_FOR_MAP=100;
+  //
+  // El mapa se acota por criterio operativo, no por un tope arbitrario: pedir
+  // «los cien primeros» dejaba fuera del mapa a conductores en la calle en
+  // cuanto la flota pasaba de cien cuentas, y justo a los de alta mas
+  // reciente. Se piden los que estan en servicio y se recorre el cursor hasta
+  // agotarlo, de modo que no queda ninguno sin dibujar; el volumen lo acota la
+  // realidad --cuantos hay conectados a la vez-- y no una constante.
+  const ESTADOS_EN_SERVICIO='AVAILABLE,ONLINE,BUSY,IN_TRIP';
+  const DRIVERS_PAGE=100;
+  // Cortafuegos por si el cursor no avanzara: 50 paginas son 5 000 conductores
+  // simultaneos, muy por encima de cualquier operacion real.
+  const DRIVERS_MAX_PAGES=50;
+
+  const loadOperationalDrivers=async()=>{
+    let acumulados=[];
+    let cursor=null;
+    let vueltas=0;
+    do{
+      const consulta=`/users?role=driver&driverStatus=${ESTADOS_EN_SERVICIO}&limit=${DRIVERS_PAGE}`
+        +(cursor?`&cursor=${encodeURIComponent(cursor)}`:'');
+      const pagina=await apiService.get(consulta);
+      if(!Array.isArray(pagina?.items))break;
+      acumulados=accumulatePage(acumulados,pagina.items);
+      cursor=pagina.nextCursor||null;
+      vueltas+=1;
+    }while(cursor&&vueltas<DRIVERS_MAX_PAGES);
+    return acumulados;
+  };
 
   // Identificadores que aparecen en la tabla y aun no estan en memoria. Se
   // piden juntos y de una vez, nunca uno por fila.
@@ -117,11 +144,11 @@ export function renderAdminApp(container) {
 
   const loadAll=async()=>{
     const [conductores,trips,stats]=await Promise.all([
-      apiService.get(`/users?role=driver&limit=${DRIVERS_FOR_MAP}`),
+      loadOperationalDrivers(),
       apiService.get('/trips'),
       apiService.get('/admin/overview')
     ]);
-    if(Array.isArray(conductores?.items))db.setCollection('users',conductores.items);
+    if(Array.isArray(conductores))db.setCollection('users',conductores);
     if(Array.isArray(trips))db.setCollection('trips',trips);
     applyOverview(stats);
     ensureParticipants(trips);

@@ -284,3 +284,94 @@ test('el resumen trae las cifras globales que la página no puede dar', async ()
   assert.equal(resumen.customers.passengers, PASAJEROS);
   assert.equal(typeof resumen.customers.suspended, 'number');
 });
+
+// --------------------------------------------- mapa de operaciones
+
+/**
+ * El panel acotaba el mapa pidiendo «los cien primeros conductores». Al pasar
+ * de cien cuentas, los de alta mas reciente desaparecian del mapa aunque
+ * estuvieran en la calle. Ahora se filtra por estado operativo y se recorre el
+ * cursor hasta agotarlo.
+ */
+
+const EN_SERVICIO = 'AVAILABLE,ONLINE,BUSY,IN_TRIP';
+
+/** Recorre el listado con el cursor, como hace el panel. */
+async function recorrerConCursor(url, token, consultaBase) {
+  const vistos = [];
+  let cursor = null;
+  let vueltas = 0;
+  do {
+    const consulta = consultaBase + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+    const pagina = await listar(url, token, consulta);
+    vistos.push(...pagina.items.map(u => u.id));
+    cursor = pagina.nextCursor;
+    vueltas += 1;
+    assert.ok(vueltas < 30, 'el recorrido no termina');
+  } while (cursor);
+  return vistos;
+}
+
+test('el recorrido con cursor no se detiene en el centesimo conductor', async () => {
+  const { url, adminToken } = await preparar();
+
+  // Se supera el centenar de cuentas, que es donde fallaba el tope anterior.
+  const EXTRA = 115;
+  const creados = [];
+  for (let i = 0; i < EXTRA; i += 1) {
+    const respuesta = await pedir(`${url}/api/admin/drivers`, adminToken, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: `flota${i}@ejemplo.com`, phone: `+58414100${String(i).padStart(4, '0')}`,
+        firstName: `Flota${i}`, lastName: 'Mapa', vehicleBrand: 'Bera',
+        vehicleModel: 'BR200', vehiclePlate: `FLO${String(i).padStart(3, '0')}`
+      })
+    });
+    assert.equal(respuesta.status, 201);
+    creados.push((await respuesta.json()).user.id);
+  }
+
+  // Un conductor recien dado de alta esta OFFLINE: se recorre ese conjunto,
+  // que es el que supera el centenar.
+  const vistos = await recorrerConCursor(url, adminToken, '?role=driver&driverStatus=OFFLINE&limit=100');
+
+  assert.equal(new Set(vistos).size, vistos.length, 'ninguno repetido');
+  const alcanzados = new Set(vistos);
+  for (const id of creados) {
+    assert.ok(alcanzados.has(id), `conductor no alcanzado: ${id}`);
+  }
+  // Y explicitamente: los posteriores al centesimo tambien.
+  for (const id of creados.slice(100)) {
+    assert.ok(alcanzados.has(id), `conductor de alta tardia fuera del mapa: ${id}`);
+  }
+  assert.ok(creados.length > 100, 'la prueba debe superar el tope antiguo');
+});
+
+test('el filtro operativo distingue a quien esta en servicio de quien no', async () => {
+  const { url, adminToken, conductores } = await preparar();
+
+  // Un conductor pasa a estar en servicio al conectarse, no por una accion de
+  // administracion: se conecta de verdad.
+  const cuenta = conductores[0];
+  const token = await login(url, `conductor0@ejemplo.com`, null, 'driver').catch(() => null);
+  assert.equal(token, null, 'la contrasena temporal no se reutiliza aqui');
+
+  const antes = await listar(url, adminToken, `?role=driver&driverStatus=${EN_SERVICIO}&limit=100`);
+  const dormidos = await listar(url, adminToken, '?role=driver&driverStatus=OFFLINE&limit=100');
+
+  assert.ok(dormidos.total > 0, 'debe haber conductores fuera de servicio');
+  assert.ok(
+    !antes.items.some(u => u.id === cuenta.id),
+    'un conductor sin conectar no puede figurar como en servicio'
+  );
+  // Los dos conjuntos son disjuntos y suman el total de conductores.
+  const todos = await listar(url, adminToken, '?role=driver&limit=100');
+  assert.equal(antes.total + dormidos.total, todos.total, 'todo conductor cae en uno de los dos');
+});
+
+test('un estado operativo inventado se rechaza en el endpoint', async () => {
+  const { url, adminToken } = await preparar();
+  const respuesta = await pedir(`${url}/api/users?driverStatus=inventado`, adminToken);
+  assert.equal(respuesta.status, 400);
+  assert.equal((await respuesta.json()).error, 'INVALID_DRIVER_STATUS');
+});

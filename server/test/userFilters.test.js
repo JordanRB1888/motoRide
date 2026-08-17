@@ -252,3 +252,62 @@ test('sin el parametro no se filtra por identificador', () => {
   assert.equal(filterUsers(usuarios, parseUserFilters({})).length, 2);
   assert.equal(filterUsers(usuarios, parseUserFilters({ ids: '' })).length, 2);
 });
+
+// -------------------------------------------------- estado operativo
+
+test('filtra conductores por su estado operativo', () => {
+  const conductores = [
+    usuario({ id: 'a', role: 'driver', status: 'AVAILABLE' }),
+    usuario({ id: 'b', role: 'driver', status: 'BUSY' }),
+    usuario({ id: 'c', role: 'driver', status: 'OFFLINE' }),
+    usuario({ id: 'd', role: 'driver', status: 'IN_TRIP' })
+  ];
+  const enServicio = parseUserFilters({ role: 'driver', driverStatus: 'AVAILABLE,ONLINE,BUSY,IN_TRIP' });
+  assert.deepEqual(filterUsers(conductores, enServicio).map(u => u.id), ['a', 'b', 'd']);
+});
+
+test('ONLINE se admite porque sobrevive en clientes antiguos', () => {
+  const antiguo = usuario({ id: 'a', role: 'driver', status: 'ONLINE' });
+  const filtros = parseUserFilters({ driverStatus: 'AVAILABLE,ONLINE' });
+  assert.equal(matchesUserFilters(antiguo, filtros), true);
+});
+
+test('sin estado registrado no se cuenta como operativo', () => {
+  // Afirmar que esta en servicio quien no ha reportado nada seria inventarselo.
+  const sinEstado = usuario({ id: 'a', role: 'driver' });
+  delete sinEstado.status;
+  assert.equal(matchesUserFilters(sinEstado, parseUserFilters({ driverStatus: 'AVAILABLE' })), false);
+});
+
+test('un estado operativo inventado se rechaza', () => {
+  for (const malo of ['inventado', 'AVAILABLE,inventado', 'available', ',']) {
+    assert.throws(
+      () => parseUserFilters({ driverStatus: malo }),
+      /INVALID_DRIVER_STATUS/, `estado ${malo}`
+    );
+  }
+});
+
+test('sin el parametro no se filtra por estado operativo', () => {
+  const conductores = [
+    usuario({ id: 'a', role: 'driver', status: 'AVAILABLE' }),
+    usuario({ id: 'b', role: 'driver', status: 'OFFLINE' })
+  ];
+  assert.equal(parseUserFilters({}).driverStatus, null);
+  assert.equal(filterUsers(conductores, parseUserFilters({})).length, 2);
+});
+
+test('con mas de cien conductores, los operativos siguen saliendo todos', () => {
+  // Es el defecto que motiva el cambio: acotar por «los cien primeros» dejaba
+  // fuera del mapa a los de alta mas reciente, aunque estuvieran en la calle.
+  const flota = Array.from({ length: 260 }, (_, i) => usuario({
+    id: `d_${i}`, role: 'driver',
+    // Solo uno de cada diez esta en servicio, y los ultimos tambien.
+    status: i % 10 === 0 || i > 240 ? 'AVAILABLE' : 'OFFLINE'
+  }));
+  const enServicio = filterUsers(flota, parseUserFilters({ role: 'driver', driverStatus: 'AVAILABLE,ONLINE,BUSY,IN_TRIP' }));
+
+  const esperados = flota.filter(d => d.status === 'AVAILABLE').map(d => d.id);
+  assert.deepEqual(enServicio.map(d => d.id), esperados);
+  assert.ok(enServicio.some(d => Number(d.id.slice(2)) > 100), 'deben salir tambien los posteriores al centesimo');
+});

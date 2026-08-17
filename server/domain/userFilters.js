@@ -25,6 +25,17 @@ export const MAX_SEARCH_LENGTH = 120;
 // filtro se convierta en una forma de pedir el listado entero de una vez.
 export const MAX_IDS = 50;
 
+// Estado operativo del conductor, distinto del estado de la cuenta. El mapa de
+// operaciones necesita a quien esta en servicio ahora, no a quien se dio de
+// alta primero: acotar por «los cien primeros» dejaba fuera a conductores en
+// la calle en cuanto la flota pasaba de cien cuentas.
+//
+// `ONLINE` se admite porque sobrevive en clientes y registros antiguos con el
+// mismo significado que `AVAILABLE`.
+export const ESTADOS_OPERATIVOS = Object.freeze([
+  'AVAILABLE', 'ONLINE', 'BUSY', 'IN_TRIP', 'OFFLINE', 'SUSPENDED', 'PENDING_APPROVAL'
+]);
+
 export const isSuspended = user => user?.status === 'SUSPENDED' || user?.accountStatus === 'DISABLED';
 
 export const isVerified = user => user?.role === 'passenger'
@@ -40,7 +51,7 @@ const fullName = user => `${user?.firstName || ''} ${user?.lastName || ''}`.trim
  * usuarios pide conductores y pasajeros a la vez pero nunca administradores.
  */
 export function parseUserFilters(query = {}) {
-  const { role, status, search, ids } = query;
+  const { role, status, search, ids, driverStatus } = query;
 
   let roles = null;
   if (role !== undefined && role !== null && role !== '' && role !== 'all') {
@@ -73,13 +84,28 @@ export function parseUserFilters(query = {}) {
     identificadores = new Set(lista);
   }
 
-  return { roles, status: estado, search: texto.toLowerCase(), ids: identificadores };
+  let operativos = null;
+  if (driverStatus !== undefined && driverStatus !== null && driverStatus !== '') {
+    const lista = String(driverStatus).split(',').map(valor => valor.trim()).filter(Boolean);
+    if (!lista.length) throw new PaginationError('INVALID_DRIVER_STATUS');
+    for (const valor of lista) {
+      if (!ESTADOS_OPERATIVOS.includes(valor)) throw new PaginationError('INVALID_DRIVER_STATUS');
+    }
+    operativos = new Set(lista);
+  }
+
+  return {
+    roles, status: estado, search: texto.toLowerCase(),
+    ids: identificadores, driverStatus: operativos
+  };
 }
 
-export function matchesUserFilters(user, { roles, status, search, ids } = {}) {
+export function matchesUserFilters(user, { roles, status, search, ids, driverStatus } = {}) {
   if (!user) return false;
   if (ids && !ids.has(user.id)) return false;
   if (roles && !roles.includes(user.role)) return false;
+  // Sin estado registrado no se puede afirmar que este operativo.
+  if (driverStatus && !driverStatus.has(user.status)) return false;
 
   if (status && status !== 'all') {
     const suspendido = isSuspended(user);

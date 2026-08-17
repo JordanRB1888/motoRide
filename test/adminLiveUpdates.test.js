@@ -68,11 +68,10 @@ test('la carga inicial no pide colecciones enteras', () => {
     // El limite puede ser literal o una constante interpolada.
     assert.match(tramo, /limit=(\d+|\$\{)/, `sin limite explicito: ${tramo.slice(0, 70)}`);
   }
-  // Y la constante que se interpola tiene que ser un numero acotado, no algo
-  // que pueda acabar valiendo «todos».
-  const constante = fuente.match(/const DRIVERS_FOR_MAP\s*=\s*(\d+)/);
-  assert.ok(constante, 'el tope de conductores debe ser una constante numerica');
-  assert.ok(Number(constante[1]) > 0 && Number(constante[1]) <= 500, `tope irrazonable: ${constante[1]}`);
+  // El tamano de pagina de conductores es una constante numerica acotada.
+  const pagina = fuente.match(/const DRIVERS_PAGE\s*=\s*(\d+)/);
+  assert.ok(pagina, 'el tamano de pagina de conductores debe ser una constante numerica');
+  assert.ok(Number(pagina[1]) > 0 && Number(pagina[1]) <= 100, `tamano irrazonable: ${pagina[1]}`);
   assert.ok(
     !/apiService\.get\('\/users'\)/.test(fuente),
     'no debe quedar ninguna peticion del listado completo'
@@ -108,4 +107,26 @@ test('los registros que llegan en el evento se aplican sin pedir nada', () => {
   // test/liveUpdates.test.js; aqui solo se verifica que la pantalla la use.
   assert.match(fuente, /withCanonicalId\(patch,\s*\['id',\s*'tripId'\]\)/, 'el viaje debe normalizarse');
   assert.match(fuente, /withCanonicalId\(patch,\s*\['id',\s*'userId',\s*'driverId'\]\)/, 'y el usuario tambien');
+});
+
+test('el mapa se acota por criterio operativo, no por un tope de cuentas', () => {
+  // Pedir «los cien primeros conductores» dejaba fuera del mapa a los de alta
+  // mas reciente en cuanto la flota pasaba de cien cuentas, justo a los que
+  // mas probablemente esten en la calle.
+  assert.ok(
+    !/DRIVERS_FOR_MAP/.test(fuente),
+    'no debe quedar un tope arbitrario de cuentas para el mapa'
+  );
+  assert.match(fuente, /driverStatus=\$\{ESTADOS_EN_SERVICIO\}/, 'debe filtrarse por estado operativo');
+  assert.match(fuente, /const ESTADOS_EN_SERVICIO='AVAILABLE,ONLINE,BUSY,IN_TRIP'/, 'con los cuatro estados en servicio');
+});
+
+test('el mapa recorre el cursor hasta agotarlo, con cortafuegos', () => {
+  assert.match(fuente, /const loadOperationalDrivers=async\(\)=>/, 'debe existir el recorrido');
+  assert.match(fuente, /\}while\(cursor&&vueltas<DRIVERS_MAX_PAGES\)/, 'debe continuar mientras haya cursor');
+
+  // Sin tope de vueltas, un cursor que no avanzara dejaria el panel girando.
+  const maximo = fuente.match(/const DRIVERS_MAX_PAGES=(\d+)/);
+  assert.ok(maximo, 'debe haber un cortafuegos de vueltas');
+  assert.ok(Number(maximo[1]) >= 10, `cortafuegos demasiado corto: ${maximo[1]}`);
 });
