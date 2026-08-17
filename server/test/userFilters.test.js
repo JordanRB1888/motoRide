@@ -177,22 +177,38 @@ test('entradas ausentes o vacías no rompen el filtrado', () => {
   assert.equal(matchesUserFilters({ id: 'x' }, parseUserFilters({})), true);
 });
 
-test('el coste crece de forma proporcional al numero de usuarios', () => {
-  const construir = n => Array.from({ length: n }, (_, i) => usuario({
-    id: `u_${i}`, role: i % 5 === 0 ? 'driver' : 'passenger',
-    firstName: `Nombre${i}`, email: `persona${i}@ejemplo.com`
-  }));
+test('cada usuario se examina una sola vez, sea cual sea el tamano', () => {
+  // Se cuentan accesos en lugar de cronometrar: el reloj de pared es ruido
+  // cuando la suite corre en paralelo, y lo que importa aqui es la forma del
+  // coste, no su velocidad. Un filtrado cuadratico leeria cada registro
+  // muchas veces.
+  const construir = n => Array.from({ length: n }, (_, i) => {
+    const base = {
+      role: i % 5 === 0 ? 'driver' : 'passenger',
+      firstName: `Nombre${i}`, lastName: 'Prueba',
+      email: `persona${i}@ejemplo.com`, phone: '+584140000000',
+      accountStatus: 'ACTIVE', isVerified: true, vehiclePlate: `PL${i}`
+    };
+    let lecturas = 0;
+    return Object.defineProperty(base, 'id', {
+      get() { lecturas += 1; return `u_${i}`; },
+      enumerable: true
+    }) && Object.defineProperty(base, '__lecturas', {
+      get: () => lecturas, enumerable: false
+    });
+  });
+
   const filtros = parseUserFilters({ role: 'driver', status: 'all', search: 'nombre9' });
-  const medir = n => {
+  for (const n of [100, 1000, 5000]) {
     const datos = construir(n);
-    const inicio = process.hrtime.bigint();
     filterUsers(datos, filtros);
-    return Number(process.hrtime.bigint() - inicio) / 1e6;
-  };
-  medir(5000);
-  const pequeno = Math.max(medir(10000), 0.5);
-  const grande = medir(40000);   // cuatro veces mas
-  assert.ok(grande / pequeno < 9, `crecimiento sospechoso: ${(grande / pequeno).toFixed(1)}x`);
+    const totalLecturas = datos.reduce((suma, item) => suma + item.__lecturas, 0);
+    // Como mucho una lectura de `id` por registro y por filtro que lo mire.
+    assert.ok(
+      totalLecturas <= n * 3,
+      `con ${n} usuarios hubo ${totalLecturas} lecturas: el coste no es lineal`
+    );
+  }
 });
 
 // ------------------------------------------------- resolucion por identificador

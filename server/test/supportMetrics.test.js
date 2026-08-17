@@ -126,23 +126,34 @@ test('coincide con la implementación anterior en un histórico variado', () => 
   assert.equal(averageAdminResponseMs(messages), referencia(messages));
 });
 
-test('el coste es lineal, no cuadrático dentro del hilo', () => {
-  // La versión anterior rebuscaba hacia atrás por cada respuesta. Con un hilo
-  // muy largo eso se dispara; aquí debe crecer de forma proporcional.
-  const construir = n => Array.from({ length: n }, (_, i) =>
-    mensaje(`m_${i}`, 'u1', i % 2 === 0 ? 'passenger' : 'admin', i * 1000));
+test('cada mensaje del hilo se examina un número acotado de veces', () => {
+  // La versión anterior rebuscaba hacia atrás por cada respuesta, así que un
+  // hilo largo se disparaba. Se cuentan accesos en lugar de cronometrar: el
+  // reloj de pared es ruido cuando la suite corre en paralelo, y lo que
+  // importa es la forma del coste, no su velocidad.
+  // El caso peor de la busqueda hacia atras: una sola pregunta al principio y
+  // despues una fila larga de respuestas. Con roles alternados el defecto no
+  // se manifiesta, porque el mensaje anterior aparece a la primera.
+  const construir = n => Array.from({ length: n }, (_, i) => {
+    const base = { id: `m_${i}`, conversationUserId: 'u1', createdAt: t(i * 1000) };
+    let lecturas = 0;
+    Object.defineProperty(base, 'senderRole', {
+      get() { lecturas += 1; return i === 0 ? 'passenger' : 'admin'; },
+      enumerable: true
+    });
+    Object.defineProperty(base, '__lecturas', { get: () => lecturas, enumerable: false });
+    return base;
+  });
 
-  const medir = n => {
+  for (const n of [100, 1000, 4000]) {
     const datos = construir(n);
-    const inicio = process.hrtime.bigint();
     averageAdminResponseMs(datos);
-    return Number(process.hrtime.bigint() - inicio) / 1e6;
-  };
-
-  medir(2000);                       // calentamiento
-  const pequeno = Math.max(medir(4000), 0.5);
-  const grande = medir(16000);       // cuatro veces más datos
-  // Lineal daría ~4x; cuadrático daría ~16x. Se deja margen amplio para el
-  // ruido de medición pero se distingue con claridad entre ambos.
-  assert.ok(grande / pequeno < 9, `crecimiento sospechoso: ${(grande / pequeno).toFixed(1)}x`);
+    const totalLecturas = datos.reduce((suma, item) => suma + item.__lecturas, 0);
+    // Lineal: unas pocas lecturas por mensaje. Cuadrático: del orden de n²/4,
+    // que con 4 000 mensajes serían millones.
+    assert.ok(
+      totalLecturas <= n * 3,
+      `con ${n} mensajes hubo ${totalLecturas} lecturas: el coste no es lineal`
+    );
+  }
 });
