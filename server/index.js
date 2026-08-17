@@ -27,6 +27,7 @@ import { createPrivateStorage } from './services/privateStorage.js';
 import { createDatabasePersistence } from './services/databasePersistence.js';
 import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createConnectionLimiter } from './services/connectionLimit.js';
+import { resolveTrustProxy } from './services/trustProxy.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -60,6 +61,16 @@ const isProduction = process.env.NODE_ENV === 'production' || String(process.env
 if (isProduction && (!process.env.JWT_SECRET || jwtSecret.length < 32)) {
   throw new Error('JWT_SECRET_REQUIRED_IN_PRODUCTION');
 }
+
+// Sin esto, `req.ip` es la dirección del proxy de borde, idéntica para todo el
+// mundo: los limitadores de frecuencia dejan de ser «por cliente» y pasan a ser
+// un cupo global, de modo que treinta intentos de inicio de sesión en toda la
+// plataforma dejan fuera a los demás. El valor es el número EXACTO de proxies
+// por delante y tiene que coincidir con el despliegue real: pasarse permite
+// falsificar la dirección de origen y quedarse corto reproduce el cupo global.
+const trustProxy = resolveTrustProxy({ value: process.env.TRUST_PROXY, isProduction });
+app.set('trust proxy', trustProxy.value);
+console.log(`[+58express HTTP] trust proxy = ${String(trustProxy.value)} (${trustProxy.source})`);
 const privateStorage = createPrivateStorage({
   rootDirectory: process.env.UPLOAD_DIR || path.join(path.dirname(dataFile), 'private-uploads')
 });
