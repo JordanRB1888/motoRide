@@ -273,3 +273,144 @@ test('la respuesta queda acotada por el tamaño de página, no por lo acumulado'
   assert.ok(pagina.total > 2, 'hay más hilos de los devueltos');
   assert.ok(pagina.nextCursor, 'y se ofrece cómo seguir');
 });
+
+// ------------------------------------------------ busqueda en el servidor
+
+/**
+ * La busqueda estaba en el navegador, sobre los hilos ya descargados. Mientras
+ * el listado venia entero daba igual; con paginacion dejo de darlo: buscar
+ * solo miraba la primera pagina, asi que una conversacion mas atras no
+ * aparecia nunca y el panel decia que no habia coincidencias.
+ */
+
+const RELLENO = 41;
+let escenarioAmplio = null;
+
+/**
+ * Se crean mas hilos que una pagina, todos posteriores a los de `preparar()`.
+ * Como el listado ordena por actividad reciente, el hilo que buscaremos queda
+ * en la ultima pagina.
+ *
+ * Los hilos de relleno se abren dando de alta conductores y escribiendoles
+ * desde administracion: registrarlos uno a uno agotaria el limitador de
+ * autenticacion, que es de treinta por ventana.
+ */
+async function prepararAmplio() {
+  if (escenarioAmplio) return escenarioAmplio;
+  const { url, adminToken, pasajeros } = await preparar();
+
+  for (let i = 0; i < RELLENO; i += 1) {
+    const alta = await pedir(`${url}/api/admin/drivers`, adminToken, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: `relleno${i}@ejemplo.com`, phone: `+58414771${String(i).padStart(4, '0')}`,
+        firstName: `Relleno${i}`, lastName: 'Soporte', vehicleBrand: 'Bera',
+        vehicleModel: 'BR200', vehiclePlate: `REL${String(i).padStart(3, '0')}`
+      })
+    });
+    assert.equal(alta.status, 201, `no se pudo dar de alta el relleno ${i}`);
+    const conductor = (await alta.json()).user;
+    const mensaje = await pedir(`${url}/api/support/messages`, adminToken, {
+      method: 'POST',
+      body: JSON.stringify({ recipientId: conductor.id, text: `Consulta de relleno ${i}` })
+    });
+    assert.equal(mensaje.status, 201, `no se pudo abrir el hilo de relleno ${i}`);
+  }
+
+  // El primero de `preparar()` es ahora el de actividad mas antigua.
+  escenarioAmplio = { url, adminToken, buscado: pasajeros[0] };
+  return escenarioAmplio;
+}
+
+test('el hilo buscado aparece aunque este fuera de la primera pagina', async () => {
+  const { url, adminToken, buscado } = await prepararAmplio();
+
+  const primera = await (await pedir(`${url}/api/support/threads?limit=25`, adminToken)).json();
+  assert.ok(primera.total > 25, `hacen falta varias paginas, hay ${primera.total}`);
+  assert.ok(
+    !primera.items.some(item => item.userId === buscado.user.id),
+    'el hilo buscado debe quedar fuera de la primera pagina, o la prueba no prueba nada'
+  );
+
+  // Buscandolo, aparece de inmediato y en la primera pagina del resultado.
+  const encontrado = await (await pedir(`${url}/api/support/threads?limit=25&search=Persona0`, adminToken)).json();
+  assert.equal(encontrado.total, 1, `se esperaba una coincidencia, hubo ${encontrado.total}`);
+  assert.equal(encontrado.items[0].userId, buscado.user.id);
+  assert.equal(encontrado.nextCursor, null, 'una sola coincidencia no necesita continuacion');
+});
+
+test('la busqueda mira el texto del ultimo mensaje, no solo a la persona', async () => {
+  const { url, adminToken, buscado } = await prepararAmplio();
+  const pagina = await (await pedir(
+    `${url}/api/support/threads?limit=25&search=${encodeURIComponent('del hilo 0')}`, adminToken
+  )).json();
+  assert.equal(pagina.total, 1);
+  assert.equal(pagina.items[0].userId, buscado.user.id);
+});
+
+test('la busqueda tambien encuentra por correo y por telefono', async () => {
+  const { url, adminToken, buscado } = await prepararAmplio();
+  for (const consulta of ['soporte0@ejemplo.com', '4147000000']) {
+    const pagina = await (await pedir(
+      `${url}/api/support/threads?limit=25&search=${encodeURIComponent(consulta)}`, adminToken
+    )).json();
+    assert.equal(pagina.total, 1, `no se encontro con "${consulta}"`);
+    assert.equal(pagina.items[0].userId, buscado.user.id);
+  }
+});
+
+test('un resultado amplio se sigue paginando con el cursor', async () => {
+  const { url, adminToken } = await prepararAmplio();
+  const vistos = [];
+  let cursor = null;
+  let vueltas = 0;
+  do {
+    const consulta = `${url}/api/support/threads?limit=10&search=Relleno`
+      + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+    const pagina = await (await pedir(consulta, adminToken)).json();
+    assert.ok(pagina.items.length <= 10, 'no debe exceder el tamano pedido');
+    vistos.push(...pagina.items.map(item => item.userId));
+    cursor = pagina.nextCursor;
+    vueltas += 1;
+    assert.ok(vueltas < 20, 'la paginacion no termina');
+  } while (cursor);
+
+  assert.equal(vistos.length, RELLENO, `se esperaban ${RELLENO} coincidencias`);
+  assert.equal(new Set(vistos).size, vistos.length, 'ninguna repetida');
+  assert.ok(vueltas > 1, 'el resultado debe ocupar mas de una pagina');
+});
+
+test('el total refleja las coincidencias, no el censo de hilos', async () => {
+  const { url, adminToken } = await prepararAmplio();
+  const sinBuscar = await (await pedir(`${url}/api/support/threads?limit=5`, adminToken)).json();
+  const buscando = await (await pedir(`${url}/api/support/threads?limit=5&search=Persona0`, adminToken)).json();
+  // El panel usa este total para decir cuantas conversaciones quedan.
+  assert.ok(sinBuscar.total > buscando.total);
+  assert.equal(buscando.total, 1);
+});
+
+test('una busqueda sin coincidencias devuelve vacio, no la primera pagina', async () => {
+  const { url, adminToken } = await prepararAmplio();
+  const pagina = await (await pedir(`${url}/api/support/threads?limit=25&search=zzznoexiste`, adminToken)).json();
+  assert.deepEqual(pagina.items, []);
+  assert.equal(pagina.total, 0);
+  assert.equal(pagina.nextCursor, null);
+});
+
+test('un texto desmesurado se rechaza', async () => {
+  const { url, adminToken } = await prepararAmplio();
+  const respuesta = await pedir(`${url}/api/support/threads?search=${'a'.repeat(200)}`, adminToken);
+  assert.equal(respuesta.status, 400);
+  assert.equal((await respuesta.json()).error, 'SEARCH_TOO_LONG');
+});
+
+test('cada persona sigue viendo solo su hilo aunque busque', async () => {
+  const { url, buscado } = await prepararAmplio();
+  // Buscar no puede convertirse en una via para asomarse a hilos ajenos.
+  const ajenos = await (await pedir(`${url}/api/support/threads?limit=25&search=Relleno`, buscado.token)).json();
+  assert.equal(ajenos.total, 0, 'no debe ver hilos de otras personas');
+
+  const propio = await (await pedir(`${url}/api/support/threads?limit=25&search=Persona0`, buscado.token)).json();
+  assert.equal(propio.total, 1);
+  assert.equal(propio.items[0].userId, buscado.user.id);
+});

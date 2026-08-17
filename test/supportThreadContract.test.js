@@ -64,10 +64,21 @@ test('toda peticion de soporte lleva un tamano de pagina acotado', () => {
   const peticiones = peticionesDeSoporte();
   assert.ok(peticiones.length >= 3, `se esperaban varias peticiones, hay ${peticiones.length}`);
   for (const { archivo, tramo } of peticiones) {
-    // El limite puede ser literal o una constante interpolada; lo que no vale
-    // es pedir sin acotar.
-    assert.match(tramo, /limit=(\d+|\$\{)/, `${archivo} pide sin limite: ${tramo.slice(0, 80)}`);
+    // El limite puede ser literal, una constante interpolada, o venir de un
+    // constructor de parametros; lo que no vale es pedir sin acotar.
+    const acotado = /limit=(\d+|\$\{)/.test(tramo) || /\$\{parametros\.toString\(\)\}/.test(tramo);
+    assert.ok(acotado, `${archivo} pide sin limite: ${tramo.slice(0, 80)}`);
   }
+});
+
+test('el constructor de la consulta de hilos fija siempre el limite', () => {
+  // Es el unico sitio desde el que se pide el listado, asi que su tamano de
+  // pagina no puede ser opcional.
+  const panel = leer(PANEL);
+  const constructor = panel.match(/const consultaHilos = [\s\S]{0,400}?\n  \};/);
+  assert.ok(constructor, 'debe existir el constructor de la consulta');
+  assert.match(constructor[0], /limit: String\(THREADS_PAGE\)/, 'el limite debe fijarse siempre');
+  assert.match(constructor[0], /parametros\.set\('search'/, 'y el texto buscado viajar al servidor');
 });
 
 test('los tamanos de pagina caben por debajo del maximo del servidor', () => {
@@ -134,4 +145,17 @@ test('la metrica de tiempo de respuesta ya no se calcula en el navegador', () =>
   // Calcularla en el cliente exigia recibir el historial completo.
   assert.ok(!/function averageResponseTime/.test(fuente), 'el calculo debe estar en el servidor');
   assert.match(fuente, /formatResponseTime\(averageResponseMs\)/);
+});
+
+test('la busqueda ya no se resuelve en el navegador', () => {
+  const panel = leer(PANEL);
+  // Filtrar aqui solo miraba los hilos ya descargados: una conversacion que
+  // estuviera mas atras no aparecia nunca.
+  assert.ok(
+    !/haystack/.test(panel),
+    'el filtro local por texto debe haber desaparecido'
+  );
+  assert.match(panel, /buscarDiferido\(\)/, 'escribir debe pedir al servidor');
+  assert.match(panel, /setTimeout\(\(\) => \{ temporizadorBusqueda = null; loadThreads\(\); \}, \d+\)/,
+    'y agrupar las pulsaciones');
 });

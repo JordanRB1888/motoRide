@@ -31,6 +31,7 @@ import { resolveTrustProxy } from './services/trustProxy.js';
 import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagination.js';
 import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
+import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -904,8 +905,10 @@ const supportTime = message => new Date(message?.createdAt || 0).getTime() || 0;
 // dejaria los hilos nuevos en la ultima pagina.
 app.get('/api/support/threads', requireAuth, (req, res) => {
   let limit;
+  let search;
   try {
     limit = parseLimit(req.query.limit, SUPPORT_THREADS_PAGE);
+    search = parseSupportSearch(req.query.search);
   } catch (error) {
     return res.status(400).json({ error: error.code });
   }
@@ -934,7 +937,7 @@ app.get('/api/support/threads', requireAuth, (req, res) => {
     if (!thread.last || supportTime(message) >= supportTime(thread.last)) thread.last = message;
   }
 
-  const threads = [...byThread.values()]
+  const resumidos = [...byThread.values()]
     .sort((a, b) => supportTime(b.last) - supportTime(a.last))
     .map(thread => ({
       userId: thread.userId,
@@ -943,6 +946,11 @@ app.get('/api/support/threads', requireAuth, (req, res) => {
       unread: thread.unread,
       messageCount: thread.messageCount
     }));
+
+  // Se busca sobre TODOS los hilos y despues se corta la pagina. Al reves --que
+  // es lo que hacia la pantalla-- una conversacion que estuviera mas atras no
+  // aparecia nunca, y el panel decia que no habia ninguna coincidencia.
+  const threads = filterSupportThreads(resumidos, search);
 
   try {
     const page = paginate(threads, {

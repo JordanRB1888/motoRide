@@ -98,11 +98,21 @@ export async function renderAdminSupport(container) {
     draw();
   };
 
+  // El texto buscado viaja al servidor, que filtra TODOS los hilos antes de
+  // cortar la pagina. Filtrar aqui solo miraba los ya descargados: una
+  // conversacion que estuviera mas atras no aparecia nunca.
+  const consultaHilos = ({ cursor = null } = {}) => {
+    const parametros = new URLSearchParams({ limit: String(THREADS_PAGE) });
+    if (search.trim()) parametros.set('search', search.trim());
+    if (cursor) parametros.set('cursor', cursor);
+    return `/support/threads?${parametros.toString()}`;
+  };
+
   const loadMoreThreads = async () => {
     if (!threadsCursor || loadingMoreThreads) return;
     loadingMoreThreads = true;
     draw();
-    const page = await apiService.get(`/support/threads?limit=${THREADS_PAGE}&cursor=${encodeURIComponent(threadsCursor)}`);
+    const page = await apiService.get(consultaHilos({ cursor: threadsCursor }));
     if (disposed) return;
     loadingMoreThreads = false;
     if (Array.isArray(page?.items)) {
@@ -114,9 +124,29 @@ export async function renderAdminSupport(container) {
     draw();
   };
 
+  // Al cambiar el texto se pide la lista de nuevo desde el principio. No se
+  // recarga el hilo abierto ni los viajes: no dependen de la busqueda.
+  const loadThreads = async () => {
+    const page = await apiService.get(consultaHilos());
+    if (disposed) return;
+    threads = Array.isArray(page?.items) ? page.items : [];
+    threadsCursor = page?.nextCursor || null;
+    threadTotal = Number(page?.total) || threads.length;
+    loading = false;
+    draw();
+  };
+
+  // La busqueda se escribe letra a letra: sin agrupar seria una peticion por
+  // pulsacion.
+  let temporizadorBusqueda = null;
+  const buscarDiferido = () => {
+    if (temporizadorBusqueda) clearTimeout(temporizadorBusqueda);
+    temporizadorBusqueda = setTimeout(() => { temporizadorBusqueda = null; loadThreads(); }, 250);
+  };
+
   const load = async ({ preserveActive = true } = {}) => {
     const [threadData, tripData] = await Promise.all([
-      apiService.get(`/support/threads?limit=${THREADS_PAGE}`),
+      apiService.get(consultaHilos()),
       apiService.get('/trips')
     ]);
     if (disposed) return;
@@ -140,8 +170,9 @@ export async function renderAdminSupport(container) {
       if (filter === 'unread' && !thread.unread) return false;
       if (filter === 'resolved' && !resolvedIds.has(thread.user?.id)) return false;
       if (filter === 'open' && resolvedIds.has(thread.user?.id)) return false;
-      const haystack = `${fullName(thread.user)} ${thread.user?.email || ''} ${thread.user?.phone || ''} ${thread.lastMessage?.text || ''}`.toLowerCase();
-      return haystack.includes(search.toLowerCase());
+      // El texto ya lo resolvio el servidor sobre todos los hilos; aqui solo
+      // quedan los filtros que dependen de estado local.
+      return true;
     })
     .sort((a, b) => dateValue(b.lastMessage?.createdAt) - dateValue(a.lastMessage?.createdAt));
 
@@ -235,6 +266,7 @@ export async function renderAdminSupport(container) {
     container.querySelectorAll('[data-support-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.supportFilter; draw(); }));
     ['support-global-search', 'support-list-search'].forEach(id => container.querySelector(`#${id}`)?.addEventListener('input', event => {
       search = event.target.value;
+      buscarDiferido();
       const cursor = search.length;
       draw();
       const next = container.querySelector(`#${id}`);
