@@ -1,4 +1,5 @@
 import { db, apiService } from '../../services/apiService.js';
+import { mergeById, createCoalescer } from '../../utils/liveUpdates.js';
 import { authService } from '../../services/authService.js';
 import { renderFleetMap } from './fleetMap.js';
 import { renderUsersManagement } from './usersManagement.js';
@@ -71,12 +72,44 @@ export function renderAdminApp(container) {
   const switchTab=id=>{if(dashboardMap){dashboardMap.remove();dashboardMap=null;}disposeDriverApplicationsManagement(content);container.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.target===id));title.textContent=nav.find(item=>item[0]===id)?.[2]||id;content.innerHTML='';renderers[id]?.();};
   window.addEventListener('58express:admin-tab', event => switchTab(event.detail));
   container.querySelectorAll('.nav-item').forEach(button=>button.onclick=()=>switchTab(button.dataset.target));
-  const refresh=async()=>{const [users,trips,stats]=await Promise.all([apiService.get('/users'),apiService.get('/trips'),apiService.get('/admin/overview')]);if(Array.isArray(users))db.setCollection('users',users);if(Array.isArray(trips))db.setCollection('trips',trips);overview=stats;const applicationsButton=container.querySelector('[data-target="applications"]');if(applicationsButton)applicationsButton.dataset.count=stats?.driverApplications?.pending?String(stats.driverApplications.pending):'';const topupsButton=container.querySelector('[data-target="topups"]');if(topupsButton)topupsButton.dataset.count=stats?.walletRequests?.pendingTopups?String(stats.walletRequests.pendingTopups):'';if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();};
-  socket.on('rideRequested',data=>{notificationService.notify(admin.id,{title:'Nueva solicitud de viaje',message:`Solicitud #${data?.id?.slice(-6)||''}`,category:'TRIP',icon:'🏍️'});refresh();});
-  socket.on('tripStatusUpdated',refresh);socket.on('admin:driver_updated',refresh);socket.on('admin:driver_location',data=>{const users=db.getCollection('users')||[],driver=users.find(u=>u.id===(data.userId||data.driverId));if(driver)driver.location={...(driver.location||{}),...data};if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();});socket.on('finance:payout_updated',refresh);
-  socket.on('finance:topup_pending',()=>{notificationService.syncFromServer?.(admin.id);refresh();if(container.querySelector('.nav-item.active')?.dataset.target==='topups')renderWalletTopups(content);});
-  socket.on('finance:transaction_updated',()=>{refresh();if(container.querySelector('.nav-item.active')?.dataset.target==='topups')renderWalletTopups(content);});
+  const redrawIfDashboard=()=>{if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();};
+
+  const applyOverview=stats=>{
+    overview=stats;
+    const applicationsButton=container.querySelector('[data-target="applications"]');
+    if(applicationsButton)applicationsButton.dataset.count=stats?.driverApplications?.pending?String(stats.driverApplications.pending):'';
+    const topupsButton=container.querySelector('[data-target="topups"]');
+    if(topupsButton)topupsButton.dataset.count=stats?.walletRequests?.pendingTopups?String(stats.walletRequests.pendingTopups):'';
+  };
+
+  // Carga completa: solo al abrir el panel. Las listas enteras no vuelven a
+  // pedirse por un evento; `/api/users` son 7 MB con el volumen de seis meses.
+  const loadAll=async()=>{
+    const [users,trips,stats]=await Promise.all([apiService.get('/users'),apiService.get('/trips'),apiService.get('/admin/overview')]);
+    if(Array.isArray(users))db.setCollection('users',users);
+    if(Array.isArray(trips))db.setCollection('trips',trips);
+    applyOverview(stats);
+    redrawIfDashboard();
+  };
+
+  // Las cifras agregadas si hay que pedirlas, pero son un objeto pequeno y las
+  // rafagas de eventos se funden en una sola peticion por segundo.
+  const refreshOverview=createCoalescer(async()=>{
+    const stats=await apiService.get('/admin/overview');
+    if(!stats)return;
+    applyOverview(stats);
+    redrawIfDashboard();
+  },{intervalMs:1000});
+
+  // El registro que cambio viene dentro del propio evento, asi que se aplica
+  // sobre lo que ya esta en memoria en lugar de volver a descargar la lista.
+  const patchTrip=patch=>{db.setCollection('trips',mergeById(db.getCollection('trips'),patch));redrawIfDashboard();};
+  const patchUser=patch=>{db.setCollection('users',mergeById(db.getCollection('users'),patch));redrawIfDashboard();};
+  socket.on('rideRequested',data=>{notificationService.notify(admin.id,{title:'Nueva solicitud de viaje',message:`Solicitud #${data?.id?.slice(-6)||''}`,category:'TRIP',icon:'🏍️'});patchTrip(data);refreshOverview();});
+  socket.on('tripStatusUpdated',data=>{patchTrip({...data,id:data?.tripId||data?.id});refreshOverview();});socket.on('admin:driver_updated',data=>{patchUser(data);refreshOverview();});socket.on('admin:driver_location',data=>{const users=db.getCollection('users')||[],driver=users.find(u=>u.id===(data.userId||data.driverId));if(driver)driver.location={...(driver.location||{}),...data};if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();});socket.on('finance:payout_updated',refreshOverview);
+  socket.on('finance:topup_pending',()=>{notificationService.syncFromServer?.(admin.id);refreshOverview();if(container.querySelector('.nav-item.active')?.dataset.target==='topups')renderWalletTopups(content);});
+  socket.on('finance:transaction_updated',()=>{refreshOverview();if(container.querySelector('.nav-item.active')?.dataset.target==='topups')renderWalletTopups(content);});
   socket.on('driver_application:new',()=>{notificationService.syncFromServer?.(admin.id);if(container.querySelector('.nav-item.active')?.dataset.target==='applications')renderDriverApplicationsManagement(content);});
   socket.on('driver_application:updated',()=>{if(container.querySelector('.nav-item.active')?.dataset.target==='applications')renderDriverApplicationsManagement(content);});
-  dashboard();refresh();
+  dashboard();loadAll();
 }
