@@ -3,6 +3,7 @@ import { authService } from './authService.js';
 import { apiService } from './apiService.js';
 import { eventLogger } from '../utils/logger.js';
 import { showToast } from '../components/toast.js';
+import { createLocationThrottle } from '../utils/locationThrottle.js';
 
 class DriverGpsTracker {
   constructor() {
@@ -12,10 +13,15 @@ class DriverGpsTracker {
     this.batteryLevel = null;
     this.activeUser = null;
     this.heartbeatTimer = null;
+    this.locationThrottle = createLocationThrottle();
   }
 
   async startTracking(user) {
     if (this.isTracking) return;
+
+    // Al arrancar o reconectar, el servidor no sabe dónde está la moto: la
+    // primera muestra debe viajar sin esperar al regulador.
+    this.locationThrottle.reset();
 
     this.activeUser = user || authService.getCurrentUser();
     if (!this.activeUser || !this.activeUser.id) {
@@ -123,7 +129,15 @@ class DriverGpsTracker {
 
     // Reuse the same GPS sample locally so the driver sees the exact vehicle
     // position passengers receive, without starting a second location watcher.
+    // El mapa propio no se regula: se dibuja con cada muestra, sin coste de red.
     window.dispatchEvent(new CustomEvent('58express:driver-position', { detail: payload }));
+
+    // `watchPosition` con alta precisión entrega muestras varias veces por
+    // segundo en una moto en marcha. Enviarlas todas gasta la batería y los
+    // datos del conductor —que los paga él— por partida doble, ya que cada una
+    // salía por socket y además por REST.
+    if (!this.locationThrottle.shouldSend(payload, now)) return;
+    this.locationThrottle.markSent(payload, now);
 
     // Emitir telemetría GPS continua sobre WebSocket real
     const socket = socketClient.getSocket();
@@ -150,6 +164,14 @@ class DriverGpsTracker {
       batteryLevel: this.batteryLevel,
       timestamp: Date.now(),
     };
+
+    // Los errores de GPS --permiso denegado, señal perdida-- pueden repetirse
+    // en ráfaga, y esta rama emitía sin regular. La posición de reserva es
+    // siempre la misma, así que el regulador la deja pasar como señal de vida
+    // espaciada en vez de una vez por error.
+    const now = Date.now();
+    if (!this.locationThrottle.shouldSend(fallbackPayload, now)) return;
+    this.locationThrottle.markSent(fallbackPayload, now);
 
     const socket = socketClient.getSocket();
     if (socket && socket.connected) {
