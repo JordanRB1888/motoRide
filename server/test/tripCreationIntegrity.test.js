@@ -23,7 +23,7 @@ function tarifaCanonica({ distanceKm, durationMin, rideType = 'MOTO' }) {
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-int-'));
   const dataFile = path.join(tempDir, 'database.json');
-  const port = 7200 + Math.floor(Math.random() * 300);
+  const port = 14100 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: { ...process.env, PORT: String(port), DATA_FILE: dataFile, JWT_SECRET: 'integrity-test-secret' },

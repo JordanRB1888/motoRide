@@ -45,7 +45,7 @@ function waitForBoot(child) {
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-min-'));
   const dataFile = path.join(tempDir, 'database.json');
-  const port = 5900 + Math.floor(Math.random() * 400);
+  const port = 10500 + Math.floor(Math.random() * 399);
   const child = startProcess(dataFile, port);
   t.after(() => child.kill());
   await waitForBoot(child);
@@ -291,7 +291,7 @@ test('un viaje histórico con perfil incrustado queda saneado al responder', asy
   // Fase 1: arrancar, registrar al pasajero y detener el servidor.
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-hist-'));
   const dataFile = path.join(tempDir, 'database.json');
-  const port = 6400 + Math.floor(Math.random() * 300);
+  const port = 10500 + Math.floor(Math.random() * 399);
 
   const primero = startProcess(dataFile, port);
   await waitForBoot(primero);

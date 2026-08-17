@@ -13,7 +13,7 @@ let escenario = null;
 
 async function levantarServidor() {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-support-'));
-  const port = 7700 + Math.floor(Math.random() * 700);
+  const port = 13700 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: {

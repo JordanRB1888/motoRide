@@ -18,7 +18,7 @@ let escenario = null;
 
 async function levantarServidor() {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-ratelimit-'));
-  const port = 6200 + Math.floor(Math.random() * 700);
+  const port = 13300 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: {

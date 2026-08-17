@@ -13,7 +13,7 @@ const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 test('pasajero, conductor y administración comparten el ciclo de una carrera', async (t) => {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-'));
   const dataFile = path.join(tempDir, 'database.json');
-  const port = 4100 + Math.floor(Math.random() * 500);
+  const port = 10900 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: { ...process.env, PORT: String(port), DATA_FILE: dataFile },

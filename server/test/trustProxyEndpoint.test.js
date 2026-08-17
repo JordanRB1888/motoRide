@@ -11,7 +11,7 @@ const arrancados = [];
 
 async function levantar(t, env) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-proxy-'));
-  const port = 6950 + Math.floor(Math.random() * 700);
+  const port = 15300 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: {

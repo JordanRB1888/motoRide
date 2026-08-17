@@ -17,7 +17,7 @@ const REQUIRED_DOCS = [
 
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-evt-'));
-  const port = 8500 + Math.floor(Math.random() * 400);
+  const port = 11700 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: { ...process.env, PORT: String(port), DATA_FILE: path.join(tempDir, 'database.json'), JWT_SECRET: 'events-test-secret' },

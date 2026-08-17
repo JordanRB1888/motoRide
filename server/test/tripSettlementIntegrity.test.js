@@ -17,7 +17,7 @@ const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) /
 
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-settle-'));
-  const port = 7600 + Math.floor(Math.random() * 300);
+  const port = 14900 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: { ...process.env, PORT: String(port), DATA_FILE: path.join(tempDir, 'database.json'), JWT_SECRET: 'settlement-test-secret' },

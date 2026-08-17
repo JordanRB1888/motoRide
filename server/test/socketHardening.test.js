@@ -11,7 +11,7 @@ const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-hardening-'));
-  const port = 5500 + Math.floor(Math.random() * 400);
+  const port = 12900 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: {
