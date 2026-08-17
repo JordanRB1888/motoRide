@@ -14,19 +14,12 @@ const tripStatus = status => ({ SEARCHING: 'Buscando conductor', DRIVER_ASSIGNED
 const ACTIVE_TRIP_STATUSES = new Set(['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP']);
 const QUICK_REPLIES = ['Voy a revisar tu caso', '¿Puedes compartir más detalles?', 'Estamos asignando otro conductor'];
 
-function averageResponseTime(threads) {
-  const samples = [];
-  threads.forEach(thread => {
-    const ordered = thread.messages || [];
-    ordered.forEach((message, index) => {
-      if (message.senderRole === 'admin') {
-        const previous = ordered.slice(0, index).reverse().find(item => item.senderRole !== 'admin');
-        if (previous) samples.push(Math.max(0, dateValue(message.createdAt) - dateValue(previous.createdAt)));
-      }
-    });
-  });
-  if (!samples.length) return '—';
-  const seconds = Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length / 1000);
+// El cálculo se movió al servidor: recorrerlo en el navegador exigía recibir el
+// historial completo de todos los hilos, que es justo lo que el listado ha
+// dejado de enviar. Aquí solo queda el formato, idéntico al anterior.
+function formatResponseTime(milliseconds) {
+  if (!Number.isFinite(milliseconds)) return '—';
+  const seconds = Math.round(milliseconds / 1000);
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
@@ -53,19 +46,36 @@ export async function renderAdminSupport(container) {
   let search = '';
   let filter = 'all';
   let pendingImage = null;
+  // Los mensajes ya no viajan dentro del listado: se cargan del hilo abierto.
+  let activeMessages = [];
+  let averageResponseMs = null;
+  let threadTotal = 0;
   let loading = true;
   const resolvedIds = new Set(JSON.parse(localStorage.getItem('58express_support_resolved') || '[]'));
 
+  // El endpoint devuelve del más reciente al más antiguo; se invierte para
+  // mostrar la conversación en su orden natural.
+  const loadActiveMessages = async () => {
+    if (!activeId) { activeMessages = []; return; }
+    const page = await apiService.get(`/support/threads/${encodeURIComponent(activeId)}/messages?limit=50`);
+    if (disposed) return;
+    activeMessages = Array.isArray(page?.items) ? [...page.items].reverse() : [];
+  };
+
   const load = async ({ preserveActive = true } = {}) => {
     const [threadData, tripData] = await Promise.all([
-      apiService.get('/support/threads'),
+      apiService.get('/support/threads?limit=100'),
       apiService.get('/trips')
     ]);
     if (disposed) return;
-    threads = Array.isArray(threadData) ? threadData : [];
+    threads = Array.isArray(threadData?.items) ? threadData.items : [];
+    threadTotal = Number(threadData?.total) || threads.length;
+    averageResponseMs = Number.isFinite(threadData?.averageResponseMs) ? threadData.averageResponseMs : null;
     trips = Array.isArray(tripData) ? tripData : [];
     if (!preserveActive || !threads.some(thread => thread.user?.id === activeId)) activeId = threads[0]?.user?.id || null;
     localStorage.removeItem('58express_support_focus');
+    await loadActiveMessages();
+    if (disposed) return;
     loading = false;
     draw();
   };
@@ -77,14 +87,14 @@ export async function renderAdminSupport(container) {
       if (filter === 'unread' && !thread.unread) return false;
       if (filter === 'resolved' && !resolvedIds.has(thread.user?.id)) return false;
       if (filter === 'open' && resolvedIds.has(thread.user?.id)) return false;
-      const haystack = `${fullName(thread.user)} ${thread.user?.email || ''} ${thread.user?.phone || ''} ${thread.messages?.at(-1)?.text || ''}`.toLowerCase();
+      const haystack = `${fullName(thread.user)} ${thread.user?.email || ''} ${thread.user?.phone || ''} ${thread.lastMessage?.text || ''}`.toLowerCase();
       return haystack.includes(search.toLowerCase());
     })
-    .sort((a, b) => dateValue(b.messages?.at(-1)?.createdAt) - dateValue(a.messages?.at(-1)?.createdAt));
+    .sort((a, b) => dateValue(b.lastMessage?.createdAt) - dateValue(a.lastMessage?.createdAt));
 
   const threadCard = thread => {
     const user = thread.user || {};
-    const last = thread.messages?.at(-1);
+    const last = thread.lastMessage;
     const resolved = resolvedIds.has(user.id);
     return `<button class="support-thread ${user.id === activeId ? 'active' : ''}" data-thread-id="${escapeHtml(user.id)}" type="button">
       <span class="support-avatar ${user.role === 'driver' ? 'driver' : ''}">${neutralizePrivatePhoto(user.avatar) ? `<img src="${escapeHtml(neutralizePrivatePhoto(user.avatar))}" alt="">` : escapeHtml(initials(user))}<i></i></span>
@@ -121,21 +131,21 @@ export async function renderAdminSupport(container) {
       <section class="support-metrics">
         <article class="amber"><span>${icon('message', 23)}</span><div><small>Conversaciones</small><strong>${open}</strong><em>Abiertas ahora</em></div></article>
         <article class="cyan"><span>${icon('bell', 23)}</span><div><small>Sin leer</small><strong>${unread}</strong><em>Requieren atención</em></div></article>
-        <article class="green"><span>${icon('clock', 23)}</span><div><small>Tiempo medio</small><strong>${averageResponseTime(threads)}</strong><em>Primera respuesta</em></div></article>
+        <article class="green"><span>${icon('clock', 23)}</span><div><small>Tiempo medio</small><strong>${formatResponseTime(averageResponseMs)}</strong><em>Primera respuesta</em></div></article>
         <article class="lime"><span>${icon('checkCircle', 23)}</span><div><small>Resueltos</small><strong>${resolved}</strong><em>Casos cerrados</em></div></article>
       </section>
 
       <section class="support-workspace ${active ? '' : 'no-active'}">
         <aside class="support-inbox">
-          <header><h2>Conversaciones</h2><span>${threads.length}</span></header>
-          <nav>${[['all','Todas',threads.length],['unread','Sin leer',unread],['open','Abiertas',open],['resolved','Resueltas',resolved]].map(([id,label,count]) => `<button class="${filter === id ? 'active' : ''}" data-support-filter="${id}" type="button">${label}<b>${count}</b></button>`).join('')}</nav>
+          <header><h2>Conversaciones</h2><span>${threadTotal}</span></header>
+          <nav>${[['all','Todas',threadTotal],['unread','Sin leer',unread],['open','Abiertas',open],['resolved','Resueltas',resolved]].map(([id,label,count]) => `<button class="${filter === id ? 'active' : ''}" data-support-filter="${id}" type="button">${label}<b>${count}</b></button>`).join('')}</nav>
           <label class="support-list-search">${icon('search', 15)}<input id="support-list-search" value="${escapeHtml(search)}" placeholder="Buscar conversación"></label>
           <div class="support-thread-list">${loading ? '<div class="support-empty">Cargando conversaciones…</div>' : filtered.map(threadCard).join('') || '<div class="support-empty">No hay conversaciones con este filtro.</div>'}</div>
         </aside>
 
         <main class="support-chat-panel">
           ${active ? `<header class="support-chat-head"><div class="support-avatar ${user.role === 'driver' ? 'driver' : ''}">${neutralizePrivatePhoto(user.avatar) ? `<img src="${escapeHtml(neutralizePrivatePhoto(user.avatar))}" alt="">` : escapeHtml(initials(user))}<i></i></div><div><strong>${escapeHtml(fullName(user))}</strong><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} · ID ${escapeHtml(String(user.id).slice(-10))}</small></div><div class="support-chat-actions"><button data-copy-user title="Copiar datos">${icon('info',17)}</button>${user.phone ? `<a href="tel:${escapeHtml(user.phone)}" title="Llamar">${icon('phone',17)}</a>` : ''}</div></header>
-          <div id="support-messages" class="support-messages"><time class="support-day">Conversación de soporte</time>${active.messages?.map(messageBubble).join('') || '<div class="support-empty">Aún no hay mensajes en esta conversación.</div>'}</div>
+          <div id="support-messages" class="support-messages"><time class="support-day">Conversación de soporte</time>${activeMessages.map(messageBubble).join('') || '<div class="support-empty">Aún no hay mensajes en esta conversación.</div>'}</div>
           <div class="support-quick-replies">${QUICK_REPLIES.map(reply => `<button data-quick-reply="${escapeHtml(reply)}" type="button">${escapeHtml(reply)}</button>`).join('')}</div>
           <form id="reply-form" class="support-composer"><label class="support-attach" title="Adjuntar imagen">${icon('upload',18)}<input id="support-image" type="file" accept="image/jpeg,image/png,image/webp"></label><button class="support-template" type="button">Respuestas rápidas ${icon('chevronDown',13)}</button><label class="support-reply-wrap">${pendingImage ? `<span>Imagen lista ${icon('check',12)}</span>` : ''}<input id="reply" placeholder="Escribe una respuesta oficial…" autocomplete="off"></label><button class="support-send" type="submit">Enviar ${icon('send',16)}</button></form>` : '<div class="support-no-selection"><span>'+icon('message',30)+'</span><h3>Selecciona una conversación</h3><p>Los mensajes aparecerán aquí en tiempo real.</p></div>'}
         </main>
@@ -143,7 +153,7 @@ export async function renderAdminSupport(container) {
         ${active ? `<aside class="support-context">
           <section><header><h3>Información del ${user.role === 'driver' ? 'conductor' : 'pasajero'}</h3></header><div class="support-profile-row"><span class="support-avatar large ${user.role === 'driver' ? 'driver' : ''}">${neutralizePrivatePhoto(user.avatar) ? `<img src="${escapeHtml(neutralizePrivatePhoto(user.avatar))}" alt="">` : escapeHtml(initials(user))}</span><div><strong>${escapeHtml(fullName(user))}</strong><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} verificado</small></div></div><dl><div><dt>${icon('phone',13)} Teléfono</dt><dd>${escapeHtml(user.phone || 'No disponible')}</dd></div><div><dt>${icon('message',13)} Correo</dt><dd>${escapeHtml(user.email || 'No disponible')}</dd></div></dl></section>
           <section class="support-trip-context"><header><h3>${activeTrip ? 'Viaje activo' : 'Último viaje'}</h3><span class="${activeTrip ? 'live' : ''}">${tripStatus(latestTrip?.status)}</span></header>${latestTrip ? `<code>#${escapeHtml(String(latestTrip.id).slice(-12))}</code><div class="support-route"><p><i class="pickup"></i><span>${escapeHtml(routeFrom)}</span></p><p><i class="destination"></i><span>${escapeHtml(routeTo)}</span></p></div><footer><span>${fullDate(latestTrip.updatedAt || latestTrip.createdAt)}</span><strong>$${Number(latestTrip.fareUSD || latestTrip.fareEUR || latestTrip.pricing?.fareUSD || 0).toFixed(2)}</strong></footer>` : '<p class="support-context-empty">Este usuario no tiene viajes registrados.</p>'}</section>
-          <section class="support-case"><header><h3>Información del caso</h3><span>${active.unread ? 'Prioridad media' : resolvedIds.has(user.id) ? 'Resuelto' : 'En seguimiento'}</span></header><dl><div><dt>Estado</dt><dd>${resolvedIds.has(user.id) ? 'Resuelto' : 'En progreso'}</dd></div><div><dt>Asignado a</dt><dd>Admin Soporte</dd></div><div><dt>Última actividad</dt><dd>${shortTime(active.messages?.at(-1)?.createdAt)}</dd></div></dl><div class="support-tags"><span>soporte</span><span>${user.role === 'driver' ? 'conductor' : 'pasajero'}</span>${activeTrip ? '<span>viaje activo</span>' : ''}</div></section>
+          <section class="support-case"><header><h3>Información del caso</h3><span>${active.unread ? 'Prioridad media' : resolvedIds.has(user.id) ? 'Resuelto' : 'En seguimiento'}</span></header><dl><div><dt>Estado</dt><dd>${resolvedIds.has(user.id) ? 'Resuelto' : 'En progreso'}</dd></div><div><dt>Asignado a</dt><dd>Admin Soporte</dd></div><div><dt>Última actividad</dt><dd>${shortTime(active.lastMessage?.createdAt)}</dd></div></dl><div class="support-tags"><span>soporte</span><span>${user.role === 'driver' ? 'conductor' : 'pasajero'}</span>${activeTrip ? '<span>viaje activo</span>' : ''}</div></section>
           <section class="support-context-actions"><button id="support-resolve" class="${resolvedIds.has(user.id) ? 'resolved' : ''}" type="button">${icon(resolvedIds.has(user.id) ? 'history' : 'checkCircle',17)} ${resolvedIds.has(user.id) ? 'Reabrir caso' : 'Marcar como resuelto'}</button><button data-copy-user type="button">${icon('copy',17)} Copiar datos</button></section>
         </aside>` : ''}
       </section>
@@ -157,9 +167,14 @@ export async function renderAdminSupport(container) {
     container.querySelectorAll('[data-thread-id]').forEach(button => button.addEventListener('click', async () => {
       activeId = button.dataset.threadId;
       pendingImage = null;
+      // Se repinta antes de la peticion para que el cambio de hilo sea
+      // inmediato y no se vea la conversacion anterior mientras carga.
+      activeMessages = [];
+      draw();
       await apiService.patch(`/support/threads/${encodeURIComponent(activeId)}/read`, {});
       const thread = threads.find(item => item.user?.id === activeId);
       if (thread) thread.unread = 0;
+      await loadActiveMessages();
       draw();
     }));
     container.querySelectorAll('[data-support-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.supportFilter; draw(); }));
@@ -188,7 +203,8 @@ export async function renderAdminSupport(container) {
       const sent = await apiService.post('/support/messages', { recipientId: activeId, text, image: pendingImage });
       if (!sent) { submit.disabled = false; return showToast('No se pudo enviar la respuesta', 'error'); }
       const thread = threads.find(item => item.user?.id === activeId);
-      if (thread && !thread.messages.some(message => message.id === sent.id)) thread.messages.push(sent);
+      if (!activeMessages.some(message => message.id === sent.id)) activeMessages.push(sent);
+      if (thread) { thread.lastMessage = sent; thread.messageCount = Number(thread.messageCount || 0) + 1; }
       pendingImage = null;
       resolvedIds.delete(activeId); saveResolved();
       draw();
@@ -228,8 +244,12 @@ export async function renderAdminSupport(container) {
   const onSupportMessage = payload => {
     if (disposed) return;
     const thread = threads.find(item => item.user?.id === payload?.conversationUserId);
-    if (thread && !thread.messages.some(message => message.id === payload.id)) {
-      thread.messages.push(payload);
+    if (thread && thread.lastMessage?.id !== payload.id) {
+      thread.lastMessage = payload;
+      thread.messageCount = Number(thread.messageCount || 0) + 1;
+      if (payload.conversationUserId === activeId && !activeMessages.some(message => message.id === payload.id)) {
+        activeMessages.push(payload);
+      }
       if (payload.senderRole !== 'admin' && payload.conversationUserId !== activeId) thread.unread = Number(thread.unread || 0) + 1;
       if (payload.senderRole !== 'admin') { resolvedIds.delete(payload.conversationUserId); saveResolved(); }
       draw();

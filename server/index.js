@@ -28,6 +28,8 @@ import { createDatabasePersistence } from './services/databasePersistence.js';
 import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createConnectionLimiter } from './services/connectionLimit.js';
 import { resolveTrustProxy } from './services/trustProxy.js';
+import { parseLimit, paginate } from './domain/pagination.js';
+import { averageAdminResponseMs } from './domain/supportMetrics.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -825,15 +827,123 @@ app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), (req
   res.json(event);
 });
 
+// Tamaños de página. El máximo es lo que impide que el cliente anule la
+// paginación pidiendo `?limit=999999`. El de mensajes es más estrecho porque
+// cada registro puede arrastrar todavía una imagen en base64: eso desaparece
+// cuando entre la infraestructura de adjuntos de la fase 2B-2-4.
+const SUPPORT_THREADS_PAGE = { defaultLimit: 25, maxLimit: 100 };
+const SUPPORT_MESSAGES_PAGE = { defaultLimit: 30, maxLimit: 50 };
+
+// Un hilo de soporte se resume para el listado: el texto completo y, sobre
+// todo, la imagen en base64 se quedan fuera. Devolver el historial entero de
+// todos los hilos hacia el panel producia 149 MB en una sola respuesta con el
+// volumen de seis meses, medido contra el servidor real.
+function summarizeSupportMessage(message) {
+  if (!message) return null;
+  return {
+    id: message.id,
+    senderId: message.senderId,
+    senderRole: message.senderRole,
+    text: sanitizeText(message.text || '', 160),
+    hasImage: Boolean(message.image),
+    read: Boolean(message.read),
+    createdAt: message.createdAt
+  };
+}
+
+const supportTime = message => new Date(message?.createdAt || 0).getTime() || 0;
+
+// Los hilos se ordenan por actividad reciente. El orden anterior era el de
+// aparicion del primer mensaje, que sin paginacion daba igual; con paginacion
+// dejaria los hilos nuevos en la ultima pagina.
 app.get('/api/support/threads', requireAuth, (req, res) => {
-  const messages = req.user.role === 'admin' ? database.supportMessages : database.supportMessages.filter(message => message.conversationUserId === req.user.id);
-  const grouped = new Map();
+  let limit;
+  try {
+    limit = parseLimit(req.query.limit, SUPPORT_THREADS_PAGE);
+  } catch (error) {
+    return res.status(400).json({ error: error.code });
+  }
+
+  const messages = req.user.role === 'admin'
+    ? database.supportMessages
+    : database.supportMessages.filter(message => message.conversationUserId === req.user.id);
+
+  // Indice por identificador: resolver el usuario con find() dentro del bucle
+  // costaba O(hilos x usuarios), unos 150 millones de comparaciones con el
+  // volumen de seis meses.
+  const usersById = new Map(database.users.map(user => [user.id, user]));
+
+  const byThread = new Map();
   for (const message of messages) {
     const id = message.conversationUserId;
-    if (!grouped.has(id)) grouped.set(id, []);
-    grouped.get(id).push(message);
+    let thread = byThread.get(id);
+    if (!thread) {
+      thread = { userId: id, last: null, unread: 0, messageCount: 0 };
+      byThread.set(id, thread);
+    }
+    thread.messageCount += 1;
+    // `unread` es relativo a quien pregunta, igual que antes: para
+    // administracion cuenta lo que escribio la otra parte, y viceversa.
+    if (!message.read && message.senderRole !== req.user.role) thread.unread += 1;
+    if (!thread.last || supportTime(message) >= supportTime(thread.last)) thread.last = message;
   }
-  res.json([...grouped].map(([userId, items]) => ({ user: publicUser(database.users.find(user => user.id === userId)), messages: items.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)), unread: items.filter(item => !item.read && item.senderRole !== req.user.role).length })));
+
+  const threads = [...byThread.values()]
+    .sort((a, b) => supportTime(b.last) - supportTime(a.last))
+    .map(thread => ({
+      userId: thread.userId,
+      user: publicUser(usersById.get(thread.userId)),
+      lastMessage: summarizeSupportMessage(thread.last),
+      unread: thread.unread,
+      messageCount: thread.messageCount
+    }));
+
+  try {
+    const page = paginate(threads, {
+      limit,
+      cursor: req.query.cursor,
+      idOf: thread => thread.userId,
+      sortKeyOf: thread => thread.lastMessage?.createdAt || ''
+    });
+    // El tiempo medio de respuesta se calculaba en el navegador recorriendo el
+    // historial completo, que es justo lo que este listado ha dejado de
+    // enviar. Se calcula aquí sobre el mismo conjunto que ve quien pregunta.
+    return res.json({ ...page, averageResponseMs: averageAdminResponseMs(messages) });
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
+});
+
+// Los mensajes de un hilo concreto, del mas reciente al mas antiguo, para que
+// la primera pagina sea la conversacion actual.
+app.get('/api/support/threads/:userId/messages', requireAuth, (req, res) => {
+  const { userId } = req.params;
+  // Solo administracion o la persona duena del hilo.
+  if (req.user.role !== 'admin' && req.user.id !== userId) {
+    return res.status(403).json({ error: 'SUPPORT_THREAD_FORBIDDEN' });
+  }
+
+  let limit;
+  try {
+    limit = parseLimit(req.query.limit, SUPPORT_MESSAGES_PAGE);
+  } catch (error) {
+    return res.status(400).json({ error: error.code });
+  }
+
+  const messages = database.supportMessages
+    .filter(message => message.conversationUserId === userId)
+    .sort((a, b) => supportTime(b) - supportTime(a));
+
+  try {
+    const page = paginate(messages, {
+      limit,
+      cursor: req.query.cursor,
+      sortKeyOf: message => message.createdAt || ''
+    });
+    return res.json(page);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
 });
 
 app.post('/api/support/messages', requireAuth, (req, res) => {
