@@ -241,3 +241,40 @@ test('los dos modos recorren exactamente el mismo listado', () => {
   assert.deepEqual(porCursor, porPagina);
   assert.equal(porCursor.length, 47);
 });
+
+// ------------------------------------------------- robustez del cursor
+
+test('el cursor sobrevive a cualquier caracter en la clave o el identificador', () => {
+  // La version anterior unia los dos valores con un separador. Cualquier
+  // caracter que se elija puede aparecer dentro de uno de ellos y partir el
+  // cursor por el sitio equivocado; por eso se usa JSON.
+  const hostiles = [
+    'con espacios', 'con,comas', 'con|barras', 'con"comillas"', "con'apostrofes'",
+    'con\barras invertidas', 'con\nsalto', 'con\ttabulador', 'con:dos:puntos',
+    '["ya","es","json"]', '{}', 'con\u0000nulo', 'acentuado: ñáéíóú', '😀'
+  ];
+  for (const sortKey of hostiles) {
+    for (const id of hostiles) {
+      const cursor = encodeCursor({ sortKey, id });
+      assert.match(cursor, /^[A-Za-z0-9_-]+$/, `cursor no seguro para URL: ${sortKey} / ${id}`);
+      assert.deepEqual(
+        decodeCursor(cursor), { sortKey, id },
+        `no sobrevive el par ${JSON.stringify([sortKey, id])}`
+      );
+    }
+  }
+});
+
+test('un cursor que decodifica a algo con otra forma se rechaza', () => {
+  const comoBase64Url = texto => Buffer.from(texto, 'utf8').toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  // Manipulaciones que decodifican a JSON valido pero no al par esperado.
+  for (const carga of ['null', '{}', '[]', '["solo"]', '["a","b","c"]', '[1,2]', '["a",""]', '"texto"', '42']) {
+    assert.throws(
+      () => decodeCursor(comoBase64Url(carga)),
+      /INVALID_CURSOR/,
+      `debia rechazarse: ${carga}`
+    );
+  }
+});
