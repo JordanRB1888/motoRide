@@ -25,6 +25,7 @@ import {
 } from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
 import { createDatabasePersistence } from './services/databasePersistence.js';
+import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -1342,11 +1343,30 @@ io.on('connection', (socket) => {
   socket.join(`${socket.data.auth.role}s`);
   socket.join(`user:${socket.data.auth.userId}`);
 
+  // Contador de frecuencia propio de este socket: nace y muere con él, así que
+  // no queda ninguna estructura global creciendo por conexión.
+  const rateLimiter = createEventRateLimiter();
+
+  // Devuelve `true` si el evento debe descartarse. El aviso al cliente sale
+  // una sola vez por ventana: responder a cada evento descartado convertiría
+  // la defensa en un amplificador.
+  const rateLimited = (event) => {
+    const rechazo = rateLimiter.check(event);
+    if (!rechazo) return false;
+    if (rechazo.notificar) {
+      socket.emit('socket:rate_limited', { event, retryAfterMs: rechazo.retryAfterMs });
+    }
+    return true;
+  };
+
   // Registra un handler de evento a prueba de payloads hostiles. Un valor por
   // defecto (`data = {}`) no cubre un `null` explícito, así que desestructurar
   // lanzaba y, al ser síncrono, tumbaba el proceso entero. Aquí el payload se
   // normaliza a objeto y cualquier excepción queda contenida en el socket.
   const on = (event, handler) => socket.on(event, payload => {
+    // La frecuencia se comprueba antes de tocar la base de datos, de emitir a
+    // otras salas y de escribir en el registro.
+    if (rateLimited(event)) return;
     const data = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
     try {
       handler(data);
@@ -1357,6 +1377,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join:room', (room) => {
+    if (rateLimited('join:room')) return;
     const allowedRooms = [`${socket.data.auth.role}s`, `user:${socket.data.auth.userId}`];
     if (!allowedRooms.includes(room)) return;
     socket.join(room);
