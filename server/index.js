@@ -1908,7 +1908,7 @@ io.on('connection', (socket) => {
           persistRecord('users', driver);
           emitDriverPresence(driver);
         } else {
-          io.to('admins').emit('admin:driver_updated', { userId: driverId, status: DRIVER_STATUS.OFFLINE });
+          io.to('admins').emit('admin:driver_updated', { id: driverId, userId: driverId, status: DRIVER_STATUS.OFFLINE });
         }
       }
     }

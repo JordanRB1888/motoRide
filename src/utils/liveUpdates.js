@@ -37,6 +37,32 @@ export function mergeById(items, patch, idOf = item => item?.id) {
 }
 
 /**
+ * Da forma canónica al identificador de un evento entrante.
+ *
+ * El mismo evento llega con el identificador en sitios distintos según quién
+ * lo emita: `admin:driver_updated` viaja como el usuario completo —con `id`—
+ * en el caso normal, pero la rama que salta cuando el conductor ya no está en
+ * la base lo mandaba solo como `userId`. Y `tripStatusUpdated` usa `tripId`.
+ *
+ * Sin normalizar, `mergeById` no encuentra el registro: o lo descarta —y la
+ * actualización se pierde en silencio— o añade un duplicado en cada evento.
+ * Ninguna de las dos cosas se nota hasta que alguien mira la pantalla.
+ *
+ * Devuelve `null` si ninguna de las claves trae un identificador utilizable,
+ * para que quien llama pueda descartar el evento a conciencia.
+ */
+export function withCanonicalId(patch, claves = ['id', 'userId', 'driverId']) {
+  if (!patch || typeof patch !== 'object') return null;
+  for (const clave of claves) {
+    const valor = patch[clave];
+    if (typeof valor === 'string' && valor !== '') {
+      return patch.id === valor ? patch : { ...patch, id: valor };
+    }
+  }
+  return null;
+}
+
+/**
  * Agrupa llamadas repetidas en una sola.
  *
  * La primera se ejecuta de inmediato, para que el panel reaccione al instante.

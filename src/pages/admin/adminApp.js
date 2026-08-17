@@ -1,5 +1,5 @@
 import { db, apiService } from '../../services/apiService.js';
-import { mergeById, createCoalescer } from '../../utils/liveUpdates.js';
+import { mergeById, createCoalescer, withCanonicalId } from '../../utils/liveUpdates.js';
 import { authService } from '../../services/authService.js';
 import { renderFleetMap } from './fleetMap.js';
 import { renderUsersManagement } from './usersManagement.js';
@@ -139,10 +139,10 @@ export function renderAdminApp(container) {
 
   // El registro que cambio viene dentro del propio evento, asi que se aplica
   // sobre lo que ya esta en memoria en lugar de volver a descargar la lista.
-  const patchTrip=patch=>{const trips=mergeById(db.getCollection('trips'),patch);db.setCollection('trips',trips);ensureParticipants(trips);redrawIfDashboard();};
-  const patchUser=patch=>{db.setCollection('users',mergeById(db.getCollection('users'),patch));redrawIfDashboard();};
+  const patchTrip=patch=>{const normalizado=withCanonicalId(patch,['id','tripId']);if(!normalizado)return;const trips=mergeById(db.getCollection('trips'),normalizado);db.setCollection('trips',trips);ensureParticipants(trips);redrawIfDashboard();};
+  const patchUser=patch=>{const normalizado=withCanonicalId(patch,['id','userId','driverId']);if(!normalizado)return;db.setCollection('users',mergeById(db.getCollection('users'),normalizado));redrawIfDashboard();};
   socket.on('rideRequested',data=>{notificationService.notify(admin.id,{title:'Nueva solicitud de viaje',message:`Solicitud #${data?.id?.slice(-6)||''}`,category:'TRIP',icon:'🏍️'});patchTrip(data);refreshOverview();});
-  socket.on('tripStatusUpdated',data=>{patchTrip({...data,id:data?.tripId||data?.id});refreshOverview();});socket.on('admin:driver_updated',data=>{patchUser(data);refreshOverview();});socket.on('admin:driver_location',data=>{const users=db.getCollection('users')||[],driver=users.find(u=>u.id===(data.userId||data.driverId));if(driver)driver.location={...(driver.location||{}),...data};if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();});socket.on('finance:payout_updated',refreshOverview);
+  socket.on('tripStatusUpdated',data=>{patchTrip(data);refreshOverview();});socket.on('admin:driver_updated',data=>{patchUser(data);refreshOverview();});socket.on('admin:driver_location',data=>{const users=db.getCollection('users')||[],driver=users.find(u=>u.id===(data.userId||data.driverId));if(driver)driver.location={...(driver.location||{}),...data};if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();});socket.on('finance:payout_updated',refreshOverview);
   socket.on('finance:topup_pending',()=>{notificationService.syncFromServer?.(admin.id);refreshOverview();if(container.querySelector('.nav-item.active')?.dataset.target==='topups')renderWalletTopups(content);});
   socket.on('finance:transaction_updated',()=>{refreshOverview();if(container.querySelector('.nav-item.active')?.dataset.target==='topups')renderWalletTopups(content);});
   socket.on('driver_application:new',()=>{notificationService.syncFromServer?.(admin.id);if(container.querySelector('.nav-item.active')?.dataset.target==='applications')renderDriverApplicationsManagement(content);});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeById, createCoalescer } from '../src/utils/liveUpdates.js';
+import { mergeById, createCoalescer, withCanonicalId } from '../src/utils/liveUpdates.js';
 
 // ------------------------------------------------------------------ mergeById
 
@@ -141,4 +141,67 @@ test('dispose cancela la ejecución pendiente', () => {
   disparar.dispose();
   b.avanzar(5000);
   assert.equal(veces, 1, 'la pendiente no debía ejecutarse');
+});
+
+// ------------------------------------------------------------ withCanonicalId
+
+test('el identificador se toma de la primera clave que lo traiga', () => {
+  assert.equal(withCanonicalId({ id: 'a' }).id, 'a');
+  assert.equal(withCanonicalId({ userId: 'b' }).id, 'b');
+  assert.equal(withCanonicalId({ driverId: 'c' }).id, 'c');
+  // `id` manda sobre los demas cuando estan los dos.
+  assert.equal(withCanonicalId({ id: 'a', userId: 'b' }).id, 'a');
+});
+
+test('el resto del evento se conserva intacto', () => {
+  const evento = { userId: 'd_1', status: 'OFFLINE', extra: { anidado: true } };
+  const normalizado = withCanonicalId(evento);
+  assert.deepEqual(normalizado, { userId: 'd_1', status: 'OFFLINE', extra: { anidado: true }, id: 'd_1' });
+  assert.deepEqual(evento, { userId: 'd_1', status: 'OFFLINE', extra: { anidado: true } }, 'no muta el original');
+});
+
+test('las claves a mirar se pueden elegir', () => {
+  // `tripStatusUpdated` identifica el viaje con `tripId`.
+  assert.equal(withCanonicalId({ tripId: 't_1' }, ['id', 'tripId']).id, 't_1');
+  // Y con la lista por defecto ese mismo evento no se reconoce.
+  assert.equal(withCanonicalId({ tripId: 't_1' }), null);
+});
+
+test('un evento sin identificador utilizable se descarta', () => {
+  for (const roto of [null, undefined, {}, 'texto', 42, { id: '' }, { userId: null }, { userId: 42 }]) {
+    assert.equal(withCanonicalId(roto), null, `no debia aceptarse: ${JSON.stringify(roto)}`);
+  }
+});
+
+test('el evento OFFLINE de desconexion actualiza el conductor, no lo duplica', () => {
+  // Comportamiento completo: el panel tiene al conductor cargado y llega el
+  // aviso de desconexion, que en una de sus ramas viaja sin `id`.
+  const usuarios = [{ id: 'd_1', firstName: 'Carlos', status: 'AVAILABLE' }, { id: 'd_2', status: 'BUSY' }];
+  const evento = { userId: 'd_1', status: 'OFFLINE' };
+
+  const resultado = mergeById(usuarios, withCanonicalId(evento));
+
+  assert.equal(resultado.length, 2, 'no debe anadirse un registro nuevo');
+  assert.equal(resultado[0].status, 'OFFLINE', 'el estado debe actualizarse');
+  assert.equal(resultado[0].firstName, 'Carlos', 'y conservarse lo que el evento no trae');
+  assert.equal(resultado[1].status, 'BUSY', 'el otro conductor no se toca');
+});
+
+test('sin normalizar, ese mismo evento se perderia en silencio', () => {
+  // Documenta el defecto que motiva la normalizacion: `mergeById` descarta lo
+  // que no lleva `id`, asi que la pantalla se quedaria mostrando AVAILABLE.
+  const usuarios = [{ id: 'd_1', status: 'AVAILABLE' }];
+  const sinNormalizar = mergeById(usuarios, { userId: 'd_1', status: 'OFFLINE' });
+  assert.equal(sinNormalizar[0].status, 'AVAILABLE', 'se pierde sin normalizar');
+
+  const normalizado = mergeById(usuarios, withCanonicalId({ userId: 'd_1', status: 'OFFLINE' }));
+  assert.equal(normalizado[0].status, 'OFFLINE', 'y se aplica con normalizacion');
+});
+
+test('varios eventos de desconexion seguidos no acumulan duplicados', () => {
+  let usuarios = [{ id: 'd_1', status: 'AVAILABLE' }];
+  for (let i = 0; i < 20; i += 1) {
+    usuarios = mergeById(usuarios, withCanonicalId({ userId: 'd_1', status: 'OFFLINE' }));
+  }
+  assert.equal(usuarios.length, 1, `se acumularon ${usuarios.length} registros`);
 });
