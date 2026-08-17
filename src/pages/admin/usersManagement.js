@@ -57,12 +57,11 @@ export function renderUsersManagement(container) {
     return `/users?${parametros.toString()}`;
   };
 
-  const load = async () => {
-    const [pagina, freshTrips, resumen] = await Promise.all([
-      apiService.get(consulta()),
-      apiService.get('/trips'),
-      apiService.get('/admin/overview')
-    ]);
+  // Cambiar de pagina, de filtro o de busqueda solo pide la pagina. Antes
+  // arrastraba consigo la coleccion entera de viajes --sin paginar-- y un
+  // recalculo de las cifras globales, que no dependen de nada de eso.
+  const loadPage = async () => {
+    const pagina = await apiService.get(consulta());
     if (disposed) return;
     if (Array.isArray(pagina?.items)) {
       users = pagina.items;
@@ -72,10 +71,33 @@ export function renderUsersManagement(container) {
       // reflejarlo o los botones marcarian una pagina que no es la mostrada.
       page = Number(pagina.page) || 1;
     }
-    if (Array.isArray(freshTrips)) { trips = freshTrips; db.setCollection('trips', freshTrips); }
-    if (resumen?.customers) counts = resumen.customers;
     if (selectedId && !users.some(user => user.id === selectedId)) selectedId = null;
     render();
+  };
+
+  // Las cuatro cifras de cabecera son globales: solo cambian cuando cambia el
+  // censo, no al navegar.
+  const loadCounts = async () => {
+    const resumen = await apiService.get('/admin/overview');
+    if (disposed || !resumen?.customers) return;
+    counts = resumen.customers;
+    render();
+  };
+
+  // Los viajes alimentan el recuento por persona y el detalle. El panel ya los
+  // trae al abrirse, asi que normalmente no hace falta pedirlos.
+  const loadTrips = async () => {
+    if (trips.length) return;
+    const freshTrips = await apiService.get('/trips');
+    if (disposed || !Array.isArray(freshTrips)) return;
+    trips = freshTrips;
+    db.setCollection('trips', freshTrips);
+    render();
+  };
+
+  // Al montar la pantalla y despues de una accion que cambia el censo.
+  const load = async () => {
+    await Promise.all([loadPage(), loadCounts(), loadTrips()]);
   };
 
   // La busqueda se escribe letra a letra: sin agrupar seria una peticion por
@@ -83,7 +105,7 @@ export function renderUsersManagement(container) {
   let temporizadorBusqueda = null;
   const loadDiferido = () => {
     if (temporizadorBusqueda) clearTimeout(temporizadorBusqueda);
-    temporizadorBusqueda = setTimeout(() => { temporizadorBusqueda = null; load(); }, 250);
+    temporizadorBusqueda = setTimeout(() => { temporizadorBusqueda = null; loadPage(); }, 250);
   };
 
   const row = user => {
@@ -156,7 +178,7 @@ export function renderUsersManagement(container) {
     const updated = await apiService.patch(`/admin/drivers/${encodeURIComponent(user.id)}`, { action, reason });
     if (!updated) return showToast('No se pudo actualizar el conductor.', 'error');
     showToast(action === 'suspend' ? 'Cuenta suspendida.' : 'Cuenta reactivada.', 'success');
-    await load();
+    await Promise.all([loadPage(), loadCounts()]);
   };
 
   const openCreateDriver = () => {
@@ -170,15 +192,15 @@ export function renderUsersManagement(container) {
       const payload = Object.fromEntries(new FormData(event.currentTarget));
       const result = await apiService.post('/admin/drivers', payload);
       if (!result) { submit.disabled = false; return showToast('No se pudo crear el conductor. Verifica los datos.', 'error'); }
-      close(); await load();
+      close(); await Promise.all([loadPage(), loadCounts()]);
       alert(`Conductor creado correctamente.\n\nContraseña temporal: ${result.temporaryPassword}\n\nGuárdala y entrégala de forma segura al conductor.`);
     };
     document.body.appendChild(overlay);
   };
 
   const bindEvents = () => {
-    container.querySelectorAll('[data-user-role]').forEach(button => button.onclick = () => { role = button.dataset.userRole; page = 1; load(); });
-    container.querySelector('#user-status-filter').onchange = event => { status = event.target.value; page = 1; load(); };
+    container.querySelectorAll('[data-user-role]').forEach(button => button.onclick = () => { role = button.dataset.userRole; page = 1; loadPage(); });
+    container.querySelector('#user-status-filter').onchange = event => { status = event.target.value; page = 1; loadPage(); };
     // Se repinta al instante para que lo escrito aparezca sin retraso, y la
     // consulta al servidor se agrupa: sin agrupar seria una peticion por
     // pulsacion de tecla.
@@ -189,9 +211,9 @@ export function renderUsersManagement(container) {
     // Cambiar de persona invalida la anterior antes de pedir la nueva, y el
     // listado nunca dispara ninguna peticion.
     hydrateDetailPhoto();
-    container.querySelectorAll('[data-user-page]').forEach(button => button.onclick = () => { page = Number(button.dataset.userPage); load(); });
-    container.querySelector('#users-prev')?.addEventListener('click', () => { page = Math.max(1, page - 1); load(); });
-    container.querySelector('#users-next')?.addEventListener('click', () => { page += 1; load(); });
+    container.querySelectorAll('[data-user-page]').forEach(button => button.onclick = () => { page = Number(button.dataset.userPage); loadPage(); });
+    container.querySelector('#users-prev')?.addEventListener('click', () => { page = Math.max(1, page - 1); loadPage(); });
+    container.querySelector('#users-next')?.addEventListener('click', () => { page += 1; loadPage(); });
     container.querySelector('#new-driver')?.addEventListener('click', openCreateDriver);
     const selected = users.find(user => user.id === selectedId);
     container.querySelector('#toggle-user-state')?.addEventListener('click', () => selected && changeDriverState(selected));
