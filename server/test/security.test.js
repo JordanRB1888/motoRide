@@ -189,7 +189,7 @@ test('un conductor no puede modificar a otro conductor con identificadores del p
   const victimSocket = await connectDriver(url, victim.token, { lat: 10.7000, lng: -71.7000 });
   t.after(() => [attackerSocket, victimSocket].forEach(socket => socket.close()));
 
-  const before = await (await asJson(`${url}/api/users`, adminToken)).json();
+  const before = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
   assert.equal(findUser(before, victim.user.id).status, 'AVAILABLE');
   assert.equal(findUser(before, victim.user.id).location.lat, 10.7);
 
@@ -217,7 +217,7 @@ test('un conductor no puede modificar a otro conductor con identificadores del p
   });
   assert.equal(restLocation.status, 200);
 
-  const after = await (await asJson(`${url}/api/users`, adminToken)).json();
+  const after = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
   const victimAfter = findUser(after, victim.user.id);
   const attackerAfter = findUser(after, attacker.user.id);
 
@@ -282,7 +282,7 @@ test('se rechazan estados y coordenadas inválidos en REST y en Socket.IO', asyn
   }
 
   // La ubicación válida previa no fue sobrescrita por los intentos inválidos.
-  const users = await (await asJson(`${url}/api/users`, adminToken)).json();
+  const users = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
   assert.equal(findUser(users, driver.user.id).location.lat, 10.6428);
 
   // Socket.IO aplica exactamente la misma validación.
@@ -299,7 +299,7 @@ test('se rechazan estados y coordenadas inválidos en REST y en Socket.IO', asyn
   assert.equal((await changeRejected).error, 'INVALID_DRIVER_STATUS');
 
   await new Promise(resolve => setTimeout(resolve, 150));
-  const finalUsers = await (await asJson(`${url}/api/users`, adminToken)).json();
+  const finalUsers = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
   const finalDriver = findUser(finalUsers, driver.user.id);
   assert.equal(finalDriver.location.lat, 10.6428);
   assert.equal(finalDriver.status, 'AVAILABLE');

@@ -28,7 +28,8 @@ import { createDatabasePersistence } from './services/databasePersistence.js';
 import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createConnectionLimiter } from './services/connectionLimit.js';
 import { resolveTrustProxy } from './services/trustProxy.js';
-import { parseLimit, paginate } from './domain/pagination.js';
+import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagination.js';
+import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
@@ -706,8 +707,38 @@ app.get('/api/users/:id/photo', requireAuth, (req, res) => {
   res.end(image.buffer);
 });
 
+// El listado devolvia la coleccion entera: 7 MB con el volumen de seis meses,
+// medido contra el servidor real, y el filtrado y la busqueda ocurrian despues
+// en el navegador, de modo que buscar a una persona por su placa obligaba a
+// descargar antes a los 25 000 usuarios.
+//
+// Admite los dos modos de recorrido: `page` para el paginador numerado de la
+// pantalla de gestion, y `cursor` para quien solo necesite iterar.
 app.get('/api/users', requireAuth, requireRole('admin'), (req, res) => {
-  res.json(database.users.map(publicUser));
+  let limit;
+  let page;
+  let filters;
+  try {
+    limit = parseLimit(req.query.limit, USERS_PAGE);
+    page = parsePage(req.query.page);
+    filters = parseUserFilters(req.query);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_QUERY' });
+  }
+
+  // Se filtra sobre el registro completo --hace falta `isVerified`, que la
+  // proyeccion publica no expone-- y solo se proyecta la pagina resultante.
+  const filtrados = filterUsers(database.users, filters);
+
+  try {
+    const cursor = req.query.cursor;
+    const pagina = cursor
+      ? paginate(filtrados, { limit, cursor, sortKeyOf: user => user.createdAt || '' })
+      : paginateByPage(filtrados, { limit, page, sortKeyOf: user => user.createdAt || '' });
+    return res.json({ ...pagina, items: pagina.items.map(publicUser) });
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
 });
 
 app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => {
@@ -728,6 +759,18 @@ app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => 
       busy: drivers.filter(driver => ['BUSY', 'IN_TRIP'].includes(driver.status)).length,
       offline: drivers.filter(driver => !['AVAILABLE', 'ONLINE', 'BUSY', 'IN_TRIP'].includes(driver.status)).length
     },
+    // Cifras globales de la pantalla de gestion. Son independientes de los
+    // filtros que tenga puestos quien mira, asi que no pueden salir de una
+    // pagina del listado: pertenecen aqui.
+    customers: (() => {
+      const clientes = database.users.filter(user => ['driver', 'passenger'].includes(user.role));
+      return {
+        total: clientes.length,
+        drivers: clientes.filter(user => user.role === 'driver').length,
+        passengers: clientes.filter(user => user.role === 'passenger').length,
+        suspended: clientes.filter(isSuspended).length
+      };
+    })(),
     driverApplications: {
       total: database.driverApplications.length,
       pending: database.driverApplications.filter(item => item.status === 'pending').length,
@@ -831,6 +874,9 @@ app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), (req
 // paginación pidiendo `?limit=999999`. El de mensajes es más estrecho porque
 // cada registro puede arrastrar todavía una imagen en base64: eso desaparece
 // cuando entre la infraestructura de adjuntos de la fase 2B-2-4.
+// La pantalla de gestion muestra ocho por pagina; el tope superior acota lo
+// que puede pedir cualquier cliente.
+const USERS_PAGE = { defaultLimit: 25, maxLimit: 100 };
 const SUPPORT_THREADS_PAGE = { defaultLimit: 25, maxLimit: 100 };
 const SUPPORT_MESSAGES_PAGE = { defaultLimit: 30, maxLimit: 50 };
 

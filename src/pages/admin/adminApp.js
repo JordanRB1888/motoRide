@@ -84,11 +84,47 @@ export function renderAdminApp(container) {
 
   // Carga completa: solo al abrir el panel. Las listas enteras no vuelven a
   // pedirse por un evento; `/api/users` son 7 MB con el volumen de seis meses.
+  // El panel no necesita el censo entero: el mapa dibuja conductores y la
+  // tabla nombra a los participantes de los ocho viajes mas recientes. Pedir
+  // los 25 000 usuarios eran 7 MB medidos contra el servidor real.
+  const DRIVERS_FOR_MAP=100;
+
+  // Identificadores que aparecen en la tabla y aun no estan en memoria. Se
+  // piden juntos y de una vez, nunca uno por fila.
+  const faltantes=new Set();
+  const resolverFaltantes=createCoalescer(async()=>{
+    const pendientes=[...faltantes].slice(0,50);
+    faltantes.clear();
+    if(!pendientes.length)return;
+    const pagina=await apiService.get(`/users?ids=${encodeURIComponent(pendientes.join(','))}&limit=50`);
+    if(!Array.isArray(pagina?.items))return;
+    let coleccion=db.getCollection('users');
+    for(const usuario of pagina.items)coleccion=mergeById(coleccion,usuario);
+    db.setCollection('users',coleccion);
+    redrawIfDashboard();
+  },{intervalMs:400});
+
+  const ensureParticipants=trips=>{
+    const conocidos=new Set((db.getCollection('users')||[]).map(u=>u.id));
+    // Los mismos ocho viajes que muestra la tabla.
+    for(const trip of (trips||[]).slice().reverse().slice(0,8)){
+      for(const id of [trip?.passengerId,trip?.driverId]){
+        if(id&&!conocidos.has(id))faltantes.add(id);
+      }
+    }
+    if(faltantes.size)resolverFaltantes();
+  };
+
   const loadAll=async()=>{
-    const [users,trips,stats]=await Promise.all([apiService.get('/users'),apiService.get('/trips'),apiService.get('/admin/overview')]);
-    if(Array.isArray(users))db.setCollection('users',users);
+    const [conductores,trips,stats]=await Promise.all([
+      apiService.get(`/users?role=driver&limit=${DRIVERS_FOR_MAP}`),
+      apiService.get('/trips'),
+      apiService.get('/admin/overview')
+    ]);
+    if(Array.isArray(conductores?.items))db.setCollection('users',conductores.items);
     if(Array.isArray(trips))db.setCollection('trips',trips);
     applyOverview(stats);
+    ensureParticipants(trips);
     redrawIfDashboard();
   };
 
@@ -103,7 +139,7 @@ export function renderAdminApp(container) {
 
   // El registro que cambio viene dentro del propio evento, asi que se aplica
   // sobre lo que ya esta en memoria en lugar de volver a descargar la lista.
-  const patchTrip=patch=>{db.setCollection('trips',mergeById(db.getCollection('trips'),patch));redrawIfDashboard();};
+  const patchTrip=patch=>{const trips=mergeById(db.getCollection('trips'),patch);db.setCollection('trips',trips);ensureParticipants(trips);redrawIfDashboard();};
   const patchUser=patch=>{db.setCollection('users',mergeById(db.getCollection('users'),patch));redrawIfDashboard();};
   socket.on('rideRequested',data=>{notificationService.notify(admin.id,{title:'Nueva solicitud de viaje',message:`Solicitud #${data?.id?.slice(-6)||''}`,category:'TRIP',icon:'🏍️'});patchTrip(data);refreshOverview();});
   socket.on('tripStatusUpdated',data=>{patchTrip({...data,id:data?.tripId||data?.id});refreshOverview();});socket.on('admin:driver_updated',data=>{patchUser(data);refreshOverview();});socket.on('admin:driver_location',data=>{const users=db.getCollection('users')||[],driver=users.find(u=>u.id===(data.userId||data.driverId));if(driver)driver.location={...(driver.location||{}),...data};if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();});socket.on('finance:payout_updated',refreshOverview);

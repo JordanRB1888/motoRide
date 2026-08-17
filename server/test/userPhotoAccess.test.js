@@ -315,7 +315,7 @@ test('ninguna proyección publica bytes, base64 ni URL pública de fotografía',
   const cuerpos = {
     'respuesta de subida': await subida.text(),
     'perfil propio': await (await asJson(`${url}/api/auth/me`, persona.token)).text(),
-    'listado de usuarios (admin)': await (await asJson(`${url}/api/users`, adminToken)).text(),
+    'listado de usuarios (admin)': await (await asJson(`${url}/api/users?limit=100`, adminToken)).text(),
     'conductores cercanos': await (await asJson(`${url}/api/drivers/nearby?lat=10.66&lng=-71.61`, persona.token)).text()
   };
 

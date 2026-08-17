@@ -149,7 +149,7 @@ test('agotar el GPS no bloquea los demás eventos del mismo socket', async () =>
     socket.emit('driver:status', { status: 'BUSY' });
     await pause(400);
 
-    const usuarios = await (await asJson(`${url}/api/users`, adminToken)).json();
+    const usuarios = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
     const conductor = usuarios.find(item => item.id === driverId);
     assert.equal(conductor.status, 'BUSY', 'el cambio de estado debía procesarse');
   } finally {

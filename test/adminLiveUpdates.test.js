@@ -53,14 +53,39 @@ test('ningun evento de socket vuelve a pedir las listas completas', () => {
   }
 });
 
-test('la carga completa existe una sola vez y es la del arranque', () => {
-  // Una sola llamada a cada listado en todo el archivo: la de loadAll.
-  for (const listado of ["'/users'", "'/trips'"]) {
-    const veces = fuente.split(`apiService.get(${listado})`).length - 1;
-    assert.equal(veces, 1, `${listado} deberia pedirse una sola vez, se pide ${veces}`);
+test('la carga inicial no pide colecciones enteras', () => {
+  // `/trips` sigue sin paginar y se pide una sola vez, al abrir el panel.
+  const viajes = fuente.split("apiService.get('/trips')").length - 1;
+  assert.equal(viajes, 1, `/trips deberia pedirse una sola vez, se pide ${viajes}`);
+
+  // El listado de usuarios nunca se pide entero: siempre acotado. Se mira un
+  // tramo de texto tras cada peticion en vez de intentar delimitar la cadena,
+  // porque dentro hay parentesis y comillas de `encodeURIComponent`.
+  const posiciones = [...fuente.matchAll(/\/users\?/g)].map(m => m.index);
+  assert.ok(posiciones.length > 0, 'el panel debe seguir pidiendo usuarios');
+  for (const posicion of posiciones) {
+    const tramo = fuente.slice(posicion, posicion + 140);
+    // El limite puede ser literal o una constante interpolada.
+    assert.match(tramo, /limit=(\d+|\$\{)/, `sin limite explicito: ${tramo.slice(0, 70)}`);
   }
+  // Y la constante que se interpola tiene que ser un numero acotado, no algo
+  // que pueda acabar valiendo «todos».
+  const constante = fuente.match(/const DRIVERS_FOR_MAP\s*=\s*(\d+)/);
+  assert.ok(constante, 'el tope de conductores debe ser una constante numerica');
+  assert.ok(Number(constante[1]) > 0 && Number(constante[1]) <= 500, `tope irrazonable: ${constante[1]}`);
+  assert.ok(
+    !/apiService\.get\('\/users'\)/.test(fuente),
+    'no debe quedar ninguna peticion del listado completo'
+  );
+
   assert.match(fuente, /const loadAll\s*=/, 'debe existir la carga inicial');
   assert.match(fuente, /dashboard\(\);loadAll\(\);/, 'y ejecutarse al abrir el panel');
+});
+
+test('los participantes de los viajes se resuelven en bloque, no fila a fila', () => {
+  // Pedirlos uno a uno seria una peticion por celda de la tabla.
+  assert.match(fuente, /\/users\?ids=/, 'debe resolverse por identificadores');
+  assert.match(fuente, /resolverFaltantes=createCoalescer\(/, 'y agrupando las peticiones');
 });
 
 test('las cifras agregadas se piden de forma agrupada, no una vez por evento', () => {

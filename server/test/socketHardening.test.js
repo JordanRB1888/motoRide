@@ -154,7 +154,7 @@ test('un conductor que no recibió la oferta no puede aceptar la carrera', async
   await pause(200);
 
   // Un intento rechazado no deja al conductor en BUSY ni toca el viaje.
-  const usersAfterRejection = await (await asJson(`${url}/api/users`, adminToken)).json();
+  const usersAfterRejection = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
   assert.equal(findUser(usersAfterRejection, outsider.user.id).status, 'AVAILABLE');
   assert.equal(findUser(usersAfterRejection, offered.user.id).status, 'AVAILABLE');
   const tripsAfterRejection = await (await asJson(`${url}/api/trips`, adminToken)).json();
@@ -171,7 +171,7 @@ test('un conductor que no recibió la oferta no puede aceptar la carrera', async
   const assigned = await assignment;
   await pause(200);
 
-  const usersAfterAssignment = await (await asJson(`${url}/api/users`, adminToken)).json();
+  const usersAfterAssignment = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
   assert.equal(findUser(usersAfterAssignment, offered.user.id).status, 'BUSY');
   assert.equal(findUser(usersAfterAssignment, outsider.user.id).status, 'AVAILABLE');
 
@@ -283,7 +283,7 @@ test('los eventos malformados o sobre viajes cerrados no detienen el servidor', 
   assert.equal(closed.driverId, driver.user.id);
 
   // Y el conductor no quedó bloqueado en BUSY por los intentos fallidos.
-  const users = await (await asJson(`${url}/api/users`, adminToken)).json();
+  const users = (await (await asJson(`${url}/api/users?limit=100`, adminToken)).json()).items;
   assert.equal(findUser(users, driver.user.id).status, 'AVAILABLE');
 });
 

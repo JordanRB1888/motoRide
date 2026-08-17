@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseLimit,
+  parsePage,
   encodeCursor,
   decodeCursor,
   paginate,
+  paginateByPage,
   PaginationError
 } from '../domain/pagination.js';
 
@@ -164,4 +166,78 @@ test('el tamaño de página se respeta exactamente', () => {
     const pagina = paginate(lista(500), { limit: limite, cursor: null, sortKeyOf: item => item.fecha });
     assert.equal(pagina.items.length, limite, `límite ${limite}`);
   }
+});
+
+// ------------------------------------------------------- paginación por posición
+
+test('la página se interpreta en base 1 y rechaza lo ilegible', () => {
+  assert.equal(parsePage(undefined), 1);
+  assert.equal(parsePage(''), 1);
+  assert.equal(parsePage('1'), 1);
+  assert.equal(parsePage('7'), 7);
+  for (const malo of ['0', '-1', 'abc', '2abc', '1.5', ' 2']) {
+    assert.throws(() => parsePage(malo), /INVALID_PAGE/, `debía rechazarse: ${malo}`);
+  }
+});
+
+test('cada página por posición devuelve su tramo del listado', () => {
+  const datos = lista(25);
+  const primera = paginateByPage(datos, { limit: 10, page: 1 });
+  const tercera = paginateByPage(datos, { limit: 10, page: 3 });
+
+  assert.deepEqual(primera.items.map(i => i.id), datos.slice(0, 10).map(i => i.id));
+  assert.deepEqual(tercera.items.map(i => i.id), datos.slice(20, 25).map(i => i.id));
+  assert.equal(tercera.page, 3);
+  assert.equal(primera.total, 25);
+  assert.equal(primera.totalPages, 3);
+});
+
+test('una página fuera de rango se ajusta a la última con contenido', () => {
+  // Es lo que hacía la pantalla: un número pasado de rango no puede dejar la
+  // tabla vacía sin explicación.
+  const pagina = paginateByPage(lista(25), { limit: 10, page: 99 });
+  assert.equal(pagina.page, 3);
+  assert.equal(pagina.items.length, 5);
+});
+
+test('una colección vacía sigue teniendo una página', () => {
+  const pagina = paginateByPage([], { limit: 10, page: 1 });
+  assert.deepEqual(pagina.items, []);
+  assert.equal(pagina.total, 0);
+  assert.equal(pagina.page, 1);
+  assert.equal(pagina.totalPages, 1);
+  assert.equal(pagina.nextCursor, null);
+});
+
+test('la paginación por posición también ofrece cursor para recorrer', () => {
+  const datos = lista(25);
+  const porPosicion = paginateByPage(datos, { limit: 10, page: 1, sortKeyOf: i => i.fecha });
+  assert.ok(porPosicion.nextCursor, 'debe ofrecerse el cursor');
+
+  // Y ese cursor continúa donde corresponde si se usa el modo secuencial.
+  const siguiente = paginate(datos, { limit: 10, cursor: porPosicion.nextCursor, sortKeyOf: i => i.fecha });
+  assert.equal(siguiente.items[0].id, 'x_10');
+});
+
+test('la última página no ofrece cursor siguiente', () => {
+  const pagina = paginateByPage(lista(25), { limit: 10, page: 3 });
+  assert.equal(pagina.nextCursor, null);
+});
+
+test('los dos modos recorren exactamente el mismo listado', () => {
+  const datos = lista(47);
+  const porCursor = [];
+  let cursor = null;
+  do {
+    const p = paginate(datos, { limit: 7, cursor, sortKeyOf: i => i.fecha });
+    porCursor.push(...p.items.map(i => i.id));
+    cursor = p.nextCursor;
+  } while (cursor);
+
+  const porPagina = [];
+  for (let n = 1; n <= paginateByPage(datos, { limit: 7, page: 1 }).totalPages; n += 1) {
+    porPagina.push(...paginateByPage(datos, { limit: 7, page: n }).items.map(i => i.id));
+  }
+  assert.deepEqual(porCursor, porPagina);
+  assert.equal(porCursor.length, 47);
 });
