@@ -26,6 +26,7 @@ import {
 import { createPrivateStorage } from './services/privateStorage.js';
 import { createDatabasePersistence } from './services/databasePersistence.js';
 import { createEventRateLimiter } from './services/socketRateLimit.js';
+import { createConnectionLimiter } from './services/connectionLimit.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -1338,7 +1339,30 @@ function dispatchTripToDrivers(trip) {
 }
 
 // Socket.IO Server Setup
+// Un valor mal escrito en el entorno no debe dejar el techo abierto ni
+// bloquear a todo el mundo: solo se acepta un entero válido.
+const configuredMaxConnections = Number.parseInt(process.env.SOCKET_MAX_CONNECTIONS_PER_USER ?? '', 10);
+const connectionLimiter = createConnectionLimiter(
+  Number.isInteger(configuredMaxConnections) && configuredMaxConnections >= 1
+    ? { maxPerUser: configuredMaxConnections }
+    : {}
+);
+
 io.on('connection', (socket) => {
+  // El techo de frecuencia vive en cada socket, así que abrir muchas
+  // conexiones con la misma sesión multiplicaría el cupo. La liberación se
+  // registra antes de contar y se ejecuta siempre, admitida la conexión o no:
+  // emparejarlas sin ramas es lo que impide que el contador se desincronice y
+  // acabe cerrando la puerta a una cuenta legítima.
+  const { userId: connectionUserId } = socket.data.auth;
+  socket.on('disconnect', () => connectionLimiter.release(connectionUserId));
+  const cupo = connectionLimiter.acquire(connectionUserId);
+  if (!cupo.allowed) {
+    socket.emit('socket:error', { error: 'TOO_MANY_CONNECTIONS', maxPerUser: cupo.maxPerUser });
+    socket.disconnect(true);
+    return;
+  }
+
   console.log(`[+58express Socket.IO] Client connected: ${socket.id}`);
   socket.join(`${socket.data.auth.role}s`);
   socket.join(`user:${socket.data.auth.userId}`);

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { io } from 'socket.io-client';
 import { DEFAULT_EVENT_LIMITS } from '../services/socketRateLimit.js';
+import { DEFAULT_MAX_CONNECTIONS_PER_USER } from '../services/connectionLimit.js';
 
 const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -153,6 +154,61 @@ test('agotar el GPS no bloquea los demás eventos del mismo socket', async () =>
     assert.equal(conductor.status, 'BUSY', 'el cambio de estado debía procesarse');
   } finally {
     socket.close();
+  }
+});
+
+test('una misma cuenta no puede abrir conexiones sin límite', async () => {
+  const { url, driverToken } = await preparar();
+  const tope = DEFAULT_MAX_CONNECTIONS_PER_USER;
+  const abiertos = [];
+  try {
+    // El tope de frecuencia vive en cada socket, así que sin este límite abrir
+    // cien conexiones multiplicaría por cien el cupo de eventos.
+    for (let i = 0; i < tope; i += 1) {
+      const socket = io(url, { auth: { token: driverToken } });
+      abiertos.push(socket);
+      await esperar(socket, 'connect');
+    }
+
+    const sobrante = io(url, { auth: { token: driverToken } });
+    abiertos.push(sobrante);
+    const rechazo = await esperar(sobrante, 'socket:error');
+    assert.equal(rechazo.error, 'TOO_MANY_CONNECTIONS');
+    assert.equal(rechazo.maxPerUser, tope);
+    await pause(300);
+    assert.equal(sobrante.connected, false, 'la conexión sobrante debe cerrarse');
+
+    // Y las que ya estaban siguen funcionando: el rechazo no las arrastra.
+    assert.ok(abiertos[0].connected, 'la primera conexión sigue viva');
+  } finally {
+    for (const socket of abiertos) socket.close();
+    await pause(400);
+  }
+});
+
+test('cerrar una conexión devuelve el hueco a la cuenta', async () => {
+  const { url, driverToken } = await preparar();
+  const tope = DEFAULT_MAX_CONNECTIONS_PER_USER;
+  const abiertos = [];
+  try {
+    for (let i = 0; i < tope; i += 1) {
+      const socket = io(url, { auth: { token: driverToken } });
+      abiertos.push(socket);
+      await esperar(socket, 'connect');
+    }
+    // Si el contador no se liberase al desconectar, una cuenta quedaría
+    // bloqueada para siempre tras unas cuantas reconexiones normales.
+    abiertos.pop().close();
+    await pause(400);
+
+    const nuevo = io(url, { auth: { token: driverToken } });
+    abiertos.push(nuevo);
+    await esperar(nuevo, 'connect');
+    await pause(300);
+    assert.ok(nuevo.connected, 'el hueco liberado debía admitir una conexión nueva');
+  } finally {
+    for (const socket of abiertos) socket.close();
+    await pause(400);
   }
 });
 
