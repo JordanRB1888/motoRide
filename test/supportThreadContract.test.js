@@ -30,13 +30,73 @@ test('ningun consumidor espera ya la coleccion de mensajes dentro del hilo', () 
   }
 });
 
-test('el listado se pide siempre con un tamano de pagina explicito', () => {
-  const fuente = leer(PANEL);
-  const llamadas = fuente.match(/apiService\.get\(\s*['"`]\/support\/threads[^'"`]*['"`]/g) || [];
-  assert.ok(llamadas.length > 0, 'el panel debe seguir pidiendo el listado');
-  for (const llamada of llamadas) {
-    assert.match(llamada, /limit=\d+/, `sin limite explicito: ${llamada}`);
+/**
+ * Maximos que impone el servidor (server/index.js, SUPPORT_*_PAGE). Lo que
+ * pida la pantalla tiene que caber por debajo, o la peticion se rechaza con
+ * LIMIT_TOO_LARGE y el panel se queda en blanco.
+ */
+const MAX_HILOS_SERVIDOR = 100;
+const MAX_MENSAJES_SERVIDOR = 50;
+
+/** Tramos de texto que siguen a cada peticion de soporte, con su archivo. */
+function peticionesDeSoporte() {
+  const encontradas = [];
+  for (const archivo of [PANEL, MODAL]) {
+    const fuente = leer(archivo);
+    for (const m of fuente.matchAll(/\/support\/threads/g)) {
+      const tramo = fuente.slice(m.index, m.index + 200);
+      // `/read` marca un hilo como leido: no es un listado y no debe llevar
+      // tamano de pagina.
+      if (/^\/support\/threads\/\$\{[^`]*\/read/.test(tramo)) continue;
+      encontradas.push({ archivo, tramo });
+    }
   }
+  return encontradas;
+}
+
+/** Valor de una constante numerica declarada en el archivo. */
+function constante(archivo, nombre) {
+  const m = leer(archivo).match(new RegExp(`const ${nombre}\\s*=\\s*(\\d+)`));
+  return m ? Number(m[1]) : null;
+}
+
+test('toda peticion de soporte lleva un tamano de pagina acotado', () => {
+  const peticiones = peticionesDeSoporte();
+  assert.ok(peticiones.length >= 3, `se esperaban varias peticiones, hay ${peticiones.length}`);
+  for (const { archivo, tramo } of peticiones) {
+    // El limite puede ser literal o una constante interpolada; lo que no vale
+    // es pedir sin acotar.
+    assert.match(tramo, /limit=(\d+|\$\{)/, `${archivo} pide sin limite: ${tramo.slice(0, 80)}`);
+  }
+});
+
+test('los tamanos de pagina caben por debajo del maximo del servidor', () => {
+  const hilos = constante(PANEL, 'THREADS_PAGE');
+  const mensajesPanel = constante(PANEL, 'MESSAGES_PAGE');
+  const mensajesModal = constante(MODAL, 'PAGINA');
+
+  assert.ok(hilos, 'el panel debe declarar el tamano de pagina de hilos');
+  assert.ok(mensajesPanel, 'y el de mensajes');
+  assert.ok(mensajesModal, 'el modal tambien');
+
+  // Pasarse del maximo devuelve LIMIT_TOO_LARGE y la pantalla se queda vacia.
+  assert.ok(hilos > 0 && hilos <= MAX_HILOS_SERVIDOR, `hilos: ${hilos}`);
+  assert.ok(mensajesPanel > 0 && mensajesPanel <= MAX_MENSAJES_SERVIDOR, `mensajes: ${mensajesPanel}`);
+  assert.ok(mensajesModal > 0 && mensajesModal <= MAX_MENSAJES_SERVIDOR, `modal: ${mensajesModal}`);
+});
+
+test('lo que no cabe en la primera pagina se alcanza con el cursor', () => {
+  // Sin consumir nextCursor, subir el limite solo correria el problema mas
+  // lejos: a partir del tope del servidor habria hilos y mensajes
+  // inalcanzables desde la interfaz.
+  const panel = leer(PANEL);
+  assert.match(panel, /threadsCursor/, 'el panel debe guardar el cursor de hilos');
+  assert.match(panel, /messagesCursor/, 'y el de mensajes');
+  assert.match(panel, /support-more-threads/, 'con un control para continuar la lista');
+  assert.match(panel, /support-older-messages/, 'y otro para los mensajes anteriores');
+
+  const modal = leer(MODAL);
+  assert.match(modal, /olderCursor/, 'el modal tambien continua hacia atras');
 });
 
 test('los mensajes se piden al endpoint del hilo, no al listado', () => {
@@ -44,8 +104,8 @@ test('los mensajes se piden al endpoint del hilo, no al listado', () => {
     const fuente = leer(archivo);
     assert.match(
       fuente,
-      /\/support\/threads\/\$\{encodeURIComponent\([^)]+\)\}\/messages\?limit=\d+/,
-      `${archivo} debe pedir los mensajes del hilo con limite`
+      /\/support\/threads\/\$\{encodeURIComponent\(.*?\)\}\/messages/,
+      `${archivo} debe pedir los mensajes al endpoint del hilo`
     );
   }
 });

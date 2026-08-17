@@ -101,8 +101,11 @@ test('los registros que llegan en el evento se aplican sin pedir nada', () => {
   assert.match(fuente, /const patchUser\s*=/, 'debe aplicarse el usuario del evento');
   assert.match(fuente, /mergeById\(/, 'usando la fusion por identificador');
 
-  // `tripStatusUpdated` identifica el viaje con `tripId`, no con `id`: sin
-  // traducirlo, la fusion no encontraria el registro y anadiria uno nuevo en
-  // cada cambio de estado.
-  assert.match(fuente, /id:\s*data\?\.tripId/, 'tripId debe traducirse a id');
+  // Cada evento nombra el identificador a su manera: `tripStatusUpdated` usa
+  // `tripId` y una de las ramas de `admin:driver_updated` usaba solo `userId`.
+  // Sin normalizar, la fusion no encuentra el registro y el aviso se pierde o
+  // se duplica. El comportamiento de esa normalizacion esta comprobado en
+  // test/liveUpdates.test.js; aqui solo se verifica que la pantalla la use.
+  assert.match(fuente, /withCanonicalId\(patch,\s*\['id',\s*'tripId'\]\)/, 'el viaje debe normalizarse');
+  assert.match(fuente, /withCanonicalId\(patch,\s*\['id',\s*'userId',\s*'driverId'\]\)/, 'y el usuario tambien');
 });

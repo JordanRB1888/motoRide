@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeById, createCoalescer, withCanonicalId } from '../src/utils/liveUpdates.js';
+import { mergeById, createCoalescer, withCanonicalId, accumulatePage } from '../src/utils/liveUpdates.js';
 
 // ------------------------------------------------------------------ mergeById
 
@@ -204,4 +204,74 @@ test('varios eventos de desconexion seguidos no acumulan duplicados', () => {
     usuarios = mergeById(usuarios, withCanonicalId({ userId: 'd_1', status: 'OFFLINE' }));
   }
   assert.equal(usuarios.length, 1, `se acumularon ${usuarios.length} registros`);
+});
+
+// ------------------------------------------------------------ accumulatePage
+
+test('las paginas siguientes se anaden al final en orden', () => {
+  const primera = [{ id: 'a' }, { id: 'b' }];
+  const segunda = [{ id: 'c' }, { id: 'd' }];
+  assert.deepEqual(
+    accumulatePage(primera, segunda).map(i => i.id),
+    ['a', 'b', 'c', 'd']
+  );
+});
+
+test('los mensajes anteriores se anteponen conservando su orden', () => {
+  // El cursor avanza hacia atras en el tiempo, pero la conversacion se lee
+  // del mas antiguo al mas reciente.
+  const enPantalla = [{ id: 'm3' }, { id: 'm4' }];
+  const anteriores = [{ id: 'm1' }, { id: 'm2' }];
+  assert.deepEqual(
+    accumulatePage(enPantalla, anteriores, { posicion: 'inicio' }).map(i => i.id),
+    ['m1', 'm2', 'm3', 'm4']
+  );
+});
+
+test('un registro que ya estaba no se repite', () => {
+  // Entre dos paginas puede llegar un mensaje nuevo y desplazar el corte: sin
+  // descartar lo conocido, un registro apareceria dos veces en pantalla.
+  const previos = [{ id: 'a' }, { id: 'b' }];
+  const solapada = [{ id: 'b' }, { id: 'c' }];
+  assert.deepEqual(accumulatePage(previos, solapada).map(i => i.id), ['a', 'b', 'c']);
+});
+
+test('los duplicados dentro de la propia pagina tampoco entran dos veces', () => {
+  const resultado = accumulatePage([], [{ id: 'a' }, { id: 'a' }, { id: 'b' }]);
+  assert.deepEqual(resultado.map(i => i.id), ['a', 'b']);
+});
+
+test('los registros sin identificador se descartan en vez de acumularse', () => {
+  let coleccion = [{ id: 'a' }];
+  for (let i = 0; i < 10; i += 1) {
+    coleccion = accumulatePage(coleccion, [{}, { id: null }, { id: '' }]);
+  }
+  assert.equal(coleccion.length, 1, `se acumularon ${coleccion.length} registros basura`);
+});
+
+test('recorrer un listado entero por paginas no repite ni pierde nada', () => {
+  // Comportamiento completo: quince hilos en paginas de cuatro, como haria la
+  // pantalla pulsando «cargar mas».
+  const todos = Array.from({ length: 15 }, (_, i) => ({ userId: `u_${i}` }));
+  const idOf = item => item?.userId;
+  let cargados = [];
+  for (let desde = 0; desde < todos.length; desde += 4) {
+    cargados = accumulatePage(cargados, todos.slice(desde, desde + 4), { idOf });
+  }
+  assert.equal(cargados.length, 15);
+  assert.deepEqual(cargados.map(idOf), todos.map(idOf));
+});
+
+test('no modifica la coleccion recibida ni devuelve otra sin motivo', () => {
+  const previos = [{ id: 'a' }];
+  const copia = [...previos];
+  assert.equal(accumulatePage(previos, []), previos, 'sin nada que anadir devuelve la misma');
+  assert.equal(accumulatePage(previos, [{ id: 'a' }]), previos, 'sin novedades tampoco copia');
+  assert.deepEqual(previos, copia, 'la original queda intacta');
+});
+
+test('entradas ausentes no rompen la acumulacion', () => {
+  assert.deepEqual(accumulatePage(null, [{ id: 'a' }]).map(i => i.id), ['a']);
+  assert.deepEqual(accumulatePage([{ id: 'a' }], null).map(i => i.id), ['a']);
+  assert.deepEqual(accumulatePage(undefined, undefined), []);
 });

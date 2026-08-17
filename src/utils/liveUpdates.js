@@ -37,6 +37,37 @@ export function mergeById(items, patch, idOf = item => item?.id) {
 }
 
 /**
+ * Acumula una página nueva sobre lo ya cargado, sin repetir.
+ *
+ * Los listados paginados se recorren mientras la colección cambia por debajo:
+ * entre dos páginas puede llegar un mensaje o abrirse un hilo. Sin descartar
+ * lo ya conocido, un registro desplazado aparecería dos veces en pantalla.
+ *
+ * `posicion` distingue los dos sentidos: los hilos se añaden al final, y los
+ * mensajes anteriores se anteponen, porque el cursor avanza hacia atrás en el
+ * tiempo mientras la conversación se lee del más antiguo al más reciente.
+ */
+export function accumulatePage(existing, incoming, { posicion = 'final', idOf = item => item?.id } = {}) {
+  const previos = Array.isArray(existing) ? existing : [];
+  const nuevos = Array.isArray(incoming) ? incoming : [];
+  if (!nuevos.length) return previos;
+
+  const conocidos = new Set(previos.map(idOf));
+  const inéditos = [];
+  for (const item of nuevos) {
+    const id = idOf(item);
+    // Un registro sin identificador no se puede comparar: entraría de nuevo en
+    // cada página y se acumularía sin límite.
+    if (id === undefined || id === null || id === '') continue;
+    if (conocidos.has(id)) continue;
+    conocidos.add(id);
+    inéditos.push(item);
+  }
+  if (!inéditos.length) return previos;
+  return posicion === 'inicio' ? [...inéditos, ...previos] : [...previos, ...inéditos];
+}
+
+/**
  * Da forma canónica al identificador de un evento entrante.
  *
  * El mismo evento llega con el identificador en sitios distintos según quién

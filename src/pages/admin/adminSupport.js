@@ -1,5 +1,6 @@
 import { apiService } from '../../services/apiService.js';
 import { socket } from '../../services/socketClient.js';
+import { accumulatePage } from '../../utils/liveUpdates.js';
 import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
@@ -38,6 +39,12 @@ function readFileAsDataUrl(file) {
   });
 }
 
+// Los mismos tamaños que el servidor aplica por omisión. Se declaran aquí
+// para que quede a la vista que la pantalla no depende de pedir de más: lo que
+// no cabe en el primer lote se alcanza con el cursor.
+const THREADS_PAGE = 25;
+const MESSAGES_PAGE = 30;
+
 export async function renderAdminSupport(container) {
   let disposed = false;
   let threads = [];
@@ -48,6 +55,13 @@ export async function renderAdminSupport(container) {
   let pendingImage = null;
   // Los mensajes ya no viajan dentro del listado: se cargan del hilo abierto.
   let activeMessages = [];
+  // Cursores de continuación. Sin ellos, todo lo que pasara del primer lote
+  // quedaría inalcanzable, y subir el límite solo correría el problema más
+  // lejos en vez de resolverlo.
+  let threadsCursor = null;
+  let messagesCursor = null;
+  let loadingMoreThreads = false;
+  let loadingOlderMessages = false;
   let averageResponseMs = null;
   let threadTotal = 0;
   let loading = true;
@@ -56,19 +70,58 @@ export async function renderAdminSupport(container) {
   // El endpoint devuelve del más reciente al más antiguo; se invierte para
   // mostrar la conversación en su orden natural.
   const loadActiveMessages = async () => {
+    messagesCursor = null;
     if (!activeId) { activeMessages = []; return; }
-    const page = await apiService.get(`/support/threads/${encodeURIComponent(activeId)}/messages?limit=50`);
+    const page = await apiService.get(`/support/threads/${encodeURIComponent(activeId)}/messages?limit=${MESSAGES_PAGE}`);
     if (disposed) return;
     activeMessages = Array.isArray(page?.items) ? [...page.items].reverse() : [];
+    messagesCursor = page?.nextCursor || null;
+  };
+
+  // Los mensajes anteriores se anteponen: el cursor avanza hacia atrás en el
+  // tiempo, y en pantalla la conversación va del más antiguo al más reciente.
+  const loadOlderMessages = async () => {
+    if (!activeId || !messagesCursor || loadingOlderMessages) return;
+    loadingOlderMessages = true;
+    draw();
+    const consulta = `/support/threads/${encodeURIComponent(activeId)}/messages`
+      + `?limit=${MESSAGES_PAGE}&cursor=${encodeURIComponent(messagesCursor)}`;
+    const page = await apiService.get(consulta);
+    if (disposed) return;
+    loadingOlderMessages = false;
+    if (Array.isArray(page?.items)) {
+      activeMessages = accumulatePage(activeMessages, [...page.items].reverse(), { posicion: 'inicio' });
+      messagesCursor = page.nextCursor || null;
+    } else {
+      messagesCursor = null;
+    }
+    draw();
+  };
+
+  const loadMoreThreads = async () => {
+    if (!threadsCursor || loadingMoreThreads) return;
+    loadingMoreThreads = true;
+    draw();
+    const page = await apiService.get(`/support/threads?limit=${THREADS_PAGE}&cursor=${encodeURIComponent(threadsCursor)}`);
+    if (disposed) return;
+    loadingMoreThreads = false;
+    if (Array.isArray(page?.items)) {
+      threads = accumulatePage(threads, page.items, { idOf: item => item?.userId });
+      threadsCursor = page.nextCursor || null;
+    } else {
+      threadsCursor = null;
+    }
+    draw();
   };
 
   const load = async ({ preserveActive = true } = {}) => {
     const [threadData, tripData] = await Promise.all([
-      apiService.get('/support/threads?limit=100'),
+      apiService.get(`/support/threads?limit=${THREADS_PAGE}`),
       apiService.get('/trips')
     ]);
     if (disposed) return;
     threads = Array.isArray(threadData?.items) ? threadData.items : [];
+    threadsCursor = threadData?.nextCursor || null;
     threadTotal = Number(threadData?.total) || threads.length;
     averageResponseMs = Number.isFinite(threadData?.averageResponseMs) ? threadData.averageResponseMs : null;
     trips = Array.isArray(tripData) ? tripData : [];
@@ -140,12 +193,12 @@ export async function renderAdminSupport(container) {
           <header><h2>Conversaciones</h2><span>${threadTotal}</span></header>
           <nav>${[['all','Todas',threadTotal],['unread','Sin leer',unread],['open','Abiertas',open],['resolved','Resueltas',resolved]].map(([id,label,count]) => `<button class="${filter === id ? 'active' : ''}" data-support-filter="${id}" type="button">${label}<b>${count}</b></button>`).join('')}</nav>
           <label class="support-list-search">${icon('search', 15)}<input id="support-list-search" value="${escapeHtml(search)}" placeholder="Buscar conversación"></label>
-          <div class="support-thread-list">${loading ? '<div class="support-empty">Cargando conversaciones…</div>' : filtered.map(threadCard).join('') || '<div class="support-empty">No hay conversaciones con este filtro.</div>'}</div>
+          <div class="support-thread-list">${loading ? '<div class="support-empty">Cargando conversaciones…</div>' : (filtered.map(threadCard).join('') || '<div class="support-empty">No hay conversaciones con este filtro.</div>') + (threadsCursor ? `<button id="support-more-threads" class="support-load-more" type="button" ${loadingMoreThreads ? 'disabled' : ''}>${loadingMoreThreads ? 'Cargando…' : `Cargar más conversaciones (${Math.max(0, threadTotal - threads.length)} restantes)`}</button>` : '')}</div>
         </aside>
 
         <main class="support-chat-panel">
           ${active ? `<header class="support-chat-head"><div class="support-avatar ${user.role === 'driver' ? 'driver' : ''}">${neutralizePrivatePhoto(user.avatar) ? `<img src="${escapeHtml(neutralizePrivatePhoto(user.avatar))}" alt="">` : escapeHtml(initials(user))}<i></i></div><div><strong>${escapeHtml(fullName(user))}</strong><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} · ID ${escapeHtml(String(user.id).slice(-10))}</small></div><div class="support-chat-actions"><button data-copy-user title="Copiar datos">${icon('info',17)}</button>${user.phone ? `<a href="tel:${escapeHtml(user.phone)}" title="Llamar">${icon('phone',17)}</a>` : ''}</div></header>
-          <div id="support-messages" class="support-messages"><time class="support-day">Conversación de soporte</time>${activeMessages.map(messageBubble).join('') || '<div class="support-empty">Aún no hay mensajes en esta conversación.</div>'}</div>
+          <div id="support-messages" class="support-messages">${messagesCursor ? `<button id="support-older-messages" class="support-load-more" type="button" ${loadingOlderMessages ? 'disabled' : ''}>${loadingOlderMessages ? 'Cargando…' : 'Ver mensajes anteriores'}</button>` : ''}<time class="support-day">Conversación de soporte</time>${activeMessages.map(messageBubble).join('') || '<div class="support-empty">Aún no hay mensajes en esta conversación.</div>'}</div>
           <div class="support-quick-replies">${QUICK_REPLIES.map(reply => `<button data-quick-reply="${escapeHtml(reply)}" type="button">${escapeHtml(reply)}</button>`).join('')}</div>
           <form id="reply-form" class="support-composer"><label class="support-attach" title="Adjuntar imagen">${icon('upload',18)}<input id="support-image" type="file" accept="image/jpeg,image/png,image/webp"></label><button class="support-template" type="button">Respuestas rápidas ${icon('chevronDown',13)}</button><label class="support-reply-wrap">${pendingImage ? `<span>Imagen lista ${icon('check',12)}</span>` : ''}<input id="reply" placeholder="Escribe una respuesta oficial…" autocomplete="off"></label><button class="support-send" type="submit">Enviar ${icon('send',16)}</button></form>` : '<div class="support-no-selection"><span>'+icon('message',30)+'</span><h3>Selecciona una conversación</h3><p>Los mensajes aparecerán aquí en tiempo real.</p></div>'}
         </main>
@@ -177,6 +230,8 @@ export async function renderAdminSupport(container) {
       await loadActiveMessages();
       draw();
     }));
+    container.querySelector('#support-more-threads')?.addEventListener('click', loadMoreThreads);
+    container.querySelector('#support-older-messages')?.addEventListener('click', loadOlderMessages);
     container.querySelectorAll('[data-support-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.supportFilter; draw(); }));
     ['support-global-search', 'support-list-search'].forEach(id => container.querySelector(`#${id}`)?.addEventListener('input', event => {
       search = event.target.value;
