@@ -24,6 +24,7 @@ import {
   normalizeClientFareEstimate
 } from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
+import { createDatabasePersistence } from './services/databasePersistence.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -209,19 +210,14 @@ function ensureSeedCredentials() {
   if (changed) persistDatabase();
 }
 
+// Escritura incremental: solo llegan al disco las filas que cambiaron. La
+// versión anterior borraba y reinsertaba las diez tablas en cada llamada, de
+// modo que el coste de persistir una sola coordenada de GPS crecía con todo el
+// histórico acumulado de la aplicación.
+const persistence = createDatabasePersistence({ sqlite, database });
+
 function persistDatabase() {
-  try {
-    sqlite.exec('BEGIN IMMEDIATE');
-    for (const table of ['users', 'trips', 'notifications', 'messages', 'supportMessages', 'settings', 'transactions', 'driverApplications', 'driverDocuments', 'adminActions']) {
-      sqlite.exec(`DELETE FROM ${table}`);
-      const insert = sqlite.prepare(`INSERT INTO ${table} (id, payload) VALUES (?, ?)`);
-      for (const item of database[table]) insert.run(item.id, JSON.stringify(item));
-    }
-    sqlite.exec('COMMIT');
-  } catch (error) {
-    try { sqlite.exec('ROLLBACK'); } catch {}
-    console.error('[+58express Database] No se pudo guardar la persistencia:', error.message);
-  }
+  persistence.persist();
 }
 
 ensureSeedCredentials();
