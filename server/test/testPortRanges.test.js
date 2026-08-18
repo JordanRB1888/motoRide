@@ -14,7 +14,10 @@ const directorio = path.dirname(fileURLToPath(import.meta.url));
  * sin ninguna asercion fallida, dificil de atribuir.
  */
 
-const PATRON = /(\d{4,5}) \+ Math\.floor\(Math\.random\(\) \* (\d+)\)/g;
+// Los espacios son opcionales: un archivo escribia `4900+Math.floor(...)`
+// sin ellos y se escapaba de esta comprobacion, con un bloque que incluia
+// los puertos SIP 5060 y 5061.
+const PATRON = /(\d{4,5})\s*\+\s*Math\.floor\(Math\.random\(\)\s*\*\s*(\d+)\)/g;
 
 // Puertos que `fetch` rechaza con "bad port" y que por tanto ningun bloque
 // puede contener. Es la lista estandar de puertos bloqueados.
