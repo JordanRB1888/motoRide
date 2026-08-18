@@ -28,7 +28,7 @@ import { createDatabasePersistence } from './services/databasePersistence.js';
 import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createConnectionLimiter } from './services/connectionLimit.js';
 import { resolveTrustProxy } from './services/trustProxy.js';
-import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from './services/httpRateLimit.js';
+import { addressKey, createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from './services/httpRateLimit.js';
 import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagination.js';
 import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
@@ -83,8 +83,75 @@ const limitadores = {
   difusion: createIdentityLimiter({ name: 'difusion', limit: 10, windowMs: CUARTO_DE_HORA })
 };
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
-app.use('/api/auth', authLimiter);
+/**
+ * Intentos de credenciales. Antes habia un solo limitador montado sobre todo
+ * `/api/auth`, asi que login, registro y la lectura de sesion compartian los
+ * mismos treinta intentos por cuarto de hora. Como el cliente pide
+ * `GET /api/auth/me` en cada carga de la aplicacion, bastaba con recargar unas
+ * cuantas veces para quedarse sin poder entrar ni registrarse --y el 429 se
+ * mostraba como "Credenciales incorrectas", porque el limitador antiguo
+ * respondia texto plano.
+ *
+ * Ahora cada finalidad tiene su cubo. Ninguna sesion existe todavia en estas
+ * dos rutas, asi que `createIdentityLimiter` cuenta por direccion, que es lo
+ * que corresponde sin identidad a la que agarrarse.
+ */
+const credenciales = {
+  // Se conserva el tope anterior, ahora dedicado solo a iniciar sesion: es la
+  // proteccion contra prueba de contrasenas por fuerza bruta.
+  login: createIdentityLimiter({ name: 'login', limit: 30, windowMs: CUARTO_DE_HORA }),
+  // Crear cuentas es lo mas abusable de las dos, asi que va algo mas ajustado.
+  // Aun asi deja margen a una direccion compartida por NAT de operador, que en
+  // Venezuela es lo habitual.
+  registro: createIdentityLimiter({ name: 'registro', limit: 20, windowMs: CUARTO_DE_HORA }),
+  // Lectura y edicion de la propia sesion. No son intentos de credenciales y
+  // no deben gastar de los cubos de arriba, pero tampoco pueden quedarse sin
+  // proteccion al retirar el limitador global.
+  sesion: createIdentityLimiter({ name: 'sesion', limit: 240, windowMs: MINUTO }),
+  perfil: createIdentityLimiter({ name: 'perfil', limit: 60, windowMs: MINUTO })
+};
+
+/**
+ * Techo por direccion para /api/auth/me*, ANTES de `requireAuth`.
+ *
+ * Los limitadores de arriba se montan detras de `requireAuth` a proposito:
+ * necesitan `req.user` para contar por cuenta, que es lo correcto cuando hay
+ * sesion --si contaran por direccion, las personas tras el NAT del operador
+ * compartirian cupo sin motivo--. Pero eso deja fuera del conteo justo al
+ * trafico que nunca llega a autenticarse: sin cabecera, con un token invalido
+ * o corrupto, `requireAuth` responde 401 y el limitador de detras no llega a
+ * verlo. Antes de este hotfix ese trafico si tenia techo, porque el limitador
+ * global de `/api/auth` corria por delante de todo.
+ *
+ * Asi que van dos capas: esta por direccion para cortar inundaciones, y la de
+ * cuenta detras para el uso ya autenticado.
+ *
+ * El tope es deliberadamente alto: no cuenta intentos de credenciales --con
+ * un token no se adivina nada-- sino peticiones por segundo. La referencia mas
+ * alta de Phase 3A es `listados`, 240 por minuto, pero aquella cuenta por
+ * cuenta y esta por direccion, y en Venezuela una sola direccion puede ser un
+ * operador movil entero. Dimensionado sobre ese caso: quinientas personas tras
+ * el mismo NAT abriendo la aplicacion una vez por minuto son 500 peticiones,
+ * asi que 1200 deja mas del doble de margen al uso legitimo. Del otro lado,
+ * medido en esta maquina el proceso despacha unas 2700 peticiones por segundo
+ * de las que aqui se rechazan; 1200 por minuto son 20 por segundo, es decir
+ * que recorta una inundacion en mas del noventa y nueve por ciento.
+ */
+// Configurable para poder ejercitarlo en las pruebas sin lanzar cientos de
+// peticiones. Se exige la cadena entera de digitos: `parseInt` aceptaria
+// '600abc' --y '203.0.113.7'--, que es como se colo un fallo en trustProxy.
+const TOPE_GUARDIA_SESION = /^[1-9]\d*$/.test(String(process.env.AUTH_ME_GUARD_LIMIT ?? ''))
+  ? Number(process.env.AUTH_ME_GUARD_LIMIT)
+  : 1200;
+const guardiaSesion = createIdentityLimiter({
+  name: 'sesion-previa',
+  limit: TOPE_GUARDIA_SESION,
+  windowMs: MINUTO,
+  keyGenerator: addressKey
+});
+// Cubre GET y PATCH /api/auth/me, POST /api/auth/me/photo y cualquier subruta
+// que se anada bajo ese prefijo: el techo lo hereda por montaje, no por lista.
+app.use('/api/auth/me', guardiaSesion);
 app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
 
 const server = http.createServer(app);
@@ -615,7 +682,7 @@ app.post('/api/pricing/estimate', requireAuth, (req, res) => {
   }, pricingConfig));
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', credenciales.login, async (req, res) => {
   const { identifier, phone, email, password, role } = req.body;
   const loginId = String(identifier || phone || email || '').trim().toLowerCase();
   const identityUser = database.users.find(item =>
@@ -636,7 +703,7 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ status: 'success', user: publicUser(user), token: signToken(user) });
 });
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', credenciales.registro, async (req, res) => {
   const {
     email, phone, password, role = 'passenger', firstName, lastName
   } = req.body;
@@ -680,9 +747,9 @@ app.post('/api/auth/register', async (req, res) => {
   res.status(201).json({ status: 'created', user: publicUser(user), token: signToken(user) });
 });
 
-app.get('/api/auth/me', requireAuth, (req, res) => res.json(publicUser(req.user)));
+app.get('/api/auth/me', requireAuth, credenciales.sesion, (req, res) => res.json(publicUser(req.user)));
 
-app.patch('/api/auth/me', requireAuth, (req, res) => {
+app.patch('/api/auth/me', requireAuth, credenciales.perfil, (req, res) => {
   const allowed = ['firstName', 'lastName', 'phone', 'cedula', ...(req.user.role === 'driver' ? ['vehicleBrand', 'vehicleModel', 'vehiclePlate', 'vehicleColor'] : [])];
   for (const key of allowed) {
     if (!(key in req.body)) continue;
