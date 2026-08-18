@@ -28,6 +28,7 @@ import { createDatabasePersistence } from './services/databasePersistence.js';
 import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createConnectionLimiter } from './services/connectionLimit.js';
 import { resolveTrustProxy } from './services/trustProxy.js';
+import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from './services/httpRateLimit.js';
 import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagination.js';
 import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
@@ -46,6 +47,42 @@ app.use(cors({
   }
 }));
 app.use(express.json({ limit: '1mb' }));
+/**
+ * Topes por ruta y por identidad. Están calculados sobre el uso legítimo con
+ * holgura: la idea es cortar el abuso, no estorbar a quien trabaja.
+ *
+ * Nivel 2 --lecturas cuyo coste no guarda proporción con el esfuerzo de
+ * pedirlas-- y nivel 3 --escrituras de estado--, según la clasificación de
+ * phase-3a-retencion-y-rutas.md. El nivel 4 no lleva limitador propio: ya está
+ * paginado y una petición cuesta lo mismo la pida quien la pida.
+ */
+const limitadores = {
+  // Nivel 2. Recorren o agregan colecciones enteras en cada llamada.
+  listados: createIdentityLimiter({ name: 'listados', limit: 240, windowMs: MINUTO }),
+  resumenes: createIdentityLimiter({ name: 'resumenes', limit: 240, windowMs: MINUTO }),
+  finanzas: createIdentityLimiter({ name: 'finanzas', limit: 60, windowMs: MINUTO }),
+  cercania: createIdentityLimiter({ name: 'cercania', limit: 180, windowMs: MINUTO }),
+  // Leen de disco en cada peticion. El panel abre una por ficha desplegada.
+  archivos: createIdentityLimiter({ name: 'archivos', limit: 180, windowMs: MINUTO }),
+  // Subidas: caras y raras.
+  subidas: createIdentityLimiter({ name: 'subidas', limit: 30, windowMs: CUARTO_DE_HORA }),
+
+  // Nivel 3. Escrituras de estado; el riesgo es de volumen, no de acceso.
+  mensajes: createIdentityLimiter({ name: 'mensajes', limit: 60, windowMs: MINUTO }),
+  viajes: createIdentityLimiter({ name: 'viajes', limit: 60, windowMs: MINUTO }),
+  // Gemelo REST del GPS por socket: el cliente ya lo regula a uno cada dos
+  // segundos, asi que 120 por minuto es cuatro veces su ritmo maximo.
+  telemetria: createIdentityLimiter({ name: 'telemetria', limit: 120, windowMs: MINUTO }),
+  notificaciones: createIdentityLimiter({ name: 'notificaciones', limit: 120, windowMs: MINUTO }),
+  // Movimientos de dinero: pocos y deliberados.
+  cartera: createIdentityLimiter({ name: 'cartera', limit: 20, windowMs: CUARTO_DE_HORA }),
+  // Administracion. El alta de conductor cuesta un hash de contrasena, pero
+  // dar de alta una flota entera de una sentada es legitimo.
+  administracion: createIdentityLimiter({ name: 'administracion', limit: 300, windowMs: CUARTO_DE_HORA }),
+  // Un comunicado escribe una notificacion por cada persona de la plataforma.
+  difusion: createIdentityLimiter({ name: 'difusion', limit: 10, windowMs: CUARTO_DE_HORA })
+};
+
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
 app.use('/api/auth', authLimiter);
 app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
@@ -666,7 +703,7 @@ const profilePhotoUpload = multer({
   fileFilter: (_req, file, callback) => callback(null, ['image/jpeg','image/png','image/webp'].includes(file.mimetype))
 }).single('file');
 
-app.post('/api/auth/me/photo', requireAuth, profilePhotoUpload, (req, res) => {
+app.post('/api/auth/me/photo', requireAuth, limitadores.subidas, profilePhotoUpload, (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'INVALID_PROFILE_PHOTO' });
   let storageKey;
   try { storageKey = privateStorage.save(req.file, req.user.id); }
@@ -681,7 +718,7 @@ app.post('/api/auth/me/photo', requireAuth, profilePhotoUpload, (req, res) => {
   res.json(publicUser(req.user));
 });
 
-app.get('/api/users/:id/photo', requireAuth, (req, res) => {
+app.get('/api/users/:id/photo', requireAuth, limitadores.archivos, (req, res) => {
   // Una única respuesta para todo lo que no sea un acceso legítimo. Quien no
   // está autorizado no puede distinguir si la persona existe, si tiene
   // fotografía o si compartió alguna vez un viaje: un identificador
@@ -743,7 +780,7 @@ app.get('/api/users', requireAuth, requireRole('admin'), (req, res) => {
   }
 });
 
-app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => {
+app.get('/api/admin/overview', requireAuth, requireRole('admin'), limitadores.resumenes, (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const activeStatuses = ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'];
   const completedToday = database.trips.filter(trip => trip.status === 'COMPLETED' && String(trip.completedAt || trip.closedAt || trip.updatedAt || '').startsWith(today));
@@ -787,7 +824,7 @@ app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => 
   });
 });
 
-app.get('/api/drivers/nearby', requireAuth, (req, res) => {
+app.get('/api/drivers/nearby', requireAuth, limitadores.cercania, (req, res) => {
   const drivers = database.users.filter(user => user.role === 'driver');
   if (req.user.role === 'admin') {
     return res.json(drivers.map(driver => ({
@@ -814,7 +851,7 @@ app.get('/api/drivers/nearby', requireAuth, (req, res) => {
     })));
 });
 
-app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
   const numberFields = ['nightMultiplier', 'peakMultiplier', 'bcvRate', 'parallelRate', 'commissionRate'];
   const next = structuredClone(pricingConfig);
   for (const key of numberFields) if (req.body[key] !== undefined) next[key] = Number(req.body[key]);
@@ -835,7 +872,7 @@ app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), (req, res) =>
   res.json(next);
 });
 
-app.get('/api/admin/finance', requireAuth, requireRole('admin'), (req, res) => {
+app.get('/api/admin/finance', requireAuth, requireRole('admin'), limitadores.finanzas, (req, res) => {
   const commissionRate = Number(pricingConfig.commissionRate || 0.15);
   const transactions = database.trips.filter(trip => trip.status === 'COMPLETED').map(trip => {
     const gross = Number(trip.fareUSD || trip.fareEUR || trip.pricing?.fareUSD || 0);
@@ -858,7 +895,7 @@ app.get('/api/admin/finance', requireAuth, requireRole('admin'), (req, res) => {
   });
 });
 
-app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id && item.status === 'COMPLETED');
   if (!trip) return res.status(404).json({ error: 'COMPLETED_TRIP_NOT_FOUND' });
   if (!['PAID', 'REJECTED', 'PENDING'].includes(req.body.status)) return res.status(400).json({ error: 'INVALID_PAYOUT_STATUS' });
@@ -1004,7 +1041,7 @@ app.get('/api/support/threads/:userId/messages', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/support/messages', requireAuth, (req, res) => {
+app.post('/api/support/messages', requireAuth, limitadores.mensajes, (req, res) => {
   const conversationUserId = req.user.role === 'admin' ? req.body.recipientId : req.user.id;
   const target = database.users.find(user => user.id === conversationUserId && user.role !== 'admin');
   const image = typeof req.body.image === 'string' && /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(req.body.image) && req.body.image.length <= 1_000_000 ? req.body.image : null;
@@ -1030,7 +1067,7 @@ app.get('/api/notifications/me', requireAuth, (req, res) => {
   res.json(notifications);
 });
 
-app.patch('/api/notifications/:id/read', requireAuth, (req, res) => {
+app.patch('/api/notifications/:id/read', requireAuth, limitadores.notificaciones, (req, res) => {
   const notification = database.notifications.find(item => item.id === req.params.id);
   if (!notification || !(notification.userId === req.user.id || notification.targetRole === 'all' || notification.targetRole === req.user.role)) {
     return res.status(404).json({ error: 'NOTIFICATION_NOT_FOUND' });
@@ -1041,7 +1078,7 @@ app.patch('/api/notifications/:id/read', requireAuth, (req, res) => {
   res.json(notification);
 });
 
-app.patch('/api/notifications/me/read-all', requireAuth, (req, res) => {
+app.patch('/api/notifications/me/read-all', requireAuth, limitadores.notificaciones, (req, res) => {
   const now = new Date().toISOString();
   database.notifications.forEach(item => {
     if (item.userId === req.user.id || item.targetRole === 'all' || item.targetRole === req.user.role) {
@@ -1061,7 +1098,7 @@ app.get('/api/wallet/me', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/wallet/topups', requireAuth, (req, res) => {
+app.post('/api/wallet/topups', requireAuth, limitadores.cartera, (req, res) => {
   const amount = Math.round(Number(req.body.amount) * 100) / 100;
   const reference = String(req.body.reference || '').replace(/\D/g, '').slice(0, 20);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1000 || reference.length < 6) return res.status(400).json({ error: 'INVALID_TOPUP' });
@@ -1074,7 +1111,7 @@ app.post('/api/wallet/topups', requireAuth, (req, res) => {
   res.status(201).json(transaction);
 });
 
-app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, (req, res) => {
+app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, limitadores.cartera, (req, res) => {
   const available = Number(req.user.walletBalance || 0);
   const amount = Math.round(Number(req.body.amount || available) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0 || amount > available) return res.status(400).json({ error:'INVALID_PAYOUT' });
@@ -1085,7 +1122,7 @@ app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, (req, res) =
   persistDatabase();io.to('admins').emit('finance:payout_pending',transaction);res.status(201).json(transaction);
 });
 
-app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
   const transaction = database.transactions.find(item => item.id === req.params.id);
   if (!transaction) return res.status(404).json({ error:'TRANSACTION_NOT_FOUND' });
   const status = String(req.body.status || '').toUpperCase();
@@ -1118,7 +1155,7 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), (req
   res.json({ transaction, balance:Number(owner?.walletBalance || 0) });
 });
 
-app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), (req, res) => {
+app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), limitadores.difusion, (req, res) => {
   const role = ['all', 'driver', 'passenger'].includes(req.body.role) ? req.body.role : 'all';
   if (!req.body.title?.trim() || !req.body.message?.trim()) return res.status(400).json({ error: 'INVALID_BROADCAST' });
   const notification = { id: `notification_${crypto.randomUUID()}`, title: sanitizeText(req.body.title, 120), message: sanitizeText(req.body.message, 1000), category: 'ANNOUNCEMENT', icon: '📢', targetRole: role, createdAt: new Date().toISOString() };
@@ -1130,7 +1167,7 @@ app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), (req, res) 
   res.status(201).json(notification);
 });
 
-app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (req, res) => {
+app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const driver = database.users.find(user => user.id === req.params.id && user.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
   const { action, documentKey, documentStatus } = req.body;
@@ -1170,7 +1207,7 @@ app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (re
   res.json(publicUser(driver));
 });
 
-app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id);
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
   const allowedStatuses = ['CANCELLED', 'COMPLETED'];
@@ -1201,7 +1238,7 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) 
   res.json(trip);
 });
 
-app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (req, res) => {
+app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const index = database.users.findIndex(user => user.id === req.params.id && user.role === 'driver');
   if (index < 0) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
   const [driver] = database.users.splice(index, 1);
@@ -1211,7 +1248,7 @@ app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (r
   res.status(204).end();
 });
 
-app.post('/api/admin/drivers', requireAuth, requireRole('admin'), async (req, res) => {
+app.post('/api/admin/drivers', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const { email, phone, firstName, lastName, vehicleType = 'MOTO', vehicleBrand, vehicleModel, vehiclePlate } = req.body;
   if (!email || !phone || !firstName || !vehiclePlate) return res.status(400).json({ error: 'INVALID_DRIVER' });
   if (database.users.some(user => user.email?.toLowerCase() === email.toLowerCase() || user.phone === phone)) {
@@ -1237,7 +1274,7 @@ app.post('/api/admin/drivers', requireAuth, requireRole('admin'), async (req, re
 // completa: el panel usa los ocho mas recientes, el mapa de flota solo los
 // activos, soporte el ultimo de una persona y la gestion de usuarios los de
 // quien este seleccionado. Ahora cada una pide lo suyo.
-app.get('/api/trips', requireAuth, requireRole('admin'), (req, res) => {
+app.get('/api/trips', requireAuth, requireRole('admin'), limitadores.listados, (req, res) => {
   let limit;
   let page;
   let filters;
@@ -1264,7 +1301,7 @@ app.get('/api/trips', requireAuth, requireRole('admin'), (req, res) => {
 // Recuento de viajes por persona. La columna «N viajes» del listado de usuarios
 // solo enseña el numero: traer los viajes para contarlos seria descargar la
 // coleccion con otro nombre.
-app.get('/api/trips/summary', requireAuth, requireRole('admin'), (req, res) => {
+app.get('/api/trips/summary', requireAuth, requireRole('admin'), limitadores.resumenes, (req, res) => {
   const bruto = req.query.userId;
   if (bruto === undefined || bruto === null || bruto === '') {
     return res.status(400).json({ error: 'INVALID_USER_ID' });
@@ -1327,7 +1364,7 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   res.json(database.messages.filter(message => message.tripId === trip.id));
 });
 
-app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) => {
+app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
   // Identificador: lo aporta el cliente por compatibilidad, pero con forma
   // acotada. `Idempotency-Key` sirve cuando el cuerpo no trae `id`, que es lo
   // que ocurre al reenviar desde la cola sin conexión.
@@ -1430,7 +1467,7 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   res.json({ status: 'created', trip });
 });
 
-app.post('/api/trips/scheduled', requireAuth, requireRole('passenger'), (req, res) => {
+app.post('/api/trips/scheduled', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
   const scheduledAt = new Date(req.body.scheduledAt);
   const pickupAddress = String(req.body.pickup?.address || '').trim().slice(0, 240);
   const destinationAddress = String(req.body.destination?.address || '').trim().slice(0, 240);
@@ -1444,14 +1481,14 @@ app.get('/api/trips/scheduled/available', requireAuth, requireApprovedDriver, (r
   res.json(trips);
 });
 
-app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, (req, res) => {
+app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, limitadores.viajes, (req, res) => {
   const trip = database.trips.find(item=>item.id===req.params.id && item.status==='SCHEDULED');
   if(!trip)return res.status(404).json({error:'SCHEDULED_TRIP_NOT_FOUND'});
   if(trip.assignedDriverId && trip.assignedDriverId!==req.user.id)return res.status(409).json({error:'ALREADY_ASSIGNED'});
   trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=new Date().toISOString();persistDatabase();io.to(`user:${trip.passengerId}`).to('admins').emit('scheduled_trip:claimed',{tripId:trip.id,driver:driverPublicProfile(req.user)});res.json(trip);
 });
 
-app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), (req, res) => {
+app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id && item.passengerId === req.user.id && item.status === 'SCHEDULED');
   if (!trip) return res.status(404).json({ error: 'SCHEDULED_TRIP_NOT_FOUND' });
   if (trip.assignedDriverId) return res.status(409).json({ error: 'SCHEDULED_TRIP_ALREADY_ASSIGNED' });
@@ -1463,7 +1500,7 @@ app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), (r
   res.json(trip);
 });
 
-app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, (req, res) => {
+app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, limitadores.telemetria, (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
@@ -1475,7 +1512,7 @@ app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, (req, res) 
   res.json(publicUser(driver));
 });
 
-app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, (req, res) => {
+app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, limitadores.telemetria, (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
