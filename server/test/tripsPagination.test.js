@@ -21,6 +21,10 @@ const ADMIN_PASSWORD = 'trips-pagination-admin';
  */
 
 const VIAJES = 5000;
+// Mas de una pagina de carreras en curso, y entre las mas antiguas: con orden
+// por recencia caen al final del recorrido, que es justo lo que el tope fijo
+// de cien dejaba fuera del mapa.
+const ACTIVOS_ANTIGUOS = 130;
 const PERSONAS = 40;
 const ACTIVOS = ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'];
 
@@ -54,7 +58,7 @@ function sembrar(archivo) {
   for (let i = 0; i < VIAJES; i += 1) {
     // Uno de cada quinientos queda en curso: los activos son pocos por
     // definicion, que es justo lo que el mapa de flota necesita.
-    const enCurso = i % 500 === 0;
+    const enCurso = i < ACTIVOS_ANTIGUOS || i % 500 === 0;
     if (enCurso) activos += 1;
     const status = enCurso ? ACTIVOS[i % ACTIVOS.length] : (i % 7 === 0 ? 'CANCELLED' : 'COMPLETED');
     const cuando = new Date(inicio + i * 60000).toISOString();
@@ -175,7 +179,7 @@ test('los viajes activos son pocos y se piden aparte', async () => {
   const { url, adminToken, activos } = await preparar();
   const pagina = await listar(url, adminToken, '/api/trips?status=active&limit=100');
   assert.equal(pagina.total, activos, `se esperaban ${activos} activos`);
-  assert.ok(pagina.total < VIAJES / 100, 'los activos deben ser una fraccion minima');
+  assert.ok(pagina.total < VIAJES / 10, 'los activos deben ser una fraccion del historico');
   for (const trip of pagina.items) {
     assert.ok(ACTIVOS.includes(trip.status), `estado inesperado: ${trip.status}`);
   }
@@ -283,4 +287,56 @@ test('el coste de una pagina no crece con el volumen acumulado', async () => {
   const ms = Number(process.hrtime.bigint() - inicio) / 1e6;
   assert.equal(pagina.items.length, 8);
   assert.ok(ms < 1500, `la peticion tardo ${ms.toFixed(0)} ms`);
+});
+
+// ------------------------------------------- mapa de flota con muchas carreras
+
+/**
+ * El mapa pedia `?status=active&limit=100` y se quedaba ahi. Con mas de cien
+ * carreras simultaneas, las siguientes dejaban de pintarse sin ningun aviso.
+ * Ahora recorre el cursor hasta agotarlo.
+ */
+test('los viajes activos posteriores al centesimo siguen alcanzandose', async () => {
+  const { url, adminToken, activos } = await preparar();
+
+  // Los activos ya se sembraron: los ACTIVOS_ANTIGUOS primeros, que son los
+  // de fecha mas remota y por tanto los ultimos del recorrido por recencia.
+  const puestos = Array.from({ length: ACTIVOS_ANTIGUOS }, (_, i) => `t_${String(i).padStart(5, '0')}`);
+  assert.ok(puestos.length > 100, `hacen falta mas de cien en curso, hay ${puestos.length}`);
+  assert.ok(activos > 100, `el escenario debe tener mas de cien activos, tiene ${activos}`);
+
+  // Recorrido tal y como lo hace el mapa: paginas de cien hasta agotar cursor.
+  const vistos = [];
+  let cursor = null;
+  let vueltas = 0;
+  do {
+    const ruta = `/api/trips?status=active&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+    const pagina = await listar(url, adminToken, ruta);
+    vistos.push(...pagina.items.map(t => t.id));
+    cursor = pagina.nextCursor;
+    vueltas += 1;
+    assert.ok(vueltas < 60, 'el recorrido no termina');
+  } while (cursor);
+
+  assert.ok(vueltas > 1, 'con mas de cien activos hace falta mas de una pagina');
+  assert.equal(new Set(vistos).size, vistos.length, 'ninguno repetido');
+
+  const alcanzados = new Set(vistos);
+  for (const id of puestos) {
+    assert.ok(alcanzados.has(id), `viaje activo no alcanzado por el mapa: ${id}`);
+  }
+  // Y el recorrido cubre exactamente el total declarado por el servidor.
+  const referencia = await listar(url, adminToken, '/api/trips?status=active&limit=1');
+  assert.equal(vistos.length, referencia.total, 'el recorrido cubre todos los activos');
+});
+
+test('el recorrido de activos no arrastra historico', async () => {
+  const { url, adminToken } = await preparar();
+  const pagina = await listar(url, adminToken, '/api/trips?status=active&limit=100');
+  for (const trip of pagina.items) {
+    assert.ok(!['COMPLETED', 'CANCELLED'].includes(trip.status), `estado terminal en el mapa: ${trip.status}`);
+  }
+  // Y sigue siendo una fraccion del total.
+  const todos = await listar(url, adminToken, '/api/trips?limit=1');
+  assert.ok(pagina.total < todos.total / 10, 'los activos deben ser una fraccion del historico');
 });

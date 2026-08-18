@@ -138,3 +138,42 @@ export function createCoalescer(fn, {
 
   return trigger;
 }
+
+/**
+ * Descarta el resultado de peticiones que ya no son la última.
+ *
+ * Una búsqueda remota no responde en el orden en que se pidió: si alguien
+ * teclea «ana» y luego «ana rodriguez», la respuesta de «ana» puede llegar
+ * después y sobrescribir la lista con resultados de una consulta que ya no es
+ * la que hay en pantalla. El síntoma es desconcertante porque el texto del
+ * buscador dice una cosa y la lista muestra otra.
+ *
+ * `begin()` abre una consulta nueva e invalida las anteriores. `current()` es
+ * para lo que continúa la consulta vigente --cargar más resultados-- y no debe
+ * invalidarla, pero sí quedar descartado si entretanto llega otra. Las dos
+ * devuelven una función que dice si el resultado sigue siendo aplicable.
+ */
+export function createLatestOnly() {
+  let generacion = 0;
+
+  const vigente = mia => () => mia === generacion;
+
+  return {
+    begin() {
+      generacion += 1;
+      return vigente(generacion);
+    },
+    current() {
+      return vigente(generacion);
+    },
+    // Para invalidar sin lanzar una petición todavía: al teclear se descarta
+    // de inmediato lo que venga en camino, aunque la consulta nueva espere al
+    // agrupador.
+    invalidate() {
+      generacion += 1;
+    },
+    get generation() {
+      return generacion;
+    }
+  };
+}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeById, createCoalescer, withCanonicalId, accumulatePage } from '../src/utils/liveUpdates.js';
+import { mergeById, createCoalescer, withCanonicalId, accumulatePage, createLatestOnly } from '../src/utils/liveUpdates.js';
 
 // ------------------------------------------------------------------ mergeById
 
@@ -274,4 +274,155 @@ test('entradas ausentes no rompen la acumulacion', () => {
   assert.deepEqual(accumulatePage(null, [{ id: 'a' }]).map(i => i.id), ['a']);
   assert.deepEqual(accumulatePage([{ id: 'a' }], null).map(i => i.id), ['a']);
   assert.deepEqual(accumulatePage(undefined, undefined), []);
+});
+
+// ------------------------------------------------------------ createLatestOnly
+
+/** Simula una petición que tarda `ms` en resolver, con reloj controlado. */
+function servidorLento() {
+  const pendientes = [];
+  return {
+    pedir(valor, ms) {
+      return new Promise(resolve => pendientes.push({ resolve, valor, cuando: ms }));
+    },
+    // Resuelve en el orden de latencia, no en el de llamada.
+    resolverPorLatencia() {
+      [...pendientes].sort((a, b) => a.cuando - b.cuando).forEach(p => p.resolve(p.valor));
+      pendientes.length = 0;
+    }
+  };
+}
+
+test('una respuesta tardia de una busqueda anterior se descarta', async () => {
+  // Se teclea «ana» y luego «ana rodriguez». La primera tarda mas y responde
+  // despues: sin guardia dejaria la lista mostrando resultados de un texto que
+  // ya no esta en el buscador.
+  const vigencia = createLatestOnly();
+  const red = servidorLento();
+  let lista = [];
+
+  const buscar = async (texto, ms) => {
+    const sigueVigente = vigencia.begin();
+    const resultado = await red.pedir(texto, ms);
+    if (!sigueVigente()) return;
+    lista = [resultado];
+  };
+
+  const primera = buscar('ana', 300);
+  const segunda = buscar('ana rodriguez', 50);
+  red.resolverPorLatencia();
+  await Promise.all([primera, segunda]);
+
+  assert.deepEqual(lista, ['ana rodriguez'], 'debe quedar la ultima consulta, no la que tardo mas');
+});
+
+test('la respuesta de la consulta vigente si se aplica', async () => {
+  const vigencia = createLatestOnly();
+  const red = servidorLento();
+  let lista = [];
+  const buscar = async (texto, ms) => {
+    const sigueVigente = vigencia.begin();
+    const resultado = await red.pedir(texto, ms);
+    if (!sigueVigente()) return;
+    lista = [resultado];
+  };
+  const unica = buscar('carlos', 10);
+  red.resolverPorLatencia();
+  await unica;
+  assert.deepEqual(lista, ['carlos']);
+});
+
+test('«cargar mas» en vuelo se descarta si entretanto cambia la busqueda', async () => {
+  // Es el caso que se cuela con facilidad: la pagina siguiente de la busqueda
+  // vieja llega despues y se anade a la lista nueva, mezclando resultados de
+  // dos consultas distintas.
+  const vigencia = createLatestOnly();
+  const red = servidorLento();
+  let lista = ['viejo_1', 'viejo_2'];
+
+  const cargarMas = async () => {
+    const sigueVigente = vigencia.current();
+    const pagina = await red.pedir(['viejo_3'], 300);
+    if (!sigueVigente()) return;
+    lista = [...lista, ...pagina];
+  };
+  const buscar = async () => {
+    const sigueVigente = vigencia.begin();
+    const pagina = await red.pedir(['nuevo_1'], 50);
+    if (!sigueVigente()) return;
+    lista = pagina;
+  };
+
+  const continuacion = cargarMas();
+  const busqueda = buscar();
+  red.resolverPorLatencia();
+  await Promise.all([continuacion, busqueda]);
+
+  assert.deepEqual(lista, ['nuevo_1'], 'la pagina de la busqueda vieja no debe colarse');
+});
+
+test('«cargar mas» se aplica si nadie cambio la busqueda', async () => {
+  const vigencia = createLatestOnly();
+  const red = servidorLento();
+  let lista = ['a'];
+  const cargarMas = async () => {
+    const sigueVigente = vigencia.current();
+    const pagina = await red.pedir(['b'], 20);
+    if (!sigueVigente()) return;
+    lista = [...lista, ...pagina];
+  };
+  const continuacion = cargarMas();
+  red.resolverPorLatencia();
+  await continuacion;
+  assert.deepEqual(lista, ['a', 'b']);
+});
+
+test('invalidate descarta lo que viene en camino sin lanzar nada', async () => {
+  // Al teclear se invalida ya, sin esperar al agrupador de 250 ms: cualquier
+  // respuesta en vuelo corresponde a un texto que ya no esta en el buscador.
+  const vigencia = createLatestOnly();
+  const red = servidorLento();
+  let lista = [];
+  const enVuelo = (async () => {
+    const sigueVigente = vigencia.begin();
+    const resultado = await red.pedir('vieja', 100);
+    if (!sigueVigente()) return;
+    lista = [resultado];
+  })();
+
+  vigencia.invalidate();
+  red.resolverPorLatencia();
+  await enVuelo;
+  assert.deepEqual(lista, [], 'la respuesta invalidada no debe aplicarse');
+});
+
+test('varias consultas encadenadas dejan solo la ultima', async () => {
+  const vigencia = createLatestOnly();
+  const red = servidorLento();
+  let lista = [];
+  const buscar = async (texto, ms) => {
+    const sigueVigente = vigencia.begin();
+    const resultado = await red.pedir(texto, ms);
+    if (!sigueVigente()) return;
+    lista = [resultado];
+  };
+  // Cinco pulsaciones con latencias arbitrarias, la ultima la mas lenta.
+  const todas = [
+    buscar('a', 90), buscar('an', 10), buscar('ana', 70),
+    buscar('anab', 30), buscar('anabel', 200)
+  ];
+  red.resolverPorLatencia();
+  await Promise.all(todas);
+  assert.deepEqual(lista, ['anabel'], 'solo la ultima consulta puede escribir');
+});
+
+test('la generacion avanza con cada consulta nueva y no con las continuaciones', () => {
+  const vigencia = createLatestOnly();
+  const inicio = vigencia.generation;
+  vigencia.current();
+  assert.equal(vigencia.generation, inicio, 'continuar no abre generacion');
+  vigencia.begin();
+  assert.equal(vigencia.generation, inicio + 1);
+  vigencia.invalidate();
+  assert.equal(vigencia.generation, inicio + 2);
 });

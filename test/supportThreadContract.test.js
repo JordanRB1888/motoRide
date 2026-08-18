@@ -159,3 +159,28 @@ test('la busqueda ya no se resuelve en el navegador', () => {
   assert.match(panel, /setTimeout\(\(\) => \{ temporizadorBusqueda = null; loadThreads\(\); \}, \d+\)/,
     'y agrupar las pulsaciones');
 });
+
+test('la lista descarta respuestas de consultas ya superadas', () => {
+  const panel = leer(PANEL);
+  // La busqueda es remota: sin guardia, la respuesta de un texto anterior
+  // puede aterrizar despues y dejar la lista mostrando algo que ya no es lo
+  // que dice el buscador.
+  assert.match(panel, /const listaVigente = createLatestOnly\(\)/, 'debe existir la guardia');
+  assert.match(panel, /const sigueVigente = listaVigente\.begin\(\)/, 'cada consulta nueva abre generacion');
+  assert.match(panel, /const sigueVigente = listaVigente\.current\(\)/, 'cargar mas continua la vigente');
+  assert.match(panel, /listaVigente\.invalidate\(\)/, 'teclear invalida lo que viene en camino');
+
+  // Las tres funciones que escriben la lista tienen que comprobar vigencia
+  // antes de hacerlo. Las demas cargas --mensajes, viaje activo-- no tocan
+  // `threads` y no la necesitan.
+  for (const nombre of ['loadMoreThreads', 'loadThreads', 'load']) {
+    const inicio = panel.indexOf(`const ${nombre} = async (`);
+    assert.notEqual(inicio, -1, `no se encontro ${nombre}`);
+    const cuerpo = panel.slice(inicio, inicio + 900);
+    const escribe = cuerpo.indexOf('threads = ');
+    assert.notEqual(escribe, -1, `${nombre} deberia escribir la lista`);
+    const guardia = cuerpo.indexOf('!sigueVigente()');
+    assert.ok(guardia !== -1 && guardia < escribe,
+      `${nombre} escribe la lista sin comprobar vigencia antes`);
+  }
+});

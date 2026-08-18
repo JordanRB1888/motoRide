@@ -3,6 +3,7 @@ import { apiService } from '../../services/apiService.js';
 import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
+import { accumulatePage } from '../../utils/liveUpdates.js';
 
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 import { localAvatarHtml } from '../../utils/localAvatar.js';
@@ -216,12 +217,41 @@ async function initializeFleetMap(container) {
     if (selectedDriverId === id) selectDriver(id, false);
   }
 
+  // El mapa solo casa conductores con carreras en curso: los viajes cerrados
+  // no pintan nada y eran la inmensa mayoria de la coleccion.
+  //
+  // Se recorre el cursor hasta agotarlo en lugar de quedarse en la primera
+  // pagina: con mas de cien carreras simultaneas, las siguientes dejarian de
+  // aparecer en el mapa sin ningun aviso, que es justo el defecto que ya se
+  // corrigio en la carga de conductores.
+  const TRIPS_PAGE = 100;
+  // Cortafuegos por si el cursor no avanzara. Cincuenta paginas son cinco mil
+  // carreras a la vez, muy por encima de cualquier operacion real.
+  const TRIPS_MAX_PAGES = 50;
+
+  const loadActiveTrips = async () => {
+    let acumulados = [];
+    let cursor = null;
+    let vueltas = 0;
+    do {
+      const consulta = `/trips?status=active&limit=${TRIPS_PAGE}`
+        + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+      const pagina = await apiService.get(consulta);
+      if (!Array.isArray(pagina?.items)) break;
+      acumulados = accumulatePage(acumulados, pagina.items);
+      cursor = pagina.nextCursor || null;
+      vueltas += 1;
+    } while (cursor && vueltas < TRIPS_MAX_PAGES);
+    return acumulados;
+  };
+
   try {
-    // El mapa solo casa conductores con carreras en curso: los viajes cerrados
-    // no pintan nada y eran la inmensa mayoria de la coleccion.
-    const [initialDrivers, initialTrips] = await Promise.all([apiService.get('/drivers/nearby'), apiService.get('/trips?status=active&limit=100')]);
+    const [initialDrivers, initialTrips] = await Promise.all([
+      apiService.get('/drivers/nearby'),
+      loadActiveTrips()
+    ]);
     if (disposed) return;
-    trips = Array.isArray(initialTrips?.items) ? initialTrips.items : [];
+    trips = initialTrips;
     if (Array.isArray(initialDrivers)) initialDrivers.forEach(upsertDriver);
     const located = [...drivers.values()].map(coordinatesOf).filter(Boolean);
     if (located.length > 1) map.fitBounds(located, { padding: [70, 70], maxZoom: 14 });

@@ -1,6 +1,6 @@
 import { apiService } from '../../services/apiService.js';
 import { socket } from '../../services/socketClient.js';
-import { accumulatePage } from '../../utils/liveUpdates.js';
+import { accumulatePage, createLatestOnly } from '../../utils/liveUpdates.js';
 import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
@@ -59,6 +59,10 @@ export async function renderAdminSupport(container) {
   // quedaría inalcanzable, y subir el límite solo correría el problema más
   // lejos en vez de resolverlo.
   let threadsCursor = null;
+  // La búsqueda es remota, así que las respuestas no llegan en el orden en que
+  // se pidieron: la de «ana» puede aterrizar después de la de «ana rodriguez»
+  // y dejar la lista mostrando algo que ya no es lo que dice el buscador.
+  const listaVigente = createLatestOnly();
   let messagesCursor = null;
   let loadingMoreThreads = false;
   let loadingOlderMessages = false;
@@ -121,10 +125,14 @@ export async function renderAdminSupport(container) {
 
   const loadMoreThreads = async () => {
     if (!threadsCursor || loadingMoreThreads) return;
+    // Continúa la consulta vigente, así que no la invalida; pero si mientras
+    // está en vuelo cambia la búsqueda, su página deja de tener sentido y no
+    // debe añadirse a la lista nueva.
+    const sigueVigente = listaVigente.current();
     loadingMoreThreads = true;
     draw();
     const page = await apiService.get(consultaHilos({ cursor: threadsCursor }));
-    if (disposed) return;
+    if (disposed || !sigueVigente()) return;
     loadingMoreThreads = false;
     if (Array.isArray(page?.items)) {
       threads = accumulatePage(threads, page.items, { idOf: item => item?.userId });
@@ -138,8 +146,10 @@ export async function renderAdminSupport(container) {
   // Al cambiar el texto se pide la lista de nuevo desde el principio. No se
   // recarga el hilo abierto ni los viajes: no dependen de la busqueda.
   const loadThreads = async () => {
+    const sigueVigente = listaVigente.begin();
+    loadingMoreThreads = false;
     const page = await apiService.get(consultaHilos());
-    if (disposed) return;
+    if (disposed || !sigueVigente()) return;
     threads = Array.isArray(page?.items) ? page.items : [];
     threadsCursor = page?.nextCursor || null;
     threadTotal = Number(page?.total) || threads.length;
@@ -156,10 +166,11 @@ export async function renderAdminSupport(container) {
   };
 
   const load = async ({ preserveActive = true } = {}) => {
+    const sigueVigente = listaVigente.begin();
     const [threadData] = await Promise.all([
       apiService.get(consultaHilos())
     ]);
-    if (disposed) return;
+    if (disposed || !sigueVigente()) return;
     threads = Array.isArray(threadData?.items) ? threadData.items : [];
     threadsCursor = threadData?.nextCursor || null;
     threadTotal = Number(threadData?.total) || threads.length;
@@ -275,6 +286,9 @@ export async function renderAdminSupport(container) {
     container.querySelectorAll('[data-support-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.supportFilter; draw(); }));
     ['support-global-search', 'support-list-search'].forEach(id => container.querySelector(`#${id}`)?.addEventListener('input', event => {
       search = event.target.value;
+      // Se invalida ya, no al vencer el agrupador: cualquier respuesta en
+      // vuelo corresponde a un texto que ya no está en el buscador.
+      listaVigente.invalidate();
       buscarDiferido();
       const cursor = search.length;
       draw();

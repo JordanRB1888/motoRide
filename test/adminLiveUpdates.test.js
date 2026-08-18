@@ -138,3 +138,24 @@ test('el mapa recorre el cursor hasta agotarlo, con cortafuegos', () => {
   assert.ok(maximo, 'debe haber un cortafuegos de vueltas');
   assert.ok(Number(maximo[1]) >= 10, `cortafuegos demasiado corto: ${maximo[1]}`);
 });
+
+test('el mapa de flota recorre los viajes activos hasta agotarlos', () => {
+  const mapa = fs.readFileSync(path.join(raiz, 'src/pages/admin/fleetMap.js'), 'utf8');
+
+  // Quedarse en la primera pagina dejaria fuera del mapa las carreras
+  // posteriores a la centesima, sin ningun aviso.
+  assert.match(mapa, /const loadActiveTrips = async \(\) =>/, 'debe existir el recorrido');
+  assert.match(mapa, /\} while \(cursor && vueltas < TRIPS_MAX_PAGES\)/, 'debe continuar mientras haya cursor');
+  assert.match(mapa, /status=active/, 'solo carreras en curso, nunca el historico');
+  assert.ok(!/limit=100'\)/.test(mapa), 'no debe quedar el tope fijo de la primera version');
+
+  const maximo = mapa.match(/const TRIPS_MAX_PAGES = (\d+)/);
+  assert.ok(maximo, 'debe haber un cortafuegos de vueltas');
+  assert.ok(Number(maximo[1]) >= 10, `cortafuegos demasiado corto: ${maximo[1]}`);
+
+  // Ningun estado terminal se pide: descargar el historico es justo lo que se
+  // estaba corrigiendo.
+  for (const terminal of ['completed', 'cancelled']) {
+    assert.ok(!mapa.includes(`status=${terminal}`), `el mapa no debe pedir ${terminal}`);
+  }
+});
