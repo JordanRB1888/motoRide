@@ -17,7 +17,7 @@ const TEXTO = Buffer.from('esto no es una imagen aunque lo diga la cabecera');
 
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-photo-'));
-  const port = 9500 + Math.floor(Math.random() * 400);
+  const port = 15700 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: { ...process.env, PORT: String(port), DATA_FILE: path.join(tempDir, 'database.json'), JWT_SECRET: 'photo-test-secret' },
@@ -315,7 +315,7 @@ test('ninguna proyección publica bytes, base64 ni URL pública de fotografía',
   const cuerpos = {
     'respuesta de subida': await subida.text(),
     'perfil propio': await (await asJson(`${url}/api/auth/me`, persona.token)).text(),
-    'listado de usuarios (admin)': await (await asJson(`${url}/api/users`, adminToken)).text(),
+    'listado de usuarios (admin)': await (await asJson(`${url}/api/users?limit=100`, adminToken)).text(),
     'conductores cercanos': await (await asJson(`${url}/api/drivers/nearby?lat=10.66&lng=-71.61`, persona.token)).text()
   };
 

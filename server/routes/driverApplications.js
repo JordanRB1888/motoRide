@@ -31,6 +31,21 @@ const upload = multer({
 const uploadFields = upload.fields(DRIVER_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
 const singleDocumentUpload = upload.single('file');
 
+import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from '../services/httpRateLimit.js';
+
+// El limitador de /api/driver-applications no alcanza a todas estas rutas:
+// el router se monta en /api, de modo que /api/admin/driver-applications,
+// /api/admin/actions y /api/driver-documents/:id/content quedaban sin cubrir
+// pese a parecer que estaban dentro.
+const limitadores = {
+  // Lee un documento de disco en cada peticion.
+  documentos: createIdentityLimiter({ name: 'documentos', limit: 120, windowMs: MINUTO }),
+  // Subir cedula, licencia o RCV: caro y poco frecuente.
+  subidas: createIdentityLimiter({ name: 'subidas-documento', limit: 40, windowMs: CUARTO_DE_HORA }),
+  // Revision de expedientes desde administracion.
+  expedientes: createIdentityLimiter({ name: 'expedientes', limit: 240, windowMs: MINUTO })
+};
+
 export function createDriverApplicationsRouter({
   database,
   persistDatabase,
@@ -190,7 +205,7 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
-  router.patch('/driver-applications/me', requireAuth, (req, res) => {
+  router.patch('/driver-applications/me', requireAuth, limitadores.expedientes, (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
@@ -217,7 +232,7 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
-  router.put('/driver-applications/me/documents/:type', requireAuth, singleDocumentUpload, (req, res) => {
+  router.put('/driver-applications/me/documents/:type', requireAuth, limitadores.subidas, singleDocumentUpload, (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
@@ -240,7 +255,7 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
-  router.post('/driver-applications/me/submit', requireAuth, (req, res) => {
+  router.post('/driver-applications/me/submit', requireAuth, limitadores.expedientes, (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
@@ -257,7 +272,7 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
-  router.get('/admin/driver-applications', requireAuth, requireRole('admin'), (req, res) => {
+  router.get('/admin/driver-applications', requireAuth, requireRole('admin'), limitadores.expedientes, (req, res) => {
     const status = String(req.query.status || '').toLowerCase();
     const query = String(req.query.q || '').trim().toLowerCase();
     const allowedStatuses = Object.values(DRIVER_APPLICATION_STATUS);
@@ -281,7 +296,7 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationAdminDetail(application, getApplicationDocuments(application.id), database.users.find(user => user.id === application.userId)));
   });
 
-  router.patch('/admin/driver-applications/:id/decision', requireAuth, requireRole('admin'), (req, res) => {
+  router.patch('/admin/driver-applications/:id/decision', requireAuth, requireRole('admin'), limitadores.expedientes, (req, res) => {
     const application = database.driverApplications.find(item => item.id === req.params.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     const user = database.users.find(item => item.id === application.userId);
@@ -373,11 +388,11 @@ export function createDriverApplicationsRouter({
     res.json({ application: driverApplicationAdminDetail(application, getApplicationDocuments(application.id), user), user: publicUser(user), audit });
   });
 
-  router.get('/admin/actions', requireAuth, requireRole('admin'), (req, res) => {
+  router.get('/admin/actions', requireAuth, requireRole('admin'), limitadores.expedientes, (req, res) => {
     res.json(database.adminActions.slice().sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 500));
   });
 
-  router.get('/driver-documents/:id/content', requireAuth, (req, res) => {
+  router.get('/driver-documents/:id/content', requireAuth, limitadores.documentos, (req, res) => {
     // Una respuesta única para todo lo que no sea un acceso legítimo: quien no
     // es el propietario ni administrador no puede distinguir un documento
     // ajeno de uno inexistente, ni deducir a quién pertenece.

@@ -1,0 +1,168 @@
+/**
+ * Paginación por cursor para los listados del panel de administración.
+ *
+ * Se usa cursor y no desplazamiento numérico porque estas colecciones cambian
+ * mientras se navegan: con `offset`, un registro nuevo al principio desplaza
+ * todo y la página siguiente repite o se salta elementos. El cursor apunta a
+ * una posición concreta del orden, así que sigue siendo válido aunque la
+ * colección crezca.
+ *
+ * El cursor es opaco a propósito: quien consume la API no debe construirlo ni
+ * deducir nada de él. Se valida siempre antes de usarlo, porque llega del
+ * cliente igual que cualquier otro parámetro.
+ */
+
+export class PaginationError extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+}
+
+/**
+ * Interpreta `limit` de la consulta.
+ *
+ * El tope máximo es lo que impide que el cliente reintroduzca el problema
+ * pidiendo `?limit=999999`: sin él, la paginación sería voluntaria.
+ */
+export function parseLimit(value, { defaultLimit, maxLimit }) {
+  if (value === undefined || value === null || value === '') return defaultLimit;
+  // `Number.parseInt` se detiene en el primer carácter no numérico, así que
+  // "50abc" pasaría como 50. Se exige que sea solo dígitos.
+  if (!/^\d+$/.test(String(value))) throw new PaginationError('INVALID_LIMIT');
+  const limite = Number(value);
+  if (limite < 1) throw new PaginationError('INVALID_LIMIT');
+  if (limite > maxLimit) throw new PaginationError('LIMIT_TOO_LARGE');
+  return limite;
+}
+
+/**
+ * Interpreta `page` de la consulta, en base 1.
+ *
+ * Convive con el cursor porque no sirven para lo mismo: el cursor recorre en
+ * orden y no permite saltar, y hay pantallas con paginador numerado donde
+ * saltar a la página cuatro es justo lo que se espera.
+ */
+export function parsePage(value) {
+  if (value === undefined || value === null || value === '') return 1;
+  if (!/^\d+$/.test(String(value))) throw new PaginationError('INVALID_PAGE');
+  const pagina = Number(value);
+  if (pagina < 1) throw new PaginationError('INVALID_PAGE');
+  return pagina;
+}
+
+// Base64url sin relleno: viaja en una URL sin necesidad de escapado.
+const encodeBase64Url = texto => Buffer.from(texto, 'utf8').toString('base64')
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+const decodeBase64Url = texto => Buffer.from(
+  texto.replace(/-/g, '+').replace(/_/g, '/'), 'base64'
+).toString('utf8');
+
+const CURSOR_VALIDO = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Construye el cursor a partir de la clave de orden y del identificador.
+ *
+ * Van los dos porque la clave de orden --una fecha-- se repite: dos mensajes
+ * del mismo segundo tendrían el mismo cursor y la paginación saltaría o
+ * repetiría registros. El identificador desempata.
+ *
+ * Los dos valores se serializan como JSON en lugar de unirse con un separador.
+ * Cualquier carácter que se eligiera como separador podría aparecer dentro de
+ * la clave de orden o del identificador y partir el cursor por el sitio
+ * equivocado; con JSON no hay ambigüedad posible. La versión anterior usaba un
+ * byte nulo justamente para evitar esa colisión, y eso volvía binario el
+ * archivo fuente.
+ */
+export function encodeCursor({ sortKey, id }) {
+  if (typeof id !== 'string' || id === '') throw new PaginationError('INVALID_CURSOR_INPUT');
+  return encodeBase64Url(JSON.stringify([String(sortKey ?? ''), id]));
+}
+
+export function decodeCursor(value) {
+  if (typeof value !== 'string' || value === '') throw new PaginationError('INVALID_CURSOR');
+  if (!CURSOR_VALIDO.test(value)) throw new PaginationError('INVALID_CURSOR');
+
+  let par;
+  try {
+    par = JSON.parse(decodeBase64Url(value));
+  } catch {
+    throw new PaginationError('INVALID_CURSOR');
+  }
+  // Un cursor manipulado puede decodificar a cualquier cosa: se exige la forma
+  // exacta antes de creérselo.
+  if (!Array.isArray(par) || par.length !== 2) throw new PaginationError('INVALID_CURSOR');
+  const [sortKey, id] = par;
+  if (typeof sortKey !== 'string' || typeof id !== 'string' || id === '') {
+    throw new PaginationError('INVALID_CURSOR');
+  }
+  return { sortKey, id };
+}
+
+/**
+ * Corta una página de una colección YA ordenada.
+ *
+ * No ordena: quien llama conoce su propio criterio y lo aplica una sola vez.
+ * Aquí solo se localiza el cursor y se recorta.
+ *
+ * Un cursor que ya no existe --el registro se borró entre dos páginas-- no es
+ * un error: se responde desde el principio en lugar de dejar al cliente
+ * atascado sin poder avanzar.
+ */
+export function paginate(items, { limit, cursor, sortKeyOf, idOf = item => item.id }) {
+  const lista = Array.isArray(items) ? items : [];
+  let desde = 0;
+
+  if (cursor) {
+    const { id } = decodeCursor(cursor);
+    const posicion = lista.findIndex(item => idOf(item) === id);
+    if (posicion >= 0) desde = posicion + 1;
+  }
+
+  const pagina = lista.slice(desde, desde + limit);
+  // El cursor apunta al ÚLTIMO registro devuelto, no al primero de la página
+  // siguiente: al reanudar se busca esa posición y se continúa justo después.
+  // Apuntar al siguiente haría que ese registro se saltara al reanudar.
+  const hayMas = desde + limit < lista.length;
+  const ultimo = pagina[pagina.length - 1];
+  return {
+    items: pagina,
+    nextCursor: hayMas && ultimo
+      ? encodeCursor({ sortKey: sortKeyOf ? sortKeyOf(ultimo) : '', id: idOf(ultimo) })
+      : null,
+    total: lista.length
+  };
+}
+
+/**
+ * Corta una página por posición, para las pantallas con paginador numerado.
+ *
+ * A diferencia del cursor, aquí un registro insertado por delante desplaza
+ * todo lo demás. Es el comportamiento que corresponde a una interfaz que
+ * enseña números de página: quien la usa espera que la página cuatro sea
+ * siempre el mismo tramo del listado, no una continuación exacta.
+ *
+ * La página se ajusta a la última con contenido, igual que hacía la pantalla,
+ * para que un número fuera de rango no devuelva una tabla vacía.
+ */
+export function paginateByPage(items, { limit, page, sortKeyOf, idOf = item => item.id }) {
+  const lista = Array.isArray(items) ? items : [];
+  const totalPages = Math.max(1, Math.ceil(lista.length / limit));
+  const paginaEfectiva = Math.min(Math.max(1, page), totalPages);
+  const desde = (paginaEfectiva - 1) * limit;
+
+  const pagina = lista.slice(desde, desde + limit);
+  const hayMas = desde + limit < lista.length;
+  const ultimo = pagina[pagina.length - 1];
+  return {
+    items: pagina,
+    // Se ofrece igualmente el cursor, para quien solo quiera recorrer.
+    nextCursor: hayMas && ultimo
+      ? encodeCursor({ sortKey: sortKeyOf ? sortKeyOf(ultimo) : '', id: idOf(ultimo) })
+      : null,
+    total: lista.length,
+    page: paginaEfectiva,
+    totalPages
+  };
+}

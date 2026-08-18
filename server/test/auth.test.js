@@ -11,7 +11,7 @@ const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-auth-'));
-  const port = 4600 + Math.floor(Math.random() * 300);
+  const port = 10100 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: {

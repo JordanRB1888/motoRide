@@ -11,7 +11,7 @@ const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-wl-'));
-  const port = 6800 + Math.floor(Math.random() * 300);
+  const port = 14500 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: { ...process.env, PORT: String(port), DATA_FILE: path.join(tempDir, 'database.json'), JWT_SECRET: 'whitelist-test-secret' },
@@ -142,7 +142,7 @@ test('un cliente no puede inyectar identidad ni estado al crear un viaje', async
   }
 
   // Y tampoco quedan en la base: se relee por la API de administración.
-  const todos = await (await asJson(`${url}/api/trips`, adminToken)).json();
+  const todos = (await (await asJson(`${url}/api/trips?limit=100`, adminToken)).json()).items;
   const persistido = todos.find(item => item.id === 'trip_inyeccion');
   assert.ok(persistido);
   assert.equal(persistido.passengerId, atacante.user.id);

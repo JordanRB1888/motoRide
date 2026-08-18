@@ -24,6 +24,16 @@ import {
   normalizeClientFareEstimate
 } from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
+import { createDatabasePersistence } from './services/databasePersistence.js';
+import { createEventRateLimiter } from './services/socketRateLimit.js';
+import { createConnectionLimiter } from './services/connectionLimit.js';
+import { resolveTrustProxy } from './services/trustProxy.js';
+import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from './services/httpRateLimit.js';
+import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagination.js';
+import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
+import { averageAdminResponseMs } from './domain/supportMetrics.js';
+import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch.js';
+import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_TRIP_USER_IDS } from './domain/tripFilters.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -37,6 +47,42 @@ app.use(cors({
   }
 }));
 app.use(express.json({ limit: '1mb' }));
+/**
+ * Topes por ruta y por identidad. Están calculados sobre el uso legítimo con
+ * holgura: la idea es cortar el abuso, no estorbar a quien trabaja.
+ *
+ * Nivel 2 --lecturas cuyo coste no guarda proporción con el esfuerzo de
+ * pedirlas-- y nivel 3 --escrituras de estado--, según la clasificación de
+ * phase-3a-retencion-y-rutas.md. El nivel 4 no lleva limitador propio: ya está
+ * paginado y una petición cuesta lo mismo la pida quien la pida.
+ */
+const limitadores = {
+  // Nivel 2. Recorren o agregan colecciones enteras en cada llamada.
+  listados: createIdentityLimiter({ name: 'listados', limit: 240, windowMs: MINUTO }),
+  resumenes: createIdentityLimiter({ name: 'resumenes', limit: 240, windowMs: MINUTO }),
+  finanzas: createIdentityLimiter({ name: 'finanzas', limit: 60, windowMs: MINUTO }),
+  cercania: createIdentityLimiter({ name: 'cercania', limit: 180, windowMs: MINUTO }),
+  // Leen de disco en cada peticion. El panel abre una por ficha desplegada.
+  archivos: createIdentityLimiter({ name: 'archivos', limit: 180, windowMs: MINUTO }),
+  // Subidas: caras y raras.
+  subidas: createIdentityLimiter({ name: 'subidas', limit: 30, windowMs: CUARTO_DE_HORA }),
+
+  // Nivel 3. Escrituras de estado; el riesgo es de volumen, no de acceso.
+  mensajes: createIdentityLimiter({ name: 'mensajes', limit: 60, windowMs: MINUTO }),
+  viajes: createIdentityLimiter({ name: 'viajes', limit: 60, windowMs: MINUTO }),
+  // Gemelo REST del GPS por socket: el cliente ya lo regula a uno cada dos
+  // segundos, asi que 120 por minuto es cuatro veces su ritmo maximo.
+  telemetria: createIdentityLimiter({ name: 'telemetria', limit: 120, windowMs: MINUTO }),
+  notificaciones: createIdentityLimiter({ name: 'notificaciones', limit: 120, windowMs: MINUTO }),
+  // Movimientos de dinero: pocos y deliberados.
+  cartera: createIdentityLimiter({ name: 'cartera', limit: 20, windowMs: CUARTO_DE_HORA }),
+  // Administracion. El alta de conductor cuesta un hash de contrasena, pero
+  // dar de alta una flota entera de una sentada es legitimo.
+  administracion: createIdentityLimiter({ name: 'administracion', limit: 300, windowMs: CUARTO_DE_HORA }),
+  // Un comunicado escribe una notificacion por cada persona de la plataforma.
+  difusion: createIdentityLimiter({ name: 'difusion', limit: 10, windowMs: CUARTO_DE_HORA })
+};
+
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
 app.use('/api/auth', authLimiter);
 app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
@@ -57,6 +103,16 @@ const isProduction = process.env.NODE_ENV === 'production' || String(process.env
 if (isProduction && (!process.env.JWT_SECRET || jwtSecret.length < 32)) {
   throw new Error('JWT_SECRET_REQUIRED_IN_PRODUCTION');
 }
+
+// Sin esto, `req.ip` es la dirección del proxy de borde, idéntica para todo el
+// mundo: los limitadores de frecuencia dejan de ser «por cliente» y pasan a ser
+// un cupo global, de modo que treinta intentos de inicio de sesión en toda la
+// plataforma dejan fuera a los demás. El valor es el número EXACTO de proxies
+// por delante y tiene que coincidir con el despliegue real: pasarse permite
+// falsificar la dirección de origen y quedarse corto reproduce el cupo global.
+const trustProxy = resolveTrustProxy({ value: process.env.TRUST_PROXY, isProduction });
+app.set('trust proxy', trustProxy.value);
+console.log(`[+58express HTTP] trust proxy = ${String(trustProxy.value)} (${trustProxy.source})`);
 const privateStorage = createPrivateStorage({
   rootDirectory: process.env.UPLOAD_DIR || path.join(path.dirname(dataFile), 'private-uploads')
 });
@@ -209,19 +265,22 @@ function ensureSeedCredentials() {
   if (changed) persistDatabase();
 }
 
+// Escritura incremental: solo llegan al disco las filas que cambiaron. La
+// versión anterior borraba y reinsertaba las diez tablas en cada llamada, de
+// modo que el coste de persistir una sola coordenada de GPS crecía con todo el
+// histórico acumulado de la aplicación.
+const persistence = createDatabasePersistence({ sqlite, database });
+
 function persistDatabase() {
-  try {
-    sqlite.exec('BEGIN IMMEDIATE');
-    for (const table of ['users', 'trips', 'notifications', 'messages', 'supportMessages', 'settings', 'transactions', 'driverApplications', 'driverDocuments', 'adminActions']) {
-      sqlite.exec(`DELETE FROM ${table}`);
-      const insert = sqlite.prepare(`INSERT INTO ${table} (id, payload) VALUES (?, ?)`);
-      for (const item of database[table]) insert.run(item.id, JSON.stringify(item));
-    }
-    sqlite.exec('COMMIT');
-  } catch (error) {
-    try { sqlite.exec('ROLLBACK'); } catch {}
-    console.error('[+58express Database] No se pudo guardar la persistencia:', error.message);
-  }
+  persistence.persist();
+}
+
+// Para los eventos que modifican exactamente un registro ya conocido. Ver el
+// contrato en services/databasePersistence.js: no guarda otros cambios
+// pendientes, así que solo debe usarse cuando el manejador toca un único
+// registro y nada más.
+function persistRecord(table, item) {
+  persistence.persistRecord(table, item);
 }
 
 ensureSeedCredentials();
@@ -644,7 +703,7 @@ const profilePhotoUpload = multer({
   fileFilter: (_req, file, callback) => callback(null, ['image/jpeg','image/png','image/webp'].includes(file.mimetype))
 }).single('file');
 
-app.post('/api/auth/me/photo', requireAuth, profilePhotoUpload, (req, res) => {
+app.post('/api/auth/me/photo', requireAuth, limitadores.subidas, profilePhotoUpload, (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'INVALID_PROFILE_PHOTO' });
   let storageKey;
   try { storageKey = privateStorage.save(req.file, req.user.id); }
@@ -659,7 +718,7 @@ app.post('/api/auth/me/photo', requireAuth, profilePhotoUpload, (req, res) => {
   res.json(publicUser(req.user));
 });
 
-app.get('/api/users/:id/photo', requireAuth, (req, res) => {
+app.get('/api/users/:id/photo', requireAuth, limitadores.archivos, (req, res) => {
   // Una única respuesta para todo lo que no sea un acceso legítimo. Quien no
   // está autorizado no puede distinguir si la persona existe, si tiene
   // fotografía o si compartió alguna vez un viaje: un identificador
@@ -687,11 +746,41 @@ app.get('/api/users/:id/photo', requireAuth, (req, res) => {
   res.end(image.buffer);
 });
 
+// El listado devolvia la coleccion entera: 7 MB con el volumen de seis meses,
+// medido contra el servidor real, y el filtrado y la busqueda ocurrian despues
+// en el navegador, de modo que buscar a una persona por su placa obligaba a
+// descargar antes a los 25 000 usuarios.
+//
+// Admite los dos modos de recorrido: `page` para el paginador numerado de la
+// pantalla de gestion, y `cursor` para quien solo necesite iterar.
 app.get('/api/users', requireAuth, requireRole('admin'), (req, res) => {
-  res.json(database.users.map(publicUser));
+  let limit;
+  let page;
+  let filters;
+  try {
+    limit = parseLimit(req.query.limit, USERS_PAGE);
+    page = parsePage(req.query.page);
+    filters = parseUserFilters(req.query);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_QUERY' });
+  }
+
+  // Se filtra sobre el registro completo --hace falta `isVerified`, que la
+  // proyeccion publica no expone-- y solo se proyecta la pagina resultante.
+  const filtrados = filterUsers(database.users, filters);
+
+  try {
+    const cursor = req.query.cursor;
+    const pagina = cursor
+      ? paginate(filtrados, { limit, cursor, sortKeyOf: user => user.createdAt || '' })
+      : paginateByPage(filtrados, { limit, page, sortKeyOf: user => user.createdAt || '' });
+    return res.json({ ...pagina, items: pagina.items.map(publicUser) });
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
 });
 
-app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => {
+app.get('/api/admin/overview', requireAuth, requireRole('admin'), limitadores.resumenes, (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const activeStatuses = ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'];
   const completedToday = database.trips.filter(trip => trip.status === 'COMPLETED' && String(trip.completedAt || trip.closedAt || trip.updatedAt || '').startsWith(today));
@@ -709,6 +798,18 @@ app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => 
       busy: drivers.filter(driver => ['BUSY', 'IN_TRIP'].includes(driver.status)).length,
       offline: drivers.filter(driver => !['AVAILABLE', 'ONLINE', 'BUSY', 'IN_TRIP'].includes(driver.status)).length
     },
+    // Cifras globales de la pantalla de gestion. Son independientes de los
+    // filtros que tenga puestos quien mira, asi que no pueden salir de una
+    // pagina del listado: pertenecen aqui.
+    customers: (() => {
+      const clientes = database.users.filter(user => ['driver', 'passenger'].includes(user.role));
+      return {
+        total: clientes.length,
+        drivers: clientes.filter(user => user.role === 'driver').length,
+        passengers: clientes.filter(user => user.role === 'passenger').length,
+        suspended: clientes.filter(isSuspended).length
+      };
+    })(),
     driverApplications: {
       total: database.driverApplications.length,
       pending: database.driverApplications.filter(item => item.status === 'pending').length,
@@ -723,7 +824,7 @@ app.get('/api/admin/overview', requireAuth, requireRole('admin'), (req, res) => 
   });
 });
 
-app.get('/api/drivers/nearby', requireAuth, (req, res) => {
+app.get('/api/drivers/nearby', requireAuth, limitadores.cercania, (req, res) => {
   const drivers = database.users.filter(user => user.role === 'driver');
   if (req.user.role === 'admin') {
     return res.json(drivers.map(driver => ({
@@ -750,7 +851,7 @@ app.get('/api/drivers/nearby', requireAuth, (req, res) => {
     })));
 });
 
-app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
   const numberFields = ['nightMultiplier', 'peakMultiplier', 'bcvRate', 'parallelRate', 'commissionRate'];
   const next = structuredClone(pricingConfig);
   for (const key of numberFields) if (req.body[key] !== undefined) next[key] = Number(req.body[key]);
@@ -771,7 +872,7 @@ app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), (req, res) =>
   res.json(next);
 });
 
-app.get('/api/admin/finance', requireAuth, requireRole('admin'), (req, res) => {
+app.get('/api/admin/finance', requireAuth, requireRole('admin'), limitadores.finanzas, (req, res) => {
   const commissionRate = Number(pricingConfig.commissionRate || 0.15);
   const transactions = database.trips.filter(trip => trip.status === 'COMPLETED').map(trip => {
     const gross = Number(trip.fareUSD || trip.fareEUR || trip.pricing?.fareUSD || 0);
@@ -794,7 +895,7 @@ app.get('/api/admin/finance', requireAuth, requireRole('admin'), (req, res) => {
   });
 });
 
-app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id && item.status === 'COMPLETED');
   if (!trip) return res.status(404).json({ error: 'COMPLETED_TRIP_NOT_FOUND' });
   if (!['PAID', 'REJECTED', 'PENDING'].includes(req.body.status)) return res.status(400).json({ error: 'INVALID_PAYOUT_STATUS' });
@@ -808,18 +909,139 @@ app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), (req
   res.json(event);
 });
 
+// Tamaños de página. El máximo es lo que impide que el cliente anule la
+// paginación pidiendo `?limit=999999`. El de mensajes es más estrecho porque
+// cada registro puede arrastrar todavía una imagen en base64: eso desaparece
+// cuando entre la infraestructura de adjuntos de la fase 2B-2-4.
+// La pantalla de gestion muestra ocho por pagina; el tope superior acota lo
+// que puede pedir cualquier cliente.
+const USERS_PAGE = { defaultLimit: 25, maxLimit: 100 };
+const SUPPORT_THREADS_PAGE = { defaultLimit: 25, maxLimit: 100 };
+const SUPPORT_MESSAGES_PAGE = { defaultLimit: 30, maxLimit: 50 };
+// El panel pinta ocho viajes recientes y el mapa de flota los activos, que
+// son pocos por definicion. El maximo acota lo que puede pedir cualquiera.
+const TRIPS_PAGE = { defaultLimit: 25, maxLimit: 100 };
+
+// Un hilo de soporte se resume para el listado: el texto completo y, sobre
+// todo, la imagen en base64 se quedan fuera. Devolver el historial entero de
+// todos los hilos hacia el panel producia 149 MB en una sola respuesta con el
+// volumen de seis meses, medido contra el servidor real.
+function summarizeSupportMessage(message) {
+  if (!message) return null;
+  return {
+    id: message.id,
+    senderId: message.senderId,
+    senderRole: message.senderRole,
+    text: sanitizeText(message.text || '', 160),
+    hasImage: Boolean(message.image),
+    read: Boolean(message.read),
+    createdAt: message.createdAt
+  };
+}
+
+const supportTime = message => new Date(message?.createdAt || 0).getTime() || 0;
+
+// Los hilos se ordenan por actividad reciente. El orden anterior era el de
+// aparicion del primer mensaje, que sin paginacion daba igual; con paginacion
+// dejaria los hilos nuevos en la ultima pagina.
 app.get('/api/support/threads', requireAuth, (req, res) => {
-  const messages = req.user.role === 'admin' ? database.supportMessages : database.supportMessages.filter(message => message.conversationUserId === req.user.id);
-  const grouped = new Map();
+  let limit;
+  let search;
+  try {
+    limit = parseLimit(req.query.limit, SUPPORT_THREADS_PAGE);
+    search = parseSupportSearch(req.query.search);
+  } catch (error) {
+    return res.status(400).json({ error: error.code });
+  }
+
+  const messages = req.user.role === 'admin'
+    ? database.supportMessages
+    : database.supportMessages.filter(message => message.conversationUserId === req.user.id);
+
+  // Indice por identificador: resolver el usuario con find() dentro del bucle
+  // costaba O(hilos x usuarios), unos 150 millones de comparaciones con el
+  // volumen de seis meses.
+  const usersById = new Map(database.users.map(user => [user.id, user]));
+
+  const byThread = new Map();
   for (const message of messages) {
     const id = message.conversationUserId;
-    if (!grouped.has(id)) grouped.set(id, []);
-    grouped.get(id).push(message);
+    let thread = byThread.get(id);
+    if (!thread) {
+      thread = { userId: id, last: null, unread: 0, messageCount: 0 };
+      byThread.set(id, thread);
+    }
+    thread.messageCount += 1;
+    // `unread` es relativo a quien pregunta, igual que antes: para
+    // administracion cuenta lo que escribio la otra parte, y viceversa.
+    if (!message.read && message.senderRole !== req.user.role) thread.unread += 1;
+    if (!thread.last || supportTime(message) >= supportTime(thread.last)) thread.last = message;
   }
-  res.json([...grouped].map(([userId, items]) => ({ user: publicUser(database.users.find(user => user.id === userId)), messages: items.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)), unread: items.filter(item => !item.read && item.senderRole !== req.user.role).length })));
+
+  const resumidos = [...byThread.values()]
+    .sort((a, b) => supportTime(b.last) - supportTime(a.last))
+    .map(thread => ({
+      userId: thread.userId,
+      user: publicUser(usersById.get(thread.userId)),
+      lastMessage: summarizeSupportMessage(thread.last),
+      unread: thread.unread,
+      messageCount: thread.messageCount
+    }));
+
+  // Se busca sobre TODOS los hilos y despues se corta la pagina. Al reves --que
+  // es lo que hacia la pantalla-- una conversacion que estuviera mas atras no
+  // aparecia nunca, y el panel decia que no habia ninguna coincidencia.
+  const threads = filterSupportThreads(resumidos, search);
+
+  try {
+    const page = paginate(threads, {
+      limit,
+      cursor: req.query.cursor,
+      idOf: thread => thread.userId,
+      sortKeyOf: thread => thread.lastMessage?.createdAt || ''
+    });
+    // El tiempo medio de respuesta se calculaba en el navegador recorriendo el
+    // historial completo, que es justo lo que este listado ha dejado de
+    // enviar. Se calcula aquí sobre el mismo conjunto que ve quien pregunta.
+    return res.json({ ...page, averageResponseMs: averageAdminResponseMs(messages) });
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
 });
 
-app.post('/api/support/messages', requireAuth, (req, res) => {
+// Los mensajes de un hilo concreto, del mas reciente al mas antiguo, para que
+// la primera pagina sea la conversacion actual.
+app.get('/api/support/threads/:userId/messages', requireAuth, (req, res) => {
+  const { userId } = req.params;
+  // Solo administracion o la persona duena del hilo.
+  if (req.user.role !== 'admin' && req.user.id !== userId) {
+    return res.status(403).json({ error: 'SUPPORT_THREAD_FORBIDDEN' });
+  }
+
+  let limit;
+  try {
+    limit = parseLimit(req.query.limit, SUPPORT_MESSAGES_PAGE);
+  } catch (error) {
+    return res.status(400).json({ error: error.code });
+  }
+
+  const messages = database.supportMessages
+    .filter(message => message.conversationUserId === userId)
+    .sort((a, b) => supportTime(b) - supportTime(a));
+
+  try {
+    const page = paginate(messages, {
+      limit,
+      cursor: req.query.cursor,
+      sortKeyOf: message => message.createdAt || ''
+    });
+    return res.json(page);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
+});
+
+app.post('/api/support/messages', requireAuth, limitadores.mensajes, (req, res) => {
   const conversationUserId = req.user.role === 'admin' ? req.body.recipientId : req.user.id;
   const target = database.users.find(user => user.id === conversationUserId && user.role !== 'admin');
   const image = typeof req.body.image === 'string' && /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(req.body.image) && req.body.image.length <= 1_000_000 ? req.body.image : null;
@@ -845,7 +1067,7 @@ app.get('/api/notifications/me', requireAuth, (req, res) => {
   res.json(notifications);
 });
 
-app.patch('/api/notifications/:id/read', requireAuth, (req, res) => {
+app.patch('/api/notifications/:id/read', requireAuth, limitadores.notificaciones, (req, res) => {
   const notification = database.notifications.find(item => item.id === req.params.id);
   if (!notification || !(notification.userId === req.user.id || notification.targetRole === 'all' || notification.targetRole === req.user.role)) {
     return res.status(404).json({ error: 'NOTIFICATION_NOT_FOUND' });
@@ -856,7 +1078,7 @@ app.patch('/api/notifications/:id/read', requireAuth, (req, res) => {
   res.json(notification);
 });
 
-app.patch('/api/notifications/me/read-all', requireAuth, (req, res) => {
+app.patch('/api/notifications/me/read-all', requireAuth, limitadores.notificaciones, (req, res) => {
   const now = new Date().toISOString();
   database.notifications.forEach(item => {
     if (item.userId === req.user.id || item.targetRole === 'all' || item.targetRole === req.user.role) {
@@ -876,7 +1098,7 @@ app.get('/api/wallet/me', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/wallet/topups', requireAuth, (req, res) => {
+app.post('/api/wallet/topups', requireAuth, limitadores.cartera, (req, res) => {
   const amount = Math.round(Number(req.body.amount) * 100) / 100;
   const reference = String(req.body.reference || '').replace(/\D/g, '').slice(0, 20);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1000 || reference.length < 6) return res.status(400).json({ error: 'INVALID_TOPUP' });
@@ -889,7 +1111,7 @@ app.post('/api/wallet/topups', requireAuth, (req, res) => {
   res.status(201).json(transaction);
 });
 
-app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, (req, res) => {
+app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, limitadores.cartera, (req, res) => {
   const available = Number(req.user.walletBalance || 0);
   const amount = Math.round(Number(req.body.amount || available) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0 || amount > available) return res.status(400).json({ error:'INVALID_PAYOUT' });
@@ -900,7 +1122,7 @@ app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, (req, res) =
   persistDatabase();io.to('admins').emit('finance:payout_pending',transaction);res.status(201).json(transaction);
 });
 
-app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
   const transaction = database.transactions.find(item => item.id === req.params.id);
   if (!transaction) return res.status(404).json({ error:'TRANSACTION_NOT_FOUND' });
   const status = String(req.body.status || '').toUpperCase();
@@ -933,7 +1155,7 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), (req
   res.json({ transaction, balance:Number(owner?.walletBalance || 0) });
 });
 
-app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), (req, res) => {
+app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), limitadores.difusion, (req, res) => {
   const role = ['all', 'driver', 'passenger'].includes(req.body.role) ? req.body.role : 'all';
   if (!req.body.title?.trim() || !req.body.message?.trim()) return res.status(400).json({ error: 'INVALID_BROADCAST' });
   const notification = { id: `notification_${crypto.randomUUID()}`, title: sanitizeText(req.body.title, 120), message: sanitizeText(req.body.message, 1000), category: 'ANNOUNCEMENT', icon: '📢', targetRole: role, createdAt: new Date().toISOString() };
@@ -945,7 +1167,7 @@ app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), (req, res) 
   res.status(201).json(notification);
 });
 
-app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (req, res) => {
+app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const driver = database.users.find(user => user.id === req.params.id && user.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
   const { action, documentKey, documentStatus } = req.body;
@@ -985,7 +1207,7 @@ app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (re
   res.json(publicUser(driver));
 });
 
-app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id);
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
   const allowedStatuses = ['CANCELLED', 'COMPLETED'];
@@ -1016,7 +1238,7 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), (req, res) 
   res.json(trip);
 });
 
-app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (req, res) => {
+app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const index = database.users.findIndex(user => user.id === req.params.id && user.role === 'driver');
   if (index < 0) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
   const [driver] = database.users.splice(index, 1);
@@ -1026,7 +1248,7 @@ app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), async (r
   res.status(204).end();
 });
 
-app.post('/api/admin/drivers', requireAuth, requireRole('admin'), async (req, res) => {
+app.post('/api/admin/drivers', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const { email, phone, firstName, lastName, vehicleType = 'MOTO', vehicleBrand, vehicleModel, vehiclePlate } = req.body;
   if (!email || !phone || !firstName || !vehiclePlate) return res.status(400).json({ error: 'INVALID_DRIVER' });
   if (database.users.some(user => user.email?.toLowerCase() === email.toLowerCase() || user.phone === phone)) {
@@ -1048,8 +1270,47 @@ app.post('/api/admin/drivers', requireAuth, requireRole('admin'), async (req, re
   res.status(201).json({ user: publicUser(driver), temporaryPassword });
 });
 
-app.get('/api/trips', requireAuth, requireRole('admin'), (req, res) => {
-  res.json(database.trips);
+// Devolvia la coleccion entera. Cuatro pantallas la pedian y ninguna la queria
+// completa: el panel usa los ocho mas recientes, el mapa de flota solo los
+// activos, soporte el ultimo de una persona y la gestion de usuarios los de
+// quien este seleccionado. Ahora cada una pide lo suyo.
+app.get('/api/trips', requireAuth, requireRole('admin'), limitadores.listados, (req, res) => {
+  let limit;
+  let page;
+  let filters;
+  try {
+    limit = parseLimit(req.query.limit, TRIPS_PAGE);
+    page = parsePage(req.query.page);
+    filters = parseTripFilters(req.query);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_QUERY' });
+  }
+
+  const filtrados = filterTrips(database.trips, filters);
+  try {
+    const cursor = req.query.cursor;
+    const pagina = cursor
+      ? paginate(filtrados, { limit, cursor, sortKeyOf: trip => String(tripRecency(trip)) })
+      : paginateByPage(filtrados, { limit, page, sortKeyOf: trip => String(tripRecency(trip)) });
+    return res.json(pagina);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
+});
+
+// Recuento de viajes por persona. La columna «N viajes» del listado de usuarios
+// solo enseña el numero: traer los viajes para contarlos seria descargar la
+// coleccion con otro nombre.
+app.get('/api/trips/summary', requireAuth, requireRole('admin'), limitadores.resumenes, (req, res) => {
+  const bruto = req.query.userId;
+  if (bruto === undefined || bruto === null || bruto === '') {
+    return res.status(400).json({ error: 'INVALID_USER_ID' });
+  }
+  const userIds = String(bruto).split(',').map(valor => valor.trim()).filter(Boolean);
+  if (!userIds.length) return res.status(400).json({ error: 'INVALID_USER_ID' });
+  if (userIds.length > MAX_TRIP_USER_IDS) return res.status(400).json({ error: 'TOO_MANY_USER_IDS' });
+
+  return res.json({ items: summarizeTripsByUser(database.trips, userIds) });
 });
 
 app.get('/api/trips/me/history', requireAuth, (req, res) => {
@@ -1103,7 +1364,7 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   res.json(database.messages.filter(message => message.tripId === trip.id));
 });
 
-app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) => {
+app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
   // Identificador: lo aporta el cliente por compatibilidad, pero con forma
   // acotada. `Idempotency-Key` sirve cuando el cuerpo no trae `id`, que es lo
   // que ocurre al reenviar desde la cola sin conexión.
@@ -1206,7 +1467,7 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), (req, res) 
   res.json({ status: 'created', trip });
 });
 
-app.post('/api/trips/scheduled', requireAuth, requireRole('passenger'), (req, res) => {
+app.post('/api/trips/scheduled', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
   const scheduledAt = new Date(req.body.scheduledAt);
   const pickupAddress = String(req.body.pickup?.address || '').trim().slice(0, 240);
   const destinationAddress = String(req.body.destination?.address || '').trim().slice(0, 240);
@@ -1220,14 +1481,14 @@ app.get('/api/trips/scheduled/available', requireAuth, requireApprovedDriver, (r
   res.json(trips);
 });
 
-app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, (req, res) => {
+app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, limitadores.viajes, (req, res) => {
   const trip = database.trips.find(item=>item.id===req.params.id && item.status==='SCHEDULED');
   if(!trip)return res.status(404).json({error:'SCHEDULED_TRIP_NOT_FOUND'});
   if(trip.assignedDriverId && trip.assignedDriverId!==req.user.id)return res.status(409).json({error:'ALREADY_ASSIGNED'});
   trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=new Date().toISOString();persistDatabase();io.to(`user:${trip.passengerId}`).to('admins').emit('scheduled_trip:claimed',{tripId:trip.id,driver:driverPublicProfile(req.user)});res.json(trip);
 });
 
-app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), (req, res) => {
+app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id && item.passengerId === req.user.id && item.status === 'SCHEDULED');
   if (!trip) return res.status(404).json({ error: 'SCHEDULED_TRIP_NOT_FOUND' });
   if (trip.assignedDriverId) return res.status(409).json({ error: 'SCHEDULED_TRIP_ALREADY_ASSIGNED' });
@@ -1239,7 +1500,7 @@ app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), (r
   res.json(trip);
 });
 
-app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, (req, res) => {
+app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, limitadores.telemetria, (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
@@ -1251,7 +1512,7 @@ app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, (req, res) 
   res.json(publicUser(driver));
 });
 
-app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, (req, res) => {
+app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, limitadores.telemetria, (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
@@ -1333,16 +1594,58 @@ function dispatchTripToDrivers(trip) {
 }
 
 // Socket.IO Server Setup
+// Un valor mal escrito en el entorno no debe dejar el techo abierto ni
+// bloquear a todo el mundo: solo se acepta un entero válido.
+const configuredMaxConnections = Number.parseInt(process.env.SOCKET_MAX_CONNECTIONS_PER_USER ?? '', 10);
+const connectionLimiter = createConnectionLimiter(
+  Number.isInteger(configuredMaxConnections) && configuredMaxConnections >= 1
+    ? { maxPerUser: configuredMaxConnections }
+    : {}
+);
+
 io.on('connection', (socket) => {
+  // El techo de frecuencia vive en cada socket, así que abrir muchas
+  // conexiones con la misma sesión multiplicaría el cupo. La liberación se
+  // registra antes de contar y se ejecuta siempre, admitida la conexión o no:
+  // emparejarlas sin ramas es lo que impide que el contador se desincronice y
+  // acabe cerrando la puerta a una cuenta legítima.
+  const { userId: connectionUserId } = socket.data.auth;
+  socket.on('disconnect', () => connectionLimiter.release(connectionUserId));
+  const cupo = connectionLimiter.acquire(connectionUserId);
+  if (!cupo.allowed) {
+    socket.emit('socket:error', { error: 'TOO_MANY_CONNECTIONS', maxPerUser: cupo.maxPerUser });
+    socket.disconnect(true);
+    return;
+  }
+
   console.log(`[+58express Socket.IO] Client connected: ${socket.id}`);
   socket.join(`${socket.data.auth.role}s`);
   socket.join(`user:${socket.data.auth.userId}`);
+
+  // Contador de frecuencia propio de este socket: nace y muere con él, así que
+  // no queda ninguna estructura global creciendo por conexión.
+  const rateLimiter = createEventRateLimiter();
+
+  // Devuelve `true` si el evento debe descartarse. El aviso al cliente sale
+  // una sola vez por ventana: responder a cada evento descartado convertiría
+  // la defensa en un amplificador.
+  const rateLimited = (event) => {
+    const rechazo = rateLimiter.check(event);
+    if (!rechazo) return false;
+    if (rechazo.notificar) {
+      socket.emit('socket:rate_limited', { event, retryAfterMs: rechazo.retryAfterMs });
+    }
+    return true;
+  };
 
   // Registra un handler de evento a prueba de payloads hostiles. Un valor por
   // defecto (`data = {}`) no cubre un `null` explícito, así que desestructurar
   // lanzaba y, al ser síncrono, tumbaba el proceso entero. Aquí el payload se
   // normaliza a objeto y cualquier excepción queda contenida en el socket.
   const on = (event, handler) => socket.on(event, payload => {
+    // La frecuencia se comprueba antes de tocar la base de datos, de emitir a
+    // otras salas y de escribir en el registro.
+    if (rateLimited(event)) return;
     const data = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
     try {
       handler(data);
@@ -1353,6 +1656,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join:room', (room) => {
+    if (rateLimited('join:room')) return;
     const allowedRooms = [`${socket.data.auth.role}s`, `user:${socket.data.auth.userId}`];
     if (!allowedRooms.includes(room)) return;
     socket.join(room);
@@ -1376,7 +1680,7 @@ io.on('connection', (socket) => {
     driver.status = requestedStatus;
     driver.socketId = socket.id;
     driverRegistry.set(driver.id, socket.id);
-    persistDatabase();
+    persistRecord('users', driver);
     socket.emit('driver:connected', { success: true, socketId: socket.id, driver: publicUser(driver) });
     emitDriverPresence(driver);
   });
@@ -1397,7 +1701,9 @@ io.on('connection', (socket) => {
     // Reportar GPS no reactiva a un conductor suspendido ni cambia su estado:
     // solo cubre el caso de una cuenta sin estado previo.
     if (!driver.status) driver.status = DRIVER_STATUS.AVAILABLE;
-    persistDatabase();
+    // La ruta más caliente de la aplicación: se dispara con cada lectura de
+    // GPS de cada moto en marcha, y solo cambia este conductor.
+    persistRecord('users', driver);
     emitDriverLocation(driverId, { ...driver.location });
   };
 
@@ -1417,7 +1723,8 @@ io.on('connection', (socket) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     trip.pickup = { ...(trip.pickup || {}), lat, lng };
     trip.passengerLocation = { lat, lng, heading: Number(data.heading || 0), updatedAt: Date.now() };
-    persistDatabase();
+    // Un evento por cada movimiento del pasajero: solo cambia este viaje.
+    persistRecord('trips', trip);
     const payload = { ...trip.passengerLocation, passengerId, tripId: trip.id };
     io.to(`user:${trip.driverId}`).to('admins').emit('passengerLocationUpdated', payload);
   });
@@ -1434,7 +1741,7 @@ io.on('connection', (socket) => {
     const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
     if (!driver) return;
     driver.status = status;
-    persistDatabase();
+    persistRecord('users', driver);
     emitDriverPresence(driver);
   };
 
@@ -1656,7 +1963,7 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString()
     };
     database.messages.push(message);
-    persistDatabase();
+    persistRecord('messages', message);
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', message);
   });
 
@@ -1675,7 +1982,7 @@ io.on('connection', (socket) => {
     if (role === 'passenger' && data.targetRole === 'driver') {
       trip.driverReview = { ...review, tipEUR: Math.max(0, Number(data.tipEUR) || 0) };
     }
-    persistDatabase();
+    persistRecord('trips', trip);
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripRatingUpdated', { tripId: trip.id, role, review });
   });
 
@@ -1686,10 +1993,10 @@ io.on('connection', (socket) => {
         const driver = database.users.find(u => u.id === driverId);
         if (driver) {
           driver.status = DRIVER_STATUS.OFFLINE;
-          persistDatabase();
+          persistRecord('users', driver);
           emitDriverPresence(driver);
         } else {
-          io.to('admins').emit('admin:driver_updated', { userId: driverId, status: DRIVER_STATUS.OFFLINE });
+          io.to('admins').emit('admin:driver_updated', { id: driverId, userId: driverId, status: DRIVER_STATUS.OFFLINE });
         }
       }
     }
