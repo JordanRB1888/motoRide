@@ -28,7 +28,7 @@ import { createDatabasePersistence } from './services/databasePersistence.js';
 import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createConnectionLimiter } from './services/connectionLimit.js';
 import { resolveTrustProxy } from './services/trustProxy.js';
-import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from './services/httpRateLimit.js';
+import { addressKey, createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from './services/httpRateLimit.js';
 import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagination.js';
 import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
@@ -110,6 +110,48 @@ const credenciales = {
   sesion: createIdentityLimiter({ name: 'sesion', limit: 240, windowMs: MINUTO }),
   perfil: createIdentityLimiter({ name: 'perfil', limit: 60, windowMs: MINUTO })
 };
+
+/**
+ * Techo por direccion para /api/auth/me*, ANTES de `requireAuth`.
+ *
+ * Los limitadores de arriba se montan detras de `requireAuth` a proposito:
+ * necesitan `req.user` para contar por cuenta, que es lo correcto cuando hay
+ * sesion --si contaran por direccion, las personas tras el NAT del operador
+ * compartirian cupo sin motivo--. Pero eso deja fuera del conteo justo al
+ * trafico que nunca llega a autenticarse: sin cabecera, con un token invalido
+ * o corrupto, `requireAuth` responde 401 y el limitador de detras no llega a
+ * verlo. Antes de este hotfix ese trafico si tenia techo, porque el limitador
+ * global de `/api/auth` corria por delante de todo.
+ *
+ * Asi que van dos capas: esta por direccion para cortar inundaciones, y la de
+ * cuenta detras para el uso ya autenticado.
+ *
+ * El tope es deliberadamente alto: no cuenta intentos de credenciales --con
+ * un token no se adivina nada-- sino peticiones por segundo. La referencia mas
+ * alta de Phase 3A es `listados`, 240 por minuto, pero aquella cuenta por
+ * cuenta y esta por direccion, y en Venezuela una sola direccion puede ser un
+ * operador movil entero. Dimensionado sobre ese caso: quinientas personas tras
+ * el mismo NAT abriendo la aplicacion una vez por minuto son 500 peticiones,
+ * asi que 1200 deja mas del doble de margen al uso legitimo. Del otro lado,
+ * medido en esta maquina el proceso despacha unas 2700 peticiones por segundo
+ * de las que aqui se rechazan; 1200 por minuto son 20 por segundo, es decir
+ * que recorta una inundacion en mas del noventa y nueve por ciento.
+ */
+// Configurable para poder ejercitarlo en las pruebas sin lanzar cientos de
+// peticiones. Se exige la cadena entera de digitos: `parseInt` aceptaria
+// '600abc' --y '203.0.113.7'--, que es como se colo un fallo en trustProxy.
+const TOPE_GUARDIA_SESION = /^[1-9]\d*$/.test(String(process.env.AUTH_ME_GUARD_LIMIT ?? ''))
+  ? Number(process.env.AUTH_ME_GUARD_LIMIT)
+  : 1200;
+const guardiaSesion = createIdentityLimiter({
+  name: 'sesion-previa',
+  limit: TOPE_GUARDIA_SESION,
+  windowMs: MINUTO,
+  keyGenerator: addressKey
+});
+// Cubre GET y PATCH /api/auth/me, POST /api/auth/me/photo y cualquier subruta
+// que se anada bajo ese prefijo: el techo lo hereda por montaje, no por lista.
+app.use('/api/auth/me', guardiaSesion);
 app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
 
 const server = http.createServer(app);

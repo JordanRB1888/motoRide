@@ -32,13 +32,28 @@ export function identityKey(req) {
 }
 
 /**
+ * Clave de conteo por dirección, siempre, haya sesión o no.
+ *
+ * Para los limitadores que corren ANTES de `requireAuth`, donde `req.user` no
+ * existe todavía y no puede existir. `identityKey` recaería igualmente en la
+ * dirección, pero hacerlo explícito evita que un cambio futuro en el orden de
+ * los middlewares convierta un techo por dirección en uno por cuenta sin que
+ * nadie se entere.
+ */
+export function addressKey(req) {
+  return `ip:${ipKeyGenerator(req.ip)}`;
+}
+
+/**
  * @param {object} opciones
  * @param {string} opciones.name etiqueta que viaja en la respuesta 429, para
  *   que quien la reciba sepa qué límite tocó sin adivinarlo.
  * @param {number} opciones.limit peticiones por ventana.
  * @param {number} opciones.windowMs duración de la ventana.
+ * @param {(req: object) => string} [opciones.keyGenerator] cómo se agrupa el
+ *   conteo. Por omisión, la cuenta si hay sesión y la dirección si no.
  */
-export function createIdentityLimiter({ name, limit, windowMs }) {
+export function createIdentityLimiter({ name, limit, windowMs, keyGenerator = identityKey }) {
   if (!name) throw new Error('RATE_LIMITER_REQUIRES_NAME');
   if (!Number.isInteger(limit) || limit < 1) throw new Error('RATE_LIMITER_INVALID_LIMIT');
   if (!Number.isInteger(windowMs) || windowMs < 1000) throw new Error('RATE_LIMITER_INVALID_WINDOW');
@@ -48,7 +63,7 @@ export function createIdentityLimiter({ name, limit, windowMs }) {
     limit,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: identityKey,
+    keyGenerator,
     handler: (req, res) => {
       // Segundos que faltan para que la ventana se reabra. `resetTime` lo pone
       // la propia librería; si no estuviera, la ventana completa es una cota
