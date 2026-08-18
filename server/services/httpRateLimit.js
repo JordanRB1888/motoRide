@@ -50,12 +50,22 @@ export function createIdentityLimiter({ name, limit, windowMs }) {
     legacyHeaders: false,
     keyGenerator: identityKey,
     handler: (req, res) => {
-      // Cuerpo JSON como el resto de la API: un HTML de error rompería a
-      // cualquier cliente que espere JSON.
+      // Segundos que faltan para que la ventana se reabra. `resetTime` lo pone
+      // la propia librería; si no estuviera, la ventana completa es una cota
+      // superior segura.
+      const restanteMs = req.rateLimit?.resetTime
+        ? Math.max(0, req.rateLimit.resetTime.getTime() - Date.now())
+        : windowMs;
+      // Retry-After es la cabecera estándar que consultan los clientes para
+      // saber cuándo reintentar. El handler propio sustituye al de la
+      // librería, así que hay que ponerla aquí explícitamente.
+      res.set('Retry-After', String(Math.ceil(restanteMs / 1000)));
+      // Cuerpo JSON como el resto de la API: un HTML o un texto plano de error
+      // rompería a cualquier cliente que espere JSON.
       res.status(429).json({
         error: 'RATE_LIMITED',
         scope: name,
-        retryAfterMs: windowMs
+        retryAfterMs: restanteMs
       });
     }
   });

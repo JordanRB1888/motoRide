@@ -141,6 +141,12 @@ export function renderLanding(container) {
                 }, selectedRole)
                 : await authService.login(email, password, selectedRole);
             if (result?.success && result.user) window.navigateTo(`#/${selectedRole}`);
+            // El limitador va primero: un 429 no es una credencial mala, y
+            // mostrarlo como tal lleva a reintentar, que es justo lo peor que
+            // se puede hacer cuando el cupo ya está agotado.
+            else if (result?.status === 429 || result?.error === 'RATE_LIMITED') {
+                showToast('Demasiados intentos. Espera unos minutos e inténtalo nuevamente.', 'error');
+            }
             else if (result?.error === 'USER_EXISTS') showToast('El correo o teléfono ya está registrado.', 'error');
             else if (result?.error === 'DRIVER_APPLICATION_NOT_APPROVED') showToast(`Tu solicitud está en estado: ${result.applicationStatus}. Ingresa como pasajero para revisarla.`, 'warning', 6500);
             else if (result?.fields) showToast(Object.values(result.fields)[0], 'error');

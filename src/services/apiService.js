@@ -2,6 +2,7 @@ import { eventLogger } from '../utils/logger.js';
 import { db as clientCache } from './clientCache.js';
 import { offlineRequestQueue } from './offlineRequestQueue.js';
 import { composeApiUrl, normalizeBaseUrl } from './apiUrl.js';
+import { buildRequestError } from './httpErrorCodes.js';
 
 class ApiService {
   constructor() {
@@ -36,7 +37,11 @@ class ApiService {
         this.lastError = null;
         return payload ?? true;
       }
-      this.lastError = { status: response.status, ...(payload || { error: 'REQUEST_FAILED' }) };
+      // Un cuerpo que no sea JSON no puede borrar lo que ya sabemos por el
+      // estado HTTP. El limitador antiguo respondia texto plano, el parseo
+      // fallaba, y un 429 acababa como REQUEST_FAILED: la pantalla lo mostraba
+      // como «Credenciales incorrectas» y parecia una contrasena mala.
+      this.lastError = buildRequestError(response.status, payload);
       return null;
     } catch (error) {
       this.lastError = { status: 0, error: 'NETWORK_ERROR' };
