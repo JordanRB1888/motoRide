@@ -154,6 +154,34 @@ const guardiaSesion = createIdentityLimiter({
 // Cubre GET y PATCH /api/auth/me, POST /api/auth/me/photo y cualquier subruta
 // que se anada bajo ese prefijo: el techo lo hereda por montaje, no por lista.
 app.use('/api/auth/me', guardiaSesion);
+
+/**
+ * Techo por direccion para /api/chat-media*, ANTES de `requireAuth`.
+ *
+ * Mismo razonamiento --y mismo mecanismo-- que `guardiaSesion`: el limitador
+ * de la ruta vive detras de `requireAuth` para poder contar por cuenta, asi
+ * que una peticion sin token, o con uno invalido, muere en el 401 y nunca se
+ * cuenta. Sin esta guardia, ese trafico no tendria ningun techo. Se comprobo
+ * que ningun `app.use` anterior cubre este prefijo.
+ *
+ * Cubo propio, no compartido con la guardia de sesion: agotar uno no puede
+ * dejar sin servicio al otro, que es la leccion del cubo unico de /api/auth.
+ *
+ * Mismo tope que aquella, y por el mismo motivo: sin token la peticion muere
+ * en la verificacion del testigo, antes de tocar el disco, de modo que el
+ * coste por peticion es el mismo. Quien si lee del disco es el trafico ya
+ * autenticado, y a ese lo acota ademas `limitadores.archivos` por cuenta.
+ */
+const TOPE_GUARDIA_MEDIOS = /^[1-9]\d*$/.test(String(process.env.CHAT_MEDIA_GUARD_LIMIT ?? ''))
+  ? Number(process.env.CHAT_MEDIA_GUARD_LIMIT)
+  : 1200;
+const guardiaMedios = createIdentityLimiter({
+  name: 'medios-previa',
+  limit: TOPE_GUARDIA_MEDIOS,
+  windowMs: MINUTO,
+  keyGenerator: addressKey
+});
+app.use('/api/chat-media', guardiaMedios);
 app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
 
 const server = http.createServer(app);
@@ -190,7 +218,7 @@ const privateStorage = createPrivateStorage({
 // falta en produccion, el proceso no arranca antes que aceptar imagenes que
 // desapareceran en el siguiente despliegue.
 const chatMediaStorage = createChatMediaStorage({
-  rootDirectory: resolveChatMediaRoot({ dataFile, isProduction })
+  rootDirectory: resolveChatMediaRoot({ dataFile })
 });
 let pricingConfig = {
   ...DEFAULT_PRICING,
@@ -822,7 +850,11 @@ app.get('/api/users/:id/photo', requireAuth, limitadores.archivos, (req, res) =>
   res.end(image.buffer);
 });
 
-app.get('/api/chat-media/:id/content', requireAuth, (req, res) => {
+// Lee de disco en cada peticion, igual que la foto de perfil: misma categoria
+// de limitador --`archivos`-- y mismo orden, detras de `requireAuth` para que
+// cuente por cuenta. El trafico que no llega a autenticarse lo acota
+// `guardiaMedios`, montado sobre el prefijo mas arriba.
+app.get('/api/chat-media/:id/content', requireAuth, limitadores.archivos, (req, res) => {
   // Una unica respuesta para todo lo que no sea un acceso legitimo: un
   // identificador inexistente, uno malformado y uno ajeno son indistinguibles.
   const accessDenied = () => res.status(403).json({ error: 'CHAT_MEDIA_FORBIDDEN' });

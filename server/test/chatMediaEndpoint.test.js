@@ -28,7 +28,7 @@ async function prepararEntorno() {
   fs.mkdirSync(dataDir, { recursive: true });
   const dataFile = path.join(dataDir, 'plus58express.sqlite');
   const chatMediaDir = path.join(dataDir, 'chat-media');
-  const raiz = resolveChatMediaRoot({ dataFile, isProduction: false, env: { CHAT_MEDIA_DIR: chatMediaDir } });
+  const raiz = resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: chatMediaDir } });
   const storage = createChatMediaStorage({ rootDirectory: raiz });
   return { tempDir, dataFile, chatMediaDir, storage };
 }

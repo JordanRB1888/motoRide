@@ -53,19 +53,36 @@ test('isContainedIn acepta solo descendientes reales', () => {
   assert.equal(isContainedIn(raiz, path.resolve('/volumen/data/..oculto')), true);
 });
 
-test('en producción sin CHAT_MEDIA_DIR el arranque falla', (t) => {
-  const { dataFile } = volumen(t, 'prod-');
-  assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: {} }),
-    error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
+test('sin CHAT_MEDIA_DIR la raíz se deriva del directorio de datos', (t) => {
+  // Antes esto era un fallo duro en producción. Se cambió a propósito: el valor
+  // derivado es el mismo que se habría configurado a mano --el volumen sale de
+  // `dataFile`--, así que exigir la variable no protegía de nada y sí permitía
+  // tumbar el arranque olvidándola.
+  const { dataDir, dataFile } = volumen(t, 'derivada-');
+  const raiz = resolveChatMediaRoot({ dataFile, env: {} });
+  assert.equal(raiz, fs.realpathSync(path.join(dataDir, 'chat-media')));
+  assert.ok(fs.existsSync(raiz));
+});
+
+test('la raíz derivada queda dentro del volumen, no en un disco efímero', (t) => {
+  // El riesgo del que protegía el fallo duro: que los adjuntos acabaran fuera
+  // del volumen. Se comprueba directamente en lugar de exigir una variable.
+  const { dataDir, dataFile } = volumen(t, 'contenida-');
+  const raiz = resolveChatMediaRoot({ dataFile, env: {} });
+  assert.ok(
+    isContainedIn(fs.realpathSync(dataDir), raiz),
+    `la raíz derivada ${raiz} se salió del volumen ${dataDir}`
   );
 });
 
-test('fuera de producción el valor por omisión cuelga del directorio de datos', (t) => {
-  const { dataDir, dataFile } = volumen(t, 'dev-');
-  const raiz = resolveChatMediaRoot({ dataFile, isProduction: false, env: {} });
-  assert.equal(raiz, fs.realpathSync(path.join(dataDir, 'chat-media')));
-  assert.ok(fs.existsSync(raiz));
+test('una CHAT_MEDIA_DIR mal configurada sigue siendo un fallo duro', (t) => {
+  // Quitar la obligatoriedad no relaja la validación: declararla mal se
+  // rechaza igual que antes.
+  const { dataFile } = volumen(t, 'malconf-');
+  assert.throws(
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: path.resolve('/tmp/fuera-del-volumen') } }),
+    error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
+  );
 });
 
 test('se rechaza un directorio hermano del volumen', (t) => {
@@ -73,7 +90,7 @@ test('se rechaza un directorio hermano del volumen', (t) => {
   // `/…/data-falso` supera una comparación por prefijo pero no la contención.
   const falso = path.join(base, 'data-falso');
   assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: falso } }),
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: falso } }),
     error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
   );
 });
@@ -83,7 +100,7 @@ test('se rechaza una ruta absoluta de otro árbol y el propio directorio de dato
   const otro = temporal(t, 'otro-');
   for (const candidato of [otro, dataDir]) {
     assert.throws(
-      () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: candidato } }),
+      () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: candidato } }),
       error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE',
       `debía rechazarse: ${candidato}`
     );
@@ -94,7 +111,7 @@ test('se rechaza un ascenso con .. aunque la ruta parezca interna', (t) => {
   const { dataDir, dataFile } = volumen(t, 'ascenso-');
   const escapa = path.join(dataDir, '..', 'fuera');
   assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: escapa } }),
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: escapa } }),
     error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
   );
 });
@@ -111,7 +128,7 @@ test('un enlace simbólico que sale del volumen se rechaza', (t) => {
   }
   // Resolver con realpath antes de comparar es lo que descubre el escape.
   assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: enlace } }),
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: enlace } }),
     error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
   );
 });
@@ -119,7 +136,7 @@ test('un enlace simbólico que sale del volumen se rechaza', (t) => {
 test('el centinela de escritura no queda residual', (t) => {
   const { dataDir, dataFile } = volumen(t, 'centinela-');
   const destino = path.join(dataDir, 'chat-media');
-  const raiz = resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: destino } });
+  const raiz = resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: destino } });
   const restos = fs.readdirSync(raiz);
   assert.deepEqual(restos, [], `no debía quedar ningún archivo: ${restos.join(', ')}`);
 });
@@ -133,7 +150,7 @@ test('una ruta externa rechazada no crea nada en el destino', (t) => {
   assert.equal(fs.existsSync(fuera), false, 'precondición: no existe');
 
   assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: fuera } }),
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: fuera } }),
     error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
   );
 
@@ -146,7 +163,7 @@ test('un hermano del volumen rechazado no queda creado', (t) => {
   assert.equal(fs.existsSync(path.join(base, 'data-falso')), false);
 
   assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: falso } }),
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: falso } }),
     error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
   );
 
@@ -158,7 +175,7 @@ test('un ascenso rechazado no crea el directorio de destino', (t) => {
   const { base, dataFile } = volumen(t, 'ascenso-limpio-');
   const escapa = path.join(base, 'data', '..', 'fuera');
   assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: escapa } }),
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: escapa } }),
     error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
   );
   assert.equal(fs.existsSync(path.join(base, 'fuera')), false);
@@ -177,7 +194,7 @@ test('un symlink que sale del volumen no deja nada dentro del destino', (t) => {
   const antes = fs.readdirSync(destinoFuera);
 
   assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: enlace } }),
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: enlace } }),
     error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
   );
 
@@ -199,7 +216,7 @@ test('un ancestro intermedio que sale del volumen se rechaza sin escribir', (t) 
   const candidato = path.join(puente, 'chat-media');
 
   assert.throws(
-    () => resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: candidato } }),
+    () => resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: candidato } }),
     error => error.code === 'CHAT_MEDIA_STORAGE_UNAVAILABLE'
   );
 
@@ -210,7 +227,7 @@ test('un ancestro intermedio que sale del volumen se rechaza sin escribir', (t) 
 
 function almacen(t, opciones = {}) {
   const { dataDir, dataFile } = volumen(t, 'save-');
-  const raiz = resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: path.join(dataDir, 'chat-media') } });
+  const raiz = resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: path.join(dataDir, 'chat-media') } });
   return createChatMediaStorage({ rootDirectory: raiz, ...opciones });
 }
 
@@ -287,7 +304,7 @@ test('sin la reserva mínima se rechaza con error tipado y no se borra nada', (t
 
 test('la falta de espacio no afecta a las lecturas existentes', (t) => {
   const { dataDir, dataFile } = volumen(t, 'lecturas-');
-  const raiz = resolveChatMediaRoot({ dataFile, isProduction: true, env: { CHAT_MEDIA_DIR: path.join(dataDir, 'chat-media') } });
+  const raiz = resolveChatMediaRoot({ dataFile, env: { CHAT_MEDIA_DIR: path.join(dataDir, 'chat-media') } });
 
   const holgado = createChatMediaStorage({ rootDirectory: raiz });
   const key = holgado.saveBuffer(PNG, 'image/png', 'u');

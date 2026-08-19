@@ -88,13 +88,20 @@ function nearestExisting(candidato) {
  * Lanza `CHAT_MEDIA_STORAGE_UNAVAILABLE` ante cualquier problema: es preferible
  * que el servicio no arranque a que acepte imágenes que va a perder.
  */
-export function resolveChatMediaRoot({ dataFile, isProduction, env = process.env } = {}) {
+export function resolveChatMediaRoot({ dataFile, env = process.env } = {}) {
+  // Sin variable, el directorio se deriva de `dataFile`, que es la ubicación
+  // del volumen persistente: en producción `/data/plus58express.sqlite` da
+  // `/data/chat-media`. Exigir la variable en producción --como se hacía-- no
+  // añadía seguridad, porque el valor derivado es exactamente el mismo que se
+  // habría configurado a mano; lo único que añadía era un modo de fallo real:
+  // olvidarla impedía arrancar el proceso entero. El escenario del que
+  // protegía --caer en el disco efímero-- solo puede darse si `dataFile` ya
+  // está fuera del volumen, y entonces la base de datos se perdería antes que
+  // los adjuntos.
+  //
+  // Configurarla mal SÍ sigue siendo un fallo duro: si apunta fuera del
+  // volumen, las comprobaciones de contención de más abajo lo rechazan.
   const configurado = env.CHAT_MEDIA_DIR;
-  if (isProduction && !configurado) {
-    // Sin variable, el valor por omisión caería en el disco efímero del
-    // contenedor y los adjuntos desaparecerían en cada despliegue.
-    throw fail('CHAT_MEDIA_STORAGE_UNAVAILABLE', 'CHAT_MEDIA_DIR es obligatoria en producción');
-  }
 
   // 1. La raíz de datos es la del volumen: crearla y resolverla es legítimo.
   const dataDirectory = path.resolve(path.dirname(path.resolve(dataFile)));
