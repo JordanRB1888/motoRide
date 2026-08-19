@@ -179,7 +179,14 @@ const guardiaMedios = createIdentityLimiter({
   name: 'medios-previa',
   limit: TOPE_GUARDIA_MEDIOS,
   windowMs: MINUTO,
-  keyGenerator: addressKey
+  keyGenerator: addressKey,
+  // Solo cuenta lo que falla. Una pantalla de chat puede abrir diez imagenes,
+  // y detras del NAT de un operador hay cientos de personas haciendo lo mismo:
+  // contando los aciertos, el uso legitimo agotaria el cupo antes que ningun
+  // abuso. Lo que esta guardia debe frenar es la peticion que no llega a
+  // autenticarse --401, 403--, y a esa la sigue contando. El uso legitimo ya
+  // tiene su techo por cuenta en `limitadores.archivos`, detras de requireAuth.
+  skipSuccessfulRequests: true
 });
 app.use('/api/chat-media', guardiaMedios);
 app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));

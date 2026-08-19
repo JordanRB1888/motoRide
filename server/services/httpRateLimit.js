@@ -52,8 +52,13 @@ export function addressKey(req) {
  * @param {number} opciones.windowMs duración de la ventana.
  * @param {(req: object) => string} [opciones.keyGenerator] cómo se agrupa el
  *   conteo. Por omisión, la cuenta si hay sesión y la dirección si no.
+ * @param {boolean} [opciones.skipSuccessfulRequests] si las respuestas
+ *   correctas devuelven su permiso al terminar. Para las guardias previas a la
+ *   autenticación, donde lo que se quiere frenar es el tráfico que falla.
  */
-export function createIdentityLimiter({ name, limit, windowMs, keyGenerator = identityKey }) {
+export function createIdentityLimiter({
+  name, limit, windowMs, keyGenerator = identityKey, skipSuccessfulRequests = false
+}) {
   if (!name) throw new Error('RATE_LIMITER_REQUIRES_NAME');
   if (!Number.isInteger(limit) || limit < 1) throw new Error('RATE_LIMITER_INVALID_LIMIT');
   if (!Number.isInteger(windowMs) || windowMs < 1000) throw new Error('RATE_LIMITER_INVALID_WINDOW');
@@ -64,6 +69,7 @@ export function createIdentityLimiter({ name, limit, windowMs, keyGenerator = id
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator,
+    skipSuccessfulRequests,
     handler: (req, res) => {
       // Segundos que faltan para que la ventana se reabra. `resetTime` lo pone
       // la propia librería; si no estuviera, la ventana completa es una cota
