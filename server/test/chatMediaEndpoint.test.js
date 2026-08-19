@@ -39,7 +39,7 @@ after(() => { for (const child of procesos) { try { child.kill(); } catch { /* y
 
 function arrancar({ dataFile, chatMediaDir }) {
   // Rango amplio: este archivo arranca dos servidores por prueba.
-  const port = 10100 + Math.floor(Math.random() * 700);
+  const port = 23000 + Math.floor(Math.random() * 700);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: {
