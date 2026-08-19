@@ -4,6 +4,26 @@ import { accumulatePage, createLatestOnly } from '../../utils/liveUpdates.js';
 import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
+import { createChatMediaLoader, chatImageSource, hydrateChatMedia } from '../../utils/chatMedia.js';
+
+// Adjuntos privados de los hilos de soporte. Una descarga por imagen mientras
+// el panel siga abierto; todas se liberan al salir de la pantalla.
+const chatMedia = createChatMediaLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
+
+/**
+ * Marcado del adjunto de un mensaje de soporte.
+ *
+ * `imageRef` manda sobre `image`: un mensaje con los dos se pinta una sola vez.
+ * El formato nuevo no puede abrirse en una pestaña --su URL exige la cabecera
+ * de sesion-- asi que se muestra sin enlace.
+ */
+function adjuntoDeSoporte(message) {
+  const media = chatImageSource(message);
+  if (!media) return '';
+  return media.kind === 'ref'
+    ? `<img data-chat-media="${escapeHtml(media.id)}" hidden alt="Adjunto de soporte">`
+    : `<a href="${escapeHtml(media.dataUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(media.dataUrl)}" alt="Adjunto de soporte"></a>`;
+}
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 const fullName = user => `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Usuario +58Express';
@@ -202,13 +222,13 @@ export async function renderAdminSupport(container) {
     const resolved = resolvedIds.has(user.id);
     return `<button class="support-thread ${user.id === activeId ? 'active' : ''}" data-thread-id="${escapeHtml(user.id)}" type="button">
       <span class="support-avatar ${user.role === 'driver' ? 'driver' : ''}">${neutralizePrivatePhoto(user.avatar) ? `<img src="${escapeHtml(neutralizePrivatePhoto(user.avatar))}" alt="">` : escapeHtml(initials(user))}<i></i></span>
-      <span class="support-thread-copy"><span><strong>${escapeHtml(fullName(user))}</strong><time>${last ? shortTime(last.createdAt) : ''}</time></span><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} · ID ${escapeHtml(String(user.id || '').slice(-10))}</small><em>${escapeHtml(last?.text || (last?.image ? 'Archivo adjunto' : 'Nueva conversación'))}</em></span>
+      <span class="support-thread-copy"><span><strong>${escapeHtml(fullName(user))}</strong><time>${last ? shortTime(last.createdAt) : ''}</time></span><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} · ID ${escapeHtml(String(user.id || '').slice(-10))}</small><em>${escapeHtml(last?.text || (last?.hasImage || last?.image ? 'Archivo adjunto' : 'Nueva conversación'))}</em></span>
       ${thread.unread ? `<b class="support-unread">${thread.unread > 9 ? '9+' : thread.unread}</b>` : resolved ? `<b class="support-resolved">${icon('check', 12)}</b>` : ''}
     </button>`;
   };
 
   const messageBubble = message => `<article class="support-message ${message.senderRole === 'admin' ? 'admin' : 'customer'}">
-    ${message.image ? `<a href="${escapeHtml(message.image)}" target="_blank" rel="noopener"><img src="${escapeHtml(message.image)}" alt="Adjunto de soporte"></a>` : ''}
+    ${adjuntoDeSoporte(message)}
     ${message.text ? `<p>${escapeHtml(message.text)}</p>` : ''}
     <small>${fullDate(message.createdAt)} ${message.senderRole === 'admin' ? icon('check', 11) : ''}</small>
   </article>`;
@@ -268,6 +288,10 @@ export async function renderAdminSupport(container) {
   };
 
   const bindEvents = () => {
+    // Los adjuntos privados se piden despues de pintar: el panel se ve de
+    // inmediato y cada imagen aparece cuando llega. Una que falle deja su hueco
+    // oculto sin romper el hilo.
+    hydrateChatMedia(container, chatMedia);
     container.querySelectorAll('[data-thread-id]').forEach(button => button.addEventListener('click', async () => {
       activeId = button.dataset.threadId;
       pendingImage = null;

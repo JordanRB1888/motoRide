@@ -4,6 +4,7 @@ import { apiService } from '../services/apiService.js';
 import { formatTime } from '../utils/helpers.js';
 
 import { neutralizePrivatePhoto } from '../utils/privatePhoto.js';
+import { createChatMediaLoader, chatImageSource, hydrateChatMedia } from '../utils/chatMedia.js';
 import { localAvatarHtml } from '../utils/localAvatar.js';
 export function createChatModal({ tripId, currentUser, recipientUser }) {
     const storageKey = `58express_chat_${tripId}`;
@@ -73,6 +74,12 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
     const container = modal.querySelector('#chat-messages-container');
     const form = modal.querySelector('#chat-form');
     const input = modal.querySelector('#chat-input');
+    // Adjuntos privados: una descarga por imagen, reutilizada mientras el
+    // modal siga abierto, y todas las object URLs liberadas al cerrarlo.
+    const chatMedia = createChatMediaLoader({
+        loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint)
+    });
+
     const closeBtn = modal.querySelector('#close-chat');
     const fileInput = modal.querySelector('#chat-file-input');
     const attachBtn = modal.querySelector('#btn-attach-image');
@@ -93,7 +100,10 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
 
         container.innerHTML = messages.map(msg => {
             const isMe = msg.senderId === currentUser.id;
-            const imageSrc = safeImageSrc(msg.image);
+            // `imageRef` manda sobre `image`: un mensaje que trajera los dos
+            // --no debería-- se pinta una sola vez, con el privado.
+            const media = chatImageSource(msg, { isLegacyDataUrl: value => Boolean(safeImageSrc(value)) });
+            const imageSrc = media?.kind === 'legacy' ? safeImageSrc(media.dataUrl) : '';
             return `
                 <div class="chat-bubble-row ${isMe ? 'sent' : 'received'}" style="margin-bottom: 10px;">
                     <div class="chat-bubble" style="
@@ -101,9 +111,9 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
                         color: ${isMe ? '#121824' : 'var(--text-primary)'};
                         padding: 10px 14px; border-radius: 16px; max-width: 85%;
                     ">
-                        ${imageSrc ? `
+                        ${media ? `
                             <div style="margin-bottom: 8px; border-radius: 12px; overflow: hidden; border: 1.5px solid rgba(255,255,255,0.3);">
-                                <img src="${escapeHtml(imageSrc)}" alt="Comprobante adjunto" loading="lazy" style="width: 100%; max-height: 200px; object-fit: contain; display: block; background:#111827;" />
+                                <img ${imageSrc ? `src="${escapeHtml(imageSrc)}"` : `data-chat-media="${escapeHtml(media.id)}" hidden`} alt="Comprobante adjunto" loading="lazy" style="width: 100%; max-height: 200px; object-fit: contain; display: block; background:#111827;" />
                             </div>
                         ` : ''}
                         <p class="msg-text" style="margin: 0; font-weight: 600; font-size: 0.9rem;">${escapeHtml(msg.text || '')}</p>
@@ -114,6 +124,12 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
                 </div>
             `;
         }).join('');
+
+        // Los adjuntos privados se piden despues de pintar: la conversacion se
+        // ve de inmediato y cada imagen aparece cuando llega. Si alguna falla
+        // --sesion caducada, sin acceso, cupo agotado-- su hueco se queda
+        // oculto y el resto del hilo no se entera.
+        hydrateChatMedia(container, chatMedia);
 
         container.scrollTop = container.scrollHeight;
     }
@@ -281,6 +297,9 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         },
         destroy() {
             socket.off('chat:message', socketHandler);
+            // Antes de soltar el DOM: cada object URL de adjunto tiene dueño y
+            // aquí es donde se devuelve.
+            chatMedia.destroy();
             modal.remove();
         }
     };

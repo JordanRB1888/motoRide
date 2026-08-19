@@ -52,9 +52,21 @@ export function neutralizePrivatePhoto(value) {
   return isPrivatePhotoPath(value) ? '' : (value || '');
 }
 
+/**
+ * @param {object} opciones
+ * @param {(endpoint: string) => Promise<string|null>} opciones.loadUrl descarga
+ *   autenticada que devuelve una object URL.
+ * @param {(url: string) => void} [opciones.revokeUrl]
+ * @param {(valor: string) => string|null} [opciones.resolveEndpoint] convierte
+ *   lo que guarda el registro en la ruta que hay que pedir, o null si ese valor
+ *   no es de este cargador. Por omisión, fotografías privadas. Los adjuntos de
+ *   chat pasan el suyo: la maquinaria de propiedad, deduplicación y
+ *   generaciones es la misma y no debe existir dos veces.
+ */
 export function createPrivatePhotoLoader({
   loadUrl,
-  revokeUrl = url => URL.revokeObjectURL(url)
+  revokeUrl = url => URL.revokeObjectURL(url),
+  resolveEndpoint = canonicalPhotoPath
 } = {}) {
   /** clave -> object URL vigente. */
   const opened = new Map();
@@ -130,7 +142,7 @@ export function createPrivatePhotoLoader({
    */
   function load(photoPath, { key = photoPath } = {}) {
     if (destroyed) return Promise.resolve(null);
-    const endpoint = canonicalPhotoPath(photoPath);
+    const endpoint = resolveEndpoint(photoPath);
     if (!endpoint) return Promise.resolve(null);
 
     const already = opened.get(key);
