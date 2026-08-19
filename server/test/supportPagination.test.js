@@ -145,8 +145,13 @@ test('el resumen indica que hay imagen sin transportarla', async () => {
   const mensajes = await (await pedir(
     `${url}/api/support/threads/${propio.user.id}/messages?limit=50`, propio.token
   )).json();
-  const conImagen = mensajes.items.filter(item => item.image);
+  // Desde 4C la imagen no viaja dentro del mensaje: queda `imageRef`, que es una
+  // referencia al almacen privado. Lo que esta prueba vigila --que el listado
+  // no transporte la imagen y que el resumen si diga si la hay-- vale igual
+  // para los dos formatos, asi que se cuentan ambos.
+  const conImagen = mensajes.items.filter(item => item.image || item.imageRef);
   assert.equal(conImagen.length, 1, 'el hilo tiene exactamente un mensaje con imagen');
+  assert.ok(!conImagen[0].image, 'y ya no debe llevar la data URL');
 
   const hilos = await (await pedir(`${url}/api/support/threads`, propio.token)).json();
   assert.equal(hilos.items[0].lastMessage.hasImage, false, 'el último mensaje no tenía imagen');
