@@ -31,6 +31,9 @@ import { createConnectionLimiter } from './services/connectionLimit.js';
 import { resolveTrustProxy } from './services/trustProxy.js';
 import { addressKey, createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from './services/httpRateLimit.js';
 import { createChatMediaStorage, resolveChatMediaRoot } from './services/chatMediaStorage.js';
+import { createChatMediaPipeline } from './services/chatMediaPipeline.js';
+import { isChatImageDataUrl } from './domain/chatImageInput.js';
+import { publicChatMessage, publicChatMessages } from './domain/chatMessageProjection.js';
 import { parseLimit, parsePage, paginate, paginateByPage } from './domain/pagination.js';
 import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters.js';
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
@@ -226,6 +229,14 @@ const privateStorage = createPrivateStorage({
 // desapareceran en el siguiente despliegue.
 const chatMediaStorage = createChatMediaStorage({
   rootDirectory: resolveChatMediaRoot({ dataFile })
+});
+// Unico camino de alta de una imagen de chat: archivo primero, registro
+// despues, y compensacion si el registro falla. Lo usan los dos productores.
+const chatMediaPipeline = createChatMediaPipeline({
+  storage: chatMediaStorage,
+  onCompensationError: detalle => console.error(
+    `[+58express chat-media] archivo huerfano tras fallo de persistencia: ${detalle.reason} (${detalle.mimeType}, ${detalle.bytes} bytes)`
+  )
 });
 let pricingConfig = {
   ...DEFAULT_PRICING,
@@ -1083,7 +1094,9 @@ function summarizeSupportMessage(message) {
     senderId: message.senderId,
     senderRole: message.senderRole,
     text: sanitizeText(message.text || '', 160),
-    hasImage: Boolean(message.image),
+    // Cuenta cualquiera de los dos formatos: el nuevo guarda la referencia
+    // en `imageRef` y ya no rellena `image`.
+    hasImage: Boolean(message.image || message.imageRef),
     read: Boolean(message.read),
     createdAt: message.createdAt
   };
@@ -1185,7 +1198,7 @@ app.get('/api/support/threads/:userId/messages', requireAuth, (req, res) => {
       cursor: req.query.cursor,
       sortKeyOf: message => message.createdAt || ''
     });
-    return res.json(page);
+    return res.json({ ...page, items: publicChatMessages(page.items) });
   } catch (error) {
     return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
   }
@@ -1194,13 +1207,52 @@ app.get('/api/support/threads/:userId/messages', requireAuth, (req, res) => {
 app.post('/api/support/messages', requireAuth, limitadores.mensajes, (req, res) => {
   const conversationUserId = req.user.role === 'admin' ? req.body.recipientId : req.user.id;
   const target = database.users.find(user => user.id === conversationUserId && user.role !== 'admin');
-  const image = typeof req.body.image === 'string' && /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(req.body.image) && req.body.image.length <= 1_000_000 ? req.body.image : null;
-  if (!target || (!req.body.text?.trim() && !image)) return res.status(400).json({ error: 'INVALID_SUPPORT_MESSAGE' });
-  const message = { id: `support_${crypto.randomUUID()}`, conversationUserId, senderId: req.user.id, senderRole: req.user.role, text: sanitizeText(req.body.text, 2000), image, createdAt: new Date().toISOString(), read: false };
-  database.supportMessages.push(message);
-  persistDatabase();
-  io.to('admins').to(`user:${conversationUserId}`).emit('support:message', { ...message, user: publicUser(target) });
-  res.status(201).json(message);
+  // La imagen ya no se guarda en la fila: se escribe en el almacen privado y el
+  // mensaje se queda con la referencia. Aqui solo se comprueba que venga algo
+  // con forma de imagen; decodificarla y validarla es cosa del pipeline.
+  const tieneImagen = isChatImageDataUrl(req.body.image);
+  if (!target || (!req.body.text?.trim() && !tieneImagen)) return res.status(400).json({ error: 'INVALID_SUPPORT_MESSAGE' });
+
+  const construir = (media) => {
+    const message = {
+      id: `support_${crypto.randomUUID()}`,
+      conversationUserId,
+      senderId: req.user.id,
+      senderRole: req.user.role,
+      text: sanitizeText(req.body.text, 2000),
+      ...(media || {}),
+      createdAt: new Date().toISOString(),
+      read: false
+    };
+    database.supportMessages.push(message);
+    try {
+      persistDatabase();
+    } catch (error) {
+      // Deshacer el alta en memoria: si no se ha persistido, el mensaje no
+      // existe, y dejarlo en la coleccion lo haria visible hasta el reinicio.
+      const indice = database.supportMessages.indexOf(message);
+      if (indice >= 0) database.supportMessages.splice(indice, 1);
+      throw error;
+    }
+    return message;
+  };
+
+  let message;
+  try {
+    message = tieneImagen
+      ? chatMediaPipeline.withStoredImage(req.body.image, req.user.id, construir)
+      : construir(null);
+  } catch (error) {
+    // Nunca se devuelve el detalle: llevaria rutas o claves del almacen.
+    const code = ['INVALID_CHAT_IMAGE', 'CHAT_IMAGE_TOO_LARGE', 'INVALID_FILE_TYPE', 'CHAT_MEDIA_TOO_LARGE', 'CHAT_MEDIA_STORAGE_FULL'].includes(error?.code)
+      ? error.code
+      : 'SUPPORT_MESSAGE_FAILED';
+    return res.status(code === 'SUPPORT_MESSAGE_FAILED' ? 500 : 400).json({ error: code });
+  }
+
+  const publico = publicChatMessage(message);
+  io.to('admins').to(`user:${conversationUserId}`).emit('support:message', { ...publico, user: publicUser(target) });
+  res.status(201).json(publico);
 });
 
 app.patch('/api/support/threads/:userId/read', requireAuth, requireRole('admin'), (req, res) => {
@@ -1511,7 +1563,7 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   if (!userCanAccessTrip(req.user.id, req.user.role, trip)) {
     return res.status(403).json({ error: 'FORBIDDEN' });
   }
-  res.json(database.messages.filter(message => message.tripId === trip.id));
+  res.json(publicChatMessages(database.messages.filter(message => message.tripId === trip.id)));
 });
 
 app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
@@ -2099,22 +2151,50 @@ io.on('connection', (socket) => {
       return;
     }
     const text = String(data.text || '').trim().slice(0, 1000);
-    const image = typeof data.image === 'string' && /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(data.image) && data.image.length <= 1_000_000 ? data.image : null;
-    if (!text && !image) return;
+    // Misma semantica que el productor de soporte, por el mismo pipeline.
+    const tieneImagen = isChatImageDataUrl(data.image);
+    if (!text && !tieneImagen) return;
     const sender = database.users.find(user => user.id === userId);
-    const message = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      tripId: trip.id,
-      senderId: userId,
-      senderName: sender?.firstName || 'Usuario',
-      recipientId: role === 'driver' ? trip.passengerId : trip.driverId,
-      text,
-      image,
-      timestamp: new Date().toISOString()
+
+    const construir = (media) => {
+      const message = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        tripId: trip.id,
+        senderId: userId,
+        senderName: sender?.firstName || 'Usuario',
+        recipientId: role === 'driver' ? trip.passengerId : trip.driverId,
+        text,
+        ...(media || {}),
+        timestamp: new Date().toISOString()
+      };
+      database.messages.push(message);
+      try {
+        persistRecord('messages', message);
+      } catch (error) {
+        const indice = database.messages.indexOf(message);
+        if (indice >= 0) database.messages.splice(indice, 1);
+        throw error;
+      }
+      return message;
     };
-    database.messages.push(message);
-    persistRecord('messages', message);
-    io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', message);
+
+    let message;
+    try {
+      message = tieneImagen
+        ? chatMediaPipeline.withStoredImage(data.image, userId, construir)
+        : construir(null);
+    } catch (error) {
+      // El cliente recibe el codigo, nunca el detalle.
+      socket.emit('chat:error', {
+        error: ['INVALID_CHAT_IMAGE', 'CHAT_IMAGE_TOO_LARGE', 'INVALID_FILE_TYPE', 'CHAT_MEDIA_TOO_LARGE', 'CHAT_MEDIA_STORAGE_FULL'].includes(error?.code)
+          ? error.code
+          : 'CHAT_MESSAGE_FAILED',
+        tripId: trip.id
+      });
+      return;
+    }
+
+    io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', publicChatMessage(message));
   });
 
   on('tripRated', (data = {}) => {
