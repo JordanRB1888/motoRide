@@ -379,6 +379,7 @@ html.modern-yellow-lab .stagger-item.s4 { transition-delay: 0.16s; }
 html.modern-yellow-lab .stagger-item.s5 { transition-delay: 0.20s; }
 html.modern-yellow-lab .stagger-item.s6 { transition-delay: 0.24s; }
 html.modern-yellow-lab .stagger-item.s7 { transition-delay: 0.28s; }
+html.modern-yellow-lab .stagger-item.s7b { transition-delay: 0.30s; }
 html.modern-yellow-lab .stagger-item.s8 { transition-delay: 0.32s; }
 html.modern-yellow-lab .stagger-item.s9 { transition-delay: 0.36s; }
 
@@ -771,6 +772,82 @@ html.modern-yellow-lab .register-link a:hover {
 html.modern-yellow-lab .landing-footer {
   margin-top: 18px;
   text-align: center;
+}
+
+/* ---- Acceso con proveedor externo ---------------------------------------
+   Mismo vidrio y mismos radios que el resto de la tarjeta. Los botones nacen
+   deshabilitados: el intercambio con cada proveedor todavia no existe, y un
+   boton que parece funcionar y no hace nada es peor que uno que lo dice. */
+html.modern-yellow-lab .liquid-social-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+html.modern-yellow-lab .liquid-social-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--lab-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+html.modern-yellow-lab .liquid-social-divider::before,
+html.modern-yellow-lab .liquid-social-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+}
+html.modern-yellow-lab .liquid-social-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+html.modern-yellow-lab .liquid-social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(8px);
+  color: var(--lab-text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.28s ease,
+              background 0.28s ease;
+}
+html.modern-yellow-lab .liquid-social-btn:not([disabled]):hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 200, 7, 0.34);
+  background: rgba(255, 255, 255, 0.075);
+}
+html.modern-yellow-lab .liquid-social-btn:not([disabled]):active { transform: translateY(0); }
+/* Deshabilitado, pero legible: se atenua sin llegar a desaparecer. */
+html.modern-yellow-lab .liquid-social-btn[disabled] {
+  opacity: 0.44;
+  cursor: not-allowed;
+}
+html.modern-yellow-lab .liquid-social-btn .brand-icon { flex: 0 0 auto; }
+html.modern-yellow-lab .liquid-social-note {
+  margin: 0;
+  text-align: center;
+  color: var(--lab-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+/* En pantallas estrechas los tres pasan a una columna y muestran el nombre
+   completo, que es donde el texto corto se quedaba pobre. */
+@media (max-width: 420px) {
+  html.modern-yellow-lab .liquid-social-buttons { grid-template-columns: 1fr; }
+  html.modern-yellow-lab .liquid-social-btn { justify-content: flex-start; padding-left: 18px; }
 }
 
 html.modern-yellow-lab .landing-footer p {

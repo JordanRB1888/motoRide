@@ -2,6 +2,7 @@ import { authService } from '../services/authService.js';
 import { createDriverRegistrationModal } from '../components/driverRegistrationModal.js';
 import { showToast } from '../components/toast.js';
 import { icon } from '../utils/icons.js';
+import { brandIcon } from '../utils/brandIcons.js';
 
 export function renderLanding(container) {
     container.innerHTML = `
@@ -167,6 +168,26 @@ export function renderLanding(container) {
                                     <div class="btn-drip d2"></div>
                                 </div>
                             </button>
+
+                            <!-- Acceso con proveedor externo. Los botones estan
+                                 preparados visualmente; el intercambio con cada
+                                 proveedor todavia no existe, asi que se
+                                 muestran deshabilitados y lo dicen. -->
+                            <div class="liquid-social-block stagger-item s7b">
+                                <div class="liquid-social-divider"><span>o continuar con</span></div>
+                                <div class="liquid-social-buttons">
+                                    <button type="button" class="liquid-social-btn" data-social="google" disabled aria-disabled="true" title="Disponible próximamente">
+                                        ${brandIcon('google', 18)}<span>Google</span>
+                                    </button>
+                                    <button type="button" class="liquid-social-btn" data-social="facebook" disabled aria-disabled="true" title="Disponible próximamente">
+                                        ${brandIcon('facebook', 18)}<span>Facebook</span>
+                                    </button>
+                                    <button type="button" class="liquid-social-btn" data-social="apple" disabled aria-disabled="true" title="Disponible próximamente">
+                                        ${brandIcon('apple', 18)}<span>Apple</span>
+                                    </button>
+                                </div>
+                                <p class="liquid-social-note">Disponible próximamente</p>
+                            </div>
 
                             <!-- Conductor Special Callout -->
                             <div id="driver-register-section" class="hidden conductor-recruitment-banner stagger-item s8">
