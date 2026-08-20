@@ -6,9 +6,6 @@ import { icon } from '../../utils/icons.js';
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 import { createChatMediaLoader, chatImageSource, hydrateChatMedia } from '../../utils/chatMedia.js';
 
-// Adjuntos privados de los hilos de soporte. Una descarga por imagen mientras
-// el panel siga abierto; todas se liberan al salir de la pantalla.
-const chatMedia = createChatMediaLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
 
 /**
  * Marcado del adjunto de un mensaje de soporte.
@@ -66,6 +63,16 @@ const THREADS_PAGE = 25;
 const MESSAGES_PAGE = 30;
 
 export async function renderAdminSupport(container) {
+  /**
+   * Un cargador por pantalla, no uno de modulo.
+   *
+   * `disposeAllPrivatePhotos()` destruye todos los cargadores vivos en cada
+   * cambio de ruta, y `destroy()` es irreversible a proposito. Con un cargador
+   * de modulo, al volver al panel se reutilizaba ese mismo objeto ya muerto y
+   * los adjuntos dejaban de verse hasta recargar la pagina entera. Naciendo
+   * con la pantalla, cada entrada estrena el suyo.
+   */
+  const chatMedia = createChatMediaLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
   let disposed = false;
   let threads = [];
   let trips = [];
@@ -395,6 +402,9 @@ export async function renderAdminSupport(container) {
     if (document.body.contains(container) && container.querySelector('.support-command-view')) return;
     disposed = true;
     socket.off('support:message', onSupportMessage);
+    // Las object URLs de los adjuntos se sueltan aqui, con el resto del
+    // desmontaje: es el unico punto por el que pasa la salida de la pantalla.
+    chatMedia.destroy();
     observer.disconnect();
   });
   observer.observe(document.body, { childList: true, subtree: true });

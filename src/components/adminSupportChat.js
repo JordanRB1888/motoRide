@@ -3,10 +3,6 @@ import { socket } from '../services/socketClient.js';
 import { showToast } from './toast.js';
 import { accumulatePage } from '../utils/liveUpdates.js';
 import { createChatMediaLoader, chatImageSource, hydrateChatMedia } from '../utils/chatMedia.js';
-import { apiService as api } from '../services/apiService.js';
-
-// Adjuntos privados del hilo: una descarga por imagen, liberadas al cerrar.
-const chatMedia = createChatMediaLoader({ loadUrl: endpoint => api.getPrivateFileUrl(endpoint) });
 
 /**
  * Marcado del adjunto de un mensaje de soporte.
@@ -25,6 +21,16 @@ const adjunto = m => {
 const esc=value=>String(value||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 
 export function createAdminSupportChat(user) {
+  /**
+   * Un cargador por instancia, no uno de modulo.
+   *
+   * `disposeAllPrivatePhotos()` destruye todos los cargadores vivos en cada
+   * cambio de ruta, y `destroy()` es irreversible a proposito. Con un cargador
+   * de modulo, al volver a abrir el hilo se reutilizaba ese mismo objeto ya
+   * muerto y ninguna imagen volvia a cargarse hasta recargar la pagina entera.
+   * Naciendo con la instancia, cada apertura estrena el suyo.
+   */
+  const chatMedia = createChatMediaLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:#070b12dd;backdrop-filter:blur(12px);display:grid;place-items:center;padding:16px';
   const modal=document.createElement('div');modal.style.cssText='width:min(460px,100%);height:min(650px,90vh);background:var(--surface-card);border:2px solid var(--accent-secondary);border-radius:26px;display:flex;flex-direction:column;overflow:hidden';overlay.appendChild(modal);
@@ -34,7 +40,7 @@ export function createAdminSupportChat(user) {
   // de lectura y el boton quedaria inservible.
   let anclarAbajo=true;
   let loadingOlder=false;
-  const render=()=>{modal.innerHTML=`<header style="padding:16px 18px;background:var(--surface-elevated);display:flex;justify-content:space-between"><div><b>🛡️ Soporte +58express</b><small style="display:block;color:var(--success)">Operación en tiempo real</small></div><button id="close" style="background:none;border:0;color:var(--text-primary);font-size:20px">×</button></header><div id="msgs" style="flex:1;padding:15px;overflow:auto;display:flex;flex-direction:column;gap:10px">${olderCursor?`<button id="older" style="align-self:center;background:var(--surface-elevated);color:var(--text-primary);border:1px solid var(--border-color);border-radius:14px;padding:8px 14px;font-size:13px" ${loadingOlder?'disabled':''}>${loadingOlder?'Cargando…':'Ver mensajes anteriores'}</button>`:''}${messages.map(m=>`<div style="align-self:${m.senderRole==='admin'?'flex-start':'flex-end'};max-width:82%;padding:11px 14px;border-radius:16px;background:${m.senderRole==='admin'?'var(--surface-elevated)':'var(--accent-primary)'};color:${m.senderRole==='admin'?'var(--text-primary)':'#121824'}">${adjunto(m)}<div>${esc(m.text)}</div><small>${new Date(m.createdAt).toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'})}</small></div>`).join('')||'<p style="margin:auto;color:var(--text-secondary)">Cuéntanos cómo podemos ayudarte.</p>'}</div><form id="form" style="display:flex;gap:8px;padding:12px;border-top:1px solid var(--border-color)"><input id="input" required placeholder="Escribe a administración…" style="flex:1;padding:12px;border-radius:15px;border:1px solid var(--border-color);background:var(--surface-input);color:var(--text-primary)"><button class="btn primary-btn">Enviar</button></form>`;modal.querySelector('#older')?.addEventListener('click',loadOlder);modal.querySelector('#close').onclick=()=>{socket.off('support:message',onMessage);chatMedia.releaseAll();overlay.remove();};hydrateChatMedia(modal.querySelector('#msgs'),chatMedia);modal.querySelector('#form').onsubmit=async event=>{event.preventDefault();const input=modal.querySelector('#input');const sent=await apiService.post('/support/messages',{text:input.value.trim()});if(sent){messages.push(sent);render();}else showToast('No se pudo enviar el mensaje','error');};if(anclarAbajo)requestAnimationFrame(()=>{const body=modal.querySelector('#msgs');if(body)body.scrollTop=body.scrollHeight;});};
+  const render=()=>{modal.innerHTML=`<header style="padding:16px 18px;background:var(--surface-elevated);display:flex;justify-content:space-between"><div><b>🛡️ Soporte +58express</b><small style="display:block;color:var(--success)">Operación en tiempo real</small></div><button id="close" style="background:none;border:0;color:var(--text-primary);font-size:20px">×</button></header><div id="msgs" style="flex:1;padding:15px;overflow:auto;display:flex;flex-direction:column;gap:10px">${olderCursor?`<button id="older" style="align-self:center;background:var(--surface-elevated);color:var(--text-primary);border:1px solid var(--border-color);border-radius:14px;padding:8px 14px;font-size:13px" ${loadingOlder?'disabled':''}>${loadingOlder?'Cargando…':'Ver mensajes anteriores'}</button>`:''}${messages.map(m=>`<div style="align-self:${m.senderRole==='admin'?'flex-start':'flex-end'};max-width:82%;padding:11px 14px;border-radius:16px;background:${m.senderRole==='admin'?'var(--surface-elevated)':'var(--accent-primary)'};color:${m.senderRole==='admin'?'var(--text-primary)':'#121824'}">${adjunto(m)}<div>${esc(m.text)}</div><small>${new Date(m.createdAt).toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'})}</small></div>`).join('')||'<p style="margin:auto;color:var(--text-secondary)">Cuéntanos cómo podemos ayudarte.</p>'}</div><form id="form" style="display:flex;gap:8px;padding:12px;border-top:1px solid var(--border-color)"><input id="input" required placeholder="Escribe a administración…" style="flex:1;padding:12px;border-radius:15px;border:1px solid var(--border-color);background:var(--surface-input);color:var(--text-primary)"><button class="btn primary-btn">Enviar</button></form>`;modal.querySelector('#older')?.addEventListener('click',loadOlder);modal.querySelector('#close').onclick=()=>{socket.off('support:message',onMessage);chatMedia.destroy();overlay.remove();};hydrateChatMedia(modal.querySelector('#msgs'),chatMedia);modal.querySelector('#form').onsubmit=async event=>{event.preventDefault();const input=modal.querySelector('#input');const sent=await apiService.post('/support/messages',{text:input.value.trim()});if(sent){messages.push(sent);render();}else showToast('No se pudo enviar el mensaje','error');};if(anclarAbajo)requestAnimationFrame(()=>{const body=modal.querySelector('#msgs');if(body)body.scrollTop=body.scrollHeight;});};
   // El hilo propio se pide directamente, en lugar de descargar el listado
   // completo para buscarse dentro. El endpoint devuelve del más reciente al
   // más antiguo; aquí se invierte para mostrarlo en orden de conversación.

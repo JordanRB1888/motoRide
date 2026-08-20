@@ -181,11 +181,16 @@ test('J+K+L) un fallo de una imagen no rompe la conversación', async () => {
 
 // --------------------------------------- los consumidores, por su fuente
 
-test('los tres consumidores usan el cargador y sueltan lo suyo', () => {
+test('los consumidores usan el cargador y sueltan lo suyo', () => {
+  // Los cuatro destruyen su cargador al desaparecer la pantalla. Antes el de
+  // soporte solo hacia `releaseAll`, porque su cargador era de modulo y no
+  // podia destruirse sin dejarlo inservible para la siguiente visita; desde
+  // que cada pantalla estrena el suyo, lo correcto es destruirlo.
   const consumidores = [
     ['src/components/chatModal.js', 'chatMedia.destroy()'],
-    ['src/components/adminSupportChat.js', 'chatMedia.releaseAll()'],
-    ['src/pages/admin/adminSupport.js', 'hydrateChatMedia']
+    ['src/components/adminSupportChat.js', 'chatMedia.destroy()'],
+    ['src/pages/admin/adminSupport.js', 'chatMedia.destroy()'],
+    ['src/pages/driver/driverTrips.js', 'chatMedia.destroy()']
   ];
   for (const [archivo, marca] of consumidores) {
     const fuente = fs.readFileSync(path.join(raiz, archivo), 'utf8');
@@ -198,7 +203,8 @@ test('los tres consumidores usan el cargador y sueltan lo suyo', () => {
 test('E) ningún consumidor menciona la clave privada del almacén', () => {
   for (const archivo of [
     'src/components/chatModal.js', 'src/components/adminSupportChat.js',
-    'src/pages/admin/adminSupport.js', 'src/utils/chatMedia.js', 'src/services/apiService.js'
+    'src/pages/admin/adminSupport.js', 'src/pages/driver/driverTrips.js',
+    'src/utils/chatMedia.js', 'src/services/apiService.js'
   ]) {
     const fuente = fs.readFileSync(path.join(raiz, archivo), 'utf8');
     assert.ok(!fuente.includes('imageStorageKey'),
