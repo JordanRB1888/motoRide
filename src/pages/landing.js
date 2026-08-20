@@ -3,6 +3,7 @@ import { createDriverRegistrationModal } from '../components/driverRegistrationM
 import { showToast } from '../components/toast.js';
 import { icon } from '../utils/icons.js';
 import { brandIcon } from '../utils/brandIcons.js';
+import { createScreenLifecycle } from '../utils/screenLifecycle.js';
 
 export function renderLanding(container) {
     container.innerHTML = `
@@ -38,16 +39,16 @@ export function renderLanding(container) {
                                 <stop offset="100%" stop-color="transparent" />
                             </radialGradient>
                         </defs>
-                        
+
                         <!-- Background Glow Disc -->
                         <circle cx="100" cy="100" r="88" fill="url(#tachoAura)" />
-                        
+
                         <!-- Outer Gauge Track -->
                         <circle cx="100" cy="100" r="86" fill="none" stroke="rgba(255, 255, 255, 0.06)" stroke-width="3" stroke-dasharray="3, 6" />
-                        
+
                         <!-- Dynamic RPM Progress Ring -->
                         <circle class="tacho-rpm-ring" id="tacho-rpm-ring" cx="100" cy="100" r="82" fill="none" stroke="url(#tachoGrad)" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="515" stroke-dashoffset="380" transform="rotate(135 100 100)" />
-                        
+
                         <!-- Gear & Speed HUD Overlay -->
                         <g class="hud-labels" font-family="monospace">
                             <text x="100" y="32" font-size="8.5" font-weight="900" fill="#FFC400" text-anchor="middle" letter-spacing="2">+58 EXPRESS</text>
@@ -244,7 +245,13 @@ export function renderLanding(container) {
     let currentTiltX = 0;
     let currentTiltY = 0;
     let isRevving = false;
-    let animationFrameId = null;
+    /**
+     * Ciclo de vida de esta instancia: quien puso cada oyente y quien tiene el
+     * fotograma pendiente, para poder soltarlo todo al salir. Sin esto, entrar
+     * y volver al login acumulaba otro bucle y otro juego de oyentes sobre los
+     * anteriores, que seguian vivos sujetando el DOM viejo.
+     */
+    const lifecycle = createScreenLifecycle({ onFrame: dibujarEscena });
 
     function onMouseMove(event) {
         if (!cyberStage) return;
@@ -253,7 +260,7 @@ export function renderLanding(container) {
         const centerY = rect.top + rect.height / 2;
         targetTiltX = (event.clientX - centerX) * 0.05;
         targetTiltY = (event.clientY - centerY) * 0.05;
-        
+
         // Tilt card glare
         const cardRect = liquidCard.getBoundingClientRect();
         const mouseX = ((event.clientX - cardRect.left) / cardRect.width) * 100;
@@ -261,25 +268,26 @@ export function renderLanding(container) {
         liquidCard.style.setProperty('--glare-x', `${mouseX}%`);
         liquidCard.style.setProperty('--glare-y', `${mouseY}%`);
     }
-    window.addEventListener('mousemove', onMouseMove, { passive: true });
+    lifecycle.addListener(window, 'mousemove', onMouseMove, { passive: true });
 
     // Rev engine on hover / press
     cyberStage?.addEventListener('mouseenter', () => { targetSpeed = 65; });
     cyberStage?.addEventListener('mouseleave', () => { if (!isRevving) targetSpeed = 0; });
-    
+
     cyberStage?.addEventListener('mousedown', () => {
         isRevving = true;
         targetSpeed = 135;
         motoWrap?.classList.add('is-accelerating');
     });
 
-    window.addEventListener('mouseup', () => {
+    function onGlobalRelease() {
         if (isRevving) {
             isRevving = false;
             targetSpeed = 0;
             motoWrap?.classList.remove('is-accelerating');
         }
-    });
+    }
+    lifecycle.addListener(window, 'mouseup', onGlobalRelease);
 
     cyberStage?.addEventListener('touchstart', () => {
         isRevving = true;
@@ -287,13 +295,7 @@ export function renderLanding(container) {
         motoWrap?.classList.add('is-accelerating');
     }, { passive: true });
 
-    window.addEventListener('touchend', () => {
-        if (isRevving) {
-            isRevving = false;
-            targetSpeed = 0;
-            motoWrap?.classList.remove('is-accelerating');
-        }
-    }, { passive: true });
+    lifecycle.addListener(window, 'touchend', onGlobalRelease, { passive: true });
 
     // Rev up dynamically when user types in inputs!
     [emailInput, passwordInput].forEach(input => {
@@ -303,7 +305,7 @@ export function renderLanding(container) {
         });
     });
 
-    function cyberLoop(time) {
+    function dibujarEscena(time) {
         // Smooth speed & RPM interpolation
         currentSpeed += (targetSpeed - currentSpeed) * 0.12;
         if (currentSpeed < 0.5) currentSpeed = 0;
@@ -330,9 +332,10 @@ export function renderLanding(container) {
             motoWrap.style.transform = `translate3d(0, ${(floatY + revShake).toFixed(1)}px, 0) rotate(${tiltDeg.toFixed(1)}deg)`;
         }
 
-        animationFrameId = requestAnimationFrame(cyberLoop);
     }
-    animationFrameId = requestAnimationFrame(cyberLoop);
+    lifecycle.start();
+    // Se cierra sola cuando el enrutador vacia el contenedor.
+    lifecycle.closeWhenDetached(container.querySelector('.landing-container'));
 
     // --- Disclose / Peek Toggle Flow ---
     function openDisclose() {
@@ -357,7 +360,7 @@ export function renderLanding(container) {
             tabModeRegister.classList.toggle('active', registrationMode);
             passengerRegisterFields.classList.toggle('hidden', !registrationMode);
             loginTitle.textContent = registrationMode ? 'Registro Pasajero' : 'Ingreso Pasajero';
-            
+
             if (registrationMode) {
                 passengerRegLink.innerHTML = '¿Ya tienes una cuenta? <a href="#" id="link-register">Iniciar Sesión</a>';
             } else {
