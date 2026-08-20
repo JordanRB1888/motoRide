@@ -913,25 +913,338 @@ html.modern-yellow-lab :is(.wallet-real-page, .real-profile-page, .ride-history-
   width: min(100%, 560px) !important;
   padding-top: 22px !important;
 }
-html.modern-yellow-lab :is(.wallet-real-heading h2, .real-profile-heading h2,
-  .passenger-history-heading h1) {
-  font-size: 1.75rem !important;
-  letter-spacing: -.055em !important;
+/* Passenger Profile - Modern Luxury Redesign */
+html.modern-yellow-lab .real-profile-page,
+.real-profile-page {
+  width: 100% !important;
+  max-width: 480px !important;
+  margin: 0 auto !important;
+  padding: 16px 12px 100px !important;
 }
-html.modern-yellow-lab .wallet-real-balance {
-  border-radius: 29px !important;
-  background: linear-gradient(140deg, #ffe047, #ffae00) !important;
-  box-shadow: 0 22px 55px rgba(255, 174, 0, .15) !important;
+
+html.modern-yellow-lab .real-profile-heading,
+.real-profile-heading {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 18px !important;
 }
-html.modern-yellow-lab :is(.wallet-history-filters, .passenger-history-filters) button {
+
+html.modern-yellow-lab .real-profile-heading h2,
+.real-profile-heading h2 {
+  font-size: 1.65rem !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.04em !important;
+  color: #fff !important;
+  margin: 2px 0 0 !important;
+}
+
+html.modern-yellow-lab .real-profile-heading b,
+.real-profile-heading b {
+  padding: 6px 14px !important;
   border-radius: 999px !important;
+  background: rgba(0, 223, 120, 0.12) !important;
+  border: 1px solid rgba(0, 223, 120, 0.4) !important;
+  color: #00df78 !important;
+  font-size: 0.62rem !important;
+  font-weight: 800 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
 }
-html.modern-yellow-lab :is(.wallet-history-filters, .passenger-history-filters) button.active {
-  color: #111216 !important;
-  background: var(--lab-yellow) !important;
+
+html.modern-yellow-lab .real-profile-card,
+.real-profile-card {
+  position: relative !important;
+  padding: 28px 20px 22px !important;
+  border-radius: 28px !important;
+  background: linear-gradient(165deg, rgba(24, 28, 38, 0.95), rgba(10, 12, 18, 0.98)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(24px) !important;
+  margin-bottom: 14px !important;
+  overflow: visible !important;
+  text-align: center !important;
 }
-html.modern-yellow-lab .real-profile-card { padding: 25px !important; }
-html.modern-yellow-lab .real-profile-avatar { box-shadow: 0 0 0 6px rgba(255,210,31,.08) !important; }
+
+html.modern-yellow-lab .real-profile-accent,
+.real-profile-accent {
+  position: absolute !important;
+  top: 0 !important;
+  left: 24px !important;
+  right: 24px !important;
+  height: 3px !important;
+  border-radius: 0 0 4px 4px !important;
+  background: linear-gradient(90deg, #ffe02b 0%, #ffc400 50%, #ff9d00 100%) !important;
+  box-shadow: 0 0 16px rgba(255, 196, 0, 0.4) !important;
+}
+
+/* Avatar Frame & Camera Action Button */
+html.modern-yellow-lab .real-profile-avatar-wrap,
+.real-profile-avatar-wrap {
+  display: flex !important;
+  justify-content: center !important;
+  margin: 4px auto 14px !important;
+}
+
+html.modern-yellow-lab .real-profile-avatar,
+.real-profile-avatar {
+  position: relative !important;
+  width: 96px !important;
+  height: 96px !important;
+  border-radius: 50% !important;
+  padding: 3px !important;
+  background: linear-gradient(135deg, #ffc400, #ff8c00) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 196, 0, 0.25) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+}
+
+html.modern-yellow-lab .real-profile-avatar .local-avatar,
+.real-profile-avatar .local-avatar {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  font-size: 1.6rem !important;
+  font-weight: 900 !important;
+  background: #151d2d !important;
+  color: #ffc400 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+html.modern-yellow-lab .real-profile-avatar .profile-avatar-img,
+.real-profile-avatar .profile-avatar-img {
+  position: absolute !important;
+  inset: 3px !important;
+  width: calc(100% - 6px) !important;
+  height: calc(100% - 6px) !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  z-index: 2 !important;
+}
+
+html.modern-yellow-lab .profile-avatar-camera-btn,
+.profile-avatar-camera-btn {
+  position: absolute !important;
+  right: -2px !important;
+  bottom: -2px !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #ffdb22, #ffaa00) !important;
+  border: 2px solid #0f121a !important;
+  color: #080b11 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6) !important;
+  cursor: pointer !important;
+  z-index: 4 !important;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease !important;
+}
+
+html.modern-yellow-lab .profile-avatar-camera-btn:hover,
+.profile-avatar-camera-btn:hover {
+  transform: scale(1.12) !important;
+  box-shadow: 0 8px 20px rgba(255, 196, 0, 0.4) !important;
+}
+
+html.modern-yellow-lab .real-profile-name,
+.real-profile-name {
+  margin: 0 !important;
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  letter-spacing: -0.03em !important;
+}
+
+html.modern-yellow-lab .real-profile-verified,
+.real-profile-verified {
+  width: max-content !important;
+  margin: 6px auto 0 !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(0, 223, 120, 0.08) !important;
+  color: #20dc8e !important;
+  font-size: 0.58rem !important;
+  font-weight: 900 !important;
+}
+
+html.modern-yellow-lab .real-profile-joined,
+.real-profile-joined {
+  margin: 6px 0 16px !important;
+  color: #7b889b !important;
+  font-size: 0.66rem !important;
+  font-weight: 600 !important;
+}
+
+/* User Details Card inside Profile */
+html.modern-yellow-lab .real-profile-details,
+.real-profile-details {
+  padding: 12px 16px !important;
+  border-radius: 20px !important;
+  background: rgba(8, 10, 16, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  margin-bottom: 14px !important;
+}
+
+html.modern-yellow-lab .real-profile-details label,
+.real-profile-details label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 10px 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  font-size: 0.72rem !important;
+}
+
+html.modern-yellow-lab .real-profile-details label:last-child,
+.real-profile-details label:last-child {
+  border-bottom: none !important;
+}
+
+html.modern-yellow-lab .real-profile-details span,
+.real-profile-details span {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: #7b889b !important;
+  font-weight: 600 !important;
+}
+
+html.modern-yellow-lab .real-profile-details span svg,
+.real-profile-details span svg {
+  stroke: #ffc400 !important;
+}
+
+html.modern-yellow-lab .real-profile-details strong,
+.real-profile-details strong {
+  color: #f1f5f9 !important;
+  font-weight: 700 !important;
+}
+
+/* Metrics & Stats Grid */
+html.modern-yellow-lab .real-profile-stats,
+.real-profile-stats {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+}
+
+html.modern-yellow-lab .real-profile-stats article,
+.real-profile-stats article {
+  padding: 14px 12px !important;
+  border-radius: 18px !important;
+  background: rgba(8, 10, 16, 0.85) !important;
+  border: 1px solid rgba(255, 196, 0, 0.15) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+}
+
+html.modern-yellow-lab .real-profile-stats article span,
+.real-profile-stats article span {
+  color: #ffc400 !important;
+}
+
+html.modern-yellow-lab .real-profile-stats small,
+.real-profile-stats small {
+  color: #7b889b !important;
+  font-size: 0.52rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em !important;
+}
+
+html.modern-yellow-lab .real-profile-stats strong,
+.real-profile-stats strong {
+  display: block !important;
+  color: #ffc400 !important;
+  font-size: 1.15rem !important;
+  font-weight: 900 !important;
+}
+
+/* Action Buttons */
+html.modern-yellow-lab .real-profile-secondary,
+.real-profile-secondary {
+  width: 100% !important;
+  height: 50px !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 196, 0, 0.4) !important;
+  background: linear-gradient(145deg, rgba(255, 196, 0, 0.1), rgba(255, 196, 0, 0.02)) !important;
+  color: #ffc400 !important;
+  font-weight: 800 !important;
+  font-size: 0.75rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 16px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+html.modern-yellow-lab .real-profile-secondary:hover,
+.real-profile-secondary:hover {
+  background: rgba(255, 196, 0, 0.15) !important;
+  border-color: #ffc400 !important;
+}
+
+html.modern-yellow-lab .real-profile-support,
+.real-profile-support {
+  width: 100% !important;
+  padding: 14px 16px !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(16, 203, 232, 0.3) !important;
+  background: linear-gradient(145deg, rgba(16, 203, 232, 0.08), rgba(9, 14, 22, 0.95)) !important;
+  color: #10cbe8 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin-bottom: 12px !important;
+  cursor: pointer !important;
+}
+
+html.modern-yellow-lab .real-profile-support strong,
+.real-profile-support strong {
+  font-size: 0.74rem !important;
+  color: #f1f5f9 !important;
+}
+
+html.modern-yellow-lab .real-profile-support small,
+.real-profile-support small {
+  color: #7b889b !important;
+  font-size: 0.58rem !important;
+}
+
+html.modern-yellow-lab .real-profile-logout,
+.real-profile-logout {
+  width: 100% !important;
+  height: 50px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(255, 82, 101, 0.35) !important;
+  background: rgba(255, 82, 101, 0.06) !important;
+  color: #ff6576 !important;
+  font-weight: 800 !important;
+  font-size: 0.75rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 16px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+html.modern-yellow-lab .real-profile-logout:hover,
+.real-profile-logout:hover {
+  background: rgba(255, 82, 101, 0.12) !important;
+  border-color: #ff6576 !important;
+}
 
 /* Driver cockpit and pages */
 html.modern-yellow-lab .driver-top-container { gap: 8px !important; }
