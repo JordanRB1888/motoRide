@@ -9,6 +9,7 @@ import './styles/users.css';
 import './styles/receipt.css';
 import './styles/local-avatar.css';
 import './styles/diorama.css';
+import './styles/modern-yellow-lab.css';
 import { seedDatabase } from './services/clientCache.js';
 import { authService } from './services/authService.js';
 import { renderLanding } from './pages/landing.js';
@@ -45,12 +46,6 @@ applyTheme(
 
 // La experiencia moderna es ahora la interfaz oficial de +58Express.
 // ?classic=1 queda disponible solo como comparación temporal de diagnóstico.
-if (modernExperienceEnabled) {
-    import('./styles/modern-yellow-lab.css').catch(error => {
-        console.warn('[+58express] No se pudo cargar la experiencia visual moderna:', error?.message);
-        document.documentElement.classList.remove('modern-yellow-lab');
-    });
-}
 
 // Lenguaje visual aprobado para +58Express. Sigue siendo una capa separada de
 // la lógica y puede desactivarse temporalmente con ?motionPreview=0 para
