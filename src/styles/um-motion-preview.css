@@ -17,16 +17,16 @@
 }
 
 .um-motion-preview body {
-  background: #020304;
+  background: var(--x58-surface-sunken);
 }
 
 .um-motion-preview .passenger-app,
 .um-motion-preview .driver-app {
   isolation: isolate;
-  color: #f7f8fa;
+  color: var(--x58-text-primary);
   background:
     radial-gradient(circle at 50% -8%, rgba(255, 196, 0, .11), transparent 35%),
-    #030507;
+    var(--x58-surface-0);
 }
 
 .um-motion-preview .passenger-app::after,
@@ -255,7 +255,7 @@
   border-radius: 15px !important;
   background: linear-gradient(100deg, #ffb800, var(--um-yellow-hot), #ffb800) !important;
   background-size: 220% 100% !important;
-  color: #090b0d !important;
+  color: var(--x58-yellow-ink) !important;
   box-shadow: 0 12px 30px rgba(255, 183, 0, .18) !important;
   transition: transform .2s ease, box-shadow .2s ease !important;
 }
@@ -305,7 +305,7 @@
 .um-motion-preview .driver-trips-page,
 .um-motion-preview .documents-page,
 .um-motion-preview .scheduled-rides-view {
-  background: radial-gradient(circle at 50% -10%, rgba(255,196,0,.085), transparent 34%), #030507 !important;
+  background: radial-gradient(circle at 50% -10%, rgba(255,196,0,.085), transparent 34%), var(--x58-surface-0) !important;
   color: #f7f8fa !important;
 }
 
@@ -351,7 +351,7 @@
   border-color:transparent !important;
   background:linear-gradient(100deg,#ffb800,var(--um-yellow-hot),#ffb800) !important;
   background-size:220% 100% !important;
-  color:#080a0c !important;
+  color:var(--x58-yellow-ink) !important;
   box-shadow:0 11px 28px rgba(255,184,0,.16) !important;
 }
 
@@ -372,9 +372,9 @@
 .um-motion-preview .custom-toast-close:hover { color:#fff; }
 
 /* Administration follows the same black/graphite rhythm. */
-.um-motion-preview .admin-app { --admin-bg:#030507;--admin-panel:#080c11;--admin-panel-2:#0d1218;--admin-line:rgba(255,255,255,.09);background:#030507 !important; }
+.um-motion-preview .admin-app { --admin-bg:var(--x58-surface-0);--admin-panel:var(--x58-surface-1);--admin-panel-2:var(--x58-surface-2);--admin-line:var(--x58-border-subtle);background:var(--x58-surface-0) !important; }
 .um-motion-preview .admin-sidebar,.um-motion-preview .admin-header { background:rgba(5,8,11,.96) !important;border-color:rgba(255,255,255,.085) !important; }
-.um-motion-preview .admin-content { background:radial-gradient(circle at 45% -12%,rgba(255,196,0,.065),transparent 32%),#030507 !important; }
+.um-motion-preview .admin-content { background:radial-gradient(circle at 45% -12%,rgba(255,196,0,.065),transparent 32%),var(--x58-surface-0) !important; }
 .um-motion-preview :is(.operations-map-card,.ops-panel,.metric-card,.data-table-container,.kpi-card,.finance-metric,.finance-card,.support-inbox,.support-chat-panel,.support-context>section,.fleet-status-strip,.fleet-map-shell,.users-command-view>section) { position:relative;overflow:hidden;border-color:rgba(255,255,255,.09) !important;background:linear-gradient(150deg,rgba(12,16,21,.97),rgba(3,5,8,.985)) !important;box-shadow:0 18px 46px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.035) !important; }
 .um-motion-preview :is(.metric-card,.finance-metric,.kpi-card) { animation:umCardStagger .55s cubic-bezier(.16,1,.3,1) both; }
 .um-motion-preview :is(.metric-card,.finance-metric,.kpi-card):hover { transform:translateY(-4px) !important;border-color:rgba(255,196,0,.27) !important; }
@@ -407,7 +407,7 @@
 .um-motion-preview.theme-light :is(.bottom-sheet,.payment-modal-content,.notification-center-modal,.chat-modal,.driver-rating-premium,.passenger-rating-card,.driver-application-modal,.receipt-card,.topup-review-modal,.wallet-topup-modal,.support-broadcast-modal,.user-create-modal,.sos-modal-content) { border-color:rgba(17,24,39,.12) !important;background:radial-gradient(circle at 15% 0%,rgba(255,196,0,.11),transparent 35%),linear-gradient(150deg,#fff,#f1f3f5) !important;color:#121821 !important;box-shadow:0 28px 70px rgba(31,41,55,.22),inset 0 1px #fff !important; }
 .um-motion-preview.theme-light .custom-toast-pill-master { background:radial-gradient(circle at 0 50%,var(--toast-glow),transparent 42%),rgba(255,255,255,.97) !important;color:#17202b !important;box-shadow:0 13px 32px rgba(31,41,55,.18),inset 0 1px #fff !important; }
 .um-motion-preview.theme-light .custom-toast-copy { color:#17202b !important; }
-.um-motion-preview.theme-light .admin-app { --admin-bg:#edf0f3;--admin-panel:#fff;--admin-panel-2:#f6f7f9;--admin-line:rgba(17,24,39,.1);background:var(--x58-surface-0) !important;color:#121821 !important; }
+.um-motion-preview.theme-light .admin-app { --admin-bg:var(--x58-surface-0);--admin-panel:var(--x58-surface-2);--admin-panel-2:var(--x58-surface-1);--admin-line:rgba(17,24,39,.1);background:var(--x58-surface-0) !important;color:#121821 !important; }
 .um-motion-preview.theme-light .admin-sidebar,.um-motion-preview.theme-light .admin-header { background:rgba(255,255,255,.96) !important;border-color:rgba(17,24,39,.09) !important; }
 .um-motion-preview.theme-light .admin-content { background:radial-gradient(circle at 45% -12%,rgba(255,196,0,.12),transparent 32%),var(--x58-surface-0) !important; }
 .um-motion-preview.theme-light :is(.operations-map-card,.ops-panel,.metric-card,.data-table-container,.kpi-card,.finance-metric,.finance-card,.support-inbox,.support-chat-panel,.support-context>section,.fleet-status-strip,.fleet-map-shell,.users-command-view>section) { border-color:rgba(17,24,39,.1) !important;background:linear-gradient(150deg,#fff,#f3f5f7) !important;color:#121821 !important;box-shadow:0 16px 38px rgba(31,41,55,.1),inset 0 1px #fff !important; }
@@ -463,7 +463,7 @@
   height:7px !important;
   padding:0 !important;
   overflow:hidden;
-  border:1.5px solid #070b10 !important;
+  border:1.5px solid var(--x58-surface-0) !important;
   border-radius:50% !important;
   background:var(--um-yellow) !important;
   color:transparent !important;
