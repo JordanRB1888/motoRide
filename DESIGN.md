@@ -229,28 +229,114 @@ retiró justamente por esto: consumía GPU y no comunicaba nada.
 **Movimiento infinito solo con estado real detrás**: radar de búsqueda, punto
 en vivo, pulso de GPS, SOS, spinner mientras carga de verdad.
 
-Todo movimiento respeta `prefers-reduced-motion: reduce`. Con esa preferencia
-la aplicación queda **completa y usable**, sin animación continua.
+### Movimiento reducido
+
+Todo movimiento respeta `prefers-reduced-motion: reduce`, pero **movimiento
+reducido no es ausencia de movimiento**. Matar toda transición a `0.01ms`
+elimina también la señal de que algo cambió: un botón que no acusa la
+pulsación, una hoja que aparece de golpe sin decir de dónde. Quien pide
+movimiento reducido necesita menos desplazamiento, no menos información.
+
+El contrato es:
+
+- desaparece el movimiento continuo, decorativo y de gran recorrido
+  (`animation-name: none`),
+- se conserva una respuesta breve de color y opacidad en los controles,
+  a `--x58-motion-feedback`, sin desplazamiento ni escala,
+- los indicadores en vivo dejan de latir pero **siguen visibles**: se quedan
+  en su fotograma legible en lugar de desaparecer,
+- la textura se desactiva.
 
 ---
 
-## 7. Controles
+## 7. Iconografía
 
-Estados que todo control debe definir: `default`, `hover`, `active`,
-`focus-visible`, `disabled`, y cuando aplique `loading`, `error`, `success`.
+Una sola familia, definida en `src/utils/icons.js` y servida por la función
+`icon(name, size)`. No hay librería externa, no hay emoji haciendo de icono.
 
-**Foco visible**, contrato único en toda la aplicación:
-
-```css
-outline: 2px solid var(--x58-yellow);
-outline-offset: 2px;
+```
+ESTILO          contorno, geometría estilo Feather
+VIEWBOX         0 0 24 24
+STROKE WEIGHT   2
+TERMINACIONES   stroke-linecap: round · stroke-linejoin: round
+RELLENO         fill: none · stroke: currentColor
 ```
 
-**Objetivo táctil mínimo: 44 px.** Cuando el control debe verse más pequeño
-—un ojo de contraseña, una casilla—, no lo agrandes: extiende el área tocable
-con un pseudo-elemento invisible centrado, como hace `design-system.css` con
-`.liquid-eye-toggle`, `.liquid-checkbox`, `.liquid-forgot-link`, `.role-tab` y
-`.auth-tab`. El aspecto no cambia y el dedo acierta.
+El icono hereda el color del texto (`currentColor`), así que un icono dentro de
+un botón amarillo sale en tinta y dentro de un enlace sale en amarillo sin
+declarar nada.
+
+### Escala
+
+Convivían 21 tamaños distintos entre 11 y 48 px. Ahora hay cinco pasos:
+
+| Token | Valor | Uso |
+|---|---|---|
+| `--x58-icon-inline` | 14px | dentro de una línea de texto, píldoras, badges |
+| `--x58-icon-small` | 16px | listas densas, metadatos |
+| `--x58-icon-default` | 20px | botones, navegación, la mayoría de casos |
+| `--x58-icon-large` | 24px | encabezados de sección, acciones destacadas |
+| `--x58-icon-feature` | 32px | estados vacíos, confirmaciones, iconos protagonistas |
+
+Por encima de 32 px ya no es un icono sino una ilustración, y se trata como
+tal. Hay dos casos (43 y 48 px) deliberadamente fuera de la escala.
+
+```
+ESTADO ACTIVO     color: var(--x58-yellow) — el icono no cambia de grosor
+ESTADO INACTIVO   color: var(--x58-text-secondary) o --x58-text-muted
+```
+
+**El estado no se comunica engordando el trazo ni rellenando la forma.** Solo
+existe una variante rellena intencionada (`mapPinFilled`, para el punto activo
+del mapa) y está ahí porque a tamaño pequeño el contorno se pierde sobre la
+cartografía.
+
+Al añadir un icono: usa `icon()`, elige un paso de la escala y no declares el
+grosor. Cambiar un icono existente solo se justifica si es incomprensible o
+duplica a otro, nunca por gusto.
+
+---
+
+## 8. Controles y estados
+
+Todo control define estos estados. La auditoría encontró 78 reglas `:hover`
+frente a 17 `:active`, y eso es un problema de producto, no de estilo:
+
+> **En un teléfono el hover no existe.** Un control cuyo único estado es
+> `:hover` no acusa el toque: el usuario pulsa y no ve nada hasta que la acción
+> termina. El hover nunca puede ser el único portador de la interacción.
+
+| Estado | Contrato |
+|---|---|
+| `default` | el aspecto en reposo |
+| `hover` | solo en punteros que de verdad flotan (`@media (hover: hover)`) |
+| **`active`** | `transform: scale(.985)` a `--x58-motion-feedback` |
+| `focus-visible` | `outline: 2px solid var(--x58-yellow)`, `outline-offset: 2px` |
+| `disabled` | `opacity: .55`, `cursor: not-allowed`, sin respuesta a la pulsación |
+| `loading` | `[aria-busy="true"]` → `opacity: .72`, `cursor: progress` |
+| `error` | `[aria-invalid="true"]` → borde `--x58-danger` más anillo del 18 % |
+| `success` | `.is-success` → borde `--x58-success` más anillo del 18 % |
+
+**Error y éxito nunca se comunican solo con color**: llevan borde y anillo,
+para quien no distingue rojo de verde.
+
+Un control deshabilitado **no** acusa la pulsación: fingir respuesta cuando no
+va a pasar nada es mentirle al usuario.
+
+### Objetivo táctil
+
+Mínimo 44 px. Cuando el control debe verse más pequeño, no lo agrandes:
+extiende el área tocable con un pseudo-elemento invisible centrado, como hace
+`design-system.css` con el ojo de contraseña, la casilla, el enlace de
+recuperación, las pestañas y el enlace de registro. El aspecto no cambia y el
+dedo acierta.
+
+### Superficies del navegador
+
+Selección de texto, cursor de escritura y barras de scroll llegan con valores
+por defecto que no pertenecen a ningún sistema. Están tematizados desde la
+paleta. Es la señal más barata de que una interfaz fue construida y no
+ensamblada, y la que más se olvida.
 
 ---
 

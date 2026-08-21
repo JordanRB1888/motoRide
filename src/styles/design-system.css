@@ -442,15 +442,22 @@ textarea,
 .liquid-checkbox,
 .liquid-forgot-link,
 .role-tab,
-.auth-tab {
+.auth-tab,
+.register-link a {
   position: relative;
+}
+
+/* Los botones sociales median 43px: un pixel por debajo del objetivo. */
+.liquid-social-btn {
+  min-height: 44px;
 }
 
 .liquid-eye-toggle::after,
 .liquid-checkbox::after,
 .liquid-forgot-link::after,
 .role-tab::after,
-.auth-tab::after {
+.auth-tab::after,
+.register-link a::after {
   content: '';
   position: absolute;
   top: 50%;
