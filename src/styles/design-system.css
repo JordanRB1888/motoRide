@@ -1,0 +1,306 @@
+/* =========================================================================
+   +58EXPRESS — SISTEMA VISUAL CANÓNICO
+   =========================================================================
+   Fuente de verdad única del lenguaje visual. Los namespaces históricos
+   (--lab-*, --um-*, --surface-*, --admin-*) se re-apuntan a estos tokens,
+   de modo que las tres capas de skin convergen sin reescribir sus reglas.
+
+   Documentado en DESIGN.md. No añadir tokens sin actualizar ese documento.
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   TIPOGRAFÍA AUTOHOSPEDADA
+   Ambas familias son OFL-1.1 (licencias en public/fonts/). Se sirven desde
+   el propio origen: cero peticiones a Google Fonts u otro CDN.
+   Solo el subset latin, que cubre á é í ó ú ñ ¿ ¡ ü (U+0000-00FF).
+   Variables: un archivo cubre todo el rango de pesos.
+   font-display: swap evita el texto invisible (FOIT) en conexiones lentas.
+   ------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Manrope Variable';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/manrope-latin-variable.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Sora Variable';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('/fonts/sora-latin-variable.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  /* ---------------------------------------------------------------------
+     MARCA — un solo amarillo en tres pasos intencionados.
+     --x58-yellow es el amarillo certificado del Login; la rampa preserva
+     exactamente el degradado aprobado (#ffd21f → #ffb800).
+     --------------------------------------------------------------------- */
+  --x58-yellow: #ffd21f;
+  --x58-yellow-hover: #ffc400;
+  --x58-yellow-active: #ffb800;
+  --x58-yellow-soft: rgba(255, 210, 31, .13);
+  --x58-yellow-line: rgba(255, 210, 31, .34);
+  --x58-yellow-ink: #1a1500;
+
+  /* ---------------------------------------------------------------------
+     SUPERFICIES — grafito cálido. El azul (R<B) se elimina: aquí R>B en
+     todos los escalones, lo que da calidez sin virar a marrón.
+     --------------------------------------------------------------------- */
+  --x58-surface-0: #0e0d0b;
+  --x58-surface-1: #161512;
+  --x58-surface-2: #1e1c19;
+  --x58-surface-raised: #262420;
+  --x58-surface-overlay: rgba(9, 8, 7, .94);
+  --x58-surface-sunken: #0a0908;
+
+  /* ---------------------------------------------------------------------
+     TEXTO — blancos y grises cálidos, no azulados.
+     --------------------------------------------------------------------- */
+  --x58-text-primary: #f7f6f3;
+  --x58-text-secondary: #a3a09a;
+  --x58-text-muted: #74716b;
+  --x58-text-inverse: #14130f;
+
+  /* ---------------------------------------------------------------------
+     BORDES
+     --------------------------------------------------------------------- */
+  --x58-border-subtle: rgba(255, 255, 255, .09);
+  --x58-border-strong: rgba(255, 255, 255, .17);
+
+  /* ---------------------------------------------------------------------
+     ESTADO — armonizados con la base cálida. El cian queda relegado a
+     información; deja de actuar como acento secundario de marca.
+     --------------------------------------------------------------------- */
+  --x58-success: #55e29a;
+  --x58-warning: #ffa726;
+  --x58-danger: #ff6878;
+  --x58-info: #63c9ff;
+
+  /* ---------------------------------------------------------------------
+     ESPACIADO
+     --------------------------------------------------------------------- */
+  --x58-space-1: 4px;
+  --x58-space-2: 8px;
+  --x58-space-3: 12px;
+  --x58-space-4: 16px;
+  --x58-space-5: 24px;
+  --x58-space-6: 32px;
+  --x58-space-7: 48px;
+
+  /* ---------------------------------------------------------------------
+     RADIO — nombrado por función, no por tamaño.
+     --------------------------------------------------------------------- */
+  --x58-radius-small: 10px;
+  --x58-radius-control: 14px;
+  --x58-radius-card: 20px;
+  --x58-radius-sheet: 28px;
+  --x58-radius-pill: 999px;
+
+  /* ---------------------------------------------------------------------
+     SOMBRA — suaves y cálidas; sin glow permanente.
+     --------------------------------------------------------------------- */
+  --x58-shadow-subtle: 0 1px 2px rgba(0, 0, 0, .34);
+  --x58-shadow-card: 0 8px 24px rgba(0, 0, 0, .34);
+  --x58-shadow-floating: 0 16px 40px rgba(0, 0, 0, .42);
+  --x58-shadow-modal: 0 24px 70px rgba(0, 0, 0, .5);
+
+  /* ---------------------------------------------------------------------
+     MOVIMIENTO — duraciones por tipo de interacción, no por capricho.
+     --------------------------------------------------------------------- */
+  --x58-motion-feedback: 130ms;
+  --x58-motion-fast: 170ms;
+  --x58-motion-standard: 220ms;
+  --x58-motion-sheet: 300ms;
+  --x58-motion-route: 320ms;
+
+  --x58-ease-standard: cubic-bezier(.4, 0, .2, 1);
+  --x58-ease-out: cubic-bezier(.16, 1, .3, 1);
+  --x58-ease-in: cubic-bezier(.5, 0, .9, .3);
+
+  /* ---------------------------------------------------------------------
+     TIPOGRAFÍA
+     Sora  — display y cifras de gran tamaño (precio, velocidad).
+     Manrope — interfaz, cuerpo y datos numéricos operativos.
+     --------------------------------------------------------------------- */
+  --x58-font-display: 'Sora Variable', 'Sora', system-ui, -apple-system,
+    'Segoe UI', Roboto, sans-serif;
+  --x58-font-ui: 'Manrope Variable', 'Manrope', system-ui, -apple-system,
+    'Segoe UI', Roboto, sans-serif;
+
+  color-scheme: dark;
+}
+
+/* =========================================================================
+   MODO CLARO — diseñado, no invertido.
+   Off-white cálido, grafito para texto, el mismo amarillo de marca.
+   ========================================================================= */
+.theme-light {
+  --x58-surface-0: #f2f0ec;
+  --x58-surface-1: #f8f7f4;
+  --x58-surface-2: #ffffff;
+  --x58-surface-raised: #ffffff;
+  --x58-surface-overlay: rgba(255, 255, 255, .96);
+  --x58-surface-sunken: #e8e5df;
+
+  --x58-text-primary: #191713;
+  --x58-text-secondary: #56534c;
+  --x58-text-muted: #817d75;
+  --x58-text-inverse: #f7f6f3;
+
+  --x58-border-subtle: rgba(20, 18, 14, .10);
+  --x58-border-strong: rgba(20, 18, 14, .20);
+
+  --x58-yellow-soft: rgba(255, 184, 0, .16);
+  --x58-yellow-line: rgba(196, 140, 0, .38);
+
+  /* Bajo luz exterior el amarillo puro sobre blanco pierde contraste:
+     los estados usan el escalón profundo. */
+  --x58-success: #12855a;
+  --x58-warning: #a35c00;
+  --x58-danger: #c62839;
+  --x58-info: #1668a8;
+
+  --x58-shadow-subtle: 0 1px 2px rgba(24, 20, 12, .07);
+  --x58-shadow-card: 0 6px 18px rgba(24, 20, 12, .09);
+  --x58-shadow-floating: 0 14px 34px rgba(24, 20, 12, .12);
+  --x58-shadow-modal: 0 22px 56px rgba(24, 20, 12, .18);
+
+  color-scheme: light;
+}
+
+/* =========================================================================
+   MATERIAL — textura de grano muy sutil.
+   Un SVG de ruido embebido (sin petición de red, ~0,3 KB) a opacidad muy
+   baja evita que las superficies grandes se vean digitalmente planas.
+   Se aplica solo al fondo de la aplicación, nunca sobre texto.
+   ========================================================================= */
+.x58-grain::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.theme-light .x58-grain::before { opacity: .018; }
+
+/* =========================================================================
+   TIPOGRAFÍA APLICADA
+   Cifras tabulares en todo dato numérico operativo: precio, saldo, ETA,
+   distancia, velocidad y calificación no deben bailar al actualizarse.
+   ========================================================================= */
+body,
+input,
+select,
+textarea,
+button {
+  font-family: var(--x58-font-ui);
+}
+
+body {
+  font-size: .9375rem;
+  line-height: 1.5;
+  font-weight: 450;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, .x58-display {
+  font-family: var(--x58-font-display);
+  font-weight: 700;
+  letter-spacing: -.025em;
+  line-height: 1.12;
+}
+
+h3, h4 {
+  font-family: var(--x58-font-ui);
+  font-weight: 650;
+  letter-spacing: -.015em;
+  line-height: 1.25;
+}
+
+/* 16px real en los campos: por debajo de eso iOS Safari hace zoom al
+   enfocar y rompe la composición móvil. */
+input,
+select,
+textarea {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+button {
+  font-weight: 650;
+  letter-spacing: .005em;
+}
+
+.x58-numeric,
+.x58-price,
+.x58-wallet,
+.x58-eta,
+.x58-distance,
+.x58-speed,
+.x58-rating {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.x58-price,
+.x58-wallet,
+.x58-speed {
+  font-family: var(--x58-font-display);
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.x58-otp {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: .3em;
+  font-weight: 700;
+}
+
+.x58-caption {
+  font-size: .75rem;
+  font-weight: 550;
+  letter-spacing: .01em;
+  line-height: 1.35;
+  color: var(--x58-text-muted);
+}
+
+/* =========================================================================
+   FOCO VISIBLE — un solo contrato en toda la aplicación.
+   ========================================================================= */
+:focus-visible {
+  outline: 2px solid var(--x58-yellow);
+  outline-offset: 2px;
+  border-radius: var(--x58-radius-small);
+}
+
+/* =========================================================================
+   MOVIMIENTO REDUCIDO
+   La aplicación queda completa y usable, sin animación continua.
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .x58-grain::before { display: none; }
+}

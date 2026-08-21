@@ -5,27 +5,29 @@
  */
 
 html.modern-yellow-lab {
-  --lab-bg: #0c0d12;
-  --lab-bg-soft: #12141b;
-  --lab-panel: rgba(25, 27, 36, .92);
-  --lab-panel-strong: #1a1c25;
-  --lab-panel-warm: #242116;
-  --lab-line: rgba(255, 255, 255, .105);
-  --lab-line-bright: rgba(255, 210, 31, .34);
-  --lab-yellow: #ffd21f;
-  --lab-yellow-2: #ffb800;
-  --lab-yellow-soft: rgba(255, 210, 31, .13);
-  --lab-white: #f7f7fa;
-  --lab-muted: #9699a6;
-  --lab-muted-2: #686b77;
-  --lab-green: #55e29a;
-  --lab-red: #ff6878;
-  --lab-blue: #63c9ff;
-  --lab-radius-xl: 30px;
-  --lab-radius-lg: 23px;
-  --lab-radius-md: 17px;
-  --lab-shadow: 0 24px 70px rgba(0, 0, 0, .42);
-  color-scheme: dark;
+  /* Re-apuntado al sistema canónico (design-system.css). Los nombres --lab-*
+     se conservan porque 721 reglas de este archivo dependen de ellos; los
+     valores pasan a tener una sola fuente de verdad. */
+  --lab-bg: var(--x58-surface-0);
+  --lab-bg-soft: var(--x58-surface-1);
+  --lab-panel: var(--x58-surface-2);
+  --lab-panel-strong: var(--x58-surface-raised);
+  --lab-panel-warm: #241f14;
+  --lab-line: var(--x58-border-subtle);
+  --lab-line-bright: var(--x58-yellow-line);
+  --lab-yellow: var(--x58-yellow);
+  --lab-yellow-2: var(--x58-yellow-active);
+  --lab-yellow-soft: var(--x58-yellow-soft);
+  --lab-white: var(--x58-text-primary);
+  --lab-muted: var(--x58-text-secondary);
+  --lab-muted-2: var(--x58-text-muted);
+  --lab-green: var(--x58-success);
+  --lab-red: var(--x58-danger);
+  --lab-blue: var(--x58-info);
+  --lab-radius-xl: var(--x58-radius-sheet);
+  --lab-radius-lg: var(--x58-radius-card);
+  --lab-radius-md: var(--x58-radius-control);
+  --lab-shadow: var(--x58-shadow-modal);
   background: var(--lab-bg);
 }
 

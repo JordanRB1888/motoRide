@@ -1,3 +1,4 @@
+import './styles/design-system.css';
 import './styles/index.css';
 import './styles/passenger.css';
 import './styles/driver.css';

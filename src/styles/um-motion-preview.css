@@ -5,13 +5,15 @@
  */
 
 .um-motion-preview {
-  --um-yellow: #ffc400;
-  --um-yellow-hot: #ffda36;
-  --um-ink: #030507;
-  --um-panel: rgba(7, 10, 14, .94);
-  --um-panel-soft: rgba(13, 17, 23, .92);
-  --um-line: rgba(255, 255, 255, .10);
-  --um-muted: #8993a1;
+  /* Re-apuntado al sistema canónico (design-system.css): esta capa y
+     modern-yellow-lab comparten ahora los mismos valores de marca. */
+  --um-yellow: var(--x58-yellow);
+  --um-yellow-hot: var(--x58-yellow-hover);
+  --um-ink: var(--x58-surface-sunken);
+  --um-panel: var(--x58-surface-1);
+  --um-panel-soft: var(--x58-surface-2);
+  --um-line: var(--x58-border-subtle);
+  --um-muted: var(--x58-text-secondary);
 }
 
 .um-motion-preview body {

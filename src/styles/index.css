@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&family=Outfit:wght@500;600;700;800;900&display=swap');
+/* Tipografia autohospedada: ver src/styles/design-system.css */
 
 /* ============================================================
    +58express — MASTER DESIGN SYSTEM (LUXURY VENEZUELA EDITION)
@@ -141,23 +141,23 @@ ul, ol {
    ============================================================ */
 :root {
   /* Surface Colors */
-  --surface-primary: #0f1420;
-  --surface-card: #182232;
-  --surface-elevated: #222e42;
-  --surface-input: #0a0e17;
+  --surface-primary: var(--x58-surface-0);
+  --surface-card: var(--x58-surface-2);
+  --surface-elevated: var(--x58-surface-raised);
+  --surface-input: var(--x58-surface-sunken);
 
   /* Accents */
-  --accent-primary: #FFC107;      /* Safety Yellow */
-  --accent-hover: #FFAB00;        /* Amber */
-  --accent-secondary: #00D2FF;    /* Electric Cyan */
-  --success: #00E676;             /* Emerald */
-  --danger: #FF4D4D;              /* Red Alert */
-  --warning: #FF9800;             /* Orange */
+  --accent-primary: var(--x58-yellow);      /* Safety Yellow */
+  --accent-hover: var(--x58-yellow-hover);        /* Amber */
+  --accent-secondary: var(--x58-info);    /* Electric Cyan */
+  --success: var(--x58-success);             /* Emerald */
+  --danger: var(--x58-danger);              /* Red Alert */
+  --warning: var(--x58-warning);             /* Orange */
   
   /* Text */
-  --text-primary: #F8FAFC;
-  --text-secondary: #94A3B8;
-  --text-muted: #64748B;
+  --text-primary: var(--x58-text-primary);
+  --text-secondary: var(--x58-text-secondary);
+  --text-muted: var(--x58-text-muted);
 
   /* 3D Shadows & Layering */
   --shadow-sm: 0 4px 8px rgba(0,0,0,0.3);
@@ -168,8 +168,8 @@ ul, ol {
   --shadow-glow-red: 0 0 25px rgba(255, 77, 77, 0.4);
 
   /* 3D Borders & Radii */
-  --border-color: rgba(255, 255, 255, 0.1);
-  --border-gold: rgba(255, 193, 7, 0.4);
+  --border-color: var(--x58-border-subtle);
+  --border-gold: var(--x58-yellow-line);
   --border-cyan: rgba(0, 210, 255, 0.4);
   --radius-sm: 8px;
   --radius-md: 14px;
