@@ -92,7 +92,7 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
         if (messages.length === 0) {
             container.innerHTML = `
                 <div class="chat-empty-state" style="text-align:center; padding: 30px; color: var(--text-muted);">
-                    <p>💬 Inicia la conversación o envía la captura de tu comprobante de Pago Móvil</p>
+                    <p>${icon('message', 20)} Inicia la conversación o envía la captura de tu comprobante de Pago Móvil</p>
                 </div>
             `;
             return;

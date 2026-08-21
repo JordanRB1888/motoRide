@@ -15,7 +15,7 @@ export function renderActiveRide(trip, driver, onSOS, onChat, onMinimize) {
       
       <div class="passenger-trip-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px;">
         <span style="color:var(--success); font-weight:800; font-size:0.9rem; display:flex; align-items:center; gap:6px;">
-          🟢 VIAJE EN PROGRESO
+          ${icon('checkCircle', 16)} VIAJE EN PROGRESO
         </span>
         <div class="passenger-trip-card-actions">
           <button class="trip-card-chat-btn" type="button">${icon('message', 16)} Chat</button>
@@ -44,7 +44,7 @@ export function renderActiveRide(trip, driver, onSOS, onChat, onMinimize) {
           border: 1.5px solid var(--danger); color: var(--danger); font-weight: 800; font-size: 0.85rem;
           display:flex; align-items:center; gap:6px; cursor:pointer;
         ">
-          🚨 SOS 911
+          ${icon('sos', 20)} SOS 911
         </button>
       </div>
     </div>
@@ -92,11 +92,11 @@ export function renderTripComplete(trip, driver, onRate, onTip, onDone) {
         ${localAvatarHtml({ name: driver?.firstName, role: 'driver', style: 'width:70px;height:70px;border-radius:50%;border:3px solid var(--accent-secondary);margin-bottom:8px;', label: driver?.firstName || 'Conductor' })}
         <h4 style="color: var(--text-primary); margin-bottom: 4px;">¿Cómo calificas a ${driver?.firstName || 'tu conductor'}?</h4>
         <div class="interactive-rating-stars" style="font-size: 2.2rem; cursor: pointer; color: #FFC107; display: flex; justify-content: center; gap: 8px; margin-top: 8px;">
-          <span class="star-btn" data-star="1">⭐</span>
-          <span class="star-btn" data-star="2">⭐</span>
-          <span class="star-btn" data-star="3">⭐</span>
-          <span class="star-btn" data-star="4">⭐</span>
-          <span class="star-btn" data-star="5">⭐</span>
+          <span class="star-btn" data-star="1">${icon('starFilled', 32)}</span>
+          <span class="star-btn" data-star="2">${icon('starFilled', 32)}</span>
+          <span class="star-btn" data-star="3">${icon('starFilled', 32)}</span>
+          <span class="star-btn" data-star="4">${icon('starFilled', 32)}</span>
+          <span class="star-btn" data-star="5">${icon('starFilled', 32)}</span>
         </div>
       </div>
 

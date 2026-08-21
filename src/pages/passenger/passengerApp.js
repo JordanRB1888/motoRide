@@ -151,7 +151,7 @@ export function renderPassengerApp(container) {
         <span class="passenger-trip-toggle-label">Minimizar viaje</span>
       </button>
       <button id="passenger-active-chat-btn" class="passenger-active-chat-btn hidden" aria-label="Abrir chat de la carrera">
-        <span>💬</span><span>Chat</span>
+        <span>${icon('message', 20)}</span><span>Chat</span>
         <span id="passenger-chat-unread" class="passenger-chat-unread hidden">0</span>
       </button>
     </div>
@@ -383,7 +383,7 @@ export function renderPassengerApp(container) {
     }
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:30000;background:rgba(8,13,22,.88);display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(16px)';
-    overlay.innerHTML = `<div style="width:100%;max-width:420px;padding:24px;border-radius:26px;background:var(--surface-card);border:2px solid var(--accent-primary);box-shadow:0 24px 60px rgba(0,0,0,.65)"><div style="font-size:2.5rem;text-align:center">📍 🔔</div><h3 style="color:var(--text-primary);text-align:center;margin:10px 0 8px">Permisos para tu seguridad</h3><p style="color:var(--text-secondary);line-height:1.5;font-size:.9rem">+58express necesita tu ubicación para buscar conductores y mostrar el recorrido en vivo. Las notificaciones te avisarán cuando acepten, lleguen, inicien o finalicen tu carrera.</p><button id="allow-passenger-permissions" style="width:100%;padding:15px;border:0;border-radius:16px;background:linear-gradient(135deg,#FFC107,#FF9800);color:#121824;font-weight:950;cursor:pointer">PERMITIR UBICACIÓN Y NOTIFICACIONES</button><button id="later-passenger-permissions" style="width:100%;padding:12px;margin-top:8px;border:0;background:none;color:var(--text-secondary);font-weight:800;cursor:pointer">Ahora no</button></div>`;
+    overlay.innerHTML = `<div style="width:100%;max-width:420px;padding:24px;border-radius:26px;background:var(--surface-card);border:2px solid var(--accent-primary);box-shadow:0 24px 60px rgba(0,0,0,.65)"><div style="font-size:2.5rem;text-align:center">${icon('mapPin', 24)} ${icon('bell', 24)}</div><h3 style="color:var(--text-primary);text-align:center;margin:10px 0 8px">Permisos para tu seguridad</h3><p style="color:var(--text-secondary);line-height:1.5;font-size:.9rem">+58express necesita tu ubicación para buscar conductores y mostrar el recorrido en vivo. Las notificaciones te avisarán cuando acepten, lleguen, inicien o finalicen tu carrera.</p><button id="allow-passenger-permissions" style="width:100%;padding:15px;border:0;border-radius:16px;background:linear-gradient(135deg,#FFC107,#FF9800);color:#121824;font-weight:950;cursor:pointer">PERMITIR UBICACIÓN Y NOTIFICACIONES</button><button id="later-passenger-permissions" style="width:100%;padding:12px;margin-top:8px;border:0;background:none;color:var(--text-secondary);font-weight:800;cursor:pointer">Ahora no</button></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#allow-passenger-permissions').addEventListener('click', async () => {
       localStorage.setItem(permissionKey, 'yes');

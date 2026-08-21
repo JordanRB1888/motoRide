@@ -123,7 +123,7 @@ export function renderDriverProfile(container, options = {}) {
             border: 1.5px solid var(--accent-secondary); margin-bottom: 20px;
           ">
             <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 800; margin-bottom: 14px;">
-              ✏️ Modificar Vehículo y Datos Personales
+              ${icon('edit', 16)} Modificar Vehículo y Datos Personales
             </h4>
 
             <form id="edit-driver-form" style="display: flex; flex-direction: column; gap: 12px;">
@@ -227,7 +227,7 @@ export function renderDriverProfile(container, options = {}) {
             background: linear-gradient(135deg, #FFC107 0%, #FF8F00 100%); color: #121824;
             border-radius: 16px; margin-top: 6px;
           ">
-            ${hasWalletDebt ? 'RECARGA DESDE GANANCIAS PARA QUEDAR AL DÍA' : '💸 SOLICITAR RETIRO POR PAGO MÓVIL'}
+            ${hasWalletDebt ? 'RECARGA DESDE GANANCIAS PARA QUEDAR AL DÍA' : icon('wallet', 16) + ' SOLICITAR RETIRO POR PAGO MÓVIL'}
           </button>
         </div>
 
@@ -243,7 +243,7 @@ export function renderDriverProfile(container, options = {}) {
           border: 1.5px solid var(--accent-secondary); margin-bottom: 24px; text-align: center;
         ">
           <h4 style="color: var(--text-primary); font-size: 1.1rem; font-weight: 800; margin-bottom: 4px;">
-            💬 Atención directa con Administración
+            ${icon('message', 16)} Atención directa con Administración
           </h4>
           <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px;">
             ¿Tienes alguna duda con tu liquidación, documentos o viajes? Comunícate directamente con Administración +58 Express 24/7.
@@ -253,7 +253,7 @@ export function renderDriverProfile(container, options = {}) {
             color: var(--accent-secondary); border-color: var(--accent-secondary);
             display: flex; align-items: center; justify-content: center; gap: 10px;
           ">
-            🛡️ Hablar con Administración
+            ${icon('shield', 16)} Hablar con Administración
           </button>
         </div>
 

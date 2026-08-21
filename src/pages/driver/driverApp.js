@@ -124,7 +124,7 @@ export function renderDriverApp(container) {
             </button>
 
             <button id="driver-active-chat-btn" class="driver-active-chat-btn hidden" aria-label="Abrir chat de la carrera">
-                <span class="driver-chat-icon">💬</span>
+                <span class="driver-chat-icon">${icon('message', 20)}</span>
                 <span class="driver-chat-label">Chat</span>
                 <span id="driver-chat-unread" class="driver-chat-unread hidden">0</span>
             </button>

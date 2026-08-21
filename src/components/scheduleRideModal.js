@@ -1,5 +1,6 @@
 import { getBcvEuroRate, formatVes } from '../utils/bcvRates.js';
 import { showToast } from './toast.js';
+import { icon } from '../utils/icons.js';
 import { apiService } from '../services/apiService.js';
 
 export function createScheduleRideModal({ originName = 'Basílica de Chiquinquirá', destinationName = '', fareEUR = 4.50, onSchedule, onClose }) {
@@ -41,7 +42,7 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px dashed var(--border-color); padding-bottom: 14px; margin-bottom: 16px;">
                 <div style="display:flex; align-items:center; gap: 10px;">
                     <div style="width: 40px; height: 40px; border-radius: 50%; background: rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-primary); font-size:1.3rem;">
-                        📅
+                        ${icon('calendar', 32)}
                     </div>
                     <div>
                         <h3 style="color: var(--text-primary); font-size: 1.2rem; font-weight: 900; margin: 0;">Programar Viaje Futuro</h3>
@@ -56,13 +57,13 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
                 <div style="background: var(--surface-elevated); padding: 14px; border-radius: 18px; border: 1px solid var(--border-color); margin-bottom: 16px; display:flex; flex-direction:column; gap:10px;">
                     <div>
                     <div>
-                        <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-bottom:2px;">📍 LUGAR DE RECOGIDA (ORIGEN)</small>
+                        <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-bottom:2px;">${icon('mapPin', 14)} LUGAR DE RECOGIDA (ORIGEN)</small>
                         <input type="text" id="sch-origin-input" value="${currentOrigin}" placeholder="Ej: Basílica de Chiquinquirá" style="
                             width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:var(--text-primary); font-size:0.9rem; outline:none; font-weight:700;
                         " />
                     </div>
                     <div>
-                        <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-bottom:2px;">🚩 LUGAR DE DESTINO EN MARACAIBO</small>
+                        <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-bottom:2px;">${icon('flag', 14)} LUGAR DE DESTINO EN MARACAIBO</small>
                         <input type="text" id="sch-dest-input" value="${currentDestination}" placeholder="Ej: Sambil, Vereda del Lago, Aeropuerto" style="
                             width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-input); color:var(--text-primary); font-size:0.9rem; outline:none; font-weight:700;
                         " />
@@ -72,13 +73,13 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
                 <!-- Custom Date & Time Inputs -->
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
                     <div>
-                        <small style="color:var(--text-secondary); font-weight:700; display:block; margin-bottom:4px;">📆 Fecha del Viaje *</small>
+                        <small style="color:var(--text-secondary); font-weight:700; display:block; margin-bottom:4px;">${icon('calendar', 14)} Fecha del Viaje *</small>
                         <input type="date" id="schedule-date-input" value="${selectedDate}" min="${new Date().toISOString().split('T')[0]}" style="
                             width:100%; padding:12px; border-radius:14px; border:1.5px solid var(--border-gold); background:var(--surface-input); color:var(--text-primary); font-size:0.9rem; outline:none; font-weight:700;
                         " />
                     </div>
                     <div>
-                        <small style="color:var(--text-secondary); font-weight:700; display:block; margin-bottom:4px;">⏰ Hora de Recogida *</small>
+                        <small style="color:var(--text-secondary); font-weight:700; display:block; margin-bottom:4px;">${icon('clock', 14)} Hora de Recogida *</small>
                         <input type="time" id="schedule-time-input" value="${selectedTime}" style="
                             width:100%; padding:12px; border-radius:14px; border:1.5px solid var(--border-gold); background:var(--surface-input); color:var(--text-primary); font-size:0.9rem; outline:none; font-weight:700;
                         " />
@@ -88,7 +89,7 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
                 <!-- Advance Payment Option Switch -->
                 <div style="background: rgba(0,230,118,0.06); padding: 14px; border-radius: 18px; border: 1.5px solid var(--success); margin-bottom: 16px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-                        <strong style="color:var(--text-primary); font-size:0.92rem;">💳 Opciones de Pago de la Reserva:</strong>
+                        <strong style="color:var(--text-primary); font-size:0.92rem;">${icon('creditCard', 16)} Opciones de Pago de la Reserva:</strong>
                         <span class="badge badge-success" style="font-size:0.75rem;">Protección al Conductor</span>
                     </div>
 
@@ -109,7 +110,7 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
                             color: ${!isPaidInAdvance ? '#121824' : 'var(--text-primary)'};
                             border: 1px solid var(--border-color);
                         ">
-                            💵 Pagar al Iniciar Viaje<br>
+                            ${icon('banknote', 16)} Pagar al Iniciar Viaje<br>
                             <small style="opacity:0.85;">(Pago Móvil/Efectivo)</small>
                         </button>
                     </div>
@@ -133,7 +134,7 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
                 width: 100%; padding: 16px; border-radius: 18px; font-weight: 900; font-size: 1.05rem;
                 background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824;
             ">
-                🚀 CONFIRMAR RESERVA Y PROGRAMACIÓN
+                ${icon('check', 18)} CONFIRMAR RESERVA Y PROGRAMACIÓN
             </button>
         `;
 

@@ -140,7 +140,7 @@ export class MapComponent {
     this.locateBtn.className = 'gps-locate-btn';
     this.locateBtn.setAttribute('aria-label', 'Centrar mi ubicación');
     this.locateBtn.title = 'Ir a mi ubicación actual';
-    this.locateBtn.innerHTML = `🎯`;
+    this.locateBtn.innerHTML = icon('target', 20);
     Object.assign(this.locateBtn.style, {
       position: 'absolute',
       bottom: '100px',
@@ -381,7 +381,7 @@ export class MapComponent {
       className: 'destination-flag-marker',
       html: `
         <div class="flag-3d-container">
-          <div class="flag-head">🚩</div>
+          <div class="flag-head">${icon('flag', 16)}</div>
           <div class="beacon-pillar" style="background: linear-gradient(to top, rgba(255,77,77,0.8), rgba(255,77,77,0)); box-shadow: 0 0 15px var(--danger);"></div>
         </div>
       `,
@@ -442,7 +442,7 @@ export class MapComponent {
     const distance = Number(routeInfo?.distanceKm || 0).toFixed(1);
     const duration = Math.max(1, Math.round(Number(routeInfo?.durationMin || 0)));
     const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}&travelmode=driving`;
-    banner.innerHTML = `<div style="font-size:1.7rem">⬆</div><div style="min-width:0;flex:1"><strong style="display:block;font-size:.92rem">Continúa por la ruta marcada</strong><small style="color:#a7f3d0">${distance} km · ${duration} min hasta el destino</small></div><a href="${googleUrl}" target="_blank" rel="noopener" style="padding:8px 10px;border-radius:12px;background:#00E676;color:#101722;text-decoration:none;font-size:.75rem;font-weight:900">NAVEGAR</a>`;
+    banner.innerHTML = `<div>${icon('chevronUp', 24)}</div><div style="min-width:0;flex:1"><strong style="display:block;font-size:.92rem">Continúa por la ruta marcada</strong><small style="color:#a7f3d0">${distance} km · ${duration} min hasta el destino</small></div><a href="${googleUrl}" target="_blank" rel="noopener" style="padding:8px 10px;border-radius:12px;background:#00E676;color:#101722;text-decoration:none;font-size:.75rem;font-weight:900">NAVEGAR</a>`;
   }
 
   clearRoute() {
