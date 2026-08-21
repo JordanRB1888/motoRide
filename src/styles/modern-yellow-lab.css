@@ -541,9 +541,11 @@ html.modern-yellow-lab .liquid-input-box input {
   min-width: 0 !important;
   border: none !important;
   background: transparent !important;
-  color: #ffffff !important;
+  color: var(--x58-text-primary) !important;
   padding: 12px 6px !important;
-  font-size: 0.92rem !important;
+  /* 16px reales, no 0.92rem: por debajo de 16px iOS Safari hace zoom
+     automatico al enfocar y descuadra la pantalla de acceso. */
+  font-size: 1rem !important;
   outline: none !important;
   box-shadow: none !important;
   box-sizing: border-box !important;

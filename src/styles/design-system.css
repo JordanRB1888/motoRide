@@ -309,6 +309,39 @@ button {
 }
 
 /* =========================================================================
+   OBJETIVOS TÁCTILES
+   Varios controles miden menos de 44px y son difíciles de acertar con el
+   pulgar en marcha. En lugar de agrandarlos —lo que alteraría la
+   composición certificada del Login— se extiende el área tocable con un
+   pseudo-elemento invisible centrado. El aspecto no cambia; el dedo acierta.
+   ========================================================================= */
+.liquid-eye-toggle,
+.liquid-checkbox,
+.liquid-forgot-link,
+.role-tab,
+.auth-tab {
+  position: relative;
+}
+
+.liquid-eye-toggle::after,
+.liquid-checkbox::after,
+.liquid-forgot-link::after,
+.role-tab::after,
+.auth-tab::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  /* Solo amplía el blanco del toque: no pinta, no captura scroll. */
+  pointer-events: auto;
+}
+
+/* =========================================================================
    MOVIMIENTO REDUCIDO
    La aplicación queda completa y usable, sin animación continua.
    ========================================================================= */
