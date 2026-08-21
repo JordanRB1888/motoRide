@@ -1993,3 +1993,43 @@ html.modern-yellow-lab.theme-light .liquid-peek-btn {
     overflow: visible !important;
   }
 }
+
+/* =========================================================================
+   PERFIL EN TEMA CLARO — HIGH 2 de la certificación visual
+   =========================================================================
+   Las reglas de arriba fijan `color: #fff !important` y un fondo oscuro sin
+   acotar por tema, así que ganaban también en claro: el nombre quedaba blanco
+   sobre tarjeta blanca y el bloque de datos conservaba un slab oscuro dentro
+   de una tarjeta clara.
+
+   Estos overrides van acotados a `.theme-light` y usan solo tokens del
+   sistema. El tema oscuro, que ya estaba certificado, no se toca.
+   ========================================================================= */
+html.modern-yellow-lab.theme-light .real-profile-name {
+  color: var(--x58-text-primary) !important;
+}
+
+html.modern-yellow-lab.theme-light .real-profile-joined {
+  color: var(--x58-text-secondary) !important;
+}
+
+html.modern-yellow-lab.theme-light .real-profile-details {
+  background: var(--x58-surface-1) !important;
+  border: 1px solid var(--x58-border-subtle) !important;
+  color: var(--x58-text-primary) !important;
+}
+
+/* La etiqueta describe; el valor es el dato. Se distinguen por jerarquía de
+   color, no por peso, que ya lo llevan desde el tema oscuro. */
+html.modern-yellow-lab.theme-light .real-profile-details label > span {
+  color: var(--x58-text-secondary) !important;
+}
+
+html.modern-yellow-lab.theme-light .real-profile-details strong {
+  color: var(--x58-text-primary) !important;
+}
+
+/* El icono de cada fila conserva el amarillo de marca: es el único acento. */
+html.modern-yellow-lab.theme-light .real-profile-details span svg {
+  stroke: var(--x58-yellow-active) !important;
+}

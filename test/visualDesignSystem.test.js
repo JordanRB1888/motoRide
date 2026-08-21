@@ -289,3 +289,54 @@ test('el área táctil nunca se declara más ancha que su propio control', () =>
   assert.doesNotMatch(bloque[0], /(?<!min-)width:\s*\d+px/,
     'un ancho fijo invadiría a los controles vecinos');
 });
+
+test('el perfil en tema claro no hereda texto ni superficie del tema oscuro', () => {
+  // HIGH 2. `.real-profile-name { color:#fff !important }` no estaba acotado
+  // por tema, asi que ganaba tambien en claro: blanco sobre tarjeta blanca.
+  // `.real-profile-details` conservaba un slab oscuro dentro de esa tarjeta.
+  const lab = read('src/styles/modern-yellow-lab.css');
+  const prefijo = 'html.modern-yellow-lab.theme-light ';
+
+  const requeridos = [
+    ['.real-profile-name', '--x58-text-primary'],
+    ['.real-profile-joined', '--x58-text-secondary'],
+    ['.real-profile-details', '--x58-surface-1'],
+    ['.real-profile-details label > span', '--x58-text-secondary'],
+    ['.real-profile-details strong', '--x58-text-primary']
+  ];
+
+  for (const [selector, token] of requeridos) {
+    const inicio = lab.indexOf(prefijo + selector + ' {');
+    assert.notEqual(inicio, -1, `falta el override claro de ${selector}`);
+    const bloque = lab.slice(inicio, lab.indexOf('}', inicio));
+    assert.ok(bloque.includes(token),
+      `${selector} en claro debe usar ${token}, no un valor suelto`);
+  }
+
+  // El override tiene que ir despues de la regla base para ganarle.
+  assert.ok(
+    lab.indexOf(prefijo + '.real-profile-name') > lab.indexOf('html.modern-yellow-lab .real-profile-name,'),
+    'el override claro debe ir despues de la regla base'
+  );
+});
+
+test('el tema oscuro del perfil no se toca', () => {
+  // El oscuro ya estaba certificado: todos los overrides nuevos deben ir
+  // acotados a .theme-light y ninguno puede quedar suelto.
+  const lab = read('src/styles/modern-yellow-lab.css');
+  const inicio = lab.indexOf('PERFIL EN TEMA CLARO');
+  assert.notEqual(inicio, -1, 'falta el bloque de perfil claro');
+  const bloque = lab.slice(inicio);
+
+  // Cada linea que abre una regla en este bloque debe llevar .theme-light.
+  const selectores = bloque
+    .split(/\r?\n/)
+    .map(linea => linea.trim())
+    .filter(linea => linea.startsWith('html') && linea.endsWith('{'));
+
+  assert.ok(selectores.length >= 5, `se esperaban al menos 5 overrides, hay ${selectores.length}`);
+  for (const sel of selectores) {
+    assert.ok(sel.includes('.theme-light'),
+      `el override "${sel.slice(0, 60)}" no esta acotado al tema claro y afectaria al oscuro`);
+  }
+});
