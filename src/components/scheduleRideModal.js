@@ -134,7 +134,7 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
                 width: 100%; padding: 16px; border-radius: 18px; font-weight: 900; font-size: 1.05rem;
                 background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824;
             ">
-                ${icon('check', 18)} CONFIRMAR RESERVA Y PROGRAMACIÓN
+                ${icon('check', 20)} CONFIRMAR RESERVA Y PROGRAMACIÓN
             </button>
         `;
 
