@@ -1,3 +1,8 @@
+export const composeBottomSheetTransform = (offset = '0px') => {
+  const normalizedOffset = typeof offset === 'number' ? `${offset}px` : offset;
+  return `translate(-50%, ${normalizedOffset})`;
+};
+
 export class BottomSheet {
   constructor(options = {}) {
     this.options = {
@@ -44,7 +49,7 @@ export class BottomSheet {
       borderRadius: '28px',
       border: '1.5px solid var(--border-gold, #FFC107)',
       boxShadow: '0 -15px 40px rgba(0,0,0,0.8), 0 0 25px rgba(255,193,7,0.2)',
-      transform: 'translate(-50%, 200%)',
+      transform: composeBottomSheetTransform('200%'),
       transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
       zIndex: 9000,
       display: 'none',
@@ -106,8 +111,10 @@ export class BottomSheet {
     this.startY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
     
     const rect = this.sheet.getBoundingClientRect();
-    this.initialTransform = rect.top;
-    
+    const computedBottom = Number.parseFloat(window.getComputedStyle(this.sheet).bottom) || 0;
+    this.initialTop = rect.top;
+    this.dragNaturalTop = window.innerHeight - computedBottom - rect.height;
+
     this.sheet.style.transition = 'none'; // Disable transition during drag
   }
 
@@ -121,15 +128,16 @@ export class BottomSheet {
     
     const clientY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
     const deltaY = clientY - this.startY;
-    let newY = this.initialTransform + deltaY;
+    let newTop = this.initialTop + deltaY;
     
     // Prevent dragging above highest snap point
     const minSnapY = window.innerHeight * (1 - this.options.snapPoints[this.options.snapPoints.length - 1] / 100);
-    if (newY < minSnapY) {
-      newY = minSnapY - Math.pow(minSnapY - newY, 0.8); // Resistance
+    if (newTop < minSnapY) {
+      newTop = minSnapY - Math.pow(minSnapY - newTop, 0.8); // Resistance
     }
-    
-    this.sheet.style.transform = `translateY(${newY}px)`;
+
+    const dragOffset = newTop - this.dragNaturalTop;
+    this.sheet.style.transform = composeBottomSheetTransform(`${dragOffset}px`);
   }
 
   _onDragEnd(e) {
@@ -189,8 +197,8 @@ export class BottomSheet {
     const translateY = 100 - vh;
     
     this.sheet.style.transform = this.sheet.classList.contains('fare-preview-sheet') || this.sheet.classList.contains('destination-search-sheet') || this.sheet.classList.contains('passenger-active-trip-sheet') || this.sheet.classList.contains('searching-ride-sheet')
-      ? 'translate(-50%, 0)'
-      : `translate(-50%, ${translateY}vh)`;
+      ? composeBottomSheetTransform()
+      : composeBottomSheetTransform(`${translateY}vh`);
     this._notifyStateChange();
   }
 
@@ -220,7 +228,7 @@ export class BottomSheet {
 
   close() {
     this.overlay.style.opacity = '0';
-    this.sheet.style.transform = 'translate(-50%, 200%)';
+    this.sheet.style.transform = composeBottomSheetTransform('200%');
     
     setTimeout(() => {
       this.overlay.style.visibility = 'hidden';

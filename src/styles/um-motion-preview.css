@@ -621,3 +621,139 @@
 .um-motion-preview .notification-center-footer{min-height:52px!important;padding:7px 13px!important;border-color:rgba(255,255,255,.08)!important;background:rgba(4,7,10,.94)!important}.um-motion-preview .notification-center-footer button{min-height:36px!important;font-size:.59rem!important}.um-motion-preview .notification-center-footer #btn-test-sound{color:#8e99a7!important}
 .um-motion-preview.theme-light .notification-center-header,.um-motion-preview.theme-light .notification-category-tabs,.um-motion-preview.theme-light .notification-center-footer{border-color:rgba(17,24,39,.09)!important;background:rgba(248,249,251,.92)!important}.um-motion-preview.theme-light .notification-center-title strong,.um-motion-preview.theme-light .notification-item-heading strong{color:#151c25!important}.um-motion-preview.theme-light .notification-category-tabs .cat-filter-btn{border-color:rgba(17,24,39,.1)!important;background:rgba(17,24,39,.025)!important;color:#657181!important}.um-motion-preview.theme-light .notification-category-tabs .cat-filter-btn.active{border-color:rgba(197,143,0,.38)!important;background:rgba(255,196,0,.13)!important;color:#8a6200!important}.um-motion-preview.theme-light .notif-item-card{border-color:rgba(17,24,39,.09)!important;background:rgba(255,255,255,.78)!important}.um-motion-preview.theme-light .notif-item-card.is-unread{border-color:rgba(197,143,0,.26)!important;background:linear-gradient(100deg,rgba(255,196,0,.09),#fff 48%)!important}.um-motion-preview.theme-light .notification-item-icon{border-color:rgba(17,24,39,.08)!important;background:#f5f6f8!important}.um-motion-preview.theme-light .notification-item-copy p{color:#697585!important}
 @media(max-width:460px){.um-motion-preview .notification-center-overlay{padding:6px!important}.um-motion-preview .notification-center-modal{width:100%!important;height:min(650px,94dvh)!important;border-radius:20px!important}.um-motion-preview .notification-center-header{padding:13px 12px 10px!important}.um-motion-preview .notification-sound-toggle{width:32px!important;padding:0!important;justify-content:center}.um-motion-preview .notification-sound-toggle span{display:none}.um-motion-preview .notification-category-tabs{padding-inline:10px!important}.um-motion-preview .notification-list{padding-inline:9px!important}}
+
+/* Passenger surface and geometry contract. Every inner view and transient
+   surface shares one graphite/yellow language, while layout stays inside the
+   phone viewport. */
+.um-motion-preview {
+  --um-passenger-surface:
+    radial-gradient(circle at 12% 0%, rgba(255,196,0,.075), transparent 34%),
+    linear-gradient(150deg, rgba(12,16,22,.99), rgba(3,5,8,.995));
+}
+
+.um-motion-preview :is(
+  .top-search-bar,
+  .search-sheet,
+  .fare-confirm-card,
+  .fare-preview,
+  .assigned-driver-shell,
+  .assigned-driver-card,
+  .searching-ride-shell,
+  .searching-ride-card,
+  .completion-card,
+  .driver-card,
+  .wallet-real-history,
+  .wallet-movement-card,
+  .passenger-history-summary article,
+  .passenger-history-card,
+  .passenger-history-empty,
+  .real-profile-card,
+  .real-profile-stats article,
+  .real-profile-form,
+  .real-profile-support,
+  .payment-modal,
+  .payment-modal-content,
+  .passenger-rating-card,
+  .receipt-card,
+  .chat-modal,
+  .notification-center-modal,
+  .wallet-topup-modal,
+  .topup-review-modal,
+  .sos-modal-content
+) {
+  border-color: rgba(255,255,255,.11) !important;
+  background: var(--um-passenger-surface) !important;
+  box-shadow: 0 24px 64px rgba(0,0,0,.58), inset 0 1px rgba(255,255,255,.045) !important;
+}
+
+.um-motion-preview body > .bottom-sheet {
+  box-sizing: border-box !important;
+  width: min(calc(100% - 16px), 460px) !important;
+  max-width: 460px !important;
+  max-height: calc(100dvh - 106px) !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255,255,255,.11) !important;
+  border-radius: 28px 28px 0 0 !important;
+  background: var(--um-passenger-surface) !important;
+  box-shadow: 0 -22px 64px rgba(0,0,0,.64), inset 0 1px rgba(255,255,255,.045) !important;
+}
+
+.um-motion-preview body > .bottom-sheet :is(.bottom-sheet-content, .fare-preview-premium,
+  .fare-confirm-card, .assigned-driver-card, .searching-ride-card, .driver-card) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.um-motion-preview body > .bottom-sheet .bottom-sheet-content {
+  width: 100% !important;
+  overscroll-behavior: contain;
+}
+
+.um-motion-preview :is(.fare-preview-premium, .fare-confirm-card) {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-inline: auto !important;
+}
+
+.um-motion-preview :is(.fare-preview-body, .ride-type-selector, .fare-metrics,
+  .assigned-driver-actions, .payment-methods) {
+  min-width: 0 !important;
+}
+
+.um-motion-preview :is(.page-overlay.active, .wallet-real-page,
+  .passenger-history-premium, .real-profile-page) {
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.um-motion-preview.theme-light {
+  --um-passenger-surface:
+    radial-gradient(circle at 12% 0%, rgba(255,196,0,.12), transparent 34%),
+    linear-gradient(150deg, rgba(255,255,255,.99), rgba(243,245,248,.995));
+}
+
+.um-motion-preview.theme-light :is(.fare-confirm-card, .fare-preview, .assigned-driver-shell,
+  .assigned-driver-card, .searching-ride-shell, .searching-ride-card, .completion-card,
+  .driver-card, .payment-modal, .payment-modal-content, .passenger-rating-card,
+  .receipt-card, .sos-modal-content) {
+  color: #121821 !important;
+  border-color: rgba(17,24,39,.11) !important;
+  box-shadow: 0 20px 52px rgba(31,41,55,.18), inset 0 1px #fff !important;
+}
+
+@media (max-width: 699px) {
+  .um-motion-preview body > .bottom-sheet,
+  .um-motion-preview body > .bottom-sheet.fare-preview-sheet,
+  .um-motion-preview body > .bottom-sheet.destination-search-sheet,
+  .um-motion-preview body > .bottom-sheet.passenger-active-trip-sheet,
+  .um-motion-preview body > .bottom-sheet.searching-ride-sheet {
+    left: 50% !important;
+    right: auto !important;
+    bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+    width: calc(100% - 12px) !important;
+    max-width: 480px !important;
+    max-height: calc(100dvh - 94px - env(safe-area-inset-top)) !important;
+    margin: 0 !important;
+  }
+
+  .um-motion-preview .payment-modal-overlay,
+  .um-motion-preview .passenger-rating-overlay,
+  .um-motion-preview .receipt-screen,
+  .um-motion-preview .chat-modal-overlay,
+  .um-motion-preview .wallet-topup-backdrop {
+    padding: max(8px, env(safe-area-inset-top)) 6px calc(76px + env(safe-area-inset-bottom)) !important;
+    box-sizing: border-box !important;
+  }
+
+  .um-motion-preview :is(.payment-modal, .payment-modal-content, .passenger-rating-card,
+    .receipt-card, .chat-modal, .wallet-topup-modal, .topup-review-modal) {
+    width: 100% !important;
+    max-width: 480px !important;
+    max-height: calc(100dvh - 94px - env(safe-area-inset-top)) !important;
+    margin-inline: auto !important;
+    box-sizing: border-box !important;
+  }
+}

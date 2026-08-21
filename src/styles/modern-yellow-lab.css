@@ -1901,3 +1901,82 @@ html.modern-yellow-lab.theme-light .map-card-head > div {
 html.modern-yellow-lab.theme-light #operations-map {
   background: #e9edf3 !important;
 }
+
+/* Authentication participates in the theme too; previously the light theme
+   changed its text tokens but left the cyber card dark. */
+html.modern-yellow-lab.theme-light .cyber-auth-card {
+  color: #151922 !important;
+  background:
+    radial-gradient(circle at var(--glare-x, 50%) var(--glare-y, 25%), rgba(255,196,0,.14), transparent 52%),
+    linear-gradient(160deg, rgba(255,255,255,.98), rgba(241,243,247,.99)) !important;
+  border-color: rgba(17,24,39,.11) !important;
+  box-shadow: 0 28px 70px rgba(31,41,55,.18), inset 0 1px #fff !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.liquid-brand-title, .role-tab:hover, .auth-tab:hover) {
+  color: #151922 !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.liquid-brand-subtitle, .liquid-checkbox-label,
+  .liquid-social-note, .liquid-social-divider) {
+  color: #657080 !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.liquid-role-pills, .liquid-auth-tabs) {
+  border-color: rgba(17,24,39,.1) !important;
+  background: rgba(17,24,39,.045) !important;
+}
+
+html.modern-yellow-lab.theme-light .liquid-input-box {
+  border-color: rgba(17,24,39,.12) !important;
+  background: rgba(255,255,255,.88) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.9) !important;
+}
+
+html.modern-yellow-lab.theme-light .liquid-input-box:focus-within {
+  background: #fff !important;
+  box-shadow: 0 0 0 3px rgba(255,196,0,.13) !important;
+}
+
+html.modern-yellow-lab.theme-light .liquid-input-box input {
+  color: #151922 !important;
+}
+
+html.modern-yellow-lab.theme-light .liquid-social-btn {
+  color: #303744 !important;
+  border-color: rgba(17,24,39,.1) !important;
+  background: rgba(255,255,255,.72) !important;
+}
+
+html.modern-yellow-lab.theme-light .liquid-peek-btn {
+  color: #151922 !important;
+  background: linear-gradient(145deg, #ffd42a, #ffb300) !important;
+  border-color: rgba(176,128,0,.34) !important;
+  box-shadow: 0 8px 22px rgba(197,143,0,.2) !important;
+}
+
+/* Mobile authentication fills the actual app viewport. */
+@media (max-width: 699px) {
+  html.modern-yellow-lab .landing-container.cyber-moto-experience {
+    width: 100% !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    padding: 0 !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    overflow-y: auto !important;
+  }
+
+  html.modern-yellow-lab .cyber-auth-card {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    margin: 0 !important;
+    padding: calc(18px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom)) !important;
+    border-width: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+}
