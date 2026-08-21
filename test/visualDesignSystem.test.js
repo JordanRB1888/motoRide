@@ -240,3 +240,52 @@ test('las superficies principales usan grafito cálido, no pizarra azul', () => 
       `${name} vuelve al panel azulado`);
   }
 });
+
+/* ---------------------------------------------------------------------------
+   Regresiones de la certificación visual de Codex.
+   --------------------------------------------------------------------------- */
+
+test('ningún control con área táctil ampliada pierde su anclaje', () => {
+  // HIGH 1. `all: unset !important` borraba el position:relative del sistema.
+  // El ::after dejaba de anclarse al boton y se dimensionaba contra
+  // .liquid-role-pills —bloque contenedor por su transform— pasando de 109px
+  // a 344px: el pseudo del ultimo tab tapaba la fila y todos los clics caian
+  // en Admin. Un control anclado es la unica garantia de que el pseudo no
+  // escape de su boton.
+  const sistema = system();
+
+  // 1. Qué controles declaran un ::after de área táctil.
+  const bloqueAfter = sistema.match(/([^{}]+)::after\s*\{[^}]*min-width:\s*44px[\s\S]*?\}/);
+  assert.ok(bloqueAfter, 'no se encuentra el bloque de áreas táctiles');
+  const conArea = bloqueAfter[1]
+    .split(',')
+    .map(s => s.trim().replace(/::after$/, ''))
+    .filter(Boolean);
+  assert.ok(conArea.length >= 5, `se esperaban al menos 5 controles, hay ${conArea.length}`);
+
+  // 2. Ninguna regla puede dejarlos sin position tras un `all: unset`.
+  for (const { name, css } of readStyles()) {
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*all:\s*unset[^{}]*)\}/g)) {
+      const selector = m[1];
+      const cuerpo = m[2];
+      const afectado = conArea.find(c => selector.includes(c));
+      if (!afectado) continue;
+      assert.match(cuerpo, /position:\s*relative\s*!important/,
+        `${name}: la regla "${selector.trim().slice(0, 60)}" hace \`all: unset\` sobre ` +
+        `${afectado}, que usa un ::after de área táctil, y no restituye ` +
+        `position: relative !important. El pseudo escaparía del botón y ` +
+        `capturaría los clics de sus vecinos.`);
+    }
+  }
+});
+
+test('el área táctil nunca se declara más ancha que su propio control', () => {
+  // El ::after usa width:100% (del control) con un suelo de 44px. Si alguien
+  // lo cambiara a un ancho fijo mayor volveria a invadir a los vecinos.
+  const bloque = system().match(/::after\s*\{[^}]*min-width:\s*44px[^}]*\}/);
+  assert.ok(bloque, 'falta el bloque de área táctil');
+  assert.match(bloque[0], /width:\s*100%/, 'el ancho debe seguir al control, no ser fijo');
+  assert.match(bloque[0], /height:\s*100%/);
+  assert.doesNotMatch(bloque[0], /(?<!min-)width:\s*\d+px/,
+    'un ancho fijo invadiría a los controles vecinos');
+});

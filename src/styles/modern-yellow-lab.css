@@ -400,6 +400,11 @@ html.modern-yellow-lab .liquid-role-pills {
 
 html.modern-yellow-lab .role-tab {
   all: unset !important;
+  /* `all: unset` borra el position: relative del sistema de areas tactiles.
+     Sin el, .role-tab::after se dimensiona contra .liquid-role-pills —que es
+     bloque contenedor por su transform de entrada— y pasa de 109px a 344px:
+     el pseudo del ultimo tab tapa la fila y todos los clics caen en Admin. */
+  position: relative !important;
   box-sizing: border-box !important;
   flex: 1 1 0 !important;
   min-width: 0 !important;
@@ -464,6 +469,8 @@ html.modern-yellow-lab .liquid-auth-tabs {
 
 html.modern-yellow-lab .auth-tab {
   all: unset !important;
+  /* Mismo patron que .role-tab: ver la nota de arriba. */
+  position: relative !important;
   box-sizing: border-box !important;
   flex: 1 1 0 !important;
   height: 36px !important;
