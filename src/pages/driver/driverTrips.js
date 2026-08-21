@@ -32,8 +32,8 @@ export function renderDriverTrips() {
           <div class="history-card-top"><span class="history-id">#${esc(String(trip.id || '').slice(-7) || 'VIAJE')}</span><span class="history-status ${esc((trip.status || 'COMPLETED').toLowerCase())}">${trip.status === 'CANCELLED' ? 'Cancelado' : 'Completado'}</span></div>
           <div class="history-route"><span class="route-dot pickup"></span><div><small>RECOGIDA</small><strong>${esc(trip.pickup?.address || 'Ubicación del pasajero')}</strong></div><span class="route-line"></span><span class="route-dot destination"></span><div><small>DESTINO</small><strong>${esc(trip.destination?.address || 'Destino en Maracaibo')}</strong></div></div>
           <div class="history-card-meta"><div><small>Fecha</small><strong>${new Date(trip.completedAt || trip.createdAt || Date.now()).toLocaleDateString('es-VE')}</strong></div><div><small>Pago</small><strong>${esc(String(trip.paymentMethod || 'Efectivo').replace('_',' '))}</strong></div><div><small>Tarifa</small><strong>€${money(trip)}</strong></div></div>
-          <button class="history-detail-btn" data-id="${esc(trip.id)}">Ver detalles del viaje ${icon('chevronRight', 17)}</button>
-        </article>`).join('') : `<div class="driver-trips-empty">${icon('history', 34)}<strong>No hay viajes en esta categoría</strong><small>Las carreras aparecerán aquí automáticamente.</small></div>`;
+          <button class="history-detail-btn" data-id="${esc(trip.id)}">Ver detalles del viaje ${icon('chevronRight', 16)}</button>
+        </article>`).join('') : `<div class="driver-trips-empty">${icon('history', 32)}<strong>No hay viajes en esta categoría</strong><small>Las carreras aparecerán aquí automáticamente.</small></div>`;
       list.querySelectorAll('.history-detail-btn').forEach(button => button.addEventListener('click', () => openDetail(trips.find(trip => String(trip.id) === button.dataset.id))));
     };
     container.querySelectorAll('.driver-trip-filters button').forEach(button => button.addEventListener('click', () => {
@@ -65,7 +65,7 @@ export function renderDriverTrips() {
         : `<img src="${esc(media.dataUrl)}" alt="${esc(alt)}">`;
     };
     const date = value => value ? new Date(value).toLocaleString('es-VE') : 'No registrado';
-    container.innerHTML = `<button class="trip-detail-back">${icon('back',17)} Volver a mis viajes</button>
+    container.innerHTML = `<button class="trip-detail-back">${icon('back',16)} Volver a mis viajes</button>
       <section class="driver-trip-detail">
         <header><div><small>EXPEDIENTE DE VIAJE</small><h2>#${esc(String(trip.id).slice(-8))}</h2></div><span class="history-status ${esc((trip.status || '').toLowerCase())}">${esc(trip.status || 'COMPLETED')}</span></header>
         <div class="trip-detail-route"><div><span>●</span><small>Recogida</small><strong>${esc(trip.pickup?.address || 'Ubicación del pasajero')}</strong></div><div><span>◆</span><small>Destino</small><strong>${esc(trip.destination?.address || 'Destino en Maracaibo')}</strong></div></div>

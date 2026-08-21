@@ -46,22 +46,22 @@ export function renderProfile(container) {
             ${avatarFallback(user)}
             <img id="profile-avatar-img" class="profile-avatar-img" hidden alt="">
             <button id="profile-photo-button" class="profile-avatar-camera-btn" type="button" title="Cambiar foto">
-              ${icon('camera', 15)}
+              ${icon('camera', 14)}
             </button>
           </div>
           <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
         </div>
         <h3 class="real-profile-name">${fullName}</h3>
-        <div class="real-profile-verified">${icon('checkCircle',13)} Cuenta verificada</div>
+        <div class="real-profile-verified">${icon('checkCircle',14)} Cuenta verificada</div>
         <p class="real-profile-joined">Pasajero registrado desde ${registeredAt}</p>
         <div class="real-profile-details">
-          <label><span>${icon('phone',15)} Teléfono</span><strong>${user.phone || 'Sin registrar'}</strong></label>
-          <label><span>${icon('message',15)} Correo</span><strong>${user.email || 'Sin registrar'}</strong></label>
-          <label><span>${icon('shield',15)} Cédula / ID</span><strong>${user.cedula || 'Sin registrar'}</strong></label>
+          <label><span>${icon('phone',14)} Teléfono</span><strong>${user.phone || 'Sin registrar'}</strong></label>
+          <label><span>${icon('message',14)} Correo</span><strong>${user.email || 'Sin registrar'}</strong></label>
+          <label><span>${icon('shield',14)} Cédula / ID</span><strong>${user.cedula || 'Sin registrar'}</strong></label>
         </div>
         <div class="real-profile-stats">
-          <article><span>${icon('route',18)}</span><div><small>VIAJES</small><strong>${Number(user.totalTrips || 0)}</strong></div></article>
-          <article><span>${icon('starFilled',18)}</span><div><small>CALIFICACIÓN</small><strong>${Number(user.rating || 5).toFixed(1)}</strong></div></article>
+          <article><span>${icon('route',20)}</span><div><small>VIAJES</small><strong>${Number(user.totalTrips || 0)}</strong></div></article>
+          <article><span>${icon('starFilled',20)}</span><div><small>CALIFICACIÓN</small><strong>${Number(user.rating || 5).toFixed(1)}</strong></div></article>
         </div>
         <button id="profile-edit-toggle" class="real-profile-secondary real-profile-action" type="button">
           <span>${icon('edit',16)} ${editing ? 'Cancelar edición' : 'Editar datos personales'}</span>${icon('chevronRight',16)}
@@ -76,12 +76,12 @@ export function renderProfile(container) {
       </form>` : ''}
       ${user.driverApplicationId ? '<div id="driver-application-status-slot"></div>' : ''}
       <button id="passenger-support-btn" class="real-profile-support real-profile-action" type="button">
-        <span class="real-profile-action-icon">${icon('message',18)}</span>
+        <span class="real-profile-action-icon">${icon('message',20)}</span>
         <span><strong>Atención directa con administración</strong><small>Soporte para tu cuenta, pagos o viajes</small></span>
-        ${icon('chevronRight',17)}
+        ${icon('chevronRight',16)}
       </button>
       <button id="profile-logout-btn" class="real-profile-logout real-profile-action" type="button">
-        <span>${icon('logout',17)} Cerrar sesión</span>${icon('chevronRight',17)}
+        <span>${icon('logout',16)} Cerrar sesión</span>${icon('chevronRight',16)}
       </button>
     </div>`;
 

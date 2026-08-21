@@ -26,8 +26,8 @@ function createTripSheet({ trip, passenger, stage, title, status, actionLabel, o
         <div class="trip-passenger-row">
             ${avatar}
             <div><strong>${name}</strong><span>★ ${passenger?.rating || 4.9} · Pasajero VIP</span></div>
-            <button class="trip-contact-btn btn-driver-chat" type="button" aria-label="Abrir chat">${icon('message', 19)}</button>
-            <button class="trip-contact-btn call btn-driver-call" type="button" aria-label="Llamar pasajero">${icon('phone', 19)}</button>
+            <button class="trip-contact-btn btn-driver-chat" type="button" aria-label="Abrir chat">${icon('message', 20)}</button>
+            <button class="trip-contact-btn call btn-driver-call" type="button" aria-label="Llamar pasajero">${icon('phone', 20)}</button>
         </div>
 
         <div class="trip-quick-facts">

@@ -61,7 +61,7 @@ export function renderDriverApp(container) {
                             width: 36px; height: 36px; border-radius: 50%; display:flex; align-items:center; justify-content:center;
                             cursor: pointer; position: relative; flex-shrink: 0;
                         " title="Centro de Notificaciones">
-                            ${icon('bell', 18)}
+                            ${icon('bell', 20)}
                             <span style="
                                 position: absolute; top: -3px; right: -3px; background: var(--danger); color: white;
                                 font-size: 0.6rem; font-weight: 900; width: 14px; height: 14px; border-radius: 50%;

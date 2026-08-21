@@ -69,9 +69,9 @@ export function renderPassengerApp(container) {
         </button>
         <div class="passenger-brand-lockup"><img src="/brand-logo-header.png" alt="+58 Express"></div>
         <div class="passenger-header-actions">
-          <button id="passenger-support-shortcut" class="passenger-header-icon" type="button" aria-label="Abrir soporte">${icon('message', 18)}</button>
+          <button id="passenger-support-shortcut" class="passenger-header-icon" type="button" aria-label="Abrir soporte">${icon('message', 20)}</button>
           <button id="header-notif-btn-passenger" class="passenger-header-icon" type="button" title="Centro de Notificaciones">
-            ${icon('bell', 18)}
+            ${icon('bell', 20)}
             <span id="notif-badge-passenger">0</span>
           </button>
           <div id="header-theme-toggle-slot"></div>

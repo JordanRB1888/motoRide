@@ -35,11 +35,11 @@ export async function renderWalletTopups(container) {
     modal.innerHTML = `<section class="topup-review-modal" role="dialog" aria-modal="true" aria-labelledby="topup-review-title">
       <header>
         <div><small>VALIDACIÓN BANCARIA</small><h2 id="topup-review-title">Revisar recarga</h2></div>
-        <button type="button" data-close aria-label="Cerrar">${icon('close', 18)}</button>
+        <button type="button" data-close aria-label="Cerrar">${icon('close', 20)}</button>
       </header>
       <div class="topup-review-body">
         <section class="topup-review-amount">
-          <span>${icon('wallet', 22)}</span>
+          <span>${icon('wallet', 20)}</span>
           <div><small>MONTO A ACREDITAR</small><strong>${formatMoney(topup.amount)} <em>USD</em></strong></div>
           <b class="topup-status ${String(topup.status).toLowerCase()}">${statusLabel(topup.status)}</b>
         </section>
@@ -48,13 +48,13 @@ export async function renderWalletTopups(container) {
           <article><small>Teléfono</small><strong>${escapeHtml(user.phone || 'Sin registrar')}</strong><span>ID ${escapeHtml(String(topup.userId || '').slice(-10))}</span></article>
           <article class="reference"><small>Referencia bancaria declarada</small><strong>${escapeHtml(topup.reference || '—')}</strong><span>Pago Móvil · ${new Date(topup.createdAt).toLocaleString('es-VE')}</span></article>
         </div>
-        ${topup.status === 'PENDING' ? `<div class="topup-verification-note">${icon('shield', 19)}<p><strong>Compara esta referencia con el movimiento recibido en tu banco.</strong><span>La plataforma no puede consultar Banesco automáticamente. Aprueba únicamente después de confirmar que el dinero llegó.</span></p></div>
-        <label class="topup-confirm-check"><input type="checkbox" id="confirm-topup-reference"><span>${icon('checkCircle', 18)} Confirmé en el banco que la referencia <b>${escapeHtml(topup.reference)}</b> fue recibida por el monto correcto.</span></label>
+        ${topup.status === 'PENDING' ? `<div class="topup-verification-note">${icon('shield', 20)}<p><strong>Compara esta referencia con el movimiento recibido en tu banco.</strong><span>La plataforma no puede consultar Banesco automáticamente. Aprueba únicamente después de confirmar que el dinero llegó.</span></p></div>
+        <label class="topup-confirm-check"><input type="checkbox" id="confirm-topup-reference"><span>${icon('checkCircle', 20)} Confirmé en el banco que la referencia <b>${escapeHtml(topup.reference)}</b> fue recibida por el monto correcto.</span></label>
         <label class="topup-review-note">Nota administrativa (opcional)<textarea id="topup-review-note" maxlength="500" placeholder="Ej.: Referencia verificada en Banesco"></textarea></label>` : `
         <div class="topup-reviewed"><strong>Revisada ${new Date(topup.reviewedAt || topup.createdAt).toLocaleString('es-VE')}</strong><span>${escapeHtml(topup.reviewNote || 'Sin nota administrativa.')}</span></div>`}
       </div>
       <footer>
-        ${topup.status === 'PENDING' ? `<button type="button" class="topup-reject">${icon('close', 17)} Rechazar</button><button type="button" class="topup-approve" disabled>${icon('check', 18)} Aprobar y acreditar ${formatMoney(topup.amount)}</button>` : '<button type="button" class="topup-close-secondary" data-close>Cerrar</button>'}
+        ${topup.status === 'PENDING' ? `<button type="button" class="topup-reject">${icon('close', 16)} Rechazar</button><button type="button" class="topup-approve" disabled>${icon('check', 20)} Aprobar y acreditar ${formatMoney(topup.amount)}</button>` : '<button type="button" class="topup-close-secondary" data-close>Cerrar</button>'}
       </footer>
     </section>`;
 
@@ -109,9 +109,9 @@ export async function renderWalletTopups(container) {
     container.innerHTML = `<div class="wallet-topups-admin">
       <div class="ops-heading topup-heading"><div><span class="eyebrow"><i></i> CONCILIACIÓN DE PAGO MÓVIL</span><h1>Recargas de billetera</h1><p>Verifica la referencia bancaria antes de acreditar saldo al pasajero.</p></div><span class="topup-live-status">${icon('shield', 16)} Validación administrativa</span></div>
       <section class="topup-kpis">
-        <article class="pending"><span>${icon('clock', 21)}</span><div><small>Pendientes</small><strong>${counts.PENDING}</strong><p>${formatMoney(pendingAmount)} por revisar</p></div></article>
-        <article class="approved"><span>${icon('checkCircle', 21)}</span><div><small>Acreditadas</small><strong>${counts.APPROVED}</strong><p>${formatMoney(approvedAmount)} aprobados</p></div></article>
-        <article class="total"><span>${icon('fileText', 21)}</span><div><small>Total solicitudes</small><strong>${counts.ALL}</strong><p>Historial persistido</p></div></article>
+        <article class="pending"><span>${icon('clock', 20)}</span><div><small>Pendientes</small><strong>${counts.PENDING}</strong><p>${formatMoney(pendingAmount)} por revisar</p></div></article>
+        <article class="approved"><span>${icon('checkCircle', 20)}</span><div><small>Acreditadas</small><strong>${counts.APPROVED}</strong><p>${formatMoney(approvedAmount)} aprobados</p></div></article>
+        <article class="total"><span>${icon('fileText', 20)}</span><div><small>Total solicitudes</small><strong>${counts.ALL}</strong><p>Historial persistido</p></div></article>
       </section>
       <section class="topup-queue-card">
         <header><div><h3>Solicitudes registradas</h3><p>Selecciona una recarga para comprobar sus datos.</p></div><form id="topup-search"><span>${icon('search', 16)}</span><input value="${escapeHtml(query)}" placeholder="Buscar referencia o pasajero"><button>Buscar</button></form></header>
@@ -124,7 +124,7 @@ export async function renderWalletTopups(container) {
           <strong class="topup-row-amount">${formatMoney(item.amount)}</strong>
           <span class="topup-status ${String(item.status).toLowerCase()}">${statusLabel(item.status)}</span>
           <button type="button" class="topup-review-button" data-review-topup="${item.id}">${icon('eye', 16)} ${item.status === 'PENDING' ? 'Verificar' : 'Ver detalle'}</button>
-        </article>`).join('') || `<div class="topup-empty">${icon('wallet', 36)}<strong>No hay recargas en esta categoría</strong><p>Las nuevas solicitudes aparecerán aquí en tiempo real.</p></div>`}</div>
+        </article>`).join('') || `<div class="topup-empty">${icon('wallet', 32)}<strong>No hay recargas en esta categoría</strong><p>Las nuevas solicitudes aparecerán aquí en tiempo real.</p></div>`}</div>
       </section>
     </div>`;
 

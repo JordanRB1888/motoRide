@@ -309,6 +309,54 @@ button {
 }
 
 /* =========================================================================
+   SUPERFICIES DEL NAVEGADOR
+   Seleccion, cursor y barras de scroll llegan con valores por defecto que no
+   pertenecen a ningun sistema de diseno. Es lo primero que delata una interfaz
+   ensamblada en vez de construida, y cuesta muy poco corregirlo.
+   ========================================================================= */
+::selection {
+  background: var(--x58-yellow-soft);
+  color: var(--x58-text-primary);
+}
+
+input,
+textarea,
+[contenteditable] {
+  caret-color: var(--x58-yellow);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--x58-border-strong) transparent;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--x58-radius-pill);
+  background-clip: content-box;
+  background-color: var(--x58-border-strong);
+}
+
+*::-webkit-scrollbar-thumb:hover { background-color: var(--x58-text-muted); }
+
+/* =========================================================================
+   ICONOGRAFÍA
+   Una sola familia: trazo de 2, viewBox 24, extremos redondeados, definida en
+   src/utils/icons.js. Lo que faltaba era una escala: convivian 21 tamanos
+   distintos entre 11 y 48 px. Estos cinco pasos son la escala.
+   ========================================================================= */
+:root {
+  --x58-icon-inline: 14px;
+  --x58-icon-small: 16px;
+  --x58-icon-default: 20px;
+  --x58-icon-large: 24px;
+  --x58-icon-feature: 32px;
+}
+
+/* =========================================================================
    OBJETIVOS TÁCTILES
    Varios controles miden menos de 44px y son difíciles de acertar con el
    pulgar en marcha. En lugar de agrandarlos —lo que alteraría la
@@ -346,13 +394,54 @@ button {
    La aplicación queda completa y usable, sin animación continua.
    ========================================================================= */
 @media (prefers-reduced-motion: reduce) {
+  /* Movimiento reducido no es "sin movimiento". Matar toda transicion a
+     0.01ms elimina tambien la respuesta que indica que algo cambio: un boton
+     que no acusa la pulsacion, una hoja que aparece de golpe sin decir de
+     donde. Quien pide movimiento reducido necesita menos desplazamiento, no
+     menos informacion.
+
+     Contrato: se elimina el movimiento continuo, decorativo y de gran
+     recorrido; se conserva una respuesta breve de color y opacidad. */
+
   *,
   *::before,
   *::after {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
+    /* Nada se desplaza ni escala. */
+    animation-name: none !important;
     scroll-behavior: auto !important;
+  }
+
+  /* Respuesta minima conservada: el cambio de estado sigue siendo legible. */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [role='button'],
+  [role='tab'],
+  .nav-btn,
+  .role-btn,
+  .auth-tab {
+    transition-property: color, background-color, border-color, opacity,
+      box-shadow !important;
+    transition-duration: var(--x58-motion-feedback) !important;
+  }
+
+  /* Lo demas pierde la transicion por completo. */
+  *:not(a):not(button):not(input):not(select):not(textarea):not([role='button']):not([role='tab']),
+  *::before,
+  *::after {
+    transition-duration: .01ms !important;
+  }
+
+  /* Los indicadores de estado en vivo dejan de latir, pero deben seguir
+     viendose: se quedan en su fotograma visible, no desaparecen. */
+  [class*='pulse'],
+  [class*='radar'],
+  [class*='live'],
+  [class*='spin'] {
+    opacity: 1 !important;
+    transform: none !important;
   }
 
   .x58-grain::before { display: none; }

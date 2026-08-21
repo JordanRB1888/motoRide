@@ -136,7 +136,7 @@ export async function renderFinances(container) {
             <label>${icon('search', 16)}<input name="query" value="${escapeHtml(tripQuery)}" placeholder="Buscar movimiento"></label>
             <label class="date">Desde<input type="date" name="from" value="${dateFrom}"></label>
             <label class="date">Hasta<input type="date" name="to" value="${dateTo}"></label>
-            <button type="submit">${icon('filter', 15)} Filtrar</button>
+            <button type="submit">${icon('filter', 14)} Filtrar</button>
           </form>
         </header>
         <div class="finance-table-scroll trips"><table class="finance-table"><thead><tr><th>Viaje</th><th>Conductor</th><th>Pago</th><th>Bruto</th><th>Comisión</th><th>Neto</th><th>Liquidación</th></tr></thead><tbody>

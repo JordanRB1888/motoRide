@@ -43,7 +43,7 @@ export function createNotificationCenterModal(user, onClose) {
         modal.innerHTML = `
             <header class="notification-center-header">
                 <div class="notification-center-heading">
-                    <div class="notification-center-bell">${icon('bell', 21)}</div>
+                    <div class="notification-center-bell">${icon('bell', 20)}</div>
                     <div class="notification-center-title">
                         <strong>Centro de Notificaciones</strong>
                         <small>Avisos, alertas de carreras y finanzas</small>
@@ -84,7 +84,7 @@ export function createNotificationCenterModal(user, onClose) {
                     </article>
                 `).join('') : `
                     <div class="notification-empty">
-                        ${icon('bell', 36)}
+                        ${icon('bell', 32)}
                         <p>No tienes notificaciones en esta categoría</p>
                     </div>
                 `}

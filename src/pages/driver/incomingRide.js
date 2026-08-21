@@ -34,10 +34,10 @@ export function renderIncomingRide(trip, passenger, onAccept, onReject) {
 
             <div class="incoming-request-metrics">
                 <div class="incoming-earning"><small>GANANCIA NETA</small><strong>$${fare.toFixed(2)} <span>USD</span></strong></div>
-                <div><small>DISTANCIA</small><strong>${icon('mapPin', 18)} ${distance.toFixed(1)} km</strong></div>
-                <div><small>TIEMPO</small><strong>${icon('clock', 18)} ${Math.round(duration)} min</strong></div>
+                <div><small>DISTANCIA</small><strong>${icon('mapPin', 20)} ${distance.toFixed(1)} km</strong></div>
+                <div><small>TIEMPO</small><strong>${icon('clock', 20)} ${Math.round(duration)} min</strong></div>
                 <span class="incoming-type incoming-real-vehicle">${vehicleImage(trip?.rideType, { decorative: true })}<span>${rideType}</span></span>
-                <span class="incoming-payment">${icon('wallet', 17)} ${payment}</span>
+                <span class="incoming-payment">${icon('wallet', 16)} ${payment}</span>
             </div>
 
             <div class="incoming-route">

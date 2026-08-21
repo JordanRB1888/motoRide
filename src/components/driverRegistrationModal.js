@@ -101,7 +101,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
         const item = files.get(key);
         return `<label class="driver-document-input ${item?'ready':''}">
           <input type="file" data-document="${key}" accept="image/jpeg,image/png,image/webp,application/pdf">
-          <span class="driver-document-icon">${item ? icon('check',18) : icon('upload',18)}</span>
+          <span class="driver-document-icon">${item ? icon('check',20) : icon('upload',20)}</span>
           <span><strong>${escapeHtml(label)} ${required?'*':''}</strong><small>${item ? escapeHtml(item.file.name) : 'Toca para seleccionar'}</small></span>
           ${item?.preview && item.file.type.startsWith('image/') ? `<img src="${item.preview}" alt="Vista previa">` : ''}
         </label>`;
@@ -110,7 +110,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
 
   const confirmationStep = () => `
     <section class="driver-application-step driver-application-review">
-      <span class="review-shield">${icon('shield',30)}</span><h3>Revisa y envía tu solicitud</h3>
+      <span class="review-shield">${icon('shield',32)}</span><h3>Revisa y envía tu solicitud</h3>
       <p>La cuenta no quedará habilitada como conductor hasta que administración revise la información y los documentos.</p>
       <div class="review-summary"><div><small>Solicitante</small><strong>${escapeHtml(values.firstName)} ${escapeHtml(values.lastName)}</strong></div><div><small>Vehículo</small><strong>${escapeHtml(values.vehicleBrand)} ${escapeHtml(values.vehicleModel)} · ${escapeHtml(values.vehiclePlate)}</strong></div><div><small>Documentos</small><strong>${files.size} archivos adjuntos</strong></div></div>
       <label class="driver-terms"><input type="checkbox" id="driver-terms"> <span>Confirmo que la información es auténtica y autorizo su revisión para fines operativos y de seguridad.</span></label>
@@ -171,7 +171,7 @@ export function createDriverRegistrationModal({ onClose, onSuccess } = {}) {
   };
 
   const render = () => {
-    overlay.innerHTML = `<div class="driver-application-modal"><header><div><span>SOLICITUD DE CONDUCTOR</span><h2>Trabaja con +58Express</h2></div><button data-close aria-label="Cerrar">${icon('close',20)}</button></header><div class="driver-application-progress">${[1,2,3,4].map((number,index)=>`<div class="${step>=number?'active':''}"><i>${number}</i><span>${['Personal','Vehículo','Documentos','Confirmación'][index]}</span></div>`).join('')}</div><main>${step===1?personalStep():step===2?vehicleStep():step===3?documentsStep():confirmationStep()}</main><footer>${step>1?`<button class="secondary" data-back ${submitting?'disabled':''}>${icon('chevronLeft',17)} Atrás</button>`:'<span></span>'}${step<4?`<button class="primary" data-next>Siguiente ${icon('arrowRight',17)}</button>`:`<button class="primary" data-submit ${submitting?'disabled':''}>${submitting?'Enviando de forma segura…':`${icon('check',17)} Enviar solicitud`}</button>`}</footer></div>`;
+    overlay.innerHTML = `<div class="driver-application-modal"><header><div><span>SOLICITUD DE CONDUCTOR</span><h2>Trabaja con +58Express</h2></div><button data-close aria-label="Cerrar">${icon('close',20)}</button></header><div class="driver-application-progress">${[1,2,3,4].map((number,index)=>`<div class="${step>=number?'active':''}"><i>${number}</i><span>${['Personal','Vehículo','Documentos','Confirmación'][index]}</span></div>`).join('')}</div><main>${step===1?personalStep():step===2?vehicleStep():step===3?documentsStep():confirmationStep()}</main><footer>${step>1?`<button class="secondary" data-back ${submitting?'disabled':''}>${icon('chevronLeft',16)} Atrás</button>`:'<span></span>'}${step<4?`<button class="primary" data-next>Siguiente ${icon('arrowRight',16)}</button>`:`<button class="primary" data-submit ${submitting?'disabled':''}>${submitting?'Enviando de forma segura…':`${icon('check',16)} Enviar solicitud`}</button>`}</footer></div>`;
     bind();
   };
 

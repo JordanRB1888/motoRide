@@ -122,12 +122,23 @@ test('el modo claro está diseñado, no invertido', () => {
   assert.match(claro, /color-scheme:\s*light/);
 });
 
-test('el movimiento reducido desactiva la animación en toda la aplicación', () => {
+test('el movimiento reducido conserva la respuesta de estado', () => {
+  // El contrato cambió a proposito. Matar toda transicion a 0.01ms elimina
+  // tambien la senal de que algo cambio: quien pide movimiento reducido
+  // necesita menos desplazamiento, no quedarse sin informacion.
   const css = system();
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(css, /animation-duration:\s*\.01ms\s*!important/);
-  assert.match(css, /transition-duration:\s*\.01ms\s*!important/);
-  assert.match(css, /\.x58-grain::before\s*\{\s*display:\s*none/,
+
+  const bloque = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.match(bloque, /animation-name:\s*none\s*!important/,
+    'el movimiento continuo debe desaparecer por completo');
+  assert.match(bloque, /transition-duration:\s*var\(--x58-motion-feedback\)\s*!important/,
+    'los controles deben conservar una respuesta breve de color y opacidad');
+  assert.match(bloque, /transition-property:\s*color, background-color, border-color, opacity/,
+    'la respuesta conservada no debe incluir desplazamiento ni escala');
+  assert.match(bloque, /\[class\*='pulse'\][\s\S]*?opacity:\s*1\s*!important/,
+    'los indicadores en vivo dejan de latir pero deben seguir visibles');
+  assert.match(bloque, /\.x58-grain::before\s*\{\s*display:\s*none/,
     'la textura no debe permanecer con movimiento reducido');
 });
 

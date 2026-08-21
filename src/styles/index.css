@@ -343,13 +343,6 @@ button *, .btn *, .btn-3d *, .btn-secondary-3d *, .primary-btn *, .role-btn *, a
 .hidden { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .text-center { text-align: center; }
-.text-gradient {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-hover));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
 /* ============================================================
    LANDING PAGE (ISOMETRIC DIORAMA EDITION)
    ============================================================ */
@@ -480,7 +473,7 @@ button *, .btn *, .btn-3d *, .btn-secondary-3d *, .primary-btn *, .role-btn *, a
   color: var(--text-primary);
   font-size: 1.1rem;
   font-weight: 600;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.3s var(--x58-ease-out);
   cursor: pointer;
   box-shadow: 0 6px 0 #0a0e17, 0 10px 20px rgba(0,0,0,0.4);
 }

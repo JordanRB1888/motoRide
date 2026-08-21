@@ -163,7 +163,7 @@ export function renderLanding(container) {
                             <!-- Liquid Submit CTA Button -->
                             <button type="submit" class="primary-btn liquid-submit-btn stagger-item s7" id="btn-submit-cta">
                                 <span class="submit-text">Iniciar Sesión</span>
-                                <span class="btn-arrow-icon">${icon('arrowRight', 18)}</span>
+                                <span class="btn-arrow-icon">${icon('arrowRight', 20)}</span>
                                 <div class="btn-drip-container">
                                     <div class="btn-drip d1"></div>
                                     <div class="btn-drip d2"></div>

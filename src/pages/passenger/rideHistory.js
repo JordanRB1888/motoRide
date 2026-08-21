@@ -57,7 +57,7 @@ export function renderRideHistory(container) {
       : 'Cuando tengas movimientos en esta categoría aparecerán aquí.';
     return `<div class="passenger-history-empty">
       <div class="passenger-history-empty-art">
-        <span>${icon('history', 43)}</span><i>${icon('mapPin', 22)}</i><b>${icon('mapPin', 22)}</b>
+        <span>${icon('history', 43)}</span><i>${icon('mapPin', 20)}</i><b>${icon('mapPin', 20)}</b>
       </div>
       <h3>${title}</h3><p>${copy}</p>
       <button type="button" data-empty-action>${icon(isAll ? 'car' : 'grid', 17)} ${isAll ? 'Solicitar mi primer viaje' : 'Ver todos los viajes'}</button>

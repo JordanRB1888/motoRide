@@ -76,7 +76,7 @@ export function showToast(message, type = 'info', duration = 3200) {
   close.className = 'custom-toast-close';
   close.type = 'button';
   close.setAttribute('aria-label', 'Cerrar aviso');
-  close.innerHTML = icon('close', 15);
+  close.innerHTML = icon('close', 14);
   close.onclick = () => closeToast(toast);
 
   const progress = document.createElement('div');

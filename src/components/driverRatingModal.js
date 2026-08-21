@@ -30,7 +30,7 @@ export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas
         modal.innerHTML = `
             <header class="rating-success-header">
                 <div class="rating-brand">+58 <span>EXPRESS</span></div>
-                <div class="rating-completed">${icon('check', 18)} Viaje completado</div>
+                <div class="rating-completed">${icon('check', 20)} Viaje completado</div>
                 <small>$${fare} · ${payment}</small>
             </header>
             <div class="rating-passenger-avatar">${avatar}</div>
@@ -47,7 +47,7 @@ export function createDriverRatingModal({ trip, passengerName = 'Cliente Pruebas
             <textarea id="driver-rating-comment" rows="3" placeholder="Comentario opcional sobre el pasajero">${commentDraft}</textarea>
             <button id="submit-driver-rating-btn" class="driver-rating-submit">Enviar calificación</button>
             <button id="skip-driver-rating-btn" class="driver-rating-skip">Omitir por ahora</button>
-            <small class="rating-safety-note">${icon('shield', 15)} Tu opinión ayuda a mantener una comunidad segura</small>
+            <small class="rating-safety-note">${icon('shield', 14)} Tu opinión ayuda a mantener una comunidad segura</small>
         `;
 
         modal.querySelectorAll('.star-btn-driver').forEach(button => button.addEventListener('click', () => {

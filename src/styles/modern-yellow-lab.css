@@ -1125,7 +1125,7 @@ html.modern-yellow-lab .profile-avatar-camera-btn,
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6) !important;
   cursor: pointer !important;
   z-index: 4 !important;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease !important;
+  transition: transform 0.2s var(--x58-ease-out), box-shadow 0.2s ease !important;
 }
 
 html.modern-yellow-lab .profile-avatar-camera-btn:hover,

@@ -20,11 +20,11 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
     <section class="fare-confirm-card">
       <header class="fare-confirm-header">
         <div><small>CONFIRMAR VIAJE</small><strong>Tu +58 Express</strong></div>
-        <button type="button" class="fare-preview-collapse" aria-expanded="true" aria-label="Minimizar confirmación">${icon('chevronDown', 19)}</button>
+        <button type="button" class="fare-preview-collapse" aria-expanded="true" aria-label="Minimizar confirmación">${icon('chevronDown', 20)}</button>
       </header>
       <div class="fare-preview-body">
         <div class="fare-destination-row">
-          <span class="fare-pin">${icon('mapPin', 19)}</span>
+          <span class="fare-pin">${icon('mapPin', 20)}</span>
           <div><small>DESTINO SELECCIONADO</small><strong>${escapeHtml(fareData.destination)}</strong></div>
           <button type="button" class="btn-cancel-route-icon" aria-label="Cambiar destino">${icon('close', 16)}</button>
         </div>
@@ -42,11 +42,11 @@ export function renderFarePreview(fareData, onConfirm, onChangePayment, onCancel
           <div class="fare-metric"><small>Tiempo</small><strong>${escapeHtml(fareData.duration)}</strong></div>
         </div>
         <button type="button" id="payment-selector-btn" class="fare-payment-selector">
-          <span class="payment-leading">${icon('banknote', 19)}</span>
+          <span class="payment-leading">${icon('banknote', 20)}</span>
           <span><small>Método de pago</small><strong>${methodLabels[fareData.paymentMethod] || 'Efectivo'}</strong></span>
-          ${icon('chevronDown', 18)}
+          ${icon('chevronDown', 20)}
         </button>
-        <button type="button" class="confirm-ride-btn">${icon('navigation', 19)} Solicitar viaje ahora</button>
+        <button type="button" class="confirm-ride-btn">${icon('navigation', 20)} Solicitar viaje ahora</button>
         <div class="fare-secondary-actions">
           <button type="button" class="schedule-ride-btn">${icon('calendar', 16)} Programar</button>
           <button type="button" class="btn-cancel-route-full">Cancelar viaje</button>
@@ -168,7 +168,7 @@ function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelR
         border: 1.5px solid var(--accent-secondary); border-radius: 16px; cursor: pointer;
         display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px;
       ">
-        ${icon('calendar', 18)} Programar / Reservar para Más Tarde
+        ${icon('calendar', 20)} Programar / Reservar para Más Tarde
       </button>
 
       <!-- Cancel and Choose New Route Button -->
@@ -224,15 +224,15 @@ export function renderSearchingState(onCancel, rideType = 'MOTO') {
           <p>Contactando ${isCar ? 'automóviles' : 'mototaxistas'} cercanos</p>
           <div class="searching-ride-meta">
             <span>${icon(isCar ? 'car' : 'bike', 18)} <b>${isCar ? 'Automóvil' : 'Moto'}</b></span>
-            <span>${icon('clock', 18)} <small>Tiempo estimado</small><b>2–5 min</b></span>
+            <span>${icon('clock', 20)} <small>Tiempo estimado</small><b>2–5 min</b></span>
           </div>
         </div>
       </div>
       <button type="button" class="searching-minimize-btn" aria-label="Minimizar búsqueda">
-        ${icon('chevronDown', 18)} Minimizar
+        ${icon('chevronDown', 20)} Minimizar
       </button>
       <button type="button" class="searching-cancel-btn cancel-btn">
-        ${icon('close', 18)} Cancelar solicitud
+        ${icon('close', 20)} Cancelar solicitud
       </button>
     </section>
   `;
@@ -279,7 +279,7 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
           </div>
         </div>
         <div class="passenger-trip-card-actions">
-          <button class="trip-card-minimize-btn" type="button" aria-label="Minimizar información del viaje">${icon('chevronDown', 18)}</button>
+          <button class="trip-card-minimize-btn" type="button" aria-label="Minimizar información del viaje">${icon('chevronDown', 20)}</button>
         </div>
       </header>
 
@@ -298,15 +298,15 @@ export function renderDriverCard(driver, trip, onCall, onChat, onCancelTrip, onM
 
       <div class="assigned-driver-actions">
         <button type="button" class="call-btn">
-          ${icon('phone', 19)} Llamar
+          ${icon('phone', 20)} Llamar
         </button>
         <button type="button" class="chat-btn">
-          ${icon('message', 19)} Chat interno
+          ${icon('message', 20)} Chat interno
         </button>
       </div>
 
       <button type="button" class="cancel-driver-trip-btn">
-        ${icon('close', 17)} Cancelar viaje
+        ${icon('close', 16)} Cancelar viaje
       </button>
     </section>
   `;

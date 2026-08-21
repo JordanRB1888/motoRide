@@ -232,9 +232,9 @@ export function renderDriverProfile(container, options = {}) {
         </div>
 
         <div class="driver-profile-documents-card">
-          <span>${icon('shield', 25)}</span>
+          <span>${icon('shield', 24)}</span>
           <div><strong>Mis documentos</strong><small>Envía o actualiza cédula, licencia, RCV y documentos del vehículo.</small></div>
-          <button id="btn-open-driver-documents">Gestionar ${icon('chevronRight', 17)}</button>
+          <button id="btn-open-driver-documents">Gestionar ${icon('chevronRight', 16)}</button>
         </div>
 
         <!-- Admin Direct Support Chat Button Card -->

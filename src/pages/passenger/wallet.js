@@ -28,7 +28,7 @@ const paymentDataMarkup = () => `<div class="wallet-payment-data">
   <div><small>BANCO</small><strong>${PAYMENT_DATA.bank}</strong></div>
   <div><small>CÉDULA / RIF</small><strong>${PAYMENT_DATA.identity}</strong></div>
   <div><small>TELÉFONO</small><strong>${PAYMENT_DATA.phone}</strong></div>
-  <button type="button" data-copy-payment>${icon('copy', 15)} Copiar datos</button>
+  <button type="button" data-copy-payment>${icon('copy', 14)} Copiar datos</button>
 </div>`;
 
 const transactionPresentation = transaction => {
@@ -54,8 +54,8 @@ export function renderWallet(container) {
     const modal = document.createElement('div');
     modal.className = 'wallet-topup-backdrop';
     modal.innerHTML = `<section class="wallet-topup-modal wallet-payment-modal">
-      <button type="button" data-close aria-label="Cerrar">${icon('close', 18)}</button>
-      <span>${icon('smartphone', 22)}</span>
+      <button type="button" data-close aria-label="Cerrar">${icon('close', 20)}</button>
+      <span>${icon('smartphone', 20)}</span>
       <small class="wallet-modal-eyebrow">DATOS OFICIALES +58EXPRESS</small>
       <h3>Realiza tu Pago Móvil</h3>
       <p>Envía el pago a estos datos y guarda la referencia bancaria para registrar la recarga.</p>
@@ -75,8 +75,8 @@ export function renderWallet(container) {
     const modal = document.createElement('div');
     modal.className = 'wallet-topup-backdrop';
     modal.innerHTML = `<form class="wallet-topup-modal">
-      <button type="button" data-close aria-label="Cerrar">${icon('close', 18)}</button>
-      <span>${icon('shield', 22)}</span>
+      <button type="button" data-close aria-label="Cerrar">${icon('close', 20)}</button>
+      <span>${icon('shield', 20)}</span>
       <small class="wallet-modal-eyebrow">VERIFICACIÓN DE RECARGA</small>
       <h3>Registrar recarga</h3>
       <p>La referencia quedará pendiente hasta que administración compruebe el pago.</p>
@@ -120,7 +120,7 @@ export function renderWallet(container) {
 
     container.innerHTML = `<div class="wallet-real-page fade-in">
       <header class="wallet-real-heading">
-        <small>${icon('wallet', 15)} BILLETERA +58EXPRESS</small>
+        <small>${icon('wallet', 14)} BILLETERA +58EXPRESS</small>
         <h2>Tu dinero, con trazabilidad.</h2>
         <p>Las recargas se acreditan únicamente después de validación administrativa.</p>
       </header>
@@ -134,7 +134,7 @@ export function renderWallet(container) {
         </div>
       </section>
       <section class="wallet-real-history">
-        <div class="wallet-history-heading"><h3>${icon('fileText', 19)} Movimientos</h3><span>${transactions.length} registros</span></div>
+        <div class="wallet-history-heading"><h3>${icon('fileText', 20)} Movimientos</h3><span>${transactions.length} registros</span></div>
         <div class="wallet-history-filters">
           <button class="${filter === 'all' ? 'active' : ''}" data-wallet-filter="all">Todos</button>
           <button class="${filter === 'topups' ? 'active' : ''}" data-wallet-filter="topups">Recargas</button>
@@ -149,7 +149,7 @@ export function renderWallet(container) {
             <b>${amount < 0 ? '−' : '+'}$${Math.abs(amount).toFixed(2)}<small>${escapeHtml(transaction.status)}</small></b>
           </article>`;
           }).join('') || `<div class="wallet-empty">
-            <span>${icon('fileText', 34)}</span><strong>Aún no tienes movimientos</strong><p>Tus recargas y pagos aparecerán aquí.</p>
+            <span>${icon('fileText', 32)}</span><strong>Aún no tienes movimientos</strong><p>Tus recargas y pagos aparecerán aquí.</p>
           </div>`}
         </div>
       </section>

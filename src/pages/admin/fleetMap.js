@@ -153,15 +153,15 @@ async function initializeFleetMap(container) {
     const routeLabel = trip ? `${trip.pickup?.address || 'Recogida'} → ${trip.destination?.address || 'Destino'}` : 'Sin viaje activo';
     const battery = Number(driver.batteryLevel ?? driver.battery);
     const speed = Number(driver.speed);
-    panel.innerHTML = `<header>${photo}<div><strong>${escapeHtml(nameOf(driver))}</strong><span class="${status.toLowerCase()}">${statusText(status)}</span></div><button id="close-fleet-driver">${icon('close', 18)}</button></header>
+    panel.innerHTML = `<header>${photo}<div><strong>${escapeHtml(nameOf(driver))}</strong><span class="${status.toLowerCase()}">${statusText(status)}</span></div><button id="close-fleet-driver">${icon('close', 20)}</button></header>
       <div class="fleet-driver-facts">
         <article><span class="fleet-detail-vehicle">${vehicleImage(driver.vehicleType, { decorative: true })}</span><div><small>Vehículo</small><strong>${escapeHtml(`${driver.vehicleBrand || 'No disponible'} ${driver.vehicleModel || ''}`.trim())}</strong></div><code>${escapeHtml(driver.vehiclePlate || 'Sin placa')}</code></article>
-        <article><span>${icon('route', 17)}</span><div><small>Ruta actual</small><strong>${escapeHtml(routeLabel)}</strong></div></article>
-        <article><span>${icon('clock', 17)}</span><div><small>Última actualización GPS</small><strong class="fresh">${relativeTime(driver.updatedAt || driver.location?.updatedAt)}</strong></div></article>
-        <article><span>${icon('trending', 17)}</span><div><small>Velocidad actual</small><strong>${Number.isFinite(speed) ? `${Math.round(speed)} km/h` : 'No disponible'}</strong></div></article>
-        <article><span>${icon('zap', 17)}</span><div><small>Batería</small><strong class="fresh">${Number.isFinite(battery) ? `${Math.round(battery)}%` : 'No disponible'}</strong></div></article>
+        <article><span>${icon('route', 16)}</span><div><small>Ruta actual</small><strong>${escapeHtml(routeLabel)}</strong></div></article>
+        <article><span>${icon('clock', 16)}</span><div><small>Última actualización GPS</small><strong class="fresh">${relativeTime(driver.updatedAt || driver.location?.updatedAt)}</strong></div></article>
+        <article><span>${icon('trending', 16)}</span><div><small>Velocidad actual</small><strong>${Number.isFinite(speed) ? `${Math.round(speed)} km/h` : 'No disponible'}</strong></div></article>
+        <article><span>${icon('zap', 16)}</span><div><small>Batería</small><strong class="fresh">${Number.isFinite(battery) ? `${Math.round(battery)}%` : 'No disponible'}</strong></div></article>
       </div>
-      <footer><button id="fleet-view-trip" ${trip ? '' : 'disabled'}>${icon('map', 17)} Ver viaje</button><button id="fleet-contact-driver" ${driver.phone ? '' : 'disabled'}>${icon('phone', 17)} Contactar</button></footer>`;
+      <footer><button id="fleet-view-trip" ${trip ? '' : 'disabled'}>${icon('map', 16)} Ver viaje</button><button id="fleet-contact-driver" ${driver.phone ? '' : 'disabled'}>${icon('phone', 16)} Contactar</button></footer>`;
     panel.classList.remove('hidden');
     panel.querySelector('#close-fleet-driver').onclick = () => {
       selectedDriverId = null;

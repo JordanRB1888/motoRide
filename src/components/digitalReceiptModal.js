@@ -39,34 +39,34 @@ export function createDigitalReceiptModal({ trip, driver, passenger, onClose }) 
     overlay.innerHTML = `<div class="receipt-shell" id="receipt-modal-card">
         <header class="receipt-brand-header">
             <img src="/app-icon-v2.png" alt="+58Express">
-            <div><h2>+58Express Maracaibo</h2><p>Comprobante digital de viaje</p><span>${icon('checkCircle', 17)} Viaje completado</span></div>
-            <button id="close-receipt-btn" type="button" aria-label="Cerrar comprobante">${icon('close', 23)}</button>
+            <div><h2>+58Express Maracaibo</h2><p>Comprobante digital de viaje</p><span>${icon('checkCircle', 16)} Viaje completado</span></div>
+            <button id="close-receipt-btn" type="button" aria-label="Cerrar comprobante">${icon('close', 24)}</button>
         </header>
 
         <main class="receipt-ticket">
-            <section class="receipt-code-row"><div>${icon('fileText', 22)}<span>RECIBO <strong>#${escapeHtml(code)}</strong></span></div><time>${completedAt.toLocaleDateString('es-VE')}</time></section>
+            <section class="receipt-code-row"><div>${icon('fileText', 20)}<span>RECIBO <strong>#${escapeHtml(code)}</strong></span></div><time>${completedAt.toLocaleDateString('es-VE')}</time></section>
 
             <section class="receipt-route">
                 <div class="receipt-route-line"><i class="pickup"></i><span><b>Origen</b><strong>${escapeHtml(pickup)}</strong></span></div>
                 <div class="receipt-route-line"><i class="destination"></i><span><b>Destino</b><strong>${escapeHtml(destination)}</strong></span></div>
-                <div class="receipt-route-metrics"><article>${icon('mapPin', 19)}<span><small>Distancia</small><strong>${distance.toFixed(1)} km</strong></span></article><article>${icon('clock', 19)}<span><small>Duración</small><strong>${duration} min</strong></span></article></div>
+                <div class="receipt-route-metrics"><article>${icon('mapPin', 20)}<span><small>Distancia</small><strong>${distance.toFixed(1)} km</strong></span></article><article>${icon('clock', 20)}<span><small>Duración</small><strong>${duration} min</strong></span></article></div>
             </section>
 
             <section class="receipt-people">
                 <article><span class="receipt-person-photo">${driverPhoto ? `<img src="${escapeHtml(driverPhoto)}" alt="">` : escapeHtml(driverInitials)}</span><div><small>CONDUCTOR</small><strong>${escapeHtml(driverName)}</strong><p>${escapeHtml(vehicle)} · ${escapeHtml(plate)}</p></div></article>
-                <article><span class="receipt-person-photo">${passengerPhoto ? `<img src="${escapeHtml(passengerPhoto)}" alt="">` : escapeHtml(passengerInitials)}</span><div><small>PASAJERO</small><strong>${escapeHtml(passengerName)}</strong><p class="receipt-paid">${icon('shield', 13)} Pago confirmado</p></div></article>
+                <article><span class="receipt-person-photo">${passengerPhoto ? `<img src="${escapeHtml(passengerPhoto)}" alt="">` : escapeHtml(passengerInitials)}</span><div><small>PASAJERO</small><strong>${escapeHtml(passengerName)}</strong><p class="receipt-paid">${icon('shield', 14)} Pago confirmado</p></div></article>
             </section>
 
             <section class="receipt-payment">
                 <dl><div><dt>Tarifa del viaje</dt><dd>€${fareEUR.toFixed(2)}</dd></div>${tipEUR > 0 ? `<div class="tip"><dt>Propina voluntaria</dt><dd>+€${tipEUR.toFixed(2)}</dd></div>` : ''}</dl>
                 <div class="receipt-total"><div><small>TOTAL PAGADO</small><strong>€${totalPaidEUR.toFixed(2)} <em>EUR</em></strong></div><div><small>Equivalente VES (BCV)</small><strong>${formatVes(totalPaidEUR)}</strong></div></div>
-                <footer><span>${icon('creditCard', 19)}<small>Método de pago</small><strong>${escapeHtml(payment)}</strong></span><b>${icon('shield', 21)}</b></footer>
+                <footer><span>${icon('creditCard', 20)}<small>Método de pago</small><strong>${escapeHtml(payment)}</strong></span><b>${icon('shield', 20)}</b></footer>
             </section>
 
-            <section class="receipt-verification"><span>${icon('checkCircle', 27)}</span><div><strong>Comprobante verificado</strong><p>Registro oficial emitido por +58Express.</p></div><code>${escapeHtml(code.slice(-6))}</code></section>
+            <section class="receipt-verification"><span>${icon('checkCircle', 24)}</span><div><strong>Comprobante verificado</strong><p>Registro oficial emitido por +58Express.</p></div><code>${escapeHtml(code.slice(-6))}</code></section>
         </main>
 
-        <footer class="receipt-actions"><button id="btn-share-whatsapp" type="button">${icon('message', 20)} Compartir por WhatsApp</button><button id="btn-download-pdf" type="button">${icon('download', 19)} Descargar comprobante PDF</button></footer>
+        <footer class="receipt-actions"><button id="btn-share-whatsapp" type="button">${icon('message', 20)} Compartir por WhatsApp</button><button id="btn-download-pdf" type="button">${icon('download', 20)} Descargar comprobante PDF</button></footer>
     </div>`;
 
     const close = () => {
