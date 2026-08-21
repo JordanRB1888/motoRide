@@ -249,3 +249,84 @@ test('H) la pantalla cierra sola al desmontarse y no deja el bucle suelto', () =
   assert.ok(!/requestAnimationFrame\(/.test(landing),
     'el bucle ya no se programa a mano: de eso se encarga el ciclo de vida');
 });
+
+// ------------------------------------- cleanup() es terminal
+
+/**
+ * Una instancia cerrada no puede volver a ponerse en marcha.
+ *
+ * `cleanup()` cancela el fotograma y retira los oyentes, pero eso solo sirve si
+ * ademas cierra la puerta: si `start()` siguiera funcionando despues, bastaria
+ * con una llamada tardia --un cambio de preferencia que llega, un callback que
+ * quedaba en cola-- para resucitar el bucle de una pantalla que ya no existe, y
+ * volveriamos a tener dos generaciones vivas.
+ *
+ * La guarda estaba en el codigo desde el principio; lo que faltaba era esto:
+ * nadie comprobaba que estuviera.
+ */
+
+test('cleanup() es terminal: start() despues no reactiva nada', () => {
+  const { env, lifecycle, dibujados } = montarPantalla();
+  env.desmontar();
+
+  const pedidosTrasCierre = env.pedidos.length;
+  const dibujadosTrasCierre = dibujados.length;
+  const canceladosTrasCierre = env.cancelados.length;
+
+  lifecycle.start();
+
+  assert.equal(env.pedidos.length, pedidosTrasCierre, 'no debe programarse ningún fotograma nuevo');
+  assert.equal(dibujados.length, dibujadosTrasCierre, 'ni dibujarse una escena nueva');
+  assert.equal(env.cancelados.length, canceladosTrasCierre, 'ni cancelarse nada de más');
+  assert.equal(lifecycle.animating, false, 'el bucle no puede reactivarse');
+  assert.equal(lifecycle.disposed, true, 'y la instancia sigue cerrada');
+});
+
+test('cleanup() es terminal también con movimiento reducido', () => {
+  // Con `reduce`, `start()` no programa fotograma pero sí dibuja uno. Tras el
+  // cierre tampoco debe dibujar: pintaria sobre el DOM de una pantalla ida.
+  const { env, lifecycle, dibujados } = montarPantalla({ reducedMotion: true });
+  assert.equal(dibujados.length, 1, 'al montar dibuja una vez');
+
+  env.desmontar();
+  lifecycle.start();
+
+  assert.equal(dibujados.length, 1, 'tras cerrar no debe volver a dibujar');
+  assert.equal(env.pedidos.length, 0);
+  assert.equal(lifecycle.animating, false);
+});
+
+test('cleanup() → start() → addListener() → start() no revive la instancia', () => {
+  const { env, lifecycle, dibujados } = montarPantalla();
+  env.desmontar();
+
+  const pedidos = env.pedidos.length;
+  const pintados = dibujados.length;
+  const oyentes = env.contarOyentes();
+
+  lifecycle.start();
+  lifecycle.addListener(env.ventana, 'mousemove', () => {});
+  lifecycle.start();
+
+  assert.equal(env.pedidos.length - pedidos, 0, 'fotogramas adicionales: debe ser 0');
+  assert.equal(dibujados.length - pintados, 0, 'dibujos adicionales: debe ser 0');
+  assert.equal(env.contarOyentes() - oyentes, 0, 'oyentes añadidos: debe ser 0');
+  assert.equal(lifecycle.listenerCount, 0, 'la cuenta interna tampoco puede crecer');
+  assert.equal(lifecycle.animating, false);
+  assert.equal(lifecycle.disposed, true);
+});
+
+test('tras cerrar, ni stop() ni un fotograma en cola despiertan la instancia', () => {
+  const { env, lifecycle, dibujados } = montarPantalla();
+  const frameEnCola = env.pedidos.at(-1);
+  env.desmontar();
+
+  const cancelados = env.cancelados.length;
+  lifecycle.stop();                    // no hay nada que parar
+  assert.equal(env.cancelados.length, cancelados, 'stop() sobre una instancia cerrada no cancela nada');
+
+  // El navegador entrega el fotograma que ya tenía en cola.
+  frameEnCola.cb(999);
+  assert.equal(dibujados.length, 0, 'ese fotograma no debe pintar');
+  assert.equal(lifecycle.animating, false);
+});
