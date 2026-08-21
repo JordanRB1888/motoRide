@@ -510,7 +510,7 @@
 .um-motion-preview .real-profile-verified { width:max-content;margin:8px auto 0 !important; }
 .um-motion-preview .real-profile-card>p { margin:7px 0 16px !important;text-align:center; }
 .um-motion-preview .real-profile-details { padding:10px 14px !important; }
-.um-motion-preview .real-profile-details label { min-height:38px !important;border-bottom:1px solid rgba(148,163,184,.09); }
+.um-motion-preview .real-profile-details label { min-height:38px !important;border-bottom:1px solid rgba(163,160,154,.09); }
 .um-motion-preview .real-profile-details label:last-child { border-bottom:0; }
 .um-motion-preview .real-profile-details strong { max-width:62% !important;overflow-wrap:anywhere;white-space:normal !important;line-height:1.25; }
 .um-motion-preview .real-profile-stats { margin:14px 0 !important; }

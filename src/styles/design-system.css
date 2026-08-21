@@ -309,6 +309,81 @@ button {
 }
 
 /* =========================================================================
+   ESTADOS DE LOS CONTROLES
+   La auditoria conto 78 reglas :hover frente a 17 :active, 6 :focus-visible,
+   y practicamente ninguna definicion de carga, error o exito.
+
+   En un telefono el hover no existe. Un control cuyo unico estado es :hover
+   no acusa el toque: el usuario pulsa y no pasa nada visible hasta que la
+   accion termina. Este bloque da a todo control una respuesta de pulsacion
+   y define los estados que faltaban, sin tocar su aspecto en reposo.
+   ========================================================================= */
+
+/* Pulsacion — la respuesta que faltaba en movil. */
+button:active,
+a[role='button']:active,
+[role='button']:active,
+.nav-btn:active,
+.role-btn:active,
+.auth-tab:active,
+.role-tab:active,
+.vehicle-choice:active {
+  transform: scale(.985);
+  transition-duration: var(--x58-motion-feedback);
+}
+
+/* Deshabilitado — un solo contrato, no seis interpretaciones. */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[disabled],
+[aria-disabled='true'] {
+  opacity: .55;
+  /* !important porque cinco reglas imponen cursor:pointer con !important, y
+     un control deshabilitado que muestra cursor de pulsable miente. */
+  cursor: not-allowed !important;
+}
+
+button:disabled:active,
+[disabled]:active,
+[aria-disabled='true']:active {
+  /* Un control deshabilitado no debe acusar la pulsacion: seria mentir. */
+  transform: none;
+}
+
+/* Cargando — el control sigue visible y anuncia que esta ocupado. */
+[aria-busy='true'] {
+  cursor: progress !important;
+  opacity: .72;
+}
+
+[aria-busy='true'] > * {
+  pointer-events: none;
+}
+
+/* Error — el campo lo dice con color y borde, nunca solo con color. */
+[aria-invalid='true'],
+.is-error {
+  border-color: var(--x58-danger) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--x58-danger) 18%, transparent);
+}
+
+/* Exito — mismo tratamiento, signo contrario. */
+.is-success {
+  border-color: var(--x58-success) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--x58-success) 18%, transparent);
+}
+
+/* En un dispositivo tactil el hover puede quedarse "pegado" tras el toque:
+   se limita a los punteros que de verdad pueden flotar. */
+@media (hover: none) {
+  *:hover {
+    transition-duration: var(--x58-motion-feedback) !important;
+  }
+}
+
+/* =========================================================================
    SUPERFICIES DEL NAVEGADOR
    Seleccion, cursor y barras de scroll llegan con valores por defecto que no
    pertenecen a ningun sistema de diseno. Es lo primero que delata una interfaz

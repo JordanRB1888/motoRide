@@ -172,3 +172,71 @@ test('el Passenger de Antigravity sigue descartado', () => {
       `${name} resucita el Passenger descartado`);
   }
 });
+
+test('los controles tienen respuesta de pulsación, no solo hover', () => {
+  // La auditoria conto 78 reglas :hover frente a 17 :active. En un telefono
+  // el hover no existe: sin :active el usuario pulsa y no ve nada.
+  const css = system();
+  assert.match(css, /button:active[\s\S]*?transform:\s*scale\(\.985\)/);
+  assert.match(css, /transition-duration:\s*var\(--x58-motion-feedback\)/);
+});
+
+test('deshabilitado, ocupado, error y éxito tienen un contrato único', () => {
+  const css = system();
+  assert.match(css, /\[aria-disabled='true'\][\s\S]*?cursor:\s*not-allowed\s*!important/,
+    'un control deshabilitado con cursor de pulsable miente al usuario');
+  assert.match(css, /\[aria-busy='true'\][\s\S]*?cursor:\s*progress/);
+  assert.match(css, /\[aria-invalid='true'\][\s\S]*?border-color:\s*var\(--x58-danger\)/);
+  assert.match(css, /\.is-success[\s\S]*?border-color:\s*var\(--x58-success\)/);
+  assert.match(css, /button:disabled:active[\s\S]*?transform:\s*none/,
+    'un control deshabilitado no debe acusar la pulsación');
+});
+
+test('las superficies del navegador están tematizadas', () => {
+  const css = system();
+  assert.match(css, /::selection[\s\S]*?background:\s*var\(--x58-yellow-soft\)/);
+  assert.match(css, /caret-color:\s*var\(--x58-yellow\)/);
+  assert.match(css, /scrollbar-color:\s*var\(--x58-border-strong\)/);
+});
+
+test('la iconografía tiene una escala, no 21 tamaños sueltos', () => {
+  const css = system();
+  for (const t of ['--x58-icon-inline', '--x58-icon-small', '--x58-icon-default',
+                   '--x58-icon-large', '--x58-icon-feature']) {
+    assert.match(css, new RegExp(`${t}\s*:`), `falta ${t}`);
+  }
+  // Los tamanos pasados a icon() deben caer en la escala.
+  const escala = new Set([14, 16, 20, 24, 32, 43, 48]);
+  const fuera = [];
+  const walk = dir => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.name.endsWith('.js')) continue;
+      const src = fs.readFileSync(full, 'utf8');
+      for (const m of src.matchAll(/icon\(\s*'[a-zA-Z0-9_]+'\s*,\s*(\d+)/g)) {
+        const n = Number(m[1]);
+        if (!escala.has(n)) fuera.push(`${entry.name}:${n}`);
+      }
+    }
+  };
+  walk(path.join(root, 'src'));
+  assert.deepEqual(fuera, [], `tamaños de icono fuera de escala: ${fuera.slice(0, 8).join(', ')}`);
+});
+
+test('no reaparece el rebote con sobreimpulso', () => {
+  for (const { name, css } of readStyles()) {
+    assert.doesNotMatch(css, /cubic-bezier\([^)]*1\.[0-9]/,
+      `${name} usa una curva con sobreimpulso; el sistema usa ease-out exponencial`);
+  }
+});
+
+test('las superficies principales usan grafito cálido, no pizarra azul', () => {
+  // Passenger, Driver y Admin mantenian paletas privadas frias.
+  for (const { name, css } of readStyles()) {
+    assert.doesNotMatch(css, /rgba\(148\s*,\s*163\s*,\s*184/,
+      `${name} vuelve a la linea de pizarra azul`);
+    assert.doesNotMatch(css, /rgba\(7\s*,\s*14\s*,\s*23/,
+      `${name} vuelve al panel azulado`);
+  }
+});
