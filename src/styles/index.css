@@ -650,8 +650,8 @@ html.theme-light body,
 html.theme-light .admin-app,
 html.theme-light .passenger-app,
 html.theme-light .driver-app {
-  background-color: #e2e8f0 !important;
-  color: #0f172a !important;
+  background-color: var(--x58-surface-0) !important;
+  color: var(--x58-text-primary) !important;
 }
 
 /* Light Mode Header Bar & Top Search */

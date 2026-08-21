@@ -1526,24 +1526,26 @@ html.modern-yellow-lab :is(.finance-section-tabs, .driver-admin-filters, .topup-
  * ============================================================ */
 
 html.modern-yellow-lab.theme-light {
-  --lab-bg: #f4f5f9;
-  --lab-bg-soft: #ffffff;
-  --lab-panel: rgba(255, 255, 255, .96);
-  --lab-panel-strong: #ffffff;
+  /* Tema claro re-apuntado al sistema: antes definia su propia paleta fria
+     (#f4f5f9, grises azulados) que ganaba por especificidad al sistema. */
+  --lab-bg: var(--x58-surface-0);
+  --lab-bg-soft: var(--x58-surface-1);
+  --lab-panel: var(--x58-surface-2);
+  --lab-panel-strong: var(--x58-surface-raised);
   --lab-panel-warm: #fff8e0;
-  --lab-line: rgba(18, 20, 28, .11);
-  --lab-line-bright: rgba(176, 128, 0, .42);
+  --lab-line: var(--x58-border-subtle);
+  --lab-line-bright: var(--x58-yellow-line);
   --lab-yellow: var(--x58-yellow);
-  --lab-yellow-2: #ffb800;
+  --lab-yellow-2: var(--x58-yellow-active);
   --lab-yellow-ink: #8a6200;
-  --lab-yellow-soft: rgba(255, 193, 7, .16);
-  --lab-white: #14161c;
-  --lab-muted: #5b6070;
-  --lab-muted-2: #767c8c;
-  --lab-green: #0f8a52;
-  --lab-red: #cc2f43;
-  --lab-blue: #0b6fa8;
-  --lab-shadow: 0 20px 54px rgba(24, 27, 38, .13);
+  --lab-yellow-soft: var(--x58-yellow-soft);
+  --lab-white: var(--x58-text-primary);
+  --lab-muted: var(--x58-text-secondary);
+  --lab-muted-2: var(--x58-text-muted);
+  --lab-green: var(--x58-success);
+  --lab-red: var(--x58-danger);
+  --lab-blue: var(--x58-info);
+  --lab-shadow: var(--x58-shadow-modal);
   color-scheme: light;
   background: var(--lab-bg);
 }

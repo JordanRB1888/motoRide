@@ -381,7 +381,7 @@
 .um-motion-preview .nav-item.active { color:var(--um-yellow) !important;border-color:rgba(255,196,0,.25) !important;background:linear-gradient(90deg,rgba(255,196,0,.12),rgba(255,196,0,.015)) !important;box-shadow:inset 3px 0 var(--um-yellow),0 10px 25px rgba(0,0,0,.2) !important; }
 
 /* Complete light theme: effects stay, surfaces and contrast are remapped. */
-.um-motion-preview.theme-light body { background:#edf0f3; }
+.um-motion-preview.theme-light body { background:var(--x58-surface-0); }
 .um-motion-preview.theme-light .passenger-app,
 .um-motion-preview.theme-light .driver-app,
 .um-motion-preview.theme-light .page-overlay.active,
@@ -391,7 +391,7 @@
 .um-motion-preview.theme-light .earnings-premium,
 .um-motion-preview.theme-light .driver-trips-page,
 .um-motion-preview.theme-light .documents-page,
-.um-motion-preview.theme-light .scheduled-rides-view { color:#121821 !important;background:radial-gradient(circle at 50% -10%,rgba(255,196,0,.14),transparent 34%),#edf0f3 !important; }
+.um-motion-preview.theme-light .scheduled-rides-view { color:#121821 !important;background:radial-gradient(circle at 50% -10%,rgba(255,196,0,.14),transparent 34%),var(--x58-surface-0) !important; }
 
 .um-motion-preview.theme-light :is(.passenger-mobile-header,.driver-header,.stats-bar,.top-search-bar,.bottom-nav,.driver-nav-tabs,.offline-overlay,.wallet-balance-card,.wallet-movements,.wallet-movement-card,.passenger-history-summary article,.passenger-history-card,.passenger-history-empty,.real-profile-card,.real-profile-stats article,.real-profile-balance,.real-profile-documents,.real-profile-support,.earnings-balance-card,.earnings-chart-card,.driver-trip-card,.driver-trip-detail,.document-verification-summary,.document-real-list article,.scheduled-real-list article,.fare-preview,.active-ride,.searching-ride-card,.assigned-driver-card,.active-trip-panel,.trip-summary-card) {
   border-color:rgba(17,24,39,.11) !important;
@@ -407,9 +407,9 @@
 .um-motion-preview.theme-light :is(.bottom-sheet,.payment-modal-content,.notification-center-modal,.chat-modal,.driver-rating-premium,.passenger-rating-card,.driver-application-modal,.receipt-card,.topup-review-modal,.wallet-topup-modal,.support-broadcast-modal,.user-create-modal,.sos-modal-content) { border-color:rgba(17,24,39,.12) !important;background:radial-gradient(circle at 15% 0%,rgba(255,196,0,.11),transparent 35%),linear-gradient(150deg,#fff,#f1f3f5) !important;color:#121821 !important;box-shadow:0 28px 70px rgba(31,41,55,.22),inset 0 1px #fff !important; }
 .um-motion-preview.theme-light .custom-toast-pill-master { background:radial-gradient(circle at 0 50%,var(--toast-glow),transparent 42%),rgba(255,255,255,.97) !important;color:#17202b !important;box-shadow:0 13px 32px rgba(31,41,55,.18),inset 0 1px #fff !important; }
 .um-motion-preview.theme-light .custom-toast-copy { color:#17202b !important; }
-.um-motion-preview.theme-light .admin-app { --admin-bg:#edf0f3;--admin-panel:#fff;--admin-panel-2:#f6f7f9;--admin-line:rgba(17,24,39,.1);background:#edf0f3 !important;color:#121821 !important; }
+.um-motion-preview.theme-light .admin-app { --admin-bg:#edf0f3;--admin-panel:#fff;--admin-panel-2:#f6f7f9;--admin-line:rgba(17,24,39,.1);background:var(--x58-surface-0) !important;color:#121821 !important; }
 .um-motion-preview.theme-light .admin-sidebar,.um-motion-preview.theme-light .admin-header { background:rgba(255,255,255,.96) !important;border-color:rgba(17,24,39,.09) !important; }
-.um-motion-preview.theme-light .admin-content { background:radial-gradient(circle at 45% -12%,rgba(255,196,0,.12),transparent 32%),#edf0f3 !important; }
+.um-motion-preview.theme-light .admin-content { background:radial-gradient(circle at 45% -12%,rgba(255,196,0,.12),transparent 32%),var(--x58-surface-0) !important; }
 .um-motion-preview.theme-light :is(.operations-map-card,.ops-panel,.metric-card,.data-table-container,.kpi-card,.finance-metric,.finance-card,.support-inbox,.support-chat-panel,.support-context>section,.fleet-status-strip,.fleet-map-shell,.users-command-view>section) { border-color:rgba(17,24,39,.1) !important;background:linear-gradient(150deg,#fff,#f3f5f7) !important;color:#121821 !important;box-shadow:0 16px 38px rgba(31,41,55,.1),inset 0 1px #fff !important; }
 .um-motion-preview.theme-light .data-table :is(td,th),.um-motion-preview.theme-light .finance-table :is(td,th) { color:#17202b !important; }
 
