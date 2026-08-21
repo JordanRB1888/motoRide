@@ -224,7 +224,7 @@
   overflow: visible;
 }
 
-.vehicle-shell { fill: #ffc400; stroke: #fff0a6; stroke-width: 1.1; }
+.vehicle-shell { fill: var(--x58-yellow); stroke: #fff0a6; stroke-width: 1.1; }
 .vehicle-highlight { fill: rgba(255, 245, 180, .38); }
 .vehicle-glass { fill: #17354a; stroke: #7ddfff; stroke-width: .8; }
 .vehicle-tyre { fill: #02070d; stroke: #718096; stroke-width: 1; }

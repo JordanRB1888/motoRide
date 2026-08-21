@@ -204,7 +204,7 @@ html.modern-yellow-lab .cyber-ground-flare {
 html.modern-yellow-lab .speed-spark {
   position: absolute;
   border-radius: 50%;
-  background: #ffc400;
+  background: var(--x58-yellow);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -246,7 +246,7 @@ html.modern-yellow-lab .speed-val {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 0.94rem;
   font-weight: 900;
-  color: #ffc400;
+  color: var(--x58-yellow);
   text-shadow: 0 0 8px rgba(255, 196, 0, 0.6);
   min-width: 24px;
   text-align: right;
@@ -281,7 +281,7 @@ html.modern-yellow-lab .liquid-brand-title {
 }
 
 html.modern-yellow-lab .liquid-brand-title .liquid-highlight {
-  background: linear-gradient(135deg, #fff099 0%, #ffc400 50%, #e68a00 100%);
+  background: linear-gradient(135deg, #fff099 0%, var(--x58-yellow) 50%, #e68a00 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 0 20px rgba(255, 196, 0, 0.35);
@@ -306,7 +306,7 @@ html.modern-yellow-lab .liquid-peek-btn {
   border-radius: 999px;
   background: rgba(255, 196, 0, 0.1);
   border: 1px solid rgba(255, 196, 0, 0.3);
-  color: #ffc400;
+  color: var(--x58-yellow);
   font-weight: 800;
   font-size: 0.9rem;
   cursor: pointer;
@@ -315,7 +315,7 @@ html.modern-yellow-lab .liquid-peek-btn {
 }
 
 html.modern-yellow-lab .liquid-peek-btn:hover {
-  background: #ffc400;
+  background: var(--x58-yellow);
   color: #07090e;
   transform: translateY(-2px);
   box-shadow: 0 8px 22px rgba(255, 196, 0, 0.32);
@@ -429,10 +429,10 @@ html.modern-yellow-lab .role-tab:hover {
 }
 
 html.modern-yellow-lab .role-tab.active {
-  background: linear-gradient(145deg, #ffc400, #ffaa00) !important;
+  background: linear-gradient(145deg, var(--x58-yellow), #ffaa00) !important;
   color: #07090e !important;
   font-weight: 900 !important;
-  border-color: #ffc400 !important;
+  border-color: var(--x58-yellow) !important;
   box-shadow: 0 4px 14px rgba(255, 196, 0, 0.28) !important;
 }
 
@@ -489,7 +489,7 @@ html.modern-yellow-lab .auth-tab:hover {
 }
 
 html.modern-yellow-lab .auth-tab.active {
-  background: linear-gradient(145deg, #ffc400, #ffaa00) !important;
+  background: linear-gradient(145deg, var(--x58-yellow), #ffaa00) !important;
   color: #07090e !important;
   font-weight: 900 !important;
   box-shadow: 0 3px 14px rgba(255, 196, 0, 0.24) !important;
@@ -530,7 +530,7 @@ html.modern-yellow-lab .liquid-input-box {
 }
 
 html.modern-yellow-lab .liquid-input-box:focus-within {
-  border-color: #ffc400 !important;
+  border-color: var(--x58-yellow) !important;
   background: rgba(12, 16, 24, 0.95) !important;
   box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.15), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
 }
@@ -557,12 +557,12 @@ html.modern-yellow-lab .liquid-input-box input:-webkit-autofill:hover,
 html.modern-yellow-lab .liquid-input-box input:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0 1000px #07090e inset !important;
   -webkit-text-fill-color: #ffffff !important;
-  caret-color: #ffc400 !important;
+  caret-color: var(--x58-yellow) !important;
   transition: background-color 5000s ease-in-out 0s;
 }
 
 html.modern-yellow-lab .liquid-input-box .input-ico {
-  color: #ffc400;
+  color: var(--x58-yellow);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -572,7 +572,7 @@ html.modern-yellow-lab .liquid-input-box .input-ico {
 }
 
 html.modern-yellow-lab .country-pill {
-  color: #ffc400;
+  color: var(--x58-yellow);
   font-weight: 800;
   font-size: 0.78rem;
   margin-right: 4px;
@@ -596,7 +596,7 @@ html.modern-yellow-lab .liquid-eye-toggle {
 }
 
 html.modern-yellow-lab .liquid-eye-toggle:hover {
-  color: #ffc400 !important;
+  color: var(--x58-yellow) !important;
 }
 
 /* Helper Row (Remember me + Forgot password) */
@@ -630,8 +630,8 @@ html.modern-yellow-lab .liquid-checkbox {
 }
 
 html.modern-yellow-lab .liquid-checkbox:checked {
-  background: #ffc400;
-  border-color: #ffc400;
+  background: var(--x58-yellow);
+  border-color: var(--x58-yellow);
 }
 
 html.modern-yellow-lab .liquid-checkbox:checked::after {
@@ -645,7 +645,7 @@ html.modern-yellow-lab .liquid-checkbox:checked::after {
 }
 
 html.modern-yellow-lab .liquid-forgot-link {
-  color: #ffc400;
+  color: var(--x58-yellow);
   text-decoration: none;
   font-weight: 600;
   opacity: 0.88;
@@ -667,7 +667,7 @@ html.modern-yellow-lab .liquid-submit-btn {
   justify-content: center !important;
   gap: 8px !important;
   border-radius: 16px !important;
-  background: linear-gradient(145deg, #ffc400 0%, #e69d00 100%) !important;
+  background: linear-gradient(145deg, var(--x58-yellow) 0%, #e69d00 100%) !important;
   color: #07090e !important;
   font-weight: 800 !important;
   font-size: 0.98rem !important;
@@ -738,8 +738,8 @@ html.modern-yellow-lab .conductor-apply-btn {
   min-height: 38px !important;
   border-radius: 12px !important;
   background: rgba(255, 196, 0, 0.1) !important;
-  border: 1px solid #ffc400 !important;
-  color: #ffc400 !important;
+  border: 1px solid var(--x58-yellow) !important;
+  color: var(--x58-yellow) !important;
   font-weight: 800 !important;
   font-size: 0.8rem !important;
   display: flex !important;
@@ -751,7 +751,7 @@ html.modern-yellow-lab .conductor-apply-btn {
 }
 
 html.modern-yellow-lab .conductor-apply-btn:hover {
-  background: #ffc400 !important;
+  background: var(--x58-yellow) !important;
   color: #07090e !important;
 }
 
@@ -764,7 +764,7 @@ html.modern-yellow-lab .register-link {
 }
 
 html.modern-yellow-lab .register-link a {
-  color: #ffc400;
+  color: var(--x58-yellow);
   font-weight: 700;
   text-decoration: none;
 }
@@ -1056,7 +1056,7 @@ html.modern-yellow-lab .real-profile-accent,
   right: 24px !important;
   height: 3px !important;
   border-radius: 0 0 4px 4px !important;
-  background: linear-gradient(90deg, #ffe02b 0%, #ffc400 50%, #ff9d00 100%) !important;
+  background: linear-gradient(90deg, #ffe02b 0%, var(--x58-yellow) 50%, #ff9d00 100%) !important;
   box-shadow: 0 0 16px rgba(255, 196, 0, 0.4) !important;
 }
 
@@ -1075,7 +1075,7 @@ html.modern-yellow-lab .real-profile-avatar,
   height: 96px !important;
   border-radius: 50% !important;
   padding: 3px !important;
-  background: linear-gradient(135deg, #ffc400, #ff8c00) !important;
+  background: linear-gradient(135deg, var(--x58-yellow), #ff8c00) !important;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 196, 0, 0.25) !important;
   display: flex !important;
   align-items: center !important;
@@ -1091,7 +1091,7 @@ html.modern-yellow-lab .real-profile-avatar .local-avatar,
   font-size: 1.6rem !important;
   font-weight: 900 !important;
   background: #151d2d !important;
-  color: #ffc400 !important;
+  color: var(--x58-yellow) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1199,7 +1199,7 @@ html.modern-yellow-lab .real-profile-details span,
 
 html.modern-yellow-lab .real-profile-details span svg,
 .real-profile-details span svg {
-  stroke: #ffc400 !important;
+  stroke: var(--x58-yellow) !important;
 }
 
 html.modern-yellow-lab .real-profile-details strong,
@@ -1231,7 +1231,7 @@ html.modern-yellow-lab .real-profile-stats article,
 
 html.modern-yellow-lab .real-profile-stats article span,
 .real-profile-stats article span {
-  color: #ffc400 !important;
+  color: var(--x58-yellow) !important;
 }
 
 html.modern-yellow-lab .real-profile-stats small,
@@ -1245,7 +1245,7 @@ html.modern-yellow-lab .real-profile-stats small,
 html.modern-yellow-lab .real-profile-stats strong,
 .real-profile-stats strong {
   display: block !important;
-  color: #ffc400 !important;
+  color: var(--x58-yellow) !important;
   font-size: 1.15rem !important;
   font-weight: 900 !important;
 }
@@ -1258,7 +1258,7 @@ html.modern-yellow-lab .real-profile-secondary,
   border-radius: 16px !important;
   border: 1px solid rgba(255, 196, 0, 0.4) !important;
   background: linear-gradient(145deg, rgba(255, 196, 0, 0.1), rgba(255, 196, 0, 0.02)) !important;
-  color: #ffc400 !important;
+  color: var(--x58-yellow) !important;
   font-weight: 800 !important;
   font-size: 0.75rem !important;
   display: flex !important;
@@ -1272,7 +1272,7 @@ html.modern-yellow-lab .real-profile-secondary,
 html.modern-yellow-lab .real-profile-secondary:hover,
 .real-profile-secondary:hover {
   background: rgba(255, 196, 0, 0.15) !important;
-  border-color: #ffc400 !important;
+  border-color: var(--x58-yellow) !important;
 }
 
 html.modern-yellow-lab .real-profile-support,
@@ -1533,7 +1533,7 @@ html.modern-yellow-lab.theme-light {
   --lab-panel-warm: #fff8e0;
   --lab-line: rgba(18, 20, 28, .11);
   --lab-line-bright: rgba(176, 128, 0, .42);
-  --lab-yellow: #ffd21f;
+  --lab-yellow: var(--x58-yellow);
   --lab-yellow-2: #ffb800;
   --lab-yellow-ink: #8a6200;
   --lab-yellow-soft: rgba(255, 193, 7, .16);

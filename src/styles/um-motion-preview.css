@@ -257,7 +257,6 @@
   background-size: 220% 100% !important;
   color: #090b0d !important;
   box-shadow: 0 12px 30px rgba(255, 183, 0, .18) !important;
-  animation: umButtonGlow 3.4s ease-in-out infinite;
   transition: transform .2s ease, box-shadow .2s ease !important;
 }
 
@@ -354,7 +353,6 @@
   background-size:220% 100% !important;
   color:#080a0c !important;
   box-shadow:0 11px 28px rgba(255,184,0,.16) !important;
-  animation:umButtonGlow 3.6s ease-in-out infinite;
 }
 
 /* Dialogs, sheets and chat retain their structure but share one surface. */
@@ -577,15 +575,14 @@
   100% { transform: translateX(0); filter: blur(0) drop-shadow(0 4px 7px rgba(255, 196, 0, .22)); }
 }
 
+/* Animado con transform en lugar de left: 'left' recalcula la disposicion en
+   cada fotograma, mientras que translateX se compone en la GPU. El recorrido
+   visible es el mismo; el coste, no. El desplazamiento se expresa en unidades
+   del propio elemento (ancho 42%), por eso el recorrido es mayor que 100%. */
 @keyframes umEdgeScan {
-  0%, 16% { left: -55%; opacity: 0; }
+  0%, 16% { transform: translateX(0); opacity: 0; }
   28% { opacity: 1; }
-  64%, 100% { left: 118%; opacity: 0; }
-}
-
-@keyframes umButtonGlow {
-  0%, 100% { background-position: 0 0; }
-  50% { background-position: 100% 0; }
+  64%, 100% { transform: translateX(412%); opacity: 0; }
 }
 
 @keyframes umOnlineEnter {
