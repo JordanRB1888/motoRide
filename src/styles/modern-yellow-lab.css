@@ -95,89 +95,766 @@ html.modern-yellow-lab :is(input, select, textarea, .search-input-wrapper,
 
 html.modern-yellow-lab :is(input, textarea)::placeholder { color: #656976 !important; }
 
-/* Landing and authentication */
-html.modern-yellow-lab .landing-container {
+/* +58Express — Cyber Tachometer & Holographic Glass Experience */
+html.modern-yellow-lab .landing-container.cyber-moto-experience {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 4vw, 32px) 14px;
   background:
-    radial-gradient(circle at 50% 6%, rgba(255, 210, 31, .12), transparent 24%),
-    linear-gradient(180deg, #101116, #090a0e 68%) !important;
+    radial-gradient(circle at 50% 10%, rgba(255, 196, 0, .15) 0%, transparent 40%),
+    radial-gradient(circle at 80% 85%, rgba(255, 150, 0, .07) 0%, transparent 40%),
+    linear-gradient(180deg, #090c12 0%, #030407 100%) !important;
+  box-sizing: border-box;
+  position: relative;
+  overflow-x: hidden;
 }
 
-html.modern-yellow-lab .landing-background .grid-pattern { opacity: .12; }
-html.modern-yellow-lab .landing-background .glow-orb { filter: blur(80px); opacity: .18; }
+html.modern-yellow-lab .cyber-speed-lines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(255, 196, 0, 0.015) 40px, rgba(255, 196, 0, 0.015) 41px);
+  pointer-events: none;
+}
 
-html.modern-yellow-lab .landing-card-premium {
-  width: min(92vw, 510px) !important;
-  padding: clamp(24px, 4vw, 40px) !important;
+/* Holographic Card with Border Beam */
+html.modern-yellow-lab .cyber-auth-card {
+  width: 100% !important;
+  max-width: 390px !important;
+  padding: 26px 22px 24px !important;
   border-radius: 36px !important;
-  background: linear-gradient(155deg, rgba(28, 30, 40, .96), rgba(14, 15, 21, .97)) !important;
-  border: 1px solid rgba(255, 255, 255, .12) !important;
-  box-shadow: 0 36px 100px rgba(0, 0, 0, .55) !important;
+  background:
+    radial-gradient(circle at var(--glare-x, 50%) var(--glare-y, 25%), rgba(255, 196, 0, 0.08) 0%, transparent 55%),
+    linear-gradient(160deg, rgba(22, 26, 36, 0.9), rgba(10, 13, 18, 0.95)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.9),
+    0 0 40px rgba(255, 196, 0, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.14) !important;
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  box-sizing: border-box !important;
+  position: relative;
+  transition: all 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 
-html.modern-yellow-lab .landing-brand-icon {
-  width: 94px !important;
-  height: 94px !important;
-  padding: 7px;
-  border-radius: 30px !important;
-  border-color: var(--lab-line-bright) !important;
-  background: #111218 !important;
-  box-shadow: 0 15px 36px rgba(0, 0, 0, .36), 0 0 34px rgba(255, 210, 31, .08) !important;
+/* Tachometer Stage & Center Bera SBR */
+html.modern-yellow-lab .cyber-hero-stage {
+  position: relative;
+  width: 190px;
+  height: 175px;
+  margin: -10px auto 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
 }
 
-html.modern-yellow-lab .landing-header .logo-text {
-  margin-top: 20px !important;
-  font-size: clamp(2rem, 6vw, 2.6rem) !important;
-  letter-spacing: -.07em !important;
+html.modern-yellow-lab .tachometer-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 0 12px rgba(255, 196, 0, 0.2));
 }
 
-html.modern-yellow-lab .landing-header .tagline { color: var(--lab-muted) !important; }
-
-html.modern-yellow-lab .role-selection h2,
-html.modern-yellow-lab .login-form h2 {
-  margin: 30px 0 16px !important;
-  font-size: 1.25rem !important;
-  letter-spacing: -.035em;
+html.modern-yellow-lab .tacho-rpm-ring {
+  transition: stroke-dashoffset 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-html.modern-yellow-lab .role-btn {
-  min-height: 84px !important;
-  margin-bottom: 11px !important;
-  padding: 13px 17px !important;
-  border: 1px solid var(--lab-line) !important;
-  border-left: 1px solid var(--lab-line) !important;
-  border-radius: 22px !important;
-  background: rgba(12, 13, 18, .76) !important;
-  box-shadow: inset 0 1px rgba(255, 255, 255, .025) !important;
-  transition: border-color .18s, transform .18s, background .18s;
+html.modern-yellow-lab .cyber-moto-container {
+  position: relative;
+  width: 136px;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: 50% 80%;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease;
+  z-index: 2;
 }
 
-html.modern-yellow-lab :is(.role-btn.passenger-btn, .role-btn.driver-btn, .role-btn.admin-btn) {
-  border-color: var(--lab-line) !important;
-  border-left-color: var(--lab-line) !important;
+html.modern-yellow-lab .cyber-moto-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 12px rgba(255, 196, 0, 0.3));
+  pointer-events: none;
 }
 
-html.modern-yellow-lab :is(.role-btn.passenger-btn, .role-btn.driver-btn, .role-btn.admin-btn):hover {
-  border-color: var(--lab-line-bright) !important;
+html.modern-yellow-lab .cyber-ground-flare {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 105px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.9) 0%, rgba(255, 196, 0, 0.18) 45%, transparent 70%);
+  pointer-events: none;
 }
 
-html.modern-yellow-lab .role-btn:hover {
+/* Speed Sparks */
+html.modern-yellow-lab .speed-spark {
+  position: absolute;
+  border-radius: 50%;
+  background: #ffc400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+html.modern-yellow-lab .cyber-hero-stage:hover .speed-spark,
+html.modern-yellow-lab .cyber-moto-container.is-accelerating .speed-spark {
+  opacity: 0.8;
+  animation: sparkTrail 0.8s ease-out infinite;
+}
+
+html.modern-yellow-lab .speed-spark.sp1 { width: 4px; height: 4px; bottom: 20px; left: 15px; animation-delay: 0.1s; }
+html.modern-yellow-lab .speed-spark.sp2 { width: 3px; height: 3px; bottom: 28px; left: 25px; animation-delay: 0.3s; }
+html.modern-yellow-lab .speed-spark.sp3 { width: 5px; height: 5px; bottom: 15px; left: 8px; animation-delay: 0.5s; }
+
+@keyframes sparkTrail {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.9; }
+  100% { transform: translate(-20px, -12px) scale(0.2); opacity: 0; }
+}
+
+/* Digital Speed HUD Badge */
+html.modern-yellow-lab .hud-speed-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(8, 11, 16, 0.92);
+  border: 1px solid rgba(255, 196, 0, 0.38);
+  border-radius: 999px;
+  padding: 2px 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7), 0 0 10px rgba(255, 196, 0, 0.15);
+  z-index: 3;
+}
+
+html.modern-yellow-lab .speed-val {
+  font-family: 'Courier New', monospace;
+  font-size: 0.94rem;
+  font-weight: 900;
+  color: #ffc400;
+  text-shadow: 0 0 8px rgba(255, 196, 0, 0.6);
+  min-width: 24px;
+  text-align: right;
+}
+
+html.modern-yellow-lab .speed-unit {
+  font-family: sans-serif;
+  font-size: 0.52rem;
+  font-weight: 800;
+  color: #8fa0b5;
+  letter-spacing: 0.05em;
+}
+
+/* Accelerating Rev Animation */
+html.modern-yellow-lab .cyber-moto-container.is-accelerating {
+  filter: drop-shadow(0 0 24px rgba(255, 196, 0, 0.7)) brightness(1.15) !important;
+}
+
+/* Header & Brand Typography */
+html.modern-yellow-lab .liquid-card-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+html.modern-yellow-lab .liquid-brand-title {
+  font-size: 2.15rem !important;
+  font-weight: 900 !important;
+  color: #ffffff !important;
+  letter-spacing: -0.04em !important;
+  margin: 0 0 4px !important;
+  line-height: 1.1;
+}
+
+html.modern-yellow-lab .liquid-brand-title .liquid-highlight {
+  background: linear-gradient(135deg, #fff099 0%, #ffc400 50%, #e68a00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 20px rgba(255, 196, 0, 0.35);
+}
+
+html.modern-yellow-lab .liquid-brand-subtitle {
+  font-size: 0.84rem !important;
+  color: #8fa0b5 !important;
+  margin: 0 !important;
+  font-weight: 500;
+}
+
+/* Peek Button (Initial Collapsed State) */
+html.modern-yellow-lab .liquid-peek-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 145px;
+  margin: 10px auto 0;
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: rgba(255, 196, 0, 0.1);
+  border: 1px solid rgba(255, 196, 0, 0.3);
+  color: #ffc400;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(255, 196, 0, 0.16);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html.modern-yellow-lab .liquid-peek-btn:hover {
+  background: #ffc400;
+  color: #07090e;
   transform: translateY(-2px);
-  border-color: var(--lab-line-bright) !important;
-  background: var(--lab-yellow-soft) !important;
+  box-shadow: 0 8px 22px rgba(255, 196, 0, 0.32);
 }
 
-html.modern-yellow-lab .role-btn .role-icon {
-  width: 51px !important;
-  height: 51px !important;
+html.modern-yellow-lab .peek-chevron {
+  display: flex;
+  align-items: center;
+  transition: transform 0.3s ease;
+}
+
+html.modern-yellow-lab .liquid-peek-btn:hover .peek-chevron {
+  transform: translateY(2px);
+}
+
+/* Disclose Container State Transitions */
+html.modern-yellow-lab .liquid-disclose-wrap {
+  position: relative;
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  transition: max-height 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease;
+}
+
+/* Expanded Card State */
+html.modern-yellow-lab .liquid-auth-card.is-open .liquid-peek-btn {
+  opacity: 0;
+  max-height: 0;
+  margin: 0 auto;
+  padding: 0;
+  pointer-events: none;
+  overflow: hidden;
+  transform: scale(0.9);
+}
+
+html.modern-yellow-lab .liquid-auth-card.is-open .liquid-disclose-wrap {
+  max-height: 800px;
+  opacity: 1;
+  pointer-events: auto;
+  overflow: visible;
+  margin-top: 10px;
+}
+
+/* Settigation Liquid Wipe-in Animation for elements */
+html.modern-yellow-lab .stagger-item {
+  clip-path: inset(-10% -10% 100% -10%);
+  transform: translateY(22px);
+  opacity: 0;
+  transition: clip-path 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+}
+
+html.modern-yellow-lab .liquid-auth-card.is-open .stagger-item {
+  clip-path: inset(-10% -10% -10% -10%);
+  transform: translateY(0);
+  opacity: 1;
+}
+
+html.modern-yellow-lab .stagger-item.s1 { transition-delay: 0.04s; }
+html.modern-yellow-lab .stagger-item.s2 { transition-delay: 0.08s; }
+html.modern-yellow-lab .stagger-item.s3 { transition-delay: 0.12s; }
+html.modern-yellow-lab .stagger-item.s4 { transition-delay: 0.16s; }
+html.modern-yellow-lab .stagger-item.s5 { transition-delay: 0.20s; }
+html.modern-yellow-lab .stagger-item.s6 { transition-delay: 0.24s; }
+html.modern-yellow-lab .stagger-item.s7 { transition-delay: 0.28s; }
+html.modern-yellow-lab .stagger-item.s7b { transition-delay: 0.30s; }
+html.modern-yellow-lab .stagger-item.s8 { transition-delay: 0.32s; }
+html.modern-yellow-lab .stagger-item.s9 { transition-delay: 0.36s; }
+
+/* Role Switcher Pill Bar (Fully Isolated & Clean) */
+html.modern-yellow-lab .liquid-role-pills {
+  display: flex !important;
+  width: 100% !important;
+  background: rgba(6, 8, 12, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 999px !important;
+  padding: 4px !important;
+  gap: 4px !important;
+  margin-bottom: 14px !important;
+  box-sizing: border-box !important;
+}
+
+html.modern-yellow-lab .role-tab {
+  all: unset !important;
+  box-sizing: border-box !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  height: 38px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 0 10px !important;
+  border-radius: 999px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: #8c97aa !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  white-space: nowrap !important;
+  text-align: center !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html.modern-yellow-lab .role-tab:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+html.modern-yellow-lab .role-tab.active {
+  background: linear-gradient(145deg, #ffc400, #ffaa00) !important;
+  color: #07090e !important;
+  font-weight: 900 !important;
+  border-color: #ffc400 !important;
+  box-shadow: 0 4px 14px rgba(255, 196, 0, 0.28) !important;
+}
+
+html.modern-yellow-lab .pill-tab-icon {
+  all: unset !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: auto !important;
+  background: transparent !important;
+  border: none !important;
+  color: inherit !important;
+}
+
+/* Auth Mode Tabs (Ingresar vs Registrarse) */
+html.modern-yellow-lab .liquid-auth-tabs {
+  display: flex !important;
+  width: 100% !important;
+  background: rgba(6, 8, 12, 0.65) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 14px !important;
+  padding: 4px !important;
+  gap: 4px !important;
+  margin-bottom: 16px !important;
+  box-sizing: border-box !important;
+}
+
+html.modern-yellow-lab .auth-tab {
+  all: unset !important;
+  box-sizing: border-box !important;
+  flex: 1 1 0 !important;
+  height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 11px !important;
+  border: none !important;
+  background: transparent !important;
+  color: #8c97aa !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  text-align: center !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html.modern-yellow-lab .auth-tab:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+html.modern-yellow-lab .auth-tab.active {
+  background: linear-gradient(145deg, #ffc400, #ffaa00) !important;
+  color: #07090e !important;
+  font-weight: 900 !important;
+  box-shadow: 0 3px 14px rgba(255, 196, 0, 0.24) !important;
+}
+
+/* Liquid Input Boxes */
+html.modern-yellow-lab .register-extra-fields {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+html.modern-yellow-lab .input-row-2 {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  gap: 8px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html.modern-yellow-lab .input-row-2 .liquid-input-box {
+  min-width: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html.modern-yellow-lab .liquid-input-box {
+  display: flex !important;
+  align-items: center !important;
+  background: rgba(7, 9, 14, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 16px !important;
-  color: var(--lab-yellow) !important;
-  border-color: var(--lab-line-bright) !important;
-  background: rgba(255, 210, 31, .08) !important;
+  padding: 2px 14px !important;
+  margin-bottom: 11px !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  transition: all 0.22s ease !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
-html.modern-yellow-lab .role-btn .role-arrow { color: var(--lab-yellow) !important; }
-html.modern-yellow-lab .role-copy small { color: var(--lab-muted) !important; }
-html.modern-yellow-lab .landing-install button { border-radius: 18px !important; }
+html.modern-yellow-lab .liquid-input-box:focus-within {
+  border-color: #ffc400 !important;
+  background: rgba(12, 16, 24, 0.95) !important;
+  box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.15), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.modern-yellow-lab .liquid-input-box input {
+  flex: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  color: #ffffff !important;
+  padding: 12px 6px !important;
+  font-size: 0.92rem !important;
+  outline: none !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+}
+
+/* Clean Autofill Fix */
+html.modern-yellow-lab .liquid-input-box input:-webkit-autofill,
+html.modern-yellow-lab .liquid-input-box input:-webkit-autofill:hover,
+html.modern-yellow-lab .liquid-input-box input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #07090e inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffc400 !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+html.modern-yellow-lab .liquid-input-box .input-ico {
+  color: #ffc400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+  width: 20px;
+  min-width: 20px;
+}
+
+html.modern-yellow-lab .country-pill {
+  color: #ffc400;
+  font-weight: 800;
+  font-size: 0.78rem;
+  margin-right: 4px;
+  background: rgba(255, 196, 0, 0.12);
+  padding: 3px 7px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+
+html.modern-yellow-lab .liquid-eye-toggle {
+  border: none !important;
+  background: transparent !important;
+  color: #7b8699 !important;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  transition: color 0.18s ease;
+}
+
+html.modern-yellow-lab .liquid-eye-toggle:hover {
+  color: #ffc400 !important;
+}
+
+/* Helper Row (Remember me + Forgot password) */
+html.modern-yellow-lab .liquid-helper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 2px 14px;
+  font-size: 0.78rem;
+}
+
+html.modern-yellow-lab .liquid-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8fa0b5;
+  cursor: pointer;
+  user-select: none;
+}
+
+html.modern-yellow-lab .liquid-checkbox {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(8, 10, 15, 0.8);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+html.modern-yellow-lab .liquid-checkbox:checked {
+  background: #ffc400;
+  border-color: #ffc400;
+}
+
+html.modern-yellow-lab .liquid-checkbox:checked::after {
+  content: '✓';
+  position: absolute;
+  top: -1px;
+  left: 2px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #07090e;
+}
+
+html.modern-yellow-lab .liquid-forgot-link {
+  color: #ffc400;
+  text-decoration: none;
+  font-weight: 600;
+  opacity: 0.88;
+  transition: opacity 0.2s ease;
+}
+
+html.modern-yellow-lab .liquid-forgot-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+/* Glowing Liquid Submit Button */
+html.modern-yellow-lab .liquid-submit-btn {
+  position: relative;
+  width: 100% !important;
+  min-height: 50px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(145deg, #ffc400 0%, #e69d00 100%) !important;
+  color: #07090e !important;
+  font-weight: 800 !important;
+  font-size: 0.98rem !important;
+  border: none !important;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(255, 196, 0, 0.26), 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  margin-top: 4px !important;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+html.modern-yellow-lab .liquid-submit-btn:hover {
+  transform: translateY(-2px) scale(1.01) !important;
+  box-shadow: 0 12px 32px rgba(255, 196, 0, 0.4) !important;
+}
+
+html.modern-yellow-lab .liquid-submit-btn:active {
+  transform: scale(0.98) !important;
+}
+
+html.modern-yellow-lab .btn-arrow-icon {
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s ease;
+}
+
+html.modern-yellow-lab .liquid-submit-btn:hover .btn-arrow-icon {
+  transform: translateX(4px);
+}
+
+/* Liquid Melt Drip Animation */
+html.modern-yellow-lab .btn-drip-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+html.modern-yellow-lab .liquid-submit-btn.is-melting {
+  animation: btnLiquidMelt 0.6s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 16px rgba(255, 196, 0, 0.6));
+}
+
+@keyframes btnLiquidMelt {
+  0% { transform: scale(0.98); border-radius: 16px; }
+  100% { transform: scale(1.02); border-radius: 24px; }
+}
+
+/* Conductor Callout */
+html.modern-yellow-lab .conductor-recruitment-banner {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 196, 0, 0.04);
+  border: 1px solid rgba(255, 196, 0, 0.16);
+  text-align: center;
+}
+
+html.modern-yellow-lab .conductor-recruitment-banner p {
+  color: #8fa0b5;
+  font-size: 0.78rem;
+  margin: 0 0 6px;
+}
+
+html.modern-yellow-lab .conductor-apply-btn {
+  width: 100% !important;
+  min-height: 38px !important;
+  border-radius: 12px !important;
+  background: rgba(255, 196, 0, 0.1) !important;
+  border: 1px solid #ffc400 !important;
+  color: #ffc400 !important;
+  font-weight: 800 !important;
+  font-size: 0.8rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+html.modern-yellow-lab .conductor-apply-btn:hover {
+  background: #ffc400 !important;
+  color: #07090e !important;
+}
+
+/* Footer Link & PWA */
+html.modern-yellow-lab .register-link {
+  margin-top: 14px !important;
+  text-align: center;
+  font-size: 0.82rem;
+  color: #7b889b;
+}
+
+html.modern-yellow-lab .register-link a {
+  color: #ffc400;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+html.modern-yellow-lab .register-link a:hover {
+  text-decoration: underline;
+}
+
+html.modern-yellow-lab .landing-footer {
+  margin-top: 18px;
+  text-align: center;
+}
+
+/* ---- Acceso con proveedor externo ---------------------------------------
+   Mismo vidrio y mismos radios que el resto de la tarjeta. Los botones nacen
+   deshabilitados: el intercambio con cada proveedor todavia no existe, y un
+   boton que parece funcionar y no hace nada es peor que uno que lo dice. */
+html.modern-yellow-lab .liquid-social-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+html.modern-yellow-lab .liquid-social-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--lab-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+html.modern-yellow-lab .liquid-social-divider::before,
+html.modern-yellow-lab .liquid-social-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+}
+html.modern-yellow-lab .liquid-social-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+html.modern-yellow-lab .liquid-social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(8px);
+  color: var(--lab-text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.28s ease,
+              background 0.28s ease;
+}
+html.modern-yellow-lab .liquid-social-btn:not([disabled]):hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 200, 7, 0.34);
+  background: rgba(255, 255, 255, 0.075);
+}
+html.modern-yellow-lab .liquid-social-btn:not([disabled]):active { transform: translateY(0); }
+/* Deshabilitado, pero legible: se atenua sin llegar a desaparecer. */
+html.modern-yellow-lab .liquid-social-btn[disabled] {
+  opacity: 0.44;
+  cursor: not-allowed;
+}
+html.modern-yellow-lab .liquid-social-btn .brand-icon { flex: 0 0 auto; }
+html.modern-yellow-lab .liquid-social-note {
+  margin: 0;
+  text-align: center;
+  color: var(--lab-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+/* En pantallas estrechas los tres pasan a una columna y muestran el nombre
+   completo, que es donde el texto corto se quedaba pobre. */
+@media (max-width: 420px) {
+  html.modern-yellow-lab .liquid-social-buttons { grid-template-columns: 1fr; }
+  html.modern-yellow-lab .liquid-social-btn { justify-content: flex-start; padding-left: 18px; }
+}
+
+html.modern-yellow-lab .landing-footer p {
+  color: #485263 !important;
+  font-size: 0.74rem;
+  margin: 0;
+}
 
 /* Shared mobile shells */
 html.modern-yellow-lab :is(.passenger-app, .driver-app) {
@@ -313,25 +990,338 @@ html.modern-yellow-lab :is(.wallet-real-page, .real-profile-page, .ride-history-
   width: min(100%, 560px) !important;
   padding-top: 22px !important;
 }
-html.modern-yellow-lab :is(.wallet-real-heading h2, .real-profile-heading h2,
-  .passenger-history-heading h1) {
-  font-size: 1.75rem !important;
-  letter-spacing: -.055em !important;
+/* Passenger Profile - Modern Luxury Redesign */
+html.modern-yellow-lab .real-profile-page,
+.real-profile-page {
+  width: 100% !important;
+  max-width: 480px !important;
+  margin: 0 auto !important;
+  padding: 16px 12px 100px !important;
 }
-html.modern-yellow-lab .wallet-real-balance {
-  border-radius: 29px !important;
-  background: linear-gradient(140deg, #ffe047, #ffae00) !important;
-  box-shadow: 0 22px 55px rgba(255, 174, 0, .15) !important;
+
+html.modern-yellow-lab .real-profile-heading,
+.real-profile-heading {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 18px !important;
 }
-html.modern-yellow-lab :is(.wallet-history-filters, .passenger-history-filters) button {
+
+html.modern-yellow-lab .real-profile-heading h2,
+.real-profile-heading h2 {
+  font-size: 1.65rem !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.04em !important;
+  color: #fff !important;
+  margin: 2px 0 0 !important;
+}
+
+html.modern-yellow-lab .real-profile-heading b,
+.real-profile-heading b {
+  padding: 6px 14px !important;
   border-radius: 999px !important;
+  background: rgba(0, 223, 120, 0.12) !important;
+  border: 1px solid rgba(0, 223, 120, 0.4) !important;
+  color: #00df78 !important;
+  font-size: 0.62rem !important;
+  font-weight: 800 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
 }
-html.modern-yellow-lab :is(.wallet-history-filters, .passenger-history-filters) button.active {
-  color: #111216 !important;
-  background: var(--lab-yellow) !important;
+
+html.modern-yellow-lab .real-profile-card,
+.real-profile-card {
+  position: relative !important;
+  padding: 28px 20px 22px !important;
+  border-radius: 28px !important;
+  background: linear-gradient(165deg, rgba(24, 28, 38, 0.95), rgba(10, 12, 18, 0.98)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(24px) !important;
+  margin-bottom: 14px !important;
+  overflow: visible !important;
+  text-align: center !important;
 }
-html.modern-yellow-lab .real-profile-card { padding: 25px !important; }
-html.modern-yellow-lab .real-profile-avatar { box-shadow: 0 0 0 6px rgba(255,210,31,.08) !important; }
+
+html.modern-yellow-lab .real-profile-accent,
+.real-profile-accent {
+  position: absolute !important;
+  top: 0 !important;
+  left: 24px !important;
+  right: 24px !important;
+  height: 3px !important;
+  border-radius: 0 0 4px 4px !important;
+  background: linear-gradient(90deg, #ffe02b 0%, #ffc400 50%, #ff9d00 100%) !important;
+  box-shadow: 0 0 16px rgba(255, 196, 0, 0.4) !important;
+}
+
+/* Avatar Frame & Camera Action Button */
+html.modern-yellow-lab .real-profile-avatar-wrap,
+.real-profile-avatar-wrap {
+  display: flex !important;
+  justify-content: center !important;
+  margin: 4px auto 14px !important;
+}
+
+html.modern-yellow-lab .real-profile-avatar,
+.real-profile-avatar {
+  position: relative !important;
+  width: 96px !important;
+  height: 96px !important;
+  border-radius: 50% !important;
+  padding: 3px !important;
+  background: linear-gradient(135deg, #ffc400, #ff8c00) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 196, 0, 0.25) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+}
+
+html.modern-yellow-lab .real-profile-avatar .local-avatar,
+.real-profile-avatar .local-avatar {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  font-size: 1.6rem !important;
+  font-weight: 900 !important;
+  background: #151d2d !important;
+  color: #ffc400 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+html.modern-yellow-lab .real-profile-avatar .profile-avatar-img,
+.real-profile-avatar .profile-avatar-img {
+  position: absolute !important;
+  inset: 3px !important;
+  width: calc(100% - 6px) !important;
+  height: calc(100% - 6px) !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  z-index: 2 !important;
+}
+
+html.modern-yellow-lab .profile-avatar-camera-btn,
+.profile-avatar-camera-btn {
+  position: absolute !important;
+  right: -2px !important;
+  bottom: -2px !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #ffdb22, #ffaa00) !important;
+  border: 2px solid #0f121a !important;
+  color: #080b11 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6) !important;
+  cursor: pointer !important;
+  z-index: 4 !important;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease !important;
+}
+
+html.modern-yellow-lab .profile-avatar-camera-btn:hover,
+.profile-avatar-camera-btn:hover {
+  transform: scale(1.12) !important;
+  box-shadow: 0 8px 20px rgba(255, 196, 0, 0.4) !important;
+}
+
+html.modern-yellow-lab .real-profile-name,
+.real-profile-name {
+  margin: 0 !important;
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  letter-spacing: -0.03em !important;
+}
+
+html.modern-yellow-lab .real-profile-verified,
+.real-profile-verified {
+  width: max-content !important;
+  margin: 6px auto 0 !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(0, 223, 120, 0.08) !important;
+  color: #20dc8e !important;
+  font-size: 0.58rem !important;
+  font-weight: 900 !important;
+}
+
+html.modern-yellow-lab .real-profile-joined,
+.real-profile-joined {
+  margin: 6px 0 16px !important;
+  color: #7b889b !important;
+  font-size: 0.66rem !important;
+  font-weight: 600 !important;
+}
+
+/* User Details Card inside Profile */
+html.modern-yellow-lab .real-profile-details,
+.real-profile-details {
+  padding: 12px 16px !important;
+  border-radius: 20px !important;
+  background: rgba(8, 10, 16, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  margin-bottom: 14px !important;
+}
+
+html.modern-yellow-lab .real-profile-details label,
+.real-profile-details label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 10px 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  font-size: 0.72rem !important;
+}
+
+html.modern-yellow-lab .real-profile-details label:last-child,
+.real-profile-details label:last-child {
+  border-bottom: none !important;
+}
+
+html.modern-yellow-lab .real-profile-details span,
+.real-profile-details span {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: #7b889b !important;
+  font-weight: 600 !important;
+}
+
+html.modern-yellow-lab .real-profile-details span svg,
+.real-profile-details span svg {
+  stroke: #ffc400 !important;
+}
+
+html.modern-yellow-lab .real-profile-details strong,
+.real-profile-details strong {
+  color: #f1f5f9 !important;
+  font-weight: 700 !important;
+}
+
+/* Metrics & Stats Grid */
+html.modern-yellow-lab .real-profile-stats,
+.real-profile-stats {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+}
+
+html.modern-yellow-lab .real-profile-stats article,
+.real-profile-stats article {
+  padding: 14px 12px !important;
+  border-radius: 18px !important;
+  background: rgba(8, 10, 16, 0.85) !important;
+  border: 1px solid rgba(255, 196, 0, 0.15) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+}
+
+html.modern-yellow-lab .real-profile-stats article span,
+.real-profile-stats article span {
+  color: #ffc400 !important;
+}
+
+html.modern-yellow-lab .real-profile-stats small,
+.real-profile-stats small {
+  color: #7b889b !important;
+  font-size: 0.52rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em !important;
+}
+
+html.modern-yellow-lab .real-profile-stats strong,
+.real-profile-stats strong {
+  display: block !important;
+  color: #ffc400 !important;
+  font-size: 1.15rem !important;
+  font-weight: 900 !important;
+}
+
+/* Action Buttons */
+html.modern-yellow-lab .real-profile-secondary,
+.real-profile-secondary {
+  width: 100% !important;
+  height: 50px !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 196, 0, 0.4) !important;
+  background: linear-gradient(145deg, rgba(255, 196, 0, 0.1), rgba(255, 196, 0, 0.02)) !important;
+  color: #ffc400 !important;
+  font-weight: 800 !important;
+  font-size: 0.75rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 16px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+html.modern-yellow-lab .real-profile-secondary:hover,
+.real-profile-secondary:hover {
+  background: rgba(255, 196, 0, 0.15) !important;
+  border-color: #ffc400 !important;
+}
+
+html.modern-yellow-lab .real-profile-support,
+.real-profile-support {
+  width: 100% !important;
+  padding: 14px 16px !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(16, 203, 232, 0.3) !important;
+  background: linear-gradient(145deg, rgba(16, 203, 232, 0.08), rgba(9, 14, 22, 0.95)) !important;
+  color: #10cbe8 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin-bottom: 12px !important;
+  cursor: pointer !important;
+}
+
+html.modern-yellow-lab .real-profile-support strong,
+.real-profile-support strong {
+  font-size: 0.74rem !important;
+  color: #f1f5f9 !important;
+}
+
+html.modern-yellow-lab .real-profile-support small,
+.real-profile-support small {
+  color: #7b889b !important;
+  font-size: 0.58rem !important;
+}
+
+html.modern-yellow-lab .real-profile-logout,
+.real-profile-logout {
+  width: 100% !important;
+  height: 50px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(255, 82, 101, 0.35) !important;
+  background: rgba(255, 82, 101, 0.06) !important;
+  color: #ff6576 !important;
+  font-weight: 800 !important;
+  font-size: 0.75rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 16px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+html.modern-yellow-lab .real-profile-logout:hover,
+.real-profile-logout:hover {
+  background: rgba(255, 82, 101, 0.12) !important;
+  border-color: #ff6576 !important;
+}
 
 /* Driver cockpit and pages */
 html.modern-yellow-lab .driver-top-container { gap: 8px !important; }

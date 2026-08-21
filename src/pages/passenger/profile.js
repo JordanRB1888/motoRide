@@ -41,14 +41,19 @@ export function renderProfile(container) {
       </header>
       <section class="real-profile-card">
         <div class="real-profile-accent"></div>
-        <div class="real-profile-avatar">
-          ${avatarFallback(user)}<img id="profile-avatar-img" hidden alt="Foto de perfil">
+        <div class="real-profile-avatar-wrap">
+          <div class="real-profile-avatar">
+            ${avatarFallback(user)}
+            <img id="profile-avatar-img" class="profile-avatar-img" hidden alt="">
+            <button id="profile-photo-button" class="profile-avatar-camera-btn" type="button" title="Cambiar foto">
+              ${icon('camera', 15)}
+            </button>
+          </div>
           <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
-          <button id="profile-photo-button" type="button">${icon('camera',15)} Cambiar foto</button>
         </div>
-        <h3>${fullName}</h3>
+        <h3 class="real-profile-name">${fullName}</h3>
         <div class="real-profile-verified">${icon('checkCircle',13)} Cuenta verificada</div>
-        <p>Pasajero registrado desde ${registeredAt}</p>
+        <p class="real-profile-joined">Pasajero registrado desde ${registeredAt}</p>
         <div class="real-profile-details">
           <label><span>${icon('phone',15)} Teléfono</span><strong>${user.phone || 'Sin registrar'}</strong></label>
           <label><span>${icon('message',15)} Correo</span><strong>${user.email || 'Sin registrar'}</strong></label>

@@ -4,11 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node --max-http-header-size=65536 ./node_modules/vite/bin/vite.js",
     "dev:server": "npm --prefix server run dev",
     "start:server": "npm --prefix server start",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "node --max-http-header-size=65536 ./node_modules/vite/bin/vite.js preview",
     "test:frontend": "node --test test/*.test.js"
   },
   "dependencies": {
