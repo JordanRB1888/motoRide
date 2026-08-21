@@ -67,7 +67,9 @@
      --------------------------------------------------------------------- */
   --x58-text-primary: #f7f6f3;
   --x58-text-secondary: #a3a09a;
-  --x58-text-muted: #74716b;
+  /* #817e77 medido en 4.80:1 sobre --x58-surface-0. El valor anterior
+     (#74716b) daba 3.99 y no alcanzaba el 4.5 de WCAG AA en texto normal. */
+  --x58-text-muted: #817e77;
   --x58-text-inverse: #14130f;
 
   /* ---------------------------------------------------------------------
@@ -153,7 +155,8 @@
 
   --x58-text-primary: #191713;
   --x58-text-secondary: #56534c;
-  --x58-text-muted: #817d75;
+  /* 4.67:1 medido sobre --x58-surface-0 claro; #817d75 daba 3.60. */
+  --x58-text-muted: #6f6b61;
   --x58-text-inverse: #f7f6f3;
 
   --x58-border-subtle: rgba(20, 18, 14, .10);
@@ -164,7 +167,8 @@
 
   /* Bajo luz exterior el amarillo puro sobre blanco pierde contraste:
      los estados usan el escalón profundo. */
-  --x58-success: #12855a;
+  /* 5.14:1 medido; #12855a daba 4.07 y no alcanzaba AA. */
+  --x58-success: #0f7350;
   --x58-warning: #a35c00;
   --x58-danger: #c62839;
   --x58-info: #1668a8;
@@ -262,6 +266,22 @@ button {
   font-family: var(--x58-font-display);
   font-weight: 700;
   letter-spacing: -.02em;
+}
+
+/* Lecturas numéricas ya existentes en el producto. Antes usaban una familia
+   monoespaciada descargada aparte; ahora usan la display del sistema con
+   figuras tabulares, que es lo que impide que la cifra baile al refrescarse. */
+.earnings-amount,
+.kpi-value,
+.stat-value,
+.topup-row-amount,
+.history-id,
+.trip-stage-pill,
+.incoming-earning strong,
+.wallet-balance-amount,
+.receipt-code-row {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 .x58-otp {

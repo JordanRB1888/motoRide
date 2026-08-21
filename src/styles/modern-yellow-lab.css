@@ -42,7 +42,7 @@ html.modern-yellow-lab #app {
 }
 
 html.modern-yellow-lab body {
-  font-family: 'Outfit', system-ui, sans-serif;
+  font-family: var(--x58-font-ui);
   letter-spacing: -.01em;
 }
 
@@ -243,7 +243,7 @@ html.modern-yellow-lab .hud-speed-badge {
 }
 
 html.modern-yellow-lab .speed-val {
-  font-family: 'Courier New', monospace;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 0.94rem;
   font-weight: 900;
   color: #ffc400;
