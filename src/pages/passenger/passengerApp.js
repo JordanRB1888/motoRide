@@ -107,7 +107,7 @@ export function renderPassengerApp(container) {
         box-shadow: 0 10px 30px rgba(0,0,0,0.7);
       ">
         <div style="display:flex; align-items:center; gap: 10px; flex:1; overflow:hidden;">
-          <span style="color:var(--accent-primary); display:flex;">${icon('mapPin', 20)}</span>
+          <span style="color:var(--x58-yellow-text); display:flex;">${icon('mapPin', 20)}</span>
           <div style="flex:1; overflow:hidden;">
             <small style="color:var(--text-secondary); display:block; font-size:0.75rem;">DESTINO ACTUAL</small>
             <strong id="route-cancel-dest-name" style="color:var(--text-primary); font-size:0.9rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
@@ -525,14 +525,14 @@ export function renderPassengerApp(container) {
           <div class="recent-places" style="display:flex; flex-direction:column; gap:12px;">
           <div class="place-item preset-place" data-name="Basílica de Nuestra Señora de Chiquinquirá, Maracaibo" data-lat="10.6427" data-lon="-71.6125" 
                style="display:flex; align-items:center; gap:14px; padding:12px 16px; background:var(--surface-elevated); border-radius:16px; border:1px solid var(--border-color); cursor:pointer; transition:all 0.2s ease;">
-            <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-primary); flex-shrink:0;">
+            <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--x58-yellow-text); flex-shrink:0;">
               ${icon('home', 20)}
             </div>
             <div class="place-info" style="flex:1;">
               <strong style="display:block; color:var(--text-primary); font-size:0.98rem; font-weight:600;">Basílica de La Chiquinquirá</strong>
               <span style="color:var(--text-secondary); font-size:0.82rem;">Casco Central, Maracaibo</span>
             </div>
-            <span style="color:var(--accent-primary); font-size:1.1rem;">➔</span>
+            <span style="color:var(--x58-yellow-text); font-size:1.1rem;">➔</span>
           </div>
 
           <div class="place-item preset-place" data-name="Centro Comercial Sambil Maracaibo" data-lat="10.6975" data-lon="-71.6342" 

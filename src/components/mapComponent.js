@@ -106,7 +106,7 @@ export class MapComponent {
     legend.className = 'map-legend-bar';
     legend.style.cssText = `
       position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-      z-index: 1000; background: rgba(15, 20, 32, 0.92); backdrop-filter: blur(16px);
+      z-index: 1000; background: var(--x58-surface-overlay); backdrop-filter: blur(16px);
       border: 1.5px solid var(--border-gold, #FFC107); border-radius: 20px;
       padding: 8px 16px; display: flex; align-items: center; gap: 16px;
       box-shadow: 0 10px 25px rgba(0,0,0,0.6); pointer-events: auto;
@@ -149,10 +149,10 @@ export class MapComponent {
       width: '48px',
       height: '48px',
       borderRadius: '50%',
-      backgroundColor: 'rgba(24, 34, 50, 0.92)',
+      backgroundColor: 'var(--x58-surface-overlay)',
       backdropFilter: 'blur(16px)',
       border: '1.5px solid var(--accent-primary)',
-      color: '#FFC107',
+      color: 'var(--x58-yellow-text)',
       fontSize: '1.3rem',
       cursor: 'pointer',
       display: 'flex',

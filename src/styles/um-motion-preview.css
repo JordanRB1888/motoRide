@@ -85,7 +85,7 @@
 .um-motion-preview .theme-toggle-btn {
   border-color: rgba(255, 255, 255, .13) !important;
   background: rgba(255, 255, 255, .025) !important;
-  color: #f7f6f3 !important;
+  color: var(--x58-text-primary) !important;
   transition: border-color .25s ease, background .25s ease, color .25s ease, transform .25s ease !important;
 }
 
@@ -94,7 +94,7 @@
 .um-motion-preview .theme-toggle-btn:hover {
   border-color: rgba(255, 196, 0, .6) !important;
   background: rgba(255, 196, 0, .08) !important;
-  color: var(--um-yellow) !important;
+  color: var(--x58-yellow-text) !important;
   transform: translateY(-2px);
 }
 
@@ -137,7 +137,7 @@
   transform: translateY(-1px);
 }
 
-.um-motion-preview .passenger-app .search-icon { color: var(--um-yellow) !important; }
+.um-motion-preview .passenger-app .search-icon { color: var(--x58-yellow-text) !important; }
 
 .um-motion-preview .passenger-app .passenger-vehicle-selector { gap: 10px !important; }
 
@@ -224,9 +224,9 @@
   transform: translateY(-2px);
 }
 
-.um-motion-preview .stats-bar .stat-label { color: #817e77 !important; }
+.um-motion-preview .stats-bar .stat-label { color:var(--x58-text-muted) !important; }
 .um-motion-preview .stats-bar .stat-value { color: #fff !important; text-shadow: 0 7px 20px rgba(0, 0, 0, .5); }
-.um-motion-preview .stats-bar #stat-earnings { color: var(--um-yellow) !important; }
+.um-motion-preview .stats-bar #stat-earnings { color: var(--x58-yellow-text) !important; }
 
 .um-motion-preview .offline-overlay {
   position: relative;
@@ -289,7 +289,7 @@
 .um-motion-preview .driver-nav-tabs .nav-tab.active {
   border-color: rgba(255, 196, 0, .35) !important;
   background: linear-gradient(145deg, rgba(255, 196, 0, .13), rgba(255, 196, 0, .025)) !important;
-  color: var(--um-yellow) !important;
+  color: var(--x58-yellow-text) !important;
   box-shadow: inset 0 1px rgba(255, 196, 0, .13), 0 0 20px rgba(255, 196, 0, .05) !important;
 }
 
@@ -326,7 +326,7 @@
   color:inherit;
 }
 .um-motion-preview :is(.wallet-balance-card,.earnings-balance-card,.real-profile-balance,.driver-profile-balance-card) :is(.earnings-amount,.wallet-balance-amount,.balance-amount) {
-  color:var(--um-yellow) !important;
+  color:var(--x58-yellow-text) !important;
   text-shadow:0 10px 28px rgba(0,0,0,.42);
 }
 
@@ -368,7 +368,7 @@
 /* Compact alerts: semantic accent, no blue block and minimal map coverage. */
 .um-motion-preview .toast-container-master { top:max(12px,env(safe-area-inset-top)) !important;width:min(calc(100% - 28px),356px) !important;gap:7px !important; }
 .um-motion-preview .custom-toast-pill-master { min-height:44px !important;padding:8px 10px !important;gap:9px !important;border:1px solid var(--toast-border) !important;border-radius:14px !important;background:radial-gradient(circle at 0 50%,var(--toast-glow),transparent 42%),rgba(10,9,8,.965) !important;color:#fff !important;box-shadow:0 14px 36px rgba(0,0,0,.5),inset 0 1px rgba(255,255,255,.045) !important;backdrop-filter:blur(18px) saturate(120%); }
-.um-motion-preview .custom-toast-close { width:26px;height:26px;padding:0;display:grid;place-items:center;border:0;background:transparent;color:#817e77;cursor:pointer; }
+.um-motion-preview .custom-toast-close { width:26px;height:26px;padding:0;display:grid;place-items:center;border:0;background:transparent;color:var(--x58-text-muted);cursor:pointer; }
 .um-motion-preview .custom-toast-close:hover { color:#fff; }
 
 /* Administration follows the same black/graphite rhythm. */
@@ -378,7 +378,7 @@
 .um-motion-preview :is(.operations-map-card,.ops-panel,.metric-card,.data-table-container,.kpi-card,.finance-metric,.finance-card,.support-inbox,.support-chat-panel,.support-context>section,.fleet-status-strip,.fleet-map-shell,.users-command-view>section) { position:relative;overflow:hidden;border-color:rgba(255,255,255,.09) !important;background:linear-gradient(150deg,rgba(14,13,11,.97),rgba(10,9,8,.985)) !important;box-shadow:0 18px 46px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.035) !important; }
 .um-motion-preview :is(.metric-card,.finance-metric,.kpi-card) { animation:umCardStagger .55s cubic-bezier(.16,1,.3,1) both; }
 .um-motion-preview :is(.metric-card,.finance-metric,.kpi-card):hover { transform:translateY(-4px) !important;border-color:rgba(255,196,0,.27) !important; }
-.um-motion-preview .nav-item.active { color:var(--um-yellow) !important;border-color:rgba(255,196,0,.25) !important;background:linear-gradient(90deg,rgba(255,196,0,.12),rgba(255,196,0,.015)) !important;box-shadow:inset 3px 0 var(--um-yellow),0 10px 25px rgba(0,0,0,.2) !important; }
+.um-motion-preview .nav-item.active { color:var(--x58-yellow-text) !important;border-color:rgba(255,196,0,.25) !important;background:linear-gradient(90deg,rgba(255,196,0,.12),rgba(255,196,0,.015)) !important;box-shadow:inset 3px 0 var(--um-yellow),0 10px 25px rgba(0,0,0,.2) !important; }
 
 /* Complete light theme: effects stay, surfaces and contrast are remapped. */
 .um-motion-preview.theme-light body { background:var(--x58-surface-0); }
@@ -610,15 +610,15 @@
 .um-motion-preview .notification-center-overlay{padding:12px!important}
 .um-motion-preview .notification-center-modal{width:min(100%,440px)!important;height:min(650px,88dvh)!important;border:1px solid rgba(255,255,255,.11)!important;border-radius:24px!important;overflow:hidden}
 .um-motion-preview .notification-center-header{padding:15px 16px 12px!important;grid-template-columns:minmax(0,1fr) auto!important;gap:9px 12px!important;border-color:rgba(255,255,255,.08)!important;background:rgba(10,9,8,.72)!important}
-.um-motion-preview .notification-center-heading{gap:10px!important}.um-motion-preview .notification-center-bell{width:38px!important;height:38px!important;flex-basis:38px!important;border:1px solid rgba(255,196,0,.3);background:rgba(255,196,0,.09)!important;color:var(--um-yellow)!important;box-shadow:none!important}
-.um-motion-preview .notification-center-title strong{font-size:.93rem!important}.um-motion-preview .notification-center-title small{max-width:210px;font-size:.59rem!important;color:#817e77!important}
+.um-motion-preview .notification-center-heading{gap:10px!important}.um-motion-preview .notification-center-bell{width:38px!important;height:38px!important;flex-basis:38px!important;border:1px solid rgba(255,196,0,.3);background:rgba(255,196,0,.09)!important;color:var(--x58-yellow-text)!important;box-shadow:none!important}
+.um-motion-preview .notification-center-title strong{font-size:.93rem!important}.um-motion-preview .notification-center-title small{max-width:210px;font-size:.59rem!important;color:var(--x58-text-muted)!important}
 .um-motion-preview .notification-sound-toggle{height:32px!important;padding:0 9px!important;border-color:rgba(38,211,132,.38)!important;background:rgba(38,211,132,.055)!important;font-size:.57rem!important}.um-motion-preview .notification-close{width:31px!important;height:31px!important}
 .um-motion-preview .notification-unread-summary{grid-column:1/-1!important;height:27px!important;padding:0 9px!important;border-color:rgba(255,196,0,.22)!important;background:rgba(255,196,0,.04)!important;font-size:.57rem!important}.um-motion-preview .notification-unread-summary strong{width:19px!important;height:19px!important;font-size:.57rem!important}
-.um-motion-preview .notification-category-tabs{padding:9px 14px!important;gap:6px!important;border-color:rgba(255,255,255,.07)!important;background:rgba(10,9,8,.68)!important}.um-motion-preview .notification-category-tabs .cat-filter-btn{height:32px!important;padding:0 10px!important;border-color:rgba(255,255,255,.1)!important;border-radius:10px!important;background:rgba(255,255,255,.025)!important;color:#a3a09a!important;font-size:.58rem!important}.um-motion-preview .notification-category-tabs .cat-filter-btn.active{border-color:rgba(255,196,0,.4)!important;background:rgba(255,196,0,.1)!important;color:var(--um-yellow)!important;box-shadow:none!important}
+.um-motion-preview .notification-category-tabs{padding:9px 14px!important;gap:6px!important;border-color:rgba(255,255,255,.07)!important;background:rgba(10,9,8,.68)!important}.um-motion-preview .notification-category-tabs .cat-filter-btn{height:32px!important;padding:0 10px!important;border-color:rgba(255,255,255,.1)!important;border-radius:10px!important;background:rgba(255,255,255,.025)!important;color:var(--x58-text-secondary)!important;font-size:.58rem!important}.um-motion-preview .notification-category-tabs .cat-filter-btn.active{border-color:rgba(255,196,0,.4)!important;background:rgba(255,196,0,.1)!important;color:var(--x58-yellow-text)!important;box-shadow:none!important}
 .um-motion-preview .notification-list{padding:10px 12px 12px!important;gap:7px!important;scrollbar-width:thin;scrollbar-color:rgba(255,196,0,.42) transparent!important}.um-motion-preview .notif-item-card{min-height:70px!important;padding:10px 30px 10px 10px!important;grid-template-columns:36px minmax(0,1fr)!important;gap:9px!important;border-color:rgba(255,255,255,.09)!important;border-radius:14px!important;background:rgba(255,255,255,.025)!important;box-shadow:none!important}.um-motion-preview .notif-item-card.is-unread{border-color:rgba(255,196,0,.23)!important;background:linear-gradient(100deg,rgba(255,196,0,.055),rgba(255,255,255,.018) 48%)!important}.um-motion-preview .notif-item-card.is-unread:before{inset:13px auto 13px 0!important;width:2px!important;box-shadow:none!important}
-.um-motion-preview .notification-item-icon{width:34px!important;height:34px!important;border-color:rgba(255,255,255,.09)!important;background:rgba(0,0,0,.22)!important}.um-motion-preview .notification-item-icon svg{width:16px;height:16px}.um-motion-preview .notification-item-heading strong{font-size:.7rem!important}.um-motion-preview .notification-item-heading time{font-size:.5rem!important}.um-motion-preview .notification-item-copy p{margin-top:4px!important;display:-webkit-box;overflow:hidden;color:#817e77!important;font-size:.58rem!important;line-height:1.35!important;-webkit-box-orient:vertical;-webkit-line-clamp:2}.um-motion-preview .notification-new-dot{top:13px!important;left:51px!important;width:6px!important;height:6px!important}.um-motion-preview .notif-item-card.is-unread .notification-item-heading{padding-left:9px!important}.um-motion-preview .notification-chevron{right:10px!important;font-size:1rem!important;color:#817e77!important}
-.um-motion-preview .notification-center-footer{min-height:52px!important;padding:7px 13px!important;border-color:rgba(255,255,255,.08)!important;background:rgba(10,9,8,.94)!important}.um-motion-preview .notification-center-footer button{min-height:36px!important;font-size:.59rem!important}.um-motion-preview .notification-center-footer #btn-test-sound{color:#a3a09a!important}
-.um-motion-preview.theme-light .notification-center-header,.um-motion-preview.theme-light .notification-category-tabs,.um-motion-preview.theme-light .notification-center-footer{border-color:rgba(22,21,18,.09)!important;background:rgba(248,249,251,.92)!important}.um-motion-preview.theme-light .notification-center-title strong,.um-motion-preview.theme-light .notification-item-heading strong{color:#1e1c19!important}.um-motion-preview.theme-light .notification-category-tabs .cat-filter-btn{border-color:rgba(22,21,18,.1)!important;background:rgba(22,21,18,.025)!important;color:#817e77!important}.um-motion-preview.theme-light .notification-category-tabs .cat-filter-btn.active{border-color:rgba(197,143,0,.38)!important;background:rgba(255,196,0,.13)!important;color:#8a6200!important}.um-motion-preview.theme-light .notif-item-card{border-color:rgba(22,21,18,.09)!important;background:rgba(255,255,255,.78)!important}.um-motion-preview.theme-light .notif-item-card.is-unread{border-color:rgba(197,143,0,.26)!important;background:linear-gradient(100deg,rgba(255,196,0,.09),#fff 48%)!important}.um-motion-preview.theme-light .notification-item-icon{border-color:rgba(22,21,18,.08)!important;background:#f5f6f8!important}.um-motion-preview.theme-light .notification-item-copy p{color:#817e77!important}
+.um-motion-preview .notification-item-icon{width:34px!important;height:34px!important;border-color:rgba(255,255,255,.09)!important;background:rgba(0,0,0,.22)!important}.um-motion-preview .notification-item-icon svg{width:16px;height:16px}.um-motion-preview .notification-item-heading strong{font-size:.7rem!important}.um-motion-preview .notification-item-heading time{font-size:.5rem!important}.um-motion-preview .notification-item-copy p{margin-top:4px!important;display:-webkit-box;overflow:hidden;color:var(--x58-text-muted)!important;font-size:.58rem!important;line-height:1.35!important;-webkit-box-orient:vertical;-webkit-line-clamp:2}.um-motion-preview .notification-new-dot{top:13px!important;left:51px!important;width:6px!important;height:6px!important}.um-motion-preview .notif-item-card.is-unread .notification-item-heading{padding-left:9px!important}.um-motion-preview .notification-chevron{right:10px!important;font-size:1rem!important;color:var(--x58-text-muted)!important}
+.um-motion-preview .notification-center-footer{min-height:52px!important;padding:7px 13px!important;border-color:rgba(255,255,255,.08)!important;background:rgba(10,9,8,.94)!important}.um-motion-preview .notification-center-footer button{min-height:36px!important;font-size:.59rem!important}.um-motion-preview .notification-center-footer #btn-test-sound{color:var(--x58-text-secondary)!important}
+.um-motion-preview.theme-light .notification-center-header,.um-motion-preview.theme-light .notification-category-tabs,.um-motion-preview.theme-light .notification-center-footer{border-color:rgba(22,21,18,.09)!important;background:rgba(248,249,251,.92)!important}.um-motion-preview.theme-light .notification-center-title strong,.um-motion-preview.theme-light .notification-item-heading strong{color:#1e1c19!important}.um-motion-preview.theme-light .notification-category-tabs .cat-filter-btn{border-color:rgba(22,21,18,.1)!important;background:rgba(22,21,18,.025)!important;color:var(--x58-text-muted)!important}.um-motion-preview.theme-light .notification-category-tabs .cat-filter-btn.active{border-color:rgba(197,143,0,.38)!important;background:rgba(255,196,0,.13)!important;color:#8a6200!important}.um-motion-preview.theme-light .notif-item-card{border-color:rgba(22,21,18,.09)!important;background:rgba(255,255,255,.78)!important}.um-motion-preview.theme-light .notif-item-card.is-unread{border-color:rgba(197,143,0,.26)!important;background:linear-gradient(100deg,rgba(255,196,0,.09),#fff 48%)!important}.um-motion-preview.theme-light .notification-item-icon{border-color:rgba(22,21,18,.08)!important;background:#f5f6f8!important}.um-motion-preview.theme-light .notification-item-copy p{color:var(--x58-text-muted)!important}
 @media(max-width:460px){.um-motion-preview .notification-center-overlay{padding:6px!important}.um-motion-preview .notification-center-modal{width:100%!important;height:min(650px,94dvh)!important;border-radius:20px!important}.um-motion-preview .notification-center-header{padding:13px 12px 10px!important}.um-motion-preview .notification-sound-toggle{width:32px!important;padding:0!important;justify-content:center}.um-motion-preview .notification-sound-toggle span{display:none}.um-motion-preview .notification-category-tabs{padding-inline:10px!important}.um-motion-preview .notification-list{padding-inline:9px!important}}
 
 /* Passenger surface and geometry contract. Every inner view and transient
@@ -780,4 +780,23 @@
 @keyframes umSheetEnter {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* En modo claro este degradado dejaba el avatar del conductor como un
+   circulo casi negro en una barra marfil, mientras el del pasajero salia
+   claro: dos roles con dos avatares distintos. Ahora ambos usan el color
+   que el propio componente ya declara para el tema claro. */
+:root.theme-light.um-motion-preview .driver-avatar,
+:root.theme-light.um-motion-preview .passenger-profile-shortcut {
+  background: var(--local-avatar-bg, var(--x58-surface-1)) !important;
+}
+
+/* El boton de camara del avatar del perfil declara `bottom: -2px`, pero algo
+   le fija tambien `top`, y cuando ambos estan puestos manda `top`. El
+   resultado era que colgaba 25px por debajo del circulo y se comia los
+   primeros 11px del nombre. Liberando `top`, el `bottom` que ya estaba
+   escrito hace su trabajo y el boton se apoya en el borde del avatar.
+   Es geometria: el solape existia en los dos temas y en los dos se corrige. */
+.um-motion-preview .profile-avatar-camera-btn {
+  top: auto !important;
 }

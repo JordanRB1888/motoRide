@@ -60,7 +60,7 @@ export function createChatModal({ tripId, currentUser, recipientUser }) {
             <form class="chat-input-form" id="chat-form" style="display:flex; align-items:center; gap: 8px; padding: 10px 14px;">
                 <input type="file" id="chat-file-input" accept="image/*" style="display: none;" />
                 <button type="button" id="btn-attach-image" style="
-                    background: rgba(255,193,7,0.15); border: 1px solid var(--accent-primary); color: var(--accent-primary);
+                    background: rgba(255,193,7,0.15); border: 1px solid var(--accent-primary); color: var(--x58-yellow-text);
                     padding: 8px 12px; border-radius: 14px; font-weight: 800; font-size: 1.1rem; cursor: pointer; flex-shrink: 0;
                 " title="Adjuntar Captura o Comprobante">
                     📷

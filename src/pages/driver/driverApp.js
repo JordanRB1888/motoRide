@@ -57,7 +57,7 @@ export function renderDriverApp(container) {
                     
                     <div class="driver-header-actions">
                         <button id="header-notif-btn-driver" style="
-                            background: rgba(255,193,7,0.15); border: 1.5px solid var(--accent-primary); color: var(--accent-primary);
+                            background: rgba(255,193,7,0.15); border: 1.5px solid var(--accent-primary); color: var(--x58-yellow-text);
                             width: 36px; height: 36px; border-radius: 50%; display:flex; align-items:center; justify-content:center;
                             cursor: pointer; position: relative; flex-shrink: 0;
                         " title="Centro de Notificaciones">
@@ -106,7 +106,7 @@ export function renderDriverApp(container) {
                 <div class="online-overlay hidden" id="online-overlay" style="text-align: center; position: absolute; top: 196px; left: 50%; transform: translateX(-50%); z-index: 15; width: 90%; max-width: 420px;">
                     <div class="waiting-badge" style="
                         display: flex; align-items: center; justify-content: center; gap: 12px;
-                        padding: 14px 20px; border-radius: 20px; background: rgba(15, 20, 32, 0.94);
+                        padding: 14px 20px; border-radius: 20px; background: var(--x58-surface-overlay);
                         backdrop-filter: blur(16px); border: 1.5px solid var(--success);
                         color: var(--success); font-weight: 800; font-size: 0.95rem;
                         box-shadow: 0 10px 25px rgba(0,0,0,0.5), 0 0 20px rgba(0,230,118,0.3);

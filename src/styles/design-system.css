@@ -51,6 +51,11 @@
   --x58-yellow-line: rgba(255, 210, 31, .34);
   --x58-yellow-ink: #1a1500;
 
+  /* El amarillo de marca solo es legible como texto sobre superficie oscura.
+     Este token existe para que el modo claro pueda bajar al escalon profundo
+     sin que ninguna pantalla tenga que saberlo. */
+  --x58-yellow-text: #ffd21f;
+
   /* ---------------------------------------------------------------------
      SUPERFICIES — grafito cálido. El azul (R<B) se elimina: aquí R>B en
      todos los escalones, lo que da calidez sin virar a marrón.
@@ -83,6 +88,11 @@
      información; deja de actuar como acento secundario de marca.
      --------------------------------------------------------------------- */
   --x58-success: #55e29a;
+
+  /* Verde heredado de pantallas anteriores. Se conserva tal cual en oscuro
+     —cambiarlo seria rehacer el tema oscuro, que no toca— y en claro cede
+     al verde del sistema, porque sobre marfil daba 1.8:1. */
+  --x58-success-legacy: #20dc8e;
   --x58-warning: #ffa726;
   --x58-danger: #ff6878;
   --x58-info: #63c9ff;
@@ -165,10 +175,15 @@
   --x58-yellow-soft: rgba(255, 184, 0, .16);
   --x58-yellow-line: rgba(196, 140, 0, .38);
 
+  /* 4.62:1 sobre el marfil de fondo y 5.26:1 sobre blanco; el #ffd21f puro
+     daba 1.27 y era practicamente invisible. */
+  --x58-yellow-text: #8f6400;
+
   /* Bajo luz exterior el amarillo puro sobre blanco pierde contraste:
      los estados usan el escalón profundo. */
   /* 5.14:1 medido; #12855a daba 4.07 y no alcanzaba AA. */
   --x58-success: #0f7350;
+  --x58-success-legacy: var(--x58-success);
   --x58-warning: #a35c00;
   --x58-danger: #c62839;
   --x58-info: #1668a8;
@@ -540,4 +555,27 @@ textarea,
    ========================================================================= */
 [hidden] {
   display: none !important;
+}
+
+/* =========================================================================
+   ATRIBUCION DEL MAPA
+   El credito de Leaflet, OpenStreetMap y CARTO debe seguir visible: es una
+   obligacion de licencia y no se toca su texto ni su enlace. Lo que si se
+   corrige es el color: llegaba con el azul de enlace por defecto del
+   navegador, el unico azul decorativo que quedaba en las pantallas de mapa.
+   ========================================================================= */
+.leaflet-control-attribution {
+  background: var(--x58-surface-overlay) !important;
+  color: var(--x58-text-muted) !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--x58-text-secondary) !important;
+  text-decoration: none;
+}
+
+.leaflet-control-attribution a:hover,
+.leaflet-control-attribution a:focus-visible {
+  color: var(--x58-yellow-text) !important;
+  text-decoration: underline;
 }

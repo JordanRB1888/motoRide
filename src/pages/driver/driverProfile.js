@@ -64,7 +64,7 @@ export function renderDriverProfile(container, options = {}) {
             
             <button id="btn-trigger-driver-photo" style="
               position: absolute; bottom: 0; right: -2px;
-              background: var(--x58-yellow); color: var(--x58-text-inverse); font-size: 0.75rem;
+              background: var(--x58-yellow); color: var(--x58-yellow-ink); font-size: 0.75rem;
               padding: 5px 10px; border-radius: 14px; font-weight: 900;
               box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; border: 1.5px solid var(--x58-surface-0);
               display: flex; align-items: center; gap: 4px;
@@ -97,7 +97,7 @@ export function renderDriverProfile(container, options = {}) {
               <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
                 ${icon('bike', 14)} Vehículo
               </span>
-              <strong style="color: var(--accent-primary); font-weight: 800;">${user.vehicleBrand || 'Bera'} ${user.vehicleModel || 'BR200'} (${user.vehiclePlate || 'AC3M49P'})</strong>
+              <strong style="color: var(--x58-yellow-text); font-weight: 800;">${user.vehicleBrand || 'Bera'} ${user.vehicleModel || 'BR200'} (${user.vehiclePlate || 'AC3M49P'})</strong>
             </div>
           </div>
 
@@ -213,7 +213,7 @@ export function renderDriverProfile(container, options = {}) {
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
             <div>
               <small style="color:var(--text-secondary); display:block; font-size:0.78rem;">${hasWalletDebt ? 'SALDO DEUDOR / COMISIONES PENDIENTES' : 'BALANCE DISPONIBLE EN USD'}</small>
-              <div style="font-size: 2rem; font-weight: 900; color: ${hasWalletDebt ? 'var(--danger)' : 'var(--accent-primary)'}; font-family: 'JetBrains Mono', monospace;">
+              <div style="font-size: 2rem; font-weight: 900; color: ${hasWalletDebt ? 'var(--x58-danger)' : 'var(--x58-yellow-text)'}; font-family:var(--x58-font-display); font-variant-numeric:tabular-nums;">
                 ${hasWalletDebt ? '−' : ''}$${Math.abs(balanceEUR).toFixed(2)} USD
               </div>
               <div style="color:var(--text-secondary); font-size:0.85rem; font-weight:700;">
@@ -378,7 +378,7 @@ function openWithdrawalModal(container, balanceEUR, bcvRate) {
 
       <div style="background: rgba(255,193,7,0.08); padding: 14px; border-radius: 16px; border: 1px solid var(--border-gold); margin-bottom: 18px;">
         <small style="color:var(--text-secondary); display:block;">Disponible para transferir por Tasa BCV Euro (Bs. ${bcvRate.toFixed(2)}):</small>
-        <div style="color:var(--accent-primary); font-weight:900; font-size:1.5rem; font-family:'JetBrains Mono', monospace;">
+        <div style="color:var(--x58-yellow-text); font-weight:900; font-size:1.5rem; font-family:var(--x58-font-display); font-variant-numeric:tabular-nums;">
           €${balanceEUR.toFixed(2)} EUR <span style="font-size:0.9rem; font-weight:700; color:var(--text-secondary);"> (~ Bs. ${vesAmount.toLocaleString('es-VE', {minimumFractionDigits:2})})</span>
         </div>
       </div>

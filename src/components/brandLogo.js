@@ -19,7 +19,7 @@ export function createBrandLogo({ size = 80, showText = true } = {}) {
         ${showText ? `
             <div style="text-align: left;">
                 <div style="font-size: ${Math.round(size * 0.38)}px; font-weight: 900; line-height: 1; color: var(--text-primary); font-family: 'Outfit', sans-serif; letter-spacing: -0.5px;">
-                    <span style="color: var(--accent-primary);">+58</span><span style="color: var(--text-primary);">express</span>
+                    <span style="color: var(--x58-yellow-text);">+58</span><span style="color: var(--text-primary);">express</span>
                 </div>
                 <small style="color: var(--text-secondary); font-size: ${Math.round(size * 0.16)}px; font-weight: 700; letter-spacing: 0.5px;">
                     Tu moto, al instante 🇻🇪

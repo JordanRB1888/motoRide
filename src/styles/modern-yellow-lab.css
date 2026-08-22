@@ -95,7 +95,7 @@ html.modern-yellow-lab :is(input, select, textarea, .search-input-wrapper,
   box-shadow: none !important;
 }
 
-html.modern-yellow-lab :is(input, textarea)::placeholder { color: #817e77 !important; }
+html.modern-yellow-lab :is(input, textarea)::placeholder { color:var(--x58-text-muted) !important; }
 
 /* +58Express — Cyber Tachometer & Holographic Glass Experience */
 html.modern-yellow-lab .landing-container.cyber-moto-experience {
@@ -246,7 +246,7 @@ html.modern-yellow-lab .speed-val {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 0.94rem;
   font-weight: 900;
-  color: var(--x58-yellow);
+  color: var(--x58-yellow-text);
   text-shadow: 0 0 8px rgba(255, 196, 0, 0.6);
   min-width: 24px;
   text-align: right;
@@ -256,7 +256,7 @@ html.modern-yellow-lab .speed-unit {
   font-family: sans-serif;
   font-size: 0.52rem;
   font-weight: 800;
-  color: #a3a09a;
+  color:var(--x58-text-secondary);
   letter-spacing: 0.05em;
 }
 
@@ -289,7 +289,7 @@ html.modern-yellow-lab .liquid-brand-title .liquid-highlight {
 
 html.modern-yellow-lab .liquid-brand-subtitle {
   font-size: 0.84rem !important;
-  color: #a3a09a !important;
+  color:var(--x58-text-secondary) !important;
   margin: 0 !important;
   font-weight: 500;
 }
@@ -306,7 +306,7 @@ html.modern-yellow-lab .liquid-peek-btn {
   border-radius: 999px;
   background: rgba(255, 196, 0, 0.1);
   border: 1px solid rgba(255, 196, 0, 0.3);
-  color: var(--x58-yellow);
+  color: var(--x58-yellow-text);
   font-weight: 800;
   font-size: 0.9rem;
   cursor: pointer;
@@ -417,7 +417,7 @@ html.modern-yellow-lab .role-tab {
   border-radius: 999px !important;
   border: 1px solid transparent !important;
   background: transparent !important;
-  color: #a3a09a !important;
+  color:var(--x58-text-secondary) !important;
   font-size: 0.78rem !important;
   font-weight: 700 !important;
   cursor: pointer !important;
@@ -480,7 +480,7 @@ html.modern-yellow-lab .auth-tab {
   border-radius: 11px !important;
   border: none !important;
   background: transparent !important;
-  color: #a3a09a !important;
+  color:var(--x58-text-secondary) !important;
   font-size: 0.82rem !important;
   font-weight: 700 !important;
   cursor: pointer !important;
@@ -569,7 +569,7 @@ html.modern-yellow-lab .liquid-input-box input:-webkit-autofill:focus {
 }
 
 html.modern-yellow-lab .liquid-input-box .input-ico {
-  color: var(--x58-yellow);
+  color: var(--x58-yellow-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -579,7 +579,7 @@ html.modern-yellow-lab .liquid-input-box .input-ico {
 }
 
 html.modern-yellow-lab .country-pill {
-  color: var(--x58-yellow);
+  color: var(--x58-yellow-text);
   font-weight: 800;
   font-size: 0.78rem;
   margin-right: 4px;
@@ -592,7 +592,7 @@ html.modern-yellow-lab .country-pill {
 html.modern-yellow-lab .liquid-eye-toggle {
   border: none !important;
   background: transparent !important;
-  color: #817e77 !important;
+  color:var(--x58-text-muted) !important;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -603,7 +603,7 @@ html.modern-yellow-lab .liquid-eye-toggle {
 }
 
 html.modern-yellow-lab .liquid-eye-toggle:hover {
-  color: var(--x58-yellow) !important;
+  color: var(--x58-yellow-text) !important;
 }
 
 /* Helper Row (Remember me + Forgot password) */
@@ -619,7 +619,7 @@ html.modern-yellow-lab .liquid-checkbox-label {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #a3a09a;
+  color:var(--x58-text-secondary);
   cursor: pointer;
   user-select: none;
 }
@@ -652,7 +652,7 @@ html.modern-yellow-lab .liquid-checkbox:checked::after {
 }
 
 html.modern-yellow-lab .liquid-forgot-link {
-  color: var(--x58-yellow);
+  color: var(--x58-yellow-text);
   text-decoration: none;
   font-weight: 600;
   opacity: 0.88;
@@ -735,7 +735,7 @@ html.modern-yellow-lab .conductor-recruitment-banner {
 }
 
 html.modern-yellow-lab .conductor-recruitment-banner p {
-  color: #a3a09a;
+  color:var(--x58-text-secondary);
   font-size: 0.78rem;
   margin: 0 0 6px;
 }
@@ -746,7 +746,7 @@ html.modern-yellow-lab .conductor-apply-btn {
   border-radius: 12px !important;
   background: rgba(255, 196, 0, 0.1) !important;
   border: 1px solid var(--x58-yellow) !important;
-  color: var(--x58-yellow) !important;
+  color: var(--x58-yellow-text) !important;
   font-weight: 800 !important;
   font-size: 0.8rem !important;
   display: flex !important;
@@ -767,11 +767,11 @@ html.modern-yellow-lab .register-link {
   margin-top: 14px !important;
   text-align: center;
   font-size: 0.82rem;
-  color: #817e77;
+  color:var(--x58-text-muted);
 }
 
 html.modern-yellow-lab .register-link a {
-  color: var(--x58-yellow);
+  color: var(--x58-yellow-text);
   font-weight: 700;
   text-decoration: none;
 }
@@ -916,7 +916,7 @@ html.modern-yellow-lab :is(.bottom-nav, .driver-nav-tabs) {
 html.modern-yellow-lab :is(.nav-btn, .nav-tab) {
   min-height: 56px !important;
   border-radius: 18px !important;
-  color: #807a70 !important;
+  color: var(--x58-text-muted) !important;
   transition: color .2s, background .2s, transform .2s !important;
 }
 
@@ -1097,8 +1097,8 @@ html.modern-yellow-lab .real-profile-avatar .local-avatar,
   border-radius: 50% !important;
   font-size: 1.6rem !important;
   font-weight: 900 !important;
-  background: #1e1c19 !important;
-  color: var(--x58-yellow) !important;
+  background: var(--x58-surface-2) !important;
+  color: var(--x58-yellow-text) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1157,7 +1157,7 @@ html.modern-yellow-lab .real-profile-verified,
   padding: 4px 10px !important;
   border-radius: 999px !important;
   background: rgba(0, 223, 120, 0.08) !important;
-  color: #20dc8e !important;
+  color: var(--x58-success-legacy) !important;
   font-size: 0.58rem !important;
   font-weight: 900 !important;
 }
@@ -1165,7 +1165,7 @@ html.modern-yellow-lab .real-profile-verified,
 html.modern-yellow-lab .real-profile-joined,
 .real-profile-joined {
   margin: 6px 0 16px !important;
-  color: #817e77 !important;
+  color:var(--x58-text-muted) !important;
   font-size: 0.66rem !important;
   font-weight: 600 !important;
 }
@@ -1200,7 +1200,7 @@ html.modern-yellow-lab .real-profile-details span,
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
-  color: #817e77 !important;
+  color:var(--x58-text-muted) !important;
   font-weight: 600 !important;
 }
 
@@ -1211,7 +1211,7 @@ html.modern-yellow-lab .real-profile-details span svg,
 
 html.modern-yellow-lab .real-profile-details strong,
 .real-profile-details strong {
-  color: #f1f5f9 !important;
+  color:var(--x58-text-primary) !important;
   font-weight: 700 !important;
 }
 
@@ -1238,12 +1238,12 @@ html.modern-yellow-lab .real-profile-stats article,
 
 html.modern-yellow-lab .real-profile-stats article span,
 .real-profile-stats article span {
-  color: var(--x58-yellow) !important;
+  color: var(--x58-yellow-text) !important;
 }
 
 html.modern-yellow-lab .real-profile-stats small,
 .real-profile-stats small {
-  color: #817e77 !important;
+  color:var(--x58-text-muted) !important;
   font-size: 0.52rem !important;
   font-weight: 800 !important;
   letter-spacing: 0.06em !important;
@@ -1252,7 +1252,7 @@ html.modern-yellow-lab .real-profile-stats small,
 html.modern-yellow-lab .real-profile-stats strong,
 .real-profile-stats strong {
   display: block !important;
-  color: var(--x58-yellow) !important;
+  color: var(--x58-yellow-text) !important;
   font-size: 1.15rem !important;
   font-weight: 900 !important;
 }
@@ -1265,7 +1265,7 @@ html.modern-yellow-lab .real-profile-secondary,
   border-radius: 16px !important;
   border: 1px solid rgba(255, 196, 0, 0.4) !important;
   background: linear-gradient(145deg, rgba(255, 196, 0, 0.1), rgba(255, 196, 0, 0.02)) !important;
-  color: var(--x58-yellow) !important;
+  color: var(--x58-yellow-text) !important;
   font-weight: 800 !important;
   font-size: 0.75rem !important;
   display: flex !important;
@@ -1301,12 +1301,12 @@ html.modern-yellow-lab .real-profile-support,
 html.modern-yellow-lab .real-profile-support strong,
 .real-profile-support strong {
   font-size: 0.74rem !important;
-  color: #f1f5f9 !important;
+  color:var(--x58-text-primary) !important;
 }
 
 html.modern-yellow-lab .real-profile-support small,
 .real-profile-support small {
-  color: #817e77 !important;
+  color:var(--x58-text-muted) !important;
   font-size: 0.58rem !important;
 }
 
@@ -1348,7 +1348,7 @@ html.modern-yellow-lab .stat-item {
   border-color: var(--lab-line) !important;
   background: transparent !important;
 }
-html.modern-yellow-lab .stat-label { color: #817e77 !important; }
+html.modern-yellow-lab .stat-label { color:var(--x58-text-muted) !important; }
 html.modern-yellow-lab .stat-value { color: var(--lab-white) !important; }
 html.modern-yellow-lab .stat-item:nth-child(2) .stat-value,
 html.modern-yellow-lab .stat-item:nth-child(3) .stat-value { color: var(--lab-yellow) !important; }
@@ -1423,7 +1423,7 @@ html.modern-yellow-lab .message.sent {
 }
 html.modern-yellow-lab .chat-message.received,
 html.modern-yellow-lab .message.received {
-  background: #262420 !important;
+  background: var(--x58-surface-raised) !important;
   border-radius: 20px 20px 20px 6px !important;
 }
 
@@ -1446,7 +1446,7 @@ html.modern-yellow-lab .nav-item {
   min-height: 52px !important;
   margin-bottom: 6px !important;
   border-radius: 17px !important;
-  color: #817e77 !important;
+  color:var(--x58-text-muted) !important;
 }
 html.modern-yellow-lab .nav-item.active {
   color: var(--lab-yellow) !important;
@@ -1586,7 +1586,7 @@ html.modern-yellow-lab.theme-light :is(input, select, textarea, .search-input-wr
   box-shadow: 0 1px 2px rgba(22,21,18, .05) !important;
 }
 
-html.modern-yellow-lab.theme-light :is(input, textarea)::placeholder { color: #a3a09a !important; }
+html.modern-yellow-lab.theme-light :is(input, textarea)::placeholder { color:var(--x58-text-secondary) !important; }
 
 /* Estados hover y focus */
 html.modern-yellow-lab.theme-light :is(button, a, input, select, textarea):focus-visible {
@@ -1699,7 +1699,7 @@ html.modern-yellow-lab.theme-light :is(.bottom-nav, .driver-nav-tabs) {
   box-shadow: 0 18px 44px rgba(30,28,25, .14) !important;
 }
 
-html.modern-yellow-lab.theme-light :is(.nav-btn, .nav-tab) { color: #817e77 !important; }
+html.modern-yellow-lab.theme-light :is(.nav-btn, .nav-tab) { color:var(--x58-text-muted) !important; }
 
 html.modern-yellow-lab.theme-light :is(.nav-btn.active, .nav-tab.active) {
   color: var(--lab-yellow-ink) !important;
@@ -1830,7 +1830,7 @@ html.modern-yellow-lab.theme-light :is(.admin-sidebar, .admin-header) {
   border-color: var(--lab-line) !important;
 }
 
-html.modern-yellow-lab.theme-light .nav-item { color: #817e77 !important; }
+html.modern-yellow-lab.theme-light .nav-item { color:var(--x58-text-muted) !important; }
 
 html.modern-yellow-lab.theme-light .nav-item.active {
   color: var(--lab-yellow-ink) !important;
@@ -1857,7 +1857,7 @@ html.modern-yellow-lab.theme-light :is(.operations-map-card, .metric-card, .ops-
 }
 
 html.modern-yellow-lab.theme-light .data-table th {
-  background: #f1f3f8 !important;
+  background: var(--x58-surface-1) !important;
   color: var(--lab-muted) !important;
 }
 
@@ -1932,7 +1932,7 @@ html.modern-yellow-lab.theme-light :is(.liquid-brand-title, .role-tab:hover, .au
 
 html.modern-yellow-lab.theme-light :is(.liquid-brand-subtitle, .liquid-checkbox-label,
   .liquid-social-note, .liquid-social-divider) {
-  color: #817e77 !important;
+  color:var(--x58-text-muted) !important;
 }
 
 html.modern-yellow-lab.theme-light :is(.liquid-role-pills, .liquid-auth-tabs) {
@@ -2032,4 +2032,85 @@ html.modern-yellow-lab.theme-light .real-profile-details strong {
 /* El icono de cada fila conserva el amarillo de marca: es el único acento. */
 html.modern-yellow-lab.theme-light .real-profile-details span svg {
   stroke: var(--x58-yellow-active) !important;
+}
+
+/* =========================================================================
+   DRIVER HOME — RAIL CENTRADO Y TIRA DE METRICAS MAS COMPACTA
+   Correcciones sobre las reglas de mas arriba de este mismo archivo, que
+   es el ultimo en cargarse y por tanto el que decide.
+   ========================================================================= */
+
+/* La regla de la linea ~1494 aplica `left:10px; right:10px` a la vez al
+   header del pasajero y al del conductor. En el del pasajero funciona
+   porque esta posicionado en absoluto y ambos lados cuentan. El del
+   conductor es `position: relative`: ahi `right` se ignora y solo queda
+   `left`, que lo empujaba 10px a la derecha y lo dejaba a 18px por la
+   izquierda desbordando 2px por la derecha. Sin desplazamiento queda
+   centrado a 8/8, exactamente como la tira de metricas de debajo. */
+html.modern-yellow-lab .driver-app .driver-header {
+  left: 0 !important;
+  right: auto !important;
+}
+
+/* La tira sube hasta casi tocar el rail y adelgaza. */
+html.modern-yellow-lab .driver-app .stats-bar {
+  height: 58px !important;
+  padding: 5px 8px !important;
+  transform: translateY(-17px) !important;
+}
+
+/* =========================================================================
+   MODO CLARO — DEUDAS HEREDADAS DEL TEMA OSCURO
+   Todo lo de aqui esta acotado a .theme-light: el modo oscuro no puede
+   verse afectado por ninguna de estas reglas.
+   ========================================================================= */
+
+/* 1. El amarillo de marca como TEXTO sobre tarjeta clara daba 1.27:1, es
+      decir practicamente invisible. Baja al escalon profundo, que mide
+      4.62:1 sobre el marfil y 5.26:1 sobre blanco. El amarillo sigue
+      intacto donde actua como relleno, borde o seleccion. */
+html.modern-yellow-lab.theme-light .real-profile-heading span,
+html.modern-yellow-lab.theme-light .real-profile-stats article > span,
+html.modern-yellow-lab.theme-light .real-profile-stats article span,
+html.modern-yellow-lab.theme-light .real-profile-stats strong,
+html.modern-yellow-lab.theme-light .real-profile-secondary,
+html.modern-yellow-lab.theme-light .driver-profile-stats span,
+html.modern-yellow-lab.theme-light .driver-profile-stats strong {
+  color: var(--x58-yellow-text) !important;
+}
+
+/* 2. Los filtros del historial de la billetera llegaban con el grafito del
+      tema oscuro fijado a mano: en claro quedaba una pastilla negra con
+      texto gris a 2.38:1, que ademas parecia seleccionada compitiendo con
+      la que si lo esta. El estado activo ya tenia su regla clara. */
+html.modern-yellow-lab.theme-light .wallet-history-filters button,
+html.modern-yellow-lab.theme-light .passenger-history-filters button {
+  background: var(--x58-surface-1) !important;
+  border-color: var(--x58-border-subtle) !important;
+  color: var(--x58-text-secondary) !important;
+}
+
+/* 3. El verde de estado tambien era el del tema oscuro. */
+html.modern-yellow-lab.theme-light .real-profile-heading b {
+  border-color: color-mix(in srgb, var(--x58-success) 40%, transparent) !important;
+  color: var(--x58-success) !important;
+}
+
+/* 4. Los valores de la tira de metricas del conductor llegaban en amarillo
+      puro tambien en claro: 1.27:1 sobre marfil. Ganancias y Calificacion
+      conservan el amarillo, pero en el escalon legible; Viajes va en
+      grafito. Acotado a .theme-light: el oscuro no se toca. */
+html.modern-yellow-lab.theme-light .driver-app .stats-bar .stat-item .stat-value {
+  color: var(--x58-text-primary) !important;
+}
+
+html.modern-yellow-lab.theme-light .driver-app .stats-bar .stat-item:nth-child(2) .stat-value,
+html.modern-yellow-lab.theme-light .driver-app .stats-bar .stat-item:nth-child(3) .stat-value {
+  color: var(--x58-yellow-text) !important;
+}
+
+/* 5. El panel de actividad del Mapa de Flota conservaba su fondo grafito en
+      modo claro mientras su texto pasaba a grafito: 1.09:1, ilegible. */
+html.modern-yellow-lab.theme-light .fleet-live-panel {
+  background: var(--x58-surface-overlay) !important;
 }

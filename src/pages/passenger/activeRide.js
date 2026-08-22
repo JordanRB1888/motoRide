@@ -35,7 +35,7 @@ export function renderActiveRide(trip, driver, onSOS, onChat, onMinimize) {
                style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--accent-primary);">
           <div>
             <strong style="display:block; color:var(--text-primary); font-size:0.95rem;">${driver?.firstName || 'Conductores'} ${driver?.lastName || ''}</strong>
-            <span class="active-driver-vehicle" style="color:var(--accent-primary); font-size:0.82rem; font-weight:700;">${vehicleImage(driver?.vehicleType || trip?.rideType || 'MOTO', { className: 'active-driver-vehicle-image', decorative: true })}${driver?.vehicleBrand || 'Bera'} · ${driver?.vehiclePlate || 'AC3M49P'}</span>
+            <span class="active-driver-vehicle" style="color:var(--x58-yellow-text); font-size:0.82rem; font-weight:700;">${vehicleImage(driver?.vehicleType || trip?.rideType || 'MOTO', { className: 'active-driver-vehicle-image', decorative: true })}${driver?.vehicleBrand || 'Bera'} · ${driver?.vehiclePlate || 'AC3M49P'}</span>
           </div>
         </div>
 
@@ -82,7 +82,7 @@ export function renderTripComplete(trip, driver, onRate, onTip, onDone) {
       <!-- Amount Summary -->
       <div style="background: rgba(255,193,7,0.08); padding: 18px; border-radius: 20px; border: 1px solid var(--border-gold); margin-bottom: 24px;">
         <small style="color:var(--text-secondary); display:block; font-size:0.8rem;">MONTO TOTAL DEL VIAJE</small>
-        <div style="font-size: 2.4rem; font-weight: 900; color: var(--accent-primary); font-family: 'JetBrains Mono', monospace;">
+        <div style="font-size: 2.4rem; font-weight: 900; color: var(--x58-yellow-text); font-family:var(--x58-font-display); font-variant-numeric:tabular-nums;">
           $${(trip?.fareUSD || 4.50).toFixed(2)} <span style="font-size:1rem;">USD</span>
         </div>
       </div>

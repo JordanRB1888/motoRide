@@ -321,24 +321,42 @@ test('el perfil en tema claro no hereda texto ni superficie del tema oscuro', ()
 });
 
 test('el tema oscuro del perfil no se toca', () => {
-  // El oscuro ya estaba certificado: todos los overrides nuevos deben ir
-  // acotados a .theme-light y ninguno puede quedar suelto.
+  // El oscuro ya estaba certificado. Lo que no puede sufrir es un cambio de
+  // COLOR. Una correccion de geometria —centrar el rail, ajustar una altura—
+  // es legitima y de hecho debe aplicarse a los dos temas. Asi que el
+  // contrato es: toda declaracion que PINTE va acotada a .theme-light.
   const lab = read('src/styles/modern-yellow-lab.css');
   const inicio = lab.indexOf('PERFIL EN TEMA CLARO');
   assert.notEqual(inicio, -1, 'falta el bloque de perfil claro');
   const bloque = lab.slice(inicio);
 
-  // Cada linea que abre una regla en este bloque debe llevar .theme-light.
-  const selectores = bloque
-    .split(/\r?\n/)
-    .map(linea => linea.trim())
-    .filter(linea => linea.startsWith('html') && linea.endsWith('{'));
+  const PINTA = /(?<![-a-z])(color|background|border[a-z-]*color|box-shadow|fill|stroke|outline-color)\s*:/;
 
-  assert.ok(selectores.length >= 5, `se esperaban al menos 5 overrides, hay ${selectores.length}`);
-  for (const sel of selectores) {
-    assert.ok(sel.includes('.theme-light'),
-      `el override "${sel.slice(0, 60)}" no esta acotado al tema claro y afectaria al oscuro`);
+  const reglas = [];
+  for (const trozo of bloque.split('}')) {
+    const i = trozo.indexOf('{');
+    if (i === -1) continue;
+    const selector = trozo.slice(0, i)
+      .split(/\r?\n/)
+      .map(linea => linea.trim())
+      .filter(linea => linea && !linea.startsWith('/*') && !linea.startsWith('*'))
+      .join(' ');
+    if (!selector.includes('html') && !selector.includes(':root')) continue;
+    reglas.push({ selector, cuerpo: trozo.slice(i + 1) });
   }
+
+  assert.ok(reglas.length >= 5, `se esperaban al menos 5 overrides, hay ${reglas.length}`);
+  for (const { selector, cuerpo } of reglas) {
+    if (!PINTA.test(cuerpo)) continue;
+    assert.ok(selector.includes('.theme-light'),
+      `el override "${selector.slice(0, 70)}" pinta y no esta acotado al tema claro`);
+  }
+
+  // Y que sigan existiendo overrides claros de color: el contrato no debe
+  // poder aprobarse simplemente porque alguien los haya borrado todos.
+  const conColor = reglas.filter(regla => PINTA.test(regla.cuerpo));
+  assert.ok(conColor.length >= 5,
+    `se esperaban al menos 5 overrides de color en claro, hay ${conColor.length}`);
 });
 
 /* ---------------------------------------------------------------------------

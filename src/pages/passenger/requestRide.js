@@ -109,7 +109,7 @@ function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelR
       <div style="display:flex; justify-content:space-between; align-items:center; background: rgba(255, 193, 7, 0.06); padding: 16px; border-radius: 20px; border: 1px solid rgba(255,193,7,0.25); margin-bottom: 16px;">
         <div>
           <span style="color:var(--text-secondary); font-size:0.8rem; display:block;">TARIFA ESTIMADA</span>
-          <div style="font-size: 2.2rem; font-weight: 900; color: var(--accent-primary); font-family: 'JetBrains Mono', monospace; line-height: 1;">
+          <div style="font-size: 2.2rem; font-weight: 900; color: var(--x58-yellow-text); font-family:var(--x58-font-display); font-variant-numeric:tabular-nums; line-height: 1;">
             $${escapeHtml(fareData.fareUSD)} <span style="font-size: 0.9rem; font-weight: 700;">USD</span>
           </div>
           <div style="color: var(--text-secondary); font-size: 0.82rem; font-weight: 600; margin-top: 4px;">
@@ -146,7 +146,7 @@ function renderFarePreviewLegacy(fareData, onConfirm, onChangePayment, onCancelR
           </div>
           <div>
             <strong style="display:block; color:var(--text-primary); font-size: 0.9rem;">Método de Pago</strong>
-            <span style="color:var(--accent-primary); font-size:0.82rem; font-weight:700;">Pago Móvil / Efectivo USD / Wallet</span>
+            <span style="color:var(--x58-yellow-text); font-size:0.82rem; font-weight:700;">Pago Móvil / Efectivo USD / Wallet</span>
           </div>
         </div>
         <span style="color:var(--text-secondary); display:flex;">${icon('chevronRight', 20)}</span>

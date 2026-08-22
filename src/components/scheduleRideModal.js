@@ -41,7 +41,7 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
             <!-- Header -->
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px dashed var(--border-color); padding-bottom: 14px; margin-bottom: 16px;">
                 <div style="display:flex; align-items:center; gap: 10px;">
-                    <div style="width: 40px; height: 40px; border-radius: 50%; background: rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-primary); font-size:1.3rem;">
+                    <div style="width: 40px; height: 40px; border-radius: 50%; background: rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--x58-yellow-text); font-size:1.3rem;">
                         ${icon('calendar', 32)}
                     </div>
                     <div>
@@ -120,7 +120,7 @@ export function createScheduleRideModal({ originName = 'Basílica de Chiquinquir
                 <div style="background: rgba(255,193,7,0.06); padding: 14px; border-radius: 18px; border: 1px solid var(--border-gold); display:flex; justify-content:space-between; align-items:center;">
                     <div>
                         <small style="color:var(--text-muted); font-size:0.75rem; display:block;">TARIFA CONGELADA DE LA RESERVA</small>
-                        <strong style="color:var(--accent-primary); font-size:1.4rem; font-family:'JetBrains Mono', monospace;">€${currentFareEUR.toFixed(2)} EUR</strong>
+                        <strong style="color:var(--x58-yellow-text); font-size:1.4rem; font-family:var(--x58-font-display); font-variant-numeric:tabular-nums;">€${currentFareEUR.toFixed(2)} EUR</strong>
                     </div>
                     <div style="text-align:right;">
                         <small style="color:var(--text-muted); font-size:0.72rem; display:block;">EQUIVALENTE VES (BCV)</small>
