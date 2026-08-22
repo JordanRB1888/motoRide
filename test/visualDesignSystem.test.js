@@ -407,3 +407,23 @@ test('el manifest declara un icono enmascarable', () => {
   assert.equal(m.background_color, '#0e0d0b', 'el splash debe usar el grafito de la referencia');
   assert.equal(m.theme_color, '#ffd21f', 'el color de tema debe ser el amarillo canónico');
 });
+
+test('el acceso de administración no se anuncia en la pantalla pública', () => {
+  const landing = read('src/pages/landing.js');
+
+  // El botón se RENDERIZA condicionalmente, no se oculta con CSS: si se
+  // ocultara, seguiría apareciendo al inspeccionar el DOM.
+  assert.match(landing, /accesoAdminVisible\(\)\s*\?/,
+    'el tab admin debe renderizarse solo bajo petición explícita');
+  assert.match(landing, /function accesoAdminVisible\(\)/);
+
+  const bloque = landing.slice(landing.indexOf('function accesoAdminVisible'));
+  assert.match(bloque, /admin'\)\s*===\s*'1'/,
+    'debe existir una vía explícita para que administración entre');
+
+  // Y no puede haber una regla que lo esconda: eso sería falsa sensación.
+  for (const { name, css } of readStyles()) {
+    assert.doesNotMatch(css, /\[data-role=["']admin["']\][^{]*\{[^}]*display:\s*none/,
+      `${name} esconde el tab admin con CSS en vez de no renderizarlo`);
+  }
+});

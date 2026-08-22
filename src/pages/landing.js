@@ -2,6 +2,29 @@ import { authService } from '../services/authService.js';
 import { createDriverRegistrationModal } from '../components/driverRegistrationModal.js';
 import { showToast } from '../components/toast.js';
 import { icon } from '../utils/icons.js';
+
+/**
+ * El acceso de administracion no se anuncia en la pantalla publica.
+ *
+ * Esto NO es un control de seguridad: el endpoint de login sigue aceptando el
+ * rol admin y quien lo conozca puede usarlo. Lo que evita es publicar la
+ * puerta a todo el que abra la aplicacion, que es una peticion razonable de
+ * reduccion de superficie visible. La seguridad real vive en el backend:
+ * contrasena, JWT, verificacion de rol por peticion y limitador propio del
+ * login.
+ *
+ * El boton se RENDERIZA solo bajo peticion explicita, no se oculta con CSS:
+ * asi tampoco aparece inspeccionando el DOM.
+ */
+function accesoAdminVisible() {
+    if (typeof window === 'undefined') return false;
+    const busqueda = new URLSearchParams(window.location.search);
+    if (busqueda.get('admin') === '1') return true;
+    // El hash tambien puede llevarlo: #/?admin=1
+    const hash = window.location.hash || '';
+    const i = hash.indexOf('?');
+    return i !== -1 && new URLSearchParams(hash.slice(i + 1)).get('admin') === '1';
+}
 import { brandIcon } from '../utils/brandIcons.js';
 import { createScreenLifecycle } from '../utils/screenLifecycle.js';
 
@@ -100,10 +123,11 @@ export function renderLanding(container) {
                             <span class="pill-tab-icon">${icon('motorcycle', 14)}</span>
                             <span>Conductor</span>
                         </button>
+                        ${accesoAdminVisible() ? `
                         <button class="role-tab" data-role="admin" type="button">
                             <span class="pill-tab-icon">${icon('shield', 14)}</span>
                             <span>Admin</span>
-                        </button>
+                        </button>` : ''}
                     </div>
 
                     <!-- Auth Mode Tabs (Iniciar Sesión vs Registrarse) -->
