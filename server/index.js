@@ -10,7 +10,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { DatabaseSync } from 'node:sqlite';
 import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
 import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
@@ -25,7 +24,7 @@ import {
   normalizeClientFareEstimate
 } from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
-import { createDatabasePersistence } from './services/databasePersistence.js';
+import { openDatabaseBackend } from './services/databaseBackend.js';
 import { createEventRateLimiter } from './services/socketRateLimit.js';
 import { createConnectionLimiter } from './services/connectionLimit.js';
 import { resolveTrustProxy } from './services/trustProxy.js';
@@ -300,61 +299,15 @@ const initialDatabase = {
   adminActions: []
 };
 
-fs.mkdirSync(path.dirname(dataFile), { recursive: true });
-const sqlite = new DatabaseSync(dataFile);
-sqlite.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA foreign_keys = ON;
-  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS trips (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS supportMessages (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS transactions (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS driverApplications (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS driverDocuments (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS adminActions (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS schemaMigrations (id TEXT PRIMARY KEY, appliedAt TEXT NOT NULL);
-`);
-
 const migrationsDirectory = path.join(serverDir, 'migrations');
-if (fs.existsSync(migrationsDirectory)) {
-  for (const filename of fs.readdirSync(migrationsDirectory).filter(name => name.endsWith('.sql')).sort()) {
-    if (sqlite.prepare('SELECT id FROM schemaMigrations WHERE id = ?').get(filename)) continue;
-    sqlite.exec('BEGIN IMMEDIATE');
-    try {
-      sqlite.exec(fs.readFileSync(path.join(migrationsDirectory, filename), 'utf8'));
-      sqlite.prepare('INSERT INTO schemaMigrations (id, appliedAt) VALUES (?, ?)').run(filename, new Date().toISOString());
-      sqlite.exec('COMMIT');
-    } catch (error) {
-      sqlite.exec('ROLLBACK');
-      throw new Error(`MIGRATION_FAILED:${filename}:${error.message}`);
-    }
-  }
-}
-
-function loadCollection(table) {
-  return sqlite.prepare(`SELECT payload FROM ${table}`).all().map(row => JSON.parse(row.payload));
-}
-
-const database = {
-  users: loadCollection('users'),
-  trips: loadCollection('trips'),
-  notifications: loadCollection('notifications'),
-  messages: loadCollection('messages'),
-  supportMessages: loadCollection('supportMessages'),
-  settings: loadCollection('settings'),
-  transactions: loadCollection('transactions'),
-  driverApplications: loadCollection('driverApplications'),
-  driverDocuments: loadCollection('driverDocuments'),
-  adminActions: loadCollection('adminActions')
-};
+const databaseBackend = await openDatabaseBackend({ dataFile, migrationsDirectory });
+const { database, persistence } = databaseBackend;
+console.log(`[+58express Database] backend = ${databaseBackend.kind}`);
 
 const storedPricing = database.settings.find(item => item.id === 'pricing');
 if (storedPricing?.value) pricingConfig = { ...pricingConfig, ...storedPricing.value };
 
-function ensureSeedCredentials() {
+async function ensureSeedCredentials() {
   let changed = false;
   for (const seedUser of initialDatabase.users) {
     if (!database.users.some(user => user.id === seedUser.id)) {
@@ -385,28 +338,26 @@ function ensureSeedCredentials() {
       changed = true;
     }
   }
-  if (changed) persistDatabase();
+  if (changed && !await persistDatabase()) throw new Error('DATABASE_SEED_PERSIST_FAILED');
 }
 
 // Escritura incremental: solo llegan al disco las filas que cambiaron. La
 // versión anterior borraba y reinsertaba las diez tablas en cada llamada, de
 // modo que el coste de persistir una sola coordenada de GPS crecía con todo el
 // histórico acumulado de la aplicación.
-const persistence = createDatabasePersistence({ sqlite, database });
-
-function persistDatabase() {
-  persistence.persist();
+async function persistDatabase() {
+  return await persistence.persist();
 }
 
 // Para los eventos que modifican exactamente un registro ya conocido. Ver el
 // contrato en services/databasePersistence.js: no guarda otros cambios
 // pendientes, así que solo debe usarse cuando el manejador toca un único
 // registro y nada más.
-function persistRecord(table, item) {
-  persistence.persistRecord(table, item);
+async function persistRecord(table, item) {
+  return await persistence.persistRecord(table, item);
 }
 
-ensureSeedCredentials();
+await ensureSeedCredentials();
 
 function publicUser(user) {
   if (!user) return null;
@@ -1964,7 +1915,7 @@ io.on('connection', (socket) => {
   });
 
   // Driver Atomic Ride Acceptance Event
-  on('rideAccepted', (data = {}) => {
+  on('rideAccepted', async (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
     // Del cliente solo se acepta el identificador del viaje.
     const tripId = typeof data.tripId === 'string' ? data.tripId : null;
@@ -1994,6 +1945,12 @@ io.on('connection', (socket) => {
       return reject('INVALID_TRIP_TRANSITION');
     }
 
+    // PostgreSQL es el árbitro final entre procesos/instancias. El UPDATE
+    // condicional solo reserva el viaje si todavía sigue SEARCHING y sin
+    // conductor; el cerrojo en memoria por sí solo no cubre otra instancia.
+    const reserved = await persistence.reserveTripAssignment(tripId, driverId, new Date().toISOString());
+    if (!reserved) return reject('ALREADY_ACCEPTED');
+
     // A partir de aquí se muta estado. La transición va protegida para que un
     // evento malicioso no pueda derribar el proceso, y el cerrojo se revierte
     // si algo falla.
@@ -2016,7 +1973,7 @@ io.on('connection', (socket) => {
     trip.driverId = driverId;
     // El conductor pasa a BUSY solo con la asignación ya consolidada.
     authenticatedDriver.status = DRIVER_STATUS.BUSY;
-    persistDatabase();
+    if (!await persistDatabase()) return reject('PERSISTENCE_FAILED');
 
     console.log(`[+58express Socket.IO] Atomic lock success! Ride [${tripId}] assigned to ${driver.firstName}`);
 

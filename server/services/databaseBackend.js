@@ -1,0 +1,58 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { createDatabasePersistence, PERSISTED_TABLES } from './databasePersistence.js';
+import {
+  createPostgresPersistence,
+  createPostgresPool,
+  loadPostgresDatabase
+} from './postgresPersistence.js';
+
+export async function openDatabaseBackend({ dataFile, migrationsDirectory, logger = console } = {}) {
+  if (process.env.DATABASE_URL) {
+    const pool = createPostgresPool({
+      connectionString: process.env.DATABASE_URL,
+      max: Number(process.env.DATABASE_POOL_MAX || 10)
+    });
+    await pool.query('select 1 as ready');
+    const database = await loadPostgresDatabase(pool);
+    const persistence = await createPostgresPersistence({ pool, database, logger });
+    return { kind: 'postgres', database, persistence, close: () => persistence.close() };
+  }
+
+  fs.mkdirSync(path.dirname(dataFile), { recursive: true });
+  const sqlite = new DatabaseSync(dataFile);
+  sqlite.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+    ${PERSISTED_TABLES.map(table => `CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, payload TEXT NOT NULL);`).join('\n')}
+    CREATE TABLE IF NOT EXISTS schemaMigrations (id TEXT PRIMARY KEY, appliedAt TEXT NOT NULL);
+  `);
+
+  if (fs.existsSync(migrationsDirectory)) {
+    for (const filename of fs.readdirSync(migrationsDirectory).filter(name => name.endsWith('.sql')).sort()) {
+      if (sqlite.prepare('SELECT id FROM schemaMigrations WHERE id = ?').get(filename)) continue;
+      sqlite.exec('BEGIN IMMEDIATE');
+      try {
+        sqlite.exec(fs.readFileSync(path.join(migrationsDirectory, filename), 'utf8'));
+        sqlite.prepare('INSERT INTO schemaMigrations (id, appliedAt) VALUES (?, ?)').run(filename, new Date().toISOString());
+        sqlite.exec('COMMIT');
+      } catch (error) {
+        sqlite.exec('ROLLBACK');
+        throw new Error(`MIGRATION_FAILED:${filename}:${error.message}`);
+      }
+    }
+  }
+
+  const database = Object.fromEntries(PERSISTED_TABLES.map(table => [
+    table,
+    sqlite.prepare(`SELECT payload FROM ${table}`).all().map(row => JSON.parse(row.payload))
+  ]));
+  const persistence = createDatabasePersistence({ sqlite, database, logger });
+  return {
+    kind: 'sqlite',
+    database,
+    persistence: { ...persistence, kind: 'sqlite', reserveTripAssignment: async () => true, flush: async () => true },
+    close: async () => sqlite.close()
+  };
+}
