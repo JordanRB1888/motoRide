@@ -62,7 +62,11 @@ class RealSocketClient {
         autoConnect: Boolean(savedToken),
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: 5,
+        // En redes móviles la conexión puede perderse durante más de cinco
+        // intentos aunque el GPS por REST siga funcionando. Un conductor que
+        // eligió estar en línea no debe quedar fuera del registro de despacho
+        // silenciosamente por agotar un presupuesto finito de reconexiones.
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 2000,
         timeout: 5000
       });

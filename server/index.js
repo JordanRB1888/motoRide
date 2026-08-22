@@ -39,6 +39,7 @@ import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
 import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch.js';
 import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_TRIP_USER_IDS } from './domain/tripFilters.js';
+import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 
 const app = express();
@@ -1735,27 +1736,23 @@ function dispatchTripToDrivers(trip) {
   const pickupLat = pickup.lat;
   const pickupLng = pickup.lng;
 
-  // Find available online drivers
-  const availableDrivers = database.users
-    .filter(u =>
-      u.role === 'driver' &&
-      u.isVerified === true &&
-      u.accountStatus !== 'DISABLED' &&
-      u.status === 'AVAILABLE' &&
-      driverRegistry.has(u.id) &&
-      (u.vehicleType || 'MOTO') === (trip.rideType || 'MOTO') &&
-      !(trip.excludedDriverIds || []).includes(u.id) &&
-      Number.isFinite(u.location?.lat) &&
-      Number.isFinite(u.location?.lng)
-    )
-    .map(d => {
-      const dist = calculateDistance(pickupLat, pickupLng, d.location.lat, d.location.lng);
-      return { driver: d, dist };
-    })
-    .filter(candidate => candidate.dist <= Number(process.env.MAX_DISPATCH_RADIUS_KM || 15))
-    .sort((a, b) => a.dist - b.dist);
+  const { candidates: availableDrivers, rejectionCounts } = selectEligibleDrivers({
+    drivers: database.users,
+    trip,
+    pickup: { lat: pickupLat, lng: pickupLng },
+    driverRegistry,
+    activeTripForDriver,
+    calculateDistance,
+    maxRadiusKm: Number(process.env.MAX_DISPATCH_RADIUS_KM || 15),
+    maxLocationAgeMs: Number(process.env.MAX_DRIVER_LOCATION_AGE_MS || 120_000)
+  });
 
-  console.log(`[+58express Dispatcher] Dispatching trip [${trip.id}] to ${availableDrivers.length} online drivers`);
+  console.log(`[+58express Dispatcher] ${JSON.stringify({
+    event: 'dispatch_eligibility',
+    tripId: trip.id,
+    eligibleDriverCount: availableDrivers.length,
+    rejectionCounts
+  })}`);
 
   const session = { tripId: trip.id, candidates: availableDrivers, index: -1, currentDriverId: null };
   dispatchSessions.set(trip.id, session);
@@ -1786,7 +1783,10 @@ function dispatchTripToDrivers(trip) {
       candidatesCount: session.candidates.length,
       offerExpiresAt: Date.now() + 15000
     };
-    if (socketId) io.to(socketId).emit('rideRequested', offer);
+    if (socketId) {
+      io.to(socketId).emit('rideRequested', offer);
+      console.log(`[+58express Dispatcher] ${JSON.stringify({ event: 'driver_offer_emitted', tripId: trip.id, emitted: true })}`);
+    }
     io.to('admins').emit('rideRequested', offer);
     const timer = setTimeout(offerNext, 15000);
     dispatchTimers.set(trip.id, timer);
