@@ -10,7 +10,11 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "check": "node --check index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "db:migrate": "node scripts/postgresMigrate.js",
+    "db:import:dry-run": "node scripts/sqlitePostgresMigration.js --dry-run",
+    "db:import": "node scripts/sqlitePostgresMigration.js",
+    "db:verify": "node scripts/verifyPostgresMigration.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -20,6 +24,7 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.2.0",
+    "pg": "8.23.0",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
