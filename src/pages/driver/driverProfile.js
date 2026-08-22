@@ -50,7 +50,7 @@ export function renderDriverProfile(container, options = {}) {
           border: 1.5px solid var(--border-gold); box-shadow: 0 20px 45px rgba(0,0,0,0.6); margin-bottom: 20px;
           position: relative; overflow: hidden;
         ">
-          <div style="position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, #FFC107 0%, #00D2FF 50%, #00E676 100%);"></div>
+          <div style="position: absolute; top: 0; left: 0; right: 0; height: 5px; background: var(--x58-yellow);"></div>
 
           <!-- Avatar Container -->
           <div class="driver-profile-avatar-wrap" style="position: relative; width: 108px; height: 108px; margin: 0 auto 16px;">
@@ -64,9 +64,9 @@ export function renderDriverProfile(container, options = {}) {
             
             <button id="btn-trigger-driver-photo" style="
               position: absolute; bottom: 0; right: -2px;
-              background: var(--accent-secondary); color: #121824; font-size: 0.75rem;
+              background: var(--x58-yellow); color: var(--x58-text-inverse); font-size: 0.75rem;
               padding: 5px 10px; border-radius: 14px; font-weight: 900;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; border: 1.5px solid #121824;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; border: 1.5px solid var(--x58-surface-0);
               display: flex; align-items: center; gap: 4px;
             " title="Subir Foto Real del Conductor">
               Foto Real
@@ -197,7 +197,7 @@ export function renderDriverProfile(container, options = {}) {
 
               <button type="submit" id="btn-save-driver-info" class="btn btn-3d primary-btn" style="
                 width: 100%; padding: 14px; font-weight: 900; font-size: 0.95rem; margin-top: 6px;
-                background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%); color: #121824; cursor: pointer;
+                background: linear-gradient(135deg, var(--x58-yellow), var(--x58-yellow-active)); color: var(--x58-text-inverse); cursor: pointer;
               ">
                 ✓ GUARDAR DATOS DEL CONDUCTOR
               </button>
@@ -224,7 +224,7 @@ export function renderDriverProfile(container, options = {}) {
 
           <button id="btn-request-withdrawal" class="btn btn-3d primary-btn" ${hasWalletDebt ? 'disabled' : ''} style="
             width: 100%; padding: 16px; font-weight: 900; font-size: 1rem;
-            background: linear-gradient(135deg, #FFC107 0%, #FF8F00 100%); color: #121824;
+            background: linear-gradient(135deg, var(--x58-yellow), var(--x58-yellow-active)); color: var(--x58-text-inverse);
             border-radius: 16px; margin-top: 6px;
           ">
             ${hasWalletDebt ? 'RECARGA DESDE GANANCIAS PARA QUEDAR AL DÍA' : icon('wallet', 16) + ' SOLICITAR RETIRO POR PAGO MÓVIL'}
@@ -423,7 +423,7 @@ function openWithdrawalModal(container, balanceEUR, bcvRate) {
 
         <button type="submit" class="btn btn-3d primary-btn" style="
           width:100%; padding:16px; font-weight:900; font-size:1.1rem; margin-top:8px;
-          background: linear-gradient(135deg, #FFC107 0%, #FF8F00 100%); color:#121824;
+          background: linear-gradient(135deg, var(--x58-yellow), var(--x58-yellow-active)); color:var(--x58-text-inverse);
         ">
           ✓ CONFIRMAR SOLICITUD DE RETIRO
         </button>
