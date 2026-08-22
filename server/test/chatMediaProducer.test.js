@@ -277,9 +277,9 @@ test('N) socket y HTTP producen exactamente el mismo formato', async () => {
   const porHttp = await (await enviarSoporte(url, token, { text: 'x', image: PNG_URL })).json();
 
   // El productor de socket comparte pipeline: se comprueba sobre la fuente que
-  // ambos llaman al mismo `withStoredImage` y componen `...media` igual.
+  // ambos llaman al mismo pipeline asíncrono y componen `...media` igual.
   const fuente = fs.readFileSync(path.join(serverDir, 'index.js'), 'utf8');
-  const llamadas = fuente.match(/chatMediaPipeline\.withStoredImage\(/g) || [];
+  const llamadas = fuente.match(/chatMediaPipeline\.withStoredImageAsync\(/g) || [];
   assert.equal(llamadas.length, 2, `se esperaban los dos productores, hay ${llamadas.length}`);
   assert.equal((fuente.match(/\.\.\.\(media \|\| \{\}\)/g) || []).length, 2,
     'los dos deben componer el mensaje con el mismo bloque de medios');

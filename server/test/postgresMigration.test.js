@@ -82,3 +82,25 @@ test('la reserva de viaje usa un UPDATE condicional, no un cerrojo solo en memor
   assert.match(source, /driver_id is null/);
   assert.match(source, /rowCount !== 1/);
 });
+
+test('todas las escrituras del servidor esperan confirmación de persistencia', () => {
+  const sources = [
+    path.join(serverDir, 'index.js'),
+    path.join(serverDir, 'routes', 'driverApplications.js')
+  ].map(filename => fs.readFileSync(filename, 'utf8')).join('\n');
+  const unawaited = sources.split(/\r?\n/).filter(line =>
+    /\bpersist(?:Database|Record)\(/.test(line) &&
+    !/async function persist(?:Database|Record)/.test(line) &&
+    !/return await persistence\.persistRecord/.test(line) &&
+    !/await persist(?:Database|Record)\(/.test(line)
+  );
+  assert.deepEqual(unawaited, []);
+});
+
+test('chat y soporte compensan también rechazos asíncronos de persistencia', () => {
+  const server = fs.readFileSync(path.join(serverDir, 'index.js'), 'utf8');
+  const pipeline = fs.readFileSync(path.join(serverDir, 'services', 'chatMediaPipeline.js'), 'utf8');
+  assert.equal((server.match(/chatMediaPipeline\.withStoredImageAsync\(/g) || []).length, 2);
+  assert.match(pipeline, /async function withStoredImageAsync/);
+  assert.match(pipeline, /return await persistir\(media\)/);
+});

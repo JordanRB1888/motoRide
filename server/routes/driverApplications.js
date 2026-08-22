@@ -188,7 +188,10 @@ export function createDriverApplicationsRouter({
       title: 'Nuevo conductor esperando aprobación',
       message: `${personal.firstName} ${personal.lastName} envió una solicitud con vehículo ${vehicle.type === 'CAR' ? 'automóvil' : 'moto'}.`
     });
-    persistDatabase();
+    if (!await persistDatabase()) {
+      stored.forEach(document => privateStorage.remove(document.storageKey));
+      return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+    }
     io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
     io.to('admins').emit('platform:notification', adminNotification);
     res.status(201).json({
@@ -205,7 +208,7 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
-  router.patch('/driver-applications/me', requireAuth, limitadores.expedientes, (req, res) => {
+  router.patch('/driver-applications/me', requireAuth, limitadores.expedientes, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
@@ -228,11 +231,11 @@ export function createDriverApplicationsRouter({
     application.vehicle = validation.normalized.vehicle;
     application.status = DRIVER_APPLICATION_STATUS.DRAFT;
     application.updatedAt = new Date().toISOString();
-    persistDatabase();
+    if (!await persistDatabase()) return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
-  router.put('/driver-applications/me/documents/:type', requireAuth, limitadores.subidas, singleDocumentUpload, (req, res) => {
+  router.put('/driver-applications/me/documents/:type', requireAuth, limitadores.subidas, singleDocumentUpload, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
@@ -251,11 +254,14 @@ export function createDriverApplicationsRouter({
     }
     application.status = DRIVER_APPLICATION_STATUS.DRAFT;
     application.updatedAt = new Date().toISOString();
-    persistDatabase();
+    if (!await persistDatabase()) {
+      privateStorage.remove(storageKey);
+      return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+    }
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
-  router.post('/driver-applications/me/submit', requireAuth, limitadores.expedientes, (req, res) => {
+  router.post('/driver-applications/me/submit', requireAuth, limitadores.expedientes, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
@@ -267,7 +273,7 @@ export function createDriverApplicationsRouter({
     application.submittedAt = new Date().toISOString();
     application.updatedAt = application.submittedAt;
     application.decisionReason = null;
-    persistDatabase();
+    if (!await persistDatabase()) return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
     io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
@@ -296,7 +302,7 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationAdminDetail(application, getApplicationDocuments(application.id), database.users.find(user => user.id === application.userId)));
   });
 
-  router.patch('/admin/driver-applications/:id/decision', requireAuth, requireRole('admin'), limitadores.expedientes, (req, res) => {
+  router.patch('/admin/driver-applications/:id/decision', requireAuth, requireRole('admin'), limitadores.expedientes, async (req, res) => {
     const application = database.driverApplications.find(item => item.id === req.params.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     const user = database.users.find(item => item.id === application.userId);
@@ -381,7 +387,7 @@ export function createDriverApplicationsRouter({
     };
     database.adminActions.push(audit);
     const notification = createNotification({ userId: user.id, title: notificationTitle, message: notificationMessage });
-    persistDatabase();
+    if (!await persistDatabase()) return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
     io.to(`user:${user.id}`).emit('driver_application:updated', driverApplicationEvent(application));
     io.to(`user:${user.id}`).emit('platform:notification', notification);
     io.to('admins').emit('driver_application:updated', driverApplicationEvent(application));

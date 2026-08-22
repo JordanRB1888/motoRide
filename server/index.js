@@ -357,6 +357,12 @@ async function persistRecord(table, item) {
   return await persistence.persistRecord(table, item);
 }
 
+async function persistHttp(res) {
+  if (await persistDatabase()) return true;
+  res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+  return false;
+}
+
 await ensureSeedCredentials();
 
 function publicUser(user) {
@@ -750,13 +756,16 @@ app.post('/api/auth/register', credenciales.registro, async (req, res) => {
     updatedAt: now
   };
   database.users.push(user);
-  persistDatabase();
+  if (!await persistHttp(res)) {
+    database.users.splice(database.users.indexOf(user), 1);
+    return;
+  }
   res.status(201).json({ status: 'created', user: publicUser(user), token: signToken(user) });
 });
 
 app.get('/api/auth/me', requireAuth, credenciales.sesion, (req, res) => res.json(publicUser(req.user)));
 
-app.patch('/api/auth/me', requireAuth, credenciales.perfil, (req, res) => {
+app.patch('/api/auth/me', requireAuth, credenciales.perfil, async (req, res) => {
   const allowed = ['firstName', 'lastName', 'phone', 'cedula', ...(req.user.role === 'driver' ? ['vehicleBrand', 'vehicleModel', 'vehiclePlate', 'vehicleColor'] : [])];
   for (const key of allowed) {
     if (!(key in req.body)) continue;
@@ -767,7 +776,7 @@ app.patch('/api/auth/me', requireAuth, credenciales.perfil, (req, res) => {
     req.user[key] = key === 'vehiclePlate' ? value.toUpperCase() : value;
   }
   req.user.updatedAt = new Date().toISOString();
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   res.json(publicUser(req.user));
 });
 
@@ -777,7 +786,7 @@ const profilePhotoUpload = multer({
   fileFilter: (_req, file, callback) => callback(null, ['image/jpeg','image/png','image/webp'].includes(file.mimetype))
 }).single('file');
 
-app.post('/api/auth/me/photo', requireAuth, limitadores.subidas, profilePhotoUpload, (req, res) => {
+app.post('/api/auth/me/photo', requireAuth, limitadores.subidas, profilePhotoUpload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'INVALID_PROFILE_PHOTO' });
   let storageKey;
   try { storageKey = privateStorage.save(req.file, req.user.id); }
@@ -788,7 +797,10 @@ app.post('/api/auth/me/photo', requireAuth, limitadores.subidas, profilePhotoUpl
   req.user.photoSize = req.file.size;
   req.user.photoUrl = userPhotoUrl(req.user);
   req.user.updatedAt = new Date().toISOString();
-  persistDatabase();
+  if (!await persistHttp(res)) {
+    privateStorage.remove(storageKey);
+    return;
+  }
   res.json(publicUser(req.user));
 });
 
@@ -964,7 +976,7 @@ app.get('/api/drivers/nearby', requireAuth, limitadores.cercania, (req, res) => 
     })));
 });
 
-app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
+app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const numberFields = ['nightMultiplier', 'peakMultiplier', 'bcvRate', 'parallelRate', 'commissionRate'];
   const next = structuredClone(pricingConfig);
   for (const key of numberFields) if (req.body[key] !== undefined) next[key] = Number(req.body[key]);
@@ -980,7 +992,7 @@ app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), limitadores.a
   const record = database.settings.find(item => item.id === 'pricing');
   if (record) record.value = next;
   else database.settings.push({ id: 'pricing', value: next });
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   io.to('admins').emit('admin:pricing_updated', next);
   res.json(next);
 });
@@ -1008,14 +1020,14 @@ app.get('/api/admin/finance', requireAuth, requireRole('admin'), limitadores.fin
   });
 });
 
-app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
+app.patch('/api/admin/trips/:id/payout', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id && item.status === 'COMPLETED');
   if (!trip) return res.status(404).json({ error: 'COMPLETED_TRIP_NOT_FOUND' });
   if (!['PAID', 'REJECTED', 'PENDING'].includes(req.body.status)) return res.status(400).json({ error: 'INVALID_PAYOUT_STATUS' });
   trip.payoutStatus = req.body.status;
   trip.payoutUpdatedAt = new Date().toISOString();
   trip.payoutReference = req.body.reference || null;
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   const event = { tripId: trip.id, status: trip.payoutStatus, reference: trip.payoutReference };
   io.to(`user:${trip.driverId}`).to('admins').emit('finance:payout_updated', event);
   io.to(`user:${trip.driverId}`).emit('platform:notification', { title: trip.payoutStatus === 'PAID' ? 'Liquidación aprobada' : 'Liquidación actualizada', message: `El pago del viaje #${trip.id.slice(-6)} figura como ${trip.payoutStatus}.`, category: 'FINANCE', icon: '💵' });
@@ -1156,7 +1168,7 @@ app.get('/api/support/threads/:userId/messages', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/support/messages', requireAuth, limitadores.mensajes, (req, res) => {
+app.post('/api/support/messages', requireAuth, limitadores.mensajes, async (req, res) => {
   const conversationUserId = req.user.role === 'admin' ? req.body.recipientId : req.user.id;
   const target = database.users.find(user => user.id === conversationUserId && user.role !== 'admin');
   // La imagen ya no se guarda en la fila: se escribe en el almacen privado y el
@@ -1165,7 +1177,7 @@ app.post('/api/support/messages', requireAuth, limitadores.mensajes, (req, res) 
   const tieneImagen = isChatImageDataUrl(req.body.image);
   if (!target || (!req.body.text?.trim() && !tieneImagen)) return res.status(400).json({ error: 'INVALID_SUPPORT_MESSAGE' });
 
-  const construir = (media) => {
+  const construir = async (media) => {
     const message = {
       id: `support_${crypto.randomUUID()}`,
       conversationUserId,
@@ -1178,7 +1190,7 @@ app.post('/api/support/messages', requireAuth, limitadores.mensajes, (req, res) 
     };
     database.supportMessages.push(message);
     try {
-      persistDatabase();
+      if (!await persistDatabase()) throw new Error('DATABASE_WRITE_FAILED');
     } catch (error) {
       // Deshacer el alta en memoria: si no se ha persistido, el mensaje no
       // existe, y dejarlo en la coleccion lo haria visible hasta el reinicio.
@@ -1192,8 +1204,8 @@ app.post('/api/support/messages', requireAuth, limitadores.mensajes, (req, res) 
   let message;
   try {
     message = tieneImagen
-      ? chatMediaPipeline.withStoredImage(req.body.image, req.user.id, construir)
-      : construir(null);
+      ? await chatMediaPipeline.withStoredImageAsync(req.body.image, req.user.id, construir)
+      : await construir(null);
   } catch (error) {
     // Nunca se devuelve el detalle: llevaria rutas o claves del almacen.
     const code = ['INVALID_CHAT_IMAGE', 'CHAT_IMAGE_TOO_LARGE', 'INVALID_FILE_TYPE', 'CHAT_MEDIA_TOO_LARGE', 'CHAT_MEDIA_STORAGE_FULL'].includes(error?.code)
@@ -1207,9 +1219,9 @@ app.post('/api/support/messages', requireAuth, limitadores.mensajes, (req, res) 
   res.status(201).json(publico);
 });
 
-app.patch('/api/support/threads/:userId/read', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/support/threads/:userId/read', requireAuth, requireRole('admin'), async (req, res) => {
   database.supportMessages.forEach(message => { if (message.conversationUserId === req.params.userId && message.senderRole !== 'admin') message.read = true; });
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   res.json({ ok: true });
 });
 
@@ -1221,18 +1233,18 @@ app.get('/api/notifications/me', requireAuth, (req, res) => {
   res.json(notifications);
 });
 
-app.patch('/api/notifications/:id/read', requireAuth, limitadores.notificaciones, (req, res) => {
+app.patch('/api/notifications/:id/read', requireAuth, limitadores.notificaciones, async (req, res) => {
   const notification = database.notifications.find(item => item.id === req.params.id);
   if (!notification || !(notification.userId === req.user.id || notification.targetRole === 'all' || notification.targetRole === req.user.role)) {
     return res.status(404).json({ error: 'NOTIFICATION_NOT_FOUND' });
   }
   notification.read = true;
   notification.readAt = new Date().toISOString();
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   res.json(notification);
 });
 
-app.patch('/api/notifications/me/read-all', requireAuth, limitadores.notificaciones, (req, res) => {
+app.patch('/api/notifications/me/read-all', requireAuth, limitadores.notificaciones, async (req, res) => {
   const now = new Date().toISOString();
   database.notifications.forEach(item => {
     if (item.userId === req.user.id || item.targetRole === 'all' || item.targetRole === req.user.role) {
@@ -1240,7 +1252,7 @@ app.patch('/api/notifications/me/read-all', requireAuth, limitadores.notificacio
       item.readAt = now;
     }
   });
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   res.json({ ok: true });
 });
 
@@ -1252,7 +1264,7 @@ app.get('/api/wallet/me', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/wallet/topups', requireAuth, limitadores.cartera, (req, res) => {
+app.post('/api/wallet/topups', requireAuth, limitadores.cartera, async (req, res) => {
   const amount = Math.round(Number(req.body.amount) * 100) / 100;
   const reference = String(req.body.reference || '').replace(/\D/g, '').slice(0, 20);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1000 || reference.length < 6) return res.status(400).json({ error: 'INVALID_TOPUP' });
@@ -1260,12 +1272,12 @@ app.post('/api/wallet/topups', requireAuth, limitadores.cartera, (req, res) => {
   const transaction = { id:`transaction_${crypto.randomUUID()}`, userId:req.user.id, type:'TOP_UP', amount, currency:'USD', method:'PAGO_MOVIL', reference, status:'PENDING', createdAt:new Date().toISOString() };
   database.transactions.push(transaction);
   database.notifications.push({ id:`notification_${crypto.randomUUID()}`, targetRole:'admin', title:'Recarga pendiente de verificación', message:`${req.user.firstName} registró una recarga de $${amount.toFixed(2)}.`, category:'FINANCE', read:false, createdAt:new Date().toISOString() });
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   io.to('admins').emit('finance:topup_pending', transaction);
   res.status(201).json(transaction);
 });
 
-app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, limitadores.cartera, (req, res) => {
+app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, limitadores.cartera, async (req, res) => {
   const available = Number(req.user.walletBalance || 0);
   const amount = Math.round(Number(req.body.amount || available) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0 || amount > available) return res.status(400).json({ error:'INVALID_PAYOUT' });
@@ -1273,10 +1285,11 @@ app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, limitadores.
   const transaction={id:`transaction_${crypto.randomUUID()}`,userId:req.user.id,type:'PAYOUT',amount,currency:'USD',method:'PAGO_MOVIL',status:'PENDING',createdAt:new Date().toISOString()};
   database.transactions.push(transaction);
   database.notifications.push({ id:`notification_${crypto.randomUUID()}`, targetRole:'admin', title:'Liquidación pendiente', message:`${sanitizeText(req.user.firstName,80)} solicitó retirar $${amount.toFixed(2)}.`, category:'FINANCE', read:false, createdAt:new Date().toISOString() });
-  persistDatabase();io.to('admins').emit('finance:payout_pending',transaction);res.status(201).json(transaction);
+  if (!await persistHttp(res)) return;
+  io.to('admins').emit('finance:payout_pending',transaction);res.status(201).json(transaction);
 });
 
-app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
+app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const transaction = database.transactions.find(item => item.id === req.params.id);
   if (!transaction) return res.status(404).json({ error:'TRANSACTION_NOT_FOUND' });
   const status = String(req.body.status || '').toUpperCase();
@@ -1297,7 +1310,7 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
   const isPayout = transaction.type === 'PAYOUT';
   database.adminActions.push({ id:`admin_action_${crypto.randomUUID()}`, adminId:req.user.id, targetUserId:transaction.userId, action:`${isPayout?'payout':'topup'}_${status.toLowerCase()}`, transactionId:transaction.id, createdAt:new Date().toISOString() });
   database.notifications.push({ id:`notification_${crypto.randomUUID()}`, userId:transaction.userId, title:isPayout?(status==='APPROVED'?'Liquidación pagada':'Liquidación rechazada'):(status==='APPROVED'?'Recarga acreditada':'Recarga rechazada'), message:isPayout?(status==='APPROVED'?`Administración aprobó tu liquidación de $${transaction.amount.toFixed(2)}.`:'Administración rechazó la solicitud de liquidación.'):(status==='APPROVED'?`Se acreditaron $${transaction.amount.toFixed(2)} a tu billetera.`:'Administración no pudo validar la referencia enviada.'), category:'FINANCE', read:false, createdAt:new Date().toISOString() });
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   io.to(`user:${transaction.userId}`).emit('finance:topup_updated', transaction);
   if (owner) {
     io.to(`user:${transaction.userId}`).emit('wallet:updated', {
@@ -1309,12 +1322,12 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
   res.json({ transaction, balance:Number(owner?.walletBalance || 0) });
 });
 
-app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), limitadores.difusion, (req, res) => {
+app.post('/api/admin/broadcasts', requireAuth, requireRole('admin'), limitadores.difusion, async (req, res) => {
   const role = ['all', 'driver', 'passenger'].includes(req.body.role) ? req.body.role : 'all';
   if (!req.body.title?.trim() || !req.body.message?.trim()) return res.status(400).json({ error: 'INVALID_BROADCAST' });
   const notification = { id: `notification_${crypto.randomUUID()}`, title: sanitizeText(req.body.title, 120), message: sanitizeText(req.body.message, 1000), category: 'ANNOUNCEMENT', icon: '📢', targetRole: role, createdAt: new Date().toISOString() };
   database.notifications.push(notification);
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   if (role === 'all') io.to('drivers').to('passengers').emit('platform:notification', notification);
   else io.to(`${role}s`).emit('platform:notification', notification);
   io.to('admins').emit('admin:broadcast_sent', notification);
@@ -1351,7 +1364,7 @@ app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), limitador
     database.adminActions.push({ id:`admin_action_${crypto.randomUUID()}`, adminId:req.user.id, targetUserId:driver.id, applicationId:application?.id||null, action:action==='approve'?'reactivate':'suspend', previousStatus, nextStatus:driver.status, reason:reason||null, createdAt:new Date().toISOString() });
     database.notifications.push({ id:`notification_${crypto.randomUUID()}`, userId:driver.id, title:action==='suspend'?'Cuenta de conductor suspendida':'Cuenta de conductor reactivada', message:action==='suspend'?reason:'Tu acceso operativo fue restaurado.', category:'SYSTEM', read:false, createdAt:new Date().toISOString() });
   }
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   io.to(`user:${driver.id}`).emit('driver:account_updated', publicUser(driver));
   io.to('admins').emit('admin:driver_updated', publicUser(driver));
   if (driver.status === 'SUSPENDED') {
@@ -1361,7 +1374,7 @@ app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), limitador
   res.json(publicUser(driver));
 });
 
-app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores.administracion, (req, res) => {
+app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id);
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
   const allowedStatuses = ['CANCELLED', 'COMPLETED'];
@@ -1383,7 +1396,7 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores
   const driver = database.users.find(user => user.id === trip.driverId);
   if (driver) driver.status = 'AVAILABLE';
   const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   emitCompletedTripWalletUpdates(trip, settlement);
   io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
     tripId: trip.id,
@@ -1396,7 +1409,7 @@ app.delete('/api/admin/drivers/:id', requireAuth, requireRole('admin'), limitado
   const index = database.users.findIndex(user => user.id === req.params.id && user.role === 'driver');
   if (index < 0) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
   const [driver] = database.users.splice(index, 1);
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   const sockets = await io.in(`user:${driver.id}`).fetchSockets();
   sockets.forEach(client => client.disconnect(true));
   res.status(204).end();
@@ -1420,7 +1433,7 @@ app.post('/api/admin/drivers', requireAuth, requireRole('admin'), limitadores.ad
     )
   };
   database.users.push(driver);
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   res.status(201).json({ user: publicUser(driver), temporaryPassword });
 });
 
@@ -1518,7 +1531,7 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   res.json(publicChatMessages(database.messages.filter(message => message.tripId === trip.id)));
 });
 
-app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
+app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores.viajes, async (req, res) => {
   // Identificador: lo aporta el cliente por compatibilidad, pero con forma
   // acotada. `Idempotency-Key` sirve cuando el cuerpo no trae `id`, que es lo
   // que ocurre al reenviar desde la cola sin conexión.
@@ -1613,7 +1626,10 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
     return res.status(402).json({ error: error.code, balance: error.balance, required: error.required });
   }
   database.trips.push(trip);
-  persistDatabase();
+  if (!await persistHttp(res)) {
+    database.trips.splice(database.trips.indexOf(trip), 1);
+    return;
+  }
   
   // Trigger Dispatch Service
   dispatchTripToDrivers(trip);
@@ -1621,13 +1637,18 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
   res.json({ status: 'created', trip });
 });
 
-app.post('/api/trips/scheduled', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
+app.post('/api/trips/scheduled', requireAuth, requireRole('passenger'), limitadores.viajes, async (req, res) => {
   const scheduledAt = new Date(req.body.scheduledAt);
   const pickupAddress = String(req.body.pickup?.address || '').trim().slice(0, 240);
   const destinationAddress = String(req.body.destination?.address || '').trim().slice(0, 240);
   if (!pickupAddress || !destinationAddress || Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now() + 30 * 60 * 1000) return res.status(400).json({ error:'INVALID_SCHEDULED_TRIP' });
   const trip = { id:`scheduled_${crypto.randomUUID()}`, passengerId:req.user.id, pickup:{...req.body.pickup,address:pickupAddress}, destination:{...req.body.destination,address:destinationAddress}, scheduledAt:scheduledAt.toISOString(), rideType:req.body.rideType==='CAR'?'CAR':'MOTO', paymentMethod:String(req.body.paymentMethod||'CASH').slice(0,30), fareUSD:Math.max(0,Math.round(Number(req.body.fareUSD||0)*100)/100), status:'SCHEDULED', assignedDriverId:null, createdAt:new Date().toISOString() };
-  database.trips.push(trip); persistDatabase(); io.to('drivers').to('admins').emit('scheduled_trip:new',trip); res.status(201).json(trip);
+  database.trips.push(trip);
+  if (!await persistHttp(res)) {
+    database.trips.splice(database.trips.indexOf(trip), 1);
+    return;
+  }
+  io.to('drivers').to('admins').emit('scheduled_trip:new',trip); res.status(201).json(trip);
 });
 
 app.get('/api/trips/scheduled/available', requireAuth, requireApprovedDriver, (req, res) => {
@@ -1635,45 +1656,47 @@ app.get('/api/trips/scheduled/available', requireAuth, requireApprovedDriver, (r
   res.json(trips);
 });
 
-app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, limitadores.viajes, (req, res) => {
+app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, limitadores.viajes, async (req, res) => {
   const trip = database.trips.find(item=>item.id===req.params.id && item.status==='SCHEDULED');
   if(!trip)return res.status(404).json({error:'SCHEDULED_TRIP_NOT_FOUND'});
   if(trip.assignedDriverId && trip.assignedDriverId!==req.user.id)return res.status(409).json({error:'ALREADY_ASSIGNED'});
-  trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=new Date().toISOString();persistDatabase();io.to(`user:${trip.passengerId}`).to('admins').emit('scheduled_trip:claimed',{tripId:trip.id,driver:driverPublicProfile(req.user)});res.json(trip);
+  trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=new Date().toISOString();
+  if (!await persistHttp(res)) return;
+  io.to(`user:${trip.passengerId}`).to('admins').emit('scheduled_trip:claimed',{tripId:trip.id,driver:driverPublicProfile(req.user)});res.json(trip);
 });
 
-app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), limitadores.viajes, (req, res) => {
+app.delete('/api/trips/scheduled/:id', requireAuth, requireRole('passenger'), limitadores.viajes, async (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id && item.passengerId === req.user.id && item.status === 'SCHEDULED');
   if (!trip) return res.status(404).json({ error: 'SCHEDULED_TRIP_NOT_FOUND' });
   if (trip.assignedDriverId) return res.status(409).json({ error: 'SCHEDULED_TRIP_ALREADY_ASSIGNED' });
   trip.status = TRIP_STATUS.CANCELLED;
   trip.cancelledAt = new Date().toISOString();
   trip.updatedAt = trip.cancelledAt;
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   io.to('admins').emit('scheduled_trip:cancelled', { tripId: trip.id });
   res.json(trip);
 });
 
-app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, limitadores.telemetria, (req, res) => {
+app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, limitadores.telemetria, async (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
   const status = normalizeDriverStatus(req.body.status);
   if (!status) return res.status(400).json({ error: 'INVALID_DRIVER_STATUS' });
   driver.status = status;
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   emitDriverPresence(driver);
   res.json(publicUser(driver));
 });
 
-app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, limitadores.telemetria, (req, res) => {
+app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, limitadores.telemetria, async (req, res) => {
   const driverId = req.user.id;
   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
   const coordinates = normalizeCoordinates(req.body);
   if (!coordinates) return res.status(400).json({ error: 'INVALID_COORDINATES' });
   driver.location = { ...coordinates, updatedAt: Date.now() };
-  persistDatabase();
+  if (!await persistHttp(res)) return;
   emitDriverLocation(driverId, { ...driver.location });
   res.json(publicUser(driver));
 });
@@ -1708,13 +1731,16 @@ function dispatchTripToDrivers(trip) {
   const session = { tripId: trip.id, candidates: availableDrivers, index: -1, currentDriverId: null };
   dispatchSessions.set(trip.id, session);
 
-  const offerNext = () => {
+  const offerNext = async () => {
     if (tripLocks.get(trip.id) || trip.status !== TRIP_STATUS.SEARCHING) return;
     session.index += 1;
     const candidate = session.candidates[session.index];
     if (!candidate) {
       transitionTrip(trip, TRIP_STATUS.CANCELLED, { actorRole: 'system', reason: 'NO_DRIVERS_AVAILABLE' });
-      persistDatabase();
+      if (!await persistDatabase()) {
+        console.error(`[+58express Database] No se pudo persistir la cancelación automática de ${trip.id}`);
+        return;
+      }
       dispatchSessions.delete(trip.id);
       dispatchTimers.delete(trip.id);
       io.to(`user:${trip.passengerId}`).to('admins').emit('dispatch:no_drivers', { tripId: trip.id });
@@ -1739,11 +1765,15 @@ function dispatchTripToDrivers(trip) {
       console.log(`[+58express Dispatcher] ${JSON.stringify({ event: 'driver_offer_emitted', tripId: trip.id, emitted: true })}`);
     }
     io.to('admins').emit('rideRequested', offer);
-    const timer = setTimeout(offerNext, 15000);
+    const timer = setTimeout(() => offerNext().catch(error => {
+      console.error('[+58express Dispatcher] No se pudo continuar el despacho:', error.message);
+    }), 15000);
     dispatchTimers.set(trip.id, timer);
   };
 
-  offerNext();
+  offerNext().catch(error => {
+    console.error('[+58express Dispatcher] No se pudo iniciar el despacho:', error.message);
+  });
 }
 
 // Socket.IO Server Setup
@@ -1795,13 +1825,13 @@ io.on('connection', (socket) => {
   // defecto (`data = {}`) no cubre un `null` explícito, así que desestructurar
   // lanzaba y, al ser síncrono, tumbaba el proceso entero. Aquí el payload se
   // normaliza a objeto y cualquier excepción queda contenida en el socket.
-  const on = (event, handler) => socket.on(event, payload => {
+  const on = (event, handler) => socket.on(event, async payload => {
     // La frecuencia se comprueba antes de tocar la base de datos, de emitir a
     // otras salas y de escribir en el registro.
     if (rateLimited(event)) return;
     const data = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
     try {
-      handler(data);
+      await handler(data);
     } catch (error) {
       console.error(`[+58express Socket.IO] Error no controlado en ${event}:`, error?.message);
       socket.emit('socket:error', { event, error: 'EVENT_FAILED' });
@@ -1816,7 +1846,7 @@ io.on('connection', (socket) => {
     console.log(`[+58express Socket.IO] Socket ${socket.id} joined room: ${room}`);
   });
 
-  on('driver:connect', (data = {}) => {
+  on('driver:connect', async (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
     socket.join('drivers');
     // Nunca se resuelve el conductor por el payload: solo por la sesión firmada.
@@ -1833,13 +1863,16 @@ io.on('connection', (socket) => {
     driver.status = requestedStatus;
     driver.socketId = socket.id;
     driverRegistry.set(driver.id, socket.id);
-    persistRecord('users', driver);
+    if (!await persistRecord('users', driver)) {
+      socket.emit('driver:status_rejected', { error: 'DATABASE_WRITE_FAILED' });
+      return;
+    }
     socket.emit('driver:connected', { success: true, socketId: socket.id, driver: publicUser(driver) });
     emitDriverPresence(driver);
   });
 
   // Driver GPS Continuous Streaming Event
-  const handleDriverLocation = (data = {}) => {
+  const handleDriverLocation = async (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
     // El identificador siempre proviene de la sesión, jamás del payload.
     const driverId = socket.data.auth.userId;
@@ -1856,14 +1889,17 @@ io.on('connection', (socket) => {
     if (!driver.status) driver.status = DRIVER_STATUS.AVAILABLE;
     // La ruta más caliente de la aplicación: se dispara con cada lectura de
     // GPS de cada moto en marcha, y solo cambia este conductor.
-    persistRecord('users', driver);
+    if (!await persistRecord('users', driver)) {
+      socket.emit('driver:location_rejected', { error: 'DATABASE_WRITE_FAILED' });
+      return;
+    }
     emitDriverLocation(driverId, { ...driver.location });
   };
 
   on('driver:location', handleDriverLocation);
   on('driver:location_update', handleDriverLocation);
 
-  on('passenger:location_update', (data = {}) => {
+  on('passenger:location_update', async (data = {}) => {
     if (!allowSocketRole(socket, 'passenger')) return;
     const passengerId = socket.data.auth.userId;
     const trip = database.trips.findLast(item =>
@@ -1877,13 +1913,16 @@ io.on('connection', (socket) => {
     trip.pickup = { ...(trip.pickup || {}), lat, lng };
     trip.passengerLocation = { lat, lng, heading: Number(data.heading || 0), updatedAt: Date.now() };
     // Un evento por cada movimiento del pasajero: solo cambia este viaje.
-    persistRecord('trips', trip);
+    if (!await persistRecord('trips', trip)) {
+      socket.emit('passenger:location_rejected', { error: 'DATABASE_WRITE_FAILED' });
+      return;
+    }
     const payload = { ...trip.passengerLocation, passengerId, tripId: trip.id };
     io.to(`user:${trip.driverId}`).to('admins').emit('passengerLocationUpdated', payload);
   });
 
   // Driver Status Toggle Event ('AVAILABLE' | 'BUSY' | 'IN_TRIP' | 'OFFLINE')
-  const handleDriverStatus = (data = {}) => {
+  const handleDriverStatus = async (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
     const driverId = socket.data.auth.userId;
     const status = normalizeDriverStatus(data.status);
@@ -1894,7 +1933,10 @@ io.on('connection', (socket) => {
     const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
     if (!driver) return;
     driver.status = status;
-    persistRecord('users', driver);
+    if (!await persistRecord('users', driver)) {
+      socket.emit('driver:status_rejected', { error: 'DATABASE_WRITE_FAILED' });
+      return;
+    }
     emitDriverPresence(driver);
   };
 
@@ -2002,7 +2044,7 @@ io.on('connection', (socket) => {
   });
 
   // Trip Status Transition Event ('ARRIVED', 'IN_PROGRESS', 'COMPLETED')
-  on('tripStatusUpdated', (data = {}) => {
+  on('tripStatusUpdated', async (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
     // Del payload del conductor solo se leen estos dos campos; cualquier otra
     // cosa que venga (driver, roles, HTML, campos extra) se descarta.
@@ -2037,7 +2079,10 @@ io.on('connection', (socket) => {
       tripLocks.delete(tripId);
     }
     const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
-    persistDatabase();
+    if (!await persistDatabase()) {
+      socket.emit('tripStatusRejected', { tripId, status, error: 'DATABASE_WRITE_FAILED' });
+      return;
+    }
     emitCompletedTripWalletUpdates(trip, settlement);
     // Payload construido por el servidor a partir del viaje ya persistido:
     // nunca se retransmite el objeto recibido del conductor.
@@ -2050,7 +2095,7 @@ io.on('connection', (socket) => {
   });
 
   // Passenger Ride Cancelled Event
-  on('rideCancelled', (data = {}) => {
+  on('rideCancelled', async (data = {}) => {
     if (!allowSocketRole(socket, 'passenger')) return;
     const { tripId } = data;
     const passengerId = socket.data.auth.userId;
@@ -2090,7 +2135,10 @@ io.on('connection', (socket) => {
     }
     const assignedDriver = database.users.find(user => user.id === trip.driverId);
     if (assignedDriver) assignedDriver.status = DRIVER_STATUS.AVAILABLE;
-    persistDatabase();
+    if (!await persistDatabase()) {
+      socket.emit('rideCancellationRejected', { tripId, error: 'DATABASE_WRITE_FAILED' });
+      return;
+    }
 
     console.log(`[+58express Socket.IO] Ride [${tripId}] cancelled by passenger`);
     let audience = io.to(`user:${passengerId}`).to('admins');
@@ -2100,7 +2148,7 @@ io.on('connection', (socket) => {
     if (assignedDriver) emitDriverPresence(assignedDriver, { includeActivePassenger: false });
   });
 
-  on('chat:send_message', (data = {}) => {
+  on('chat:send_message', async (data = {}) => {
     const trip = database.trips.find(item => item.id === data.tripId);
     const { userId, role } = socket.data.auth;
     if (!trip || !userCanAccessTrip(userId, role, trip) || role === 'admin') {
@@ -2113,7 +2161,7 @@ io.on('connection', (socket) => {
     if (!text && !tieneImagen) return;
     const sender = database.users.find(user => user.id === userId);
 
-    const construir = (media) => {
+    const construir = async (media) => {
       const message = {
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         tripId: trip.id,
@@ -2126,7 +2174,7 @@ io.on('connection', (socket) => {
       };
       database.messages.push(message);
       try {
-        persistRecord('messages', message);
+        if (!await persistRecord('messages', message)) throw new Error('DATABASE_WRITE_FAILED');
       } catch (error) {
         const indice = database.messages.indexOf(message);
         if (indice >= 0) database.messages.splice(indice, 1);
@@ -2138,8 +2186,8 @@ io.on('connection', (socket) => {
     let message;
     try {
       message = tieneImagen
-        ? chatMediaPipeline.withStoredImage(data.image, userId, construir)
-        : construir(null);
+        ? await chatMediaPipeline.withStoredImageAsync(data.image, userId, construir)
+        : await construir(null);
     } catch (error) {
       // El cliente recibe el codigo, nunca el detalle.
       socket.emit('chat:error', {
@@ -2154,7 +2202,7 @@ io.on('connection', (socket) => {
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', publicChatMessage(message));
   });
 
-  on('tripRated', (data = {}) => {
+  on('tripRated', async (data = {}) => {
     const trip = database.trips.find(item => item.id === data.tripId);
     const { userId, role } = socket.data.auth;
     if (!trip || !userCanAccessTrip(userId, role, trip) || !['driver', 'passenger'].includes(role)) return;
@@ -2169,18 +2217,23 @@ io.on('connection', (socket) => {
     if (role === 'passenger' && data.targetRole === 'driver') {
       trip.driverReview = { ...review, tipEUR: Math.max(0, Number(data.tipEUR) || 0) };
     }
-    persistRecord('trips', trip);
+    if (!await persistRecord('trips', trip)) {
+      socket.emit('tripRatingRejected', { tripId: trip.id, error: 'DATABASE_WRITE_FAILED' });
+      return;
+    }
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripRatingUpdated', { tripId: trip.id, role, review });
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     for (const [driverId, socketId] of driverRegistry.entries()) {
       if (socketId === socket.id) {
         driverRegistry.delete(driverId);
         const driver = database.users.find(u => u.id === driverId);
         if (driver) {
           driver.status = DRIVER_STATUS.OFFLINE;
-          persistRecord('users', driver);
+          if (!await persistRecord('users', driver)) {
+            console.error(`[+58express Database] No se pudo persistir la desconexión de ${driverId}`);
+          }
           emitDriverPresence(driver);
         } else {
           io.to('admins').emit('admin:driver_updated', { id: driverId, userId: driverId, status: DRIVER_STATUS.OFFLINE });
