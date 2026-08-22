@@ -10,6 +10,80 @@ uno, la suite te lo dice antes de que llegue a producción.
 
 ---
 
+---
+
+## 0. La referencia visual: Passenger Home
+
+**Passenger Home, tal y como está hoy, es la fuente visual de verdad.** No este
+documento. Si algo aquí contradice esa pantalla, gana la pantalla y este texto
+se corrige.
+
+Se llegó a esta regla por un motivo concreto: un intento anterior de dirección
+visual —guardado en `design/v2-concept-preview`— fue rechazado por proponer una
+composición nueva. Lo que se quiere no es rediseñar, sino que **Driver, Admin,
+Wallet, Trips y Profile parezcan la misma aplicación que Passenger Home**.
+
+### Contrato de oro, medido sobre la pantalla real
+
+```
+FONDO           rgb(14,13,11)          grafito cálido
+TEXTO           rgb(247,246,243)
+BARRA SUPERIOR  rgba(22,21,18,.9) · radio 24px · borde rgba(255,255,255,.09)
+                sombra 0 24px 70px rgba(0,0,0,.5) · blur(26px) saturate(1.25)
+HOJA            radio 27px · borde .12 · sombra 0 -20px 60px rgba(0,0,0,.62)
+CAMPO           rgba(0,0,0,.35) · radio 14px · 15px
+NAVEGACIÓN      rgba(10,9,8,.97) · filete superior .11 · blur(22px)
+NAV ACTIVO      rgb(255,210,31) · radio 13px · sin caja
+NAV INACTIVO    rgb(128,122,112)
+TARJETA         radio 18px · borde amarillo en el estado activo
+```
+
+> Los radios reales de esta pantalla son **24 / 27 / 18 / 14 / 13**. No
+> coinciden con la escala nombrada de la sección 4, y **mandan estos**: la
+> escala describe intenciones, la pantalla describe el producto.
+
+### Uso del color
+
+Un solo amarillo para marca, acción y selección. El resto del color **solo
+cuando informa de un estado**:
+
+```
+VERDE   en línea · verificado · completado · éxito
+ROJO    peligro · cancelado · cerrar sesión · error
+ÁMBAR   pendiente · programado · advertencia
+AZUL    solo con razón semántica real. Hoy quedan tres:
+        la leyenda del mapa de flota, el punto de «tu ubicación»
+        —convención universal— y el rol Admin del Login certificado.
+```
+
+**Prohibido** usar azul o cian como decoración en bordes, botones normales,
+tarjetas, perfiles, iconos arbitrarios o títulos. Y prohibido el borde inferior
+de colores para diferenciar módulos: si un dato necesita color, ese color vive
+en el **icono o en la cifra**, nunca en una franja.
+
+### Driver y Admin
+
+Conservan su estructura y su densidad, que son distintas por función. Comparten
+todo lo demás: superficie, borde, radio, sombra, lenguaje de botón, navegación,
+iconografía y tipografía. Driver puede ser más denso; Admin puede ser mucho más
+denso. Ninguno de los dos inventa una paleta propia.
+
+### La hoja inferior
+
+Se ancla al **contenedor real de la aplicación**, nunca al viewport. En
+escritorio la app vive dentro de un armazón de teléfono más estrecho, y una
+hoja anclada a la ventana se sale por la derecha. Contrato:
+`left >= shell.left` y `right <= shell.right`, con holgura simétrica, en
+cualquier ancho y en todos los estados: abrir, arrastrar, encajar, cerrar y
+reabrir.
+
+Cuidado con las animaciones compartidas: una animación con relleno `both` gana
+al estilo en línea, y un fotograma final que fije `transform` borra el
+`translate(-50%)` con el que la hoja se centra. Por eso la hoja tiene su propia
+entrada, que solo anima opacidad.
+
+---
+
 ## 1. Marca
 
 +58express es una aplicación de mototaxi y delivery en Venezuela. Tiempo real,

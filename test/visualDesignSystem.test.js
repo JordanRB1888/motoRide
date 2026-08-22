@@ -340,3 +340,70 @@ test('el tema oscuro del perfil no se toca', () => {
       `el override "${sel.slice(0, 60)}" no esta acotado al tema claro y afectaria al oscuro`);
   }
 });
+
+/* ---------------------------------------------------------------------------
+   Armonización sobre el diseño existente. Passenger Home es la referencia.
+   --------------------------------------------------------------------------- */
+
+test('la hoja se ancla al contenedor de la app, no al viewport', () => {
+  const sheet = read('src/components/bottomSheet.js');
+  assert.match(sheet, /_syncToAppShell\(\)/,
+    'la hoja debe medir el armazón vivo para anclarse a él');
+  assert.match(sheet, /\.passenger-app, \.driver-app, \.admin-app/,
+    'debe buscar el armazón real de cada rol');
+  assert.match(sheet, /setProperty\('width'[^)]*'important'\)/,
+    'varias reglas heredadas fijan el ancho con !important y ganarían si no');
+  assert.match(sheet, /removeEventListener\('resize'/,
+    'el oyente de resize debe retirarse en destroy()');
+});
+
+test('la entrada de la hoja no borra su centrado horizontal', () => {
+  const um = read('src/styles/um-motion-preview.css');
+  const bloque = um.match(/@keyframes umSheetEnter\s*\{[\s\S]*?\n\}/);
+  assert.ok(bloque, 'la hoja necesita su propia entrada');
+  assert.doesNotMatch(bloque[0], /transform/,
+    'un fotograma con transform gana al estilo en línea y descentra la hoja');
+});
+
+test('no vuelve el borde inferior de colores en las métricas', () => {
+  const admin = read('src/styles/admin.css');
+  assert.doesNotMatch(admin, /\.metric-card:after\{[^}]*background:currentColor/,
+    'la franja inferior no puede heredar un color por tarjeta');
+
+  const pas = read('src/styles/passenger.css');
+  const barras = [...pas.matchAll(/\.passenger-history-summary article[^{]*:after\{[^}]*background:([^;}]+)/g)]
+    .map(m => m[1].trim());
+  for (const b of barras) {
+    assert.match(b, /var\(--x58-border-strong\)/,
+      `la barra "${b}" diferencia módulos por color; debe ser un filete neutro`);
+  }
+});
+
+test('el cian que queda es el que informa, no decoración', () => {
+  // Se aceptan tres usos con razón semántica real, y las definiciones de
+  // variable. Cualquier otro es decoración.
+  const permitido = /fleet\.css|user-location-marker|role-btn\.admin-btn|admin-btn \.role-icon|--lab-blue|--pwa-blue|--accent-secondary/;
+  const sospechosos = [];
+  for (const { name, css } of readStyles()) {
+    if (name === 'fleet.css') continue;
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*var\(--x58-info\)[^{}]*)\}/g)) {
+      if (!permitido.test(m[1]) && !permitido.test(m[2])) {
+        sospechosos.push(`${name}: ${m[1].trim().slice(0, 46)}`);
+      }
+    }
+  }
+  assert.deepEqual(sospechosos, [], 'cian usado como decoración');
+});
+
+test('el manifest declara un icono enmascarable', () => {
+  const m = JSON.parse(read('public/manifest.json'));
+  const mask = (m.icons || []).filter(i => (i.purpose || '').includes('maskable'));
+  assert.ok(mask.length >= 2,
+    'sin purpose maskable, Android envuelve el icono en su propio círculo blanco');
+  for (const i of mask) {
+    assert.ok(fs.existsSync(path.join(root, 'public', i.src.replace(/^\//, ''))),
+      `falta el asset ${i.src}`);
+  }
+  assert.equal(m.background_color, '#0e0d0b', 'el splash debe usar el grafito de la referencia');
+  assert.equal(m.theme_color, '#ffd21f', 'el color de tema debe ser el amarillo canónico');
+});
