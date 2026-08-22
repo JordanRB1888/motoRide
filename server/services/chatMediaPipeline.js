@@ -75,5 +75,24 @@ export function createChatMediaPipeline({ storage, onCompensationError = () => {
     }
   }
 
-  return { withStoredImage };
+  async function withStoredImageAsync(dataUrl, ownerId, persistir) {
+    const { mimeType, buffer } = decodeChatImageDataUrl(dataUrl);
+    const imageStorageKey = storage.saveBuffer(buffer, mimeType, ownerId);
+    const media = {
+      imageRef: { id: crypto.randomUUID(), mimeType },
+      imageStorageKey
+    };
+    try {
+      return await persistir(media);
+    } catch (error) {
+      try {
+        storage.remove(imageStorageKey);
+      } catch (fallo) {
+        onCompensationError({ reason: fallo?.code || 'REMOVE_FAILED', mimeType, bytes: buffer.length });
+      }
+      throw error;
+    }
+  }
+
+  return { withStoredImage, withStoredImageAsync };
 }
