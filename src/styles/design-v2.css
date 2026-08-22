@@ -1,0 +1,700 @@
+/* =========================================================================
+   +58EXPRESS — DIRECCIÓN VISUAL V2 · CONCEPTO
+   =========================================================================
+   THESIS
+     La interfaz actual es una constelación de islas: cada elemento es una
+     tarjeta redondeada, con borde, separada por un hueco y con su propio
+     color. Nada se toca y no hay suelo. Eso es lo que la hace leer como
+     plantilla. V2 se niega a esa rejilla de tarjetas.
+
+     Un suelo, un acento, bordes anclados.
+
+   OWN-WORLD
+     El mapa es el suelo, a sangre. El cromo viaja sobre él como un único
+     raíl bajo. El contenido sube desde el borde inferior del dispositivo,
+     nunca flota con márgenes laterales. Dentro, las secciones se separan
+     con aire y filetes, no con tarjetas anidadas. Un solo amarillo para
+     acción y selección; el color semántico solo como punto de estado.
+
+   FIRST VIEWPORT
+     Mapa a pantalla completa. Raíl superior de 56px con identidad a la
+     izquierda y controles a la derecha. Hoja inferior anclada al borde,
+     ancho completo, radio solo arriba. La acción principal es la más
+     grande y la única amarilla de la pantalla.
+
+   FORM
+     Composición derivada del brief fijado por el usuario (grafito cálido,
+     amarillo de marca, menos tarjetas, jerarquía por espacio y tipografía).
+
+   ESTO ES UNA MAQUETA DE CONCEPTO. No está conectada a producción.
+   ========================================================================= */
+
+.v2 {
+  /* --- Suelo y superficies: tres pasos, no siete ------------------------ */
+  --v2-ground: #0c0b0a;
+  --v2-surface: #151311;
+  --v2-raised: #1e1b18;
+  --v2-sunken: #080706;
+
+  /* --- Un solo borde, un solo filete ----------------------------------- */
+  --v2-line: rgba(255, 255, 255, .07);
+  --v2-line-strong: rgba(255, 255, 255, .14);
+
+  /* --- Texto ----------------------------------------------------------- */
+  --v2-ink: #f6f4f0;
+  --v2-ink-2: #a5a099;
+  --v2-ink-3: #726d66;
+
+  /* --- Un acento. Uno. -------------------------------------------------- */
+  --v2-accent: #ffd21f;
+  --v2-accent-deep: #ffb800;
+  --v2-accent-ink: #1a1400;
+  --v2-accent-wash: rgba(255, 210, 31, .10);
+
+  /* --- Estado: solo informa, nunca decora ------------------------------- */
+  --v2-ok: #46d18b;
+  --v2-warn: #ffa726;
+  --v2-bad: #ff5d70;
+
+  /* --- Radio: tres valores, nada más ------------------------------------ */
+  --v2-r-control: 13px;
+  --v2-r-card: 20px;
+  --v2-r-sheet: 26px;
+
+  /* --- Sombra: desplazamiento + desenfoque, nunca halo ------------------ */
+  --v2-shadow: 0 12px 32px rgba(0, 0, 0, .46);
+  --v2-shadow-sheet: 0 -14px 44px rgba(0, 0, 0, .5);
+
+  --v2-ease: cubic-bezier(.16, 1, .3, 1);
+
+  color-scheme: dark;
+  font-family: 'Manrope Variable', system-ui, sans-serif;
+  color: var(--v2-ink);
+  background: var(--v2-ground);
+}
+
+/* =========================================================================
+   MODO CLARO — marfil cálido, no blanco invertido
+   ========================================================================= */
+.v2.v2-light {
+  --v2-ground: #efece5;
+  --v2-surface: #f7f5f0;
+  --v2-raised: #ffffff;
+  --v2-sunken: #e3dfd6;
+
+  --v2-line: rgba(28, 24, 18, .09);
+  --v2-line-strong: rgba(28, 24, 18, .18);
+
+  --v2-ink: #17150f;
+  --v2-ink-2: #56514a;
+  --v2-ink-3: #837d74;
+
+  --v2-accent-wash: rgba(255, 184, 0, .16);
+  --v2-ok: #0d7a52;
+  --v2-warn: #9c5a00;
+  --v2-bad: #c02a3c;
+
+  --v2-shadow: 0 10px 26px rgba(30, 25, 15, .11);
+  --v2-shadow-sheet: 0 -12px 34px rgba(30, 25, 15, .13);
+
+  color-scheme: light;
+}
+
+/* =========================================================================
+   MARCO DE DISPOSITIVO
+   La hoja se ancla AL DISPOSITIVO, no al viewport de escritorio que lo
+   contiene. Ese fue uno de los defectos observados.
+   ========================================================================= */
+.v2-device {
+  position: relative;
+  width: 390px;
+  height: 844px;
+  overflow: hidden;
+  border-radius: 38px;
+  background: var(--v2-ground);
+  box-shadow: var(--v2-shadow);
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+}
+
+.v2-desktop {
+  width: 1280px;
+  height: 800px;
+  border-radius: var(--v2-r-card);
+  overflow: hidden;
+  background: var(--v2-ground);
+  box-shadow: var(--v2-shadow);
+  display: flex;
+  isolation: isolate;
+}
+
+/* =========================================================================
+   EL SUELO — el mapa va a sangre, no es una tarjeta
+   ========================================================================= */
+.v2-ground {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 26% 22%, rgba(255, 210, 31, .05), transparent 42%),
+    var(--v2-sunken);
+}
+
+.v2-ground::before {
+  /* Manzanas de Maracaibo: sugeridas, nunca protagonistas. */
+  content: '';
+  position: absolute;
+  inset: -12%;
+  opacity: .85;
+  background-image:
+    linear-gradient(var(--v2-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--v2-line) 1px, transparent 1px),
+    linear-gradient(var(--v2-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--v2-line) 1px, transparent 1px);
+  background-size: 34px 34px, 34px 34px, 136px 136px, 136px 136px;
+}
+
+.v2-ground::after {
+  /* Una arteria diagonal y la orilla del lago. Dos cruzandose parecian un
+     fallo de render, no cartografia. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(74deg, transparent 41.6%, rgba(255,255,255,.10) 41.6%, rgba(255,255,255,.10) 42.5%, transparent 42.5%),
+    radial-gradient(125% 58% at 116% 92%, rgba(255,255,255,.045) 47%, transparent 47.4%);
+}
+
+.v2-light .v2-ground::after {
+  background:
+    linear-gradient(74deg, transparent 41.6%, rgba(28,24,18,.11) 41.6%, rgba(28,24,18,.11) 42.5%, transparent 42.5%),
+    radial-gradient(125% 58% at 116% 92%, rgba(120,150,170,.16) 47%, transparent 47.4%);
+}
+
+.v2-light .v2-ground { background: var(--v2-sunken); }
+
+/* La ruta activa es lo único con color en el suelo. */
+.v2-route {
+  position: absolute;
+  left: 16%;
+  top: 30%;
+  width: 62%;
+  height: 34%;
+  border-left: 2px solid var(--v2-accent);
+  border-bottom: 2px solid var(--v2-accent);
+  border-bottom-left-radius: 64px;
+  opacity: .85;
+}
+
+.v2-pin {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--v2-accent);
+  box-shadow: 0 0 0 5px var(--v2-accent-wash);
+}
+
+.v2-pin.origin { left: 16%; top: 30%; background: var(--v2-ink); box-shadow: 0 0 0 5px var(--v2-line-strong); }
+.v2-pin.dest { left: 76%; top: 62%; }
+
+/* =========================================================================
+   RAÍL SUPERIOR — UNA pieza, no tres tarjetas apiladas
+   ========================================================================= */
+.v2-rail {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 14px;
+  margin: 10px 12px 0;
+  border-radius: var(--v2-r-control);
+  border: 1px solid var(--v2-line);
+  background: color-mix(in srgb, var(--v2-surface) 88%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.v2-avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--v2-raised);
+  border: 1px solid var(--v2-line);
+  font: 700 .74rem/1 'Manrope Variable', sans-serif;
+  color: var(--v2-ink-2);
+  letter-spacing: .02em;
+}
+
+.v2-rail-id { min-width: 0; flex: 1; }
+
+.v2-rail-id strong {
+  display: block;
+  font: 700 .88rem/1.2 'Sora Variable', sans-serif;
+  letter-spacing: -.02em;
+  color: var(--v2-ink);
+}
+
+.v2-rail-id span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: .68rem;
+  font-weight: 550;
+  color: var(--v2-ink-2);
+}
+
+/* El estado vive DENTRO del raíl, no flotando aparte. */
+.v2-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--v2-ok);
+}
+.v2-dot.off { background: var(--v2-ink-3); }
+
+.v2-icon-btn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--v2-line);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--v2-ink-2);
+}
+
+/* Interruptor de conexión: el único control de estado con color. */
+.v2-switch {
+  width: 52px;
+  height: 30px;
+  flex: none;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--v2-ok);
+  cursor: pointer;
+}
+.v2-switch i {
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #fff;
+  display: block;
+}
+.v2-switch.off { background: var(--v2-sunken); border: 1px solid var(--v2-line-strong); }
+.v2-switch.off i { margin-left: 0; background: var(--v2-ink-3); }
+
+/* =========================================================================
+   HOJA INFERIOR — anclada al borde del dispositivo
+   Contrato: pegada abajo, ancho completo menos un margen constante, radio
+   solo arriba. Nunca puede salirse por los lados.
+   ========================================================================= */
+.v2-sheet {
+  position: relative;
+  z-index: 4;
+  margin: auto 0 0;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--v2-line);
+  border-radius: var(--v2-r-sheet) var(--v2-r-sheet) 0 0;
+  background: var(--v2-surface);
+  box-shadow: var(--v2-shadow-sheet);
+}
+
+.v2-grip {
+  width: 38px;
+  height: 4px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  background: var(--v2-line-strong);
+}
+
+.v2-sheet h2 {
+  margin: 0 0 3px;
+  font: 700 1.28rem/1.15 'Sora Variable', sans-serif;
+  letter-spacing: -.03em;
+}
+
+.v2-sheet .v2-sub {
+  margin: 0 0 14px;
+  font-size: .78rem;
+  color: var(--v2-ink-2);
+}
+
+/* =========================================================================
+   CONTROLES
+   ========================================================================= */
+.v2-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--v2-line);
+  border-radius: var(--v2-r-control);
+  background: var(--v2-sunken);
+  color: var(--v2-ink-2);
+  font-size: 1rem;
+}
+
+.v2-field.focus {
+  border-color: var(--v2-accent);
+  box-shadow: 0 0 0 3px var(--v2-accent-wash);
+  color: var(--v2-ink);
+}
+
+.v2-cta {
+  width: 100%;
+  height: 54px;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--v2-r-control);
+  background: linear-gradient(135deg, var(--v2-accent), var(--v2-accent-deep));
+  color: var(--v2-accent-ink);
+  font: 700 .97rem/1 'Manrope Variable', sans-serif;
+  letter-spacing: .005em;
+  cursor: pointer;
+}
+
+.v2-ghost {
+  width: 100%;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--v2-line-strong);
+  border-radius: var(--v2-r-control);
+  background: transparent;
+  color: var(--v2-ink);
+  font: 650 .85rem/1 'Manrope Variable', sans-serif;
+}
+
+/* =========================================================================
+   SEGMENTOS — reemplazan las tarjetas de vehículo con borde
+   ========================================================================= */
+.v2-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--v2-r-control);
+  background: var(--v2-sunken);
+  border: 1px solid var(--v2-line);
+}
+
+.v2-seg button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--v2-ink-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.v2-seg button.on {
+  background: var(--v2-raised);
+  color: var(--v2-ink);
+  box-shadow: inset 0 0 0 1px var(--v2-accent);
+}
+
+.v2-seg strong { display: block; font-size: .83rem; font-weight: 700; }
+.v2-seg small { display: block; margin-top: 1px; font-size: .66rem; color: var(--v2-ink-3); }
+.v2-seg .price { margin-left: auto; padding-left: 8px; font-size: .8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.v2-seg button.on .price { color: var(--v2-accent); }
+
+/* =========================================================================
+   LISTAS — una estructura, repetida. No cuatro mini-tarjetas distintas.
+   ========================================================================= */
+.v2-list { display: flex; flex-direction: column; }
+
+.v2-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--v2-line);
+}
+.v2-row:last-child { border-bottom: 0; }
+
+.v2-row > i {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--v2-sunken);
+  color: var(--v2-ink-2);
+  font-style: normal;
+}
+
+.v2-row strong { display: block; font-size: .87rem; font-weight: 650; letter-spacing: -.01em; }
+.v2-row small { display: block; margin-top: 2px; font-size: .72rem; color: var(--v2-ink-2); }
+.v2-row .v2-end { text-align: right; font-size: .78rem; color: var(--v2-ink-2); font-variant-numeric: tabular-nums; }
+
+/* =========================================================================
+   MÉTRICAS — tipografía y filetes, no tres tarjetas de colores
+   ========================================================================= */
+.v2-metrics {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+
+.v2-metrics > div { padding: 0 14px; border-left: 1px solid var(--v2-line); }
+.v2-metrics > div:first-child { padding-left: 0; border-left: 0; }
+
+.v2-metrics small {
+  display: block;
+  font-size: .63rem;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+}
+
+.v2-metrics strong {
+  display: block;
+  margin-top: 5px;
+  font: 700 1.42rem/1 'Sora Variable', sans-serif;
+  letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================================
+   SECCIONES — el reemplazo de la tarjeta anidada
+   ========================================================================= */
+.v2-section { padding: 16px 0; border-top: 1px solid var(--v2-line); }
+.v2-section:first-of-type { border-top: 0; padding-top: 0; }
+
+.v2-section > h3 {
+  margin: 0 0 10px;
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+}
+
+.v2-kv { display: grid; gap: 9px; }
+.v2-kv > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.v2-kv dt, .v2-kv span:first-child { font-size: .79rem; color: var(--v2-ink-2); }
+.v2-kv dd, .v2-kv span:last-child { margin: 0; font-size: .82rem; font-weight: 650; text-align: right; }
+
+/* Saldo: grande pero sobrio. Una sola pieza, sin caja de color. */
+.v2-balance small {
+  display: block;
+  font-size: .63rem;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+}
+.v2-balance b {
+  display: block;
+  margin: 6px 0 2px;
+  font: 700 2.5rem/1 'Sora Variable', sans-serif;
+  letter-spacing: -.045em;
+  font-variant-numeric: tabular-nums;
+}
+.v2-balance em { font-style: normal; font-size: .76rem; color: var(--v2-ink-2); }
+
+/* Estado en texto, no en tarjeta pintada. */
+.v2-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .7rem;
+  font-weight: 650;
+  color: var(--v2-ink-2);
+}
+.v2-state.ok { color: var(--v2-ok); }
+.v2-state.bad { color: var(--v2-bad); }
+
+/* =========================================================================
+   NAVEGACIÓN INFERIOR — parte del suelo, no una isla más
+   ========================================================================= */
+.v2-nav {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border-top: 1px solid var(--v2-line);
+  background: var(--v2-surface);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.v2-nav button {
+  height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--v2-ink-3);
+  font: 600 .65rem/1 'Manrope Variable', sans-serif;
+  cursor: pointer;
+}
+
+/* El activo se marca con un filete arriba, no con una caja amarilla. */
+.v2-nav button.on { color: var(--v2-accent); box-shadow: inset 0 2px 0 var(--v2-accent); }
+
+/* =========================================================================
+   ADMIN — misma disciplina, mayor densidad
+   ========================================================================= */
+.v2-side {
+  width: 226px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 18px 12px;
+  border-right: 1px solid var(--v2-line);
+  background: var(--v2-surface);
+}
+
+.v2-side .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 16px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--v2-line);
+}
+.v2-side .brand strong { font: 700 1rem/1 'Sora Variable', sans-serif; letter-spacing: -.03em; }
+.v2-side .brand small { display: block; margin-top: 3px; font-size: .62rem; color: var(--v2-ink-3); }
+
+.v2-side a {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--v2-ink-2);
+  font-size: .82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.v2-side a.on { background: var(--v2-accent-wash); color: var(--v2-accent); box-shadow: inset 2px 0 0 var(--v2-accent); }
+
+.v2-main { flex: 1; min-width: 0; padding: 22px 26px; overflow: hidden; display: flex; flex-direction: column; }
+
+.v2-main > header { margin-bottom: 20px; }
+.v2-main > header h1 {
+  margin: 0;
+  font: 700 1.72rem/1.1 'Sora Variable', sans-serif;
+  letter-spacing: -.038em;
+}
+.v2-main > header p { margin: 5px 0 0; font-size: .78rem; color: var(--v2-ink-2); }
+
+/* Métricas de admin: una sola superficie con filetes. Sin arcoíris. */
+.v2-kpi {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--v2-line);
+  border-radius: var(--v2-r-card);
+  background: var(--v2-surface);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.v2-kpi > div { padding: 16px 18px; border-left: 1px solid var(--v2-line); }
+.v2-kpi > div:first-child { border-left: 0; }
+.v2-kpi small {
+  display: flex; align-items: center; gap: 7px;
+  font-size: .64rem; font-weight: 650; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--v2-ink-3);
+}
+.v2-kpi strong {
+  display: block; margin-top: 8px;
+  font: 700 1.68rem/1 'Sora Variable', sans-serif;
+  letter-spacing: -.04em; font-variant-numeric: tabular-nums;
+}
+.v2-kpi em { display: block; margin-top: 3px; font-style: normal; font-size: .68rem; color: var(--v2-ink-3); }
+
+.v2-panel {
+  border: 1px solid var(--v2-line);
+  border-radius: var(--v2-r-card);
+  background: var(--v2-surface);
+  overflow: hidden;
+}
+.v2-panel > header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--v2-line);
+}
+.v2-panel > header h3 { margin: 0; font-size: .92rem; font-weight: 700; letter-spacing: -.02em; }
+.v2-panel > header span { font-size: .7rem; color: var(--v2-ink-3); }
+
+.v2-table { width: 100%; border-collapse: collapse; }
+.v2-table th {
+  padding: 9px 18px; text-align: left;
+  font-size: .62rem; font-weight: 650; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--v2-ink-3);
+  border-bottom: 1px solid var(--v2-line);
+}
+.v2-table td {
+  padding: 12px 18px; font-size: .79rem;
+  border-bottom: 1px solid var(--v2-line);
+}
+.v2-table tr:last-child td { border-bottom: 0; }
+.v2-table .num { font-variant-numeric: tabular-nums; font-weight: 650; }
+
+.v2-grid2 { display: grid; grid-template-columns: 1.9fr 1fr; gap: 16px; flex: 1; min-height: 0; }
+.v2-grid2 > .v2-panel { display: flex; flex-direction: column; min-height: 0; }
+.v2-grid2 > .v2-panel > .v2-table,
+.v2-grid2 > .v2-panel > div { flex: 1; min-height: 0; }
+
+/* =========================================================================
+   CABECERA DE LA MAQUETA
+   ========================================================================= */
+.v2-stage { padding: 26px; background: #0a0a09; min-height: 100vh; }
+.v2-stage.light-stage { background: #dedad1; }
+
+.v2-caption {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 12px;
+  font: 650 .74rem/1 'Manrope Variable', sans-serif;
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.v2-caption b { color: #ffd21f; }
+.v2-caption span { color: #6b665e; font-weight: 600; letter-spacing: .02em; text-transform: none; }
+
+.v2-warn-banner {
+  display: flex; align-items: center; gap: 9px;
+  margin: 0 0 20px; padding: 10px 14px;
+  border: 1px solid rgba(255, 210, 31, .4);
+  border-radius: 11px;
+  background: rgba(255, 210, 31, .08);
+  color: #ffd21f;
+  font: 700 .72rem/1.3 'Manrope Variable', sans-serif;
+  letter-spacing: .05em;
+}
+
+
+/* Captura limpia: el dispositivo llena el marco, sin escenario alrededor. */
+.v2-stage.bare { padding: 0; min-height: 0; background: transparent; }
+.v2-stage.bare .v2-device,
+.v2-stage.bare .v2-desktop { border-radius: 0; box-shadow: none; }

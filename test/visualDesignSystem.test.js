@@ -6,8 +6,15 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
+/* design-v2.css es una MAQUETA DE CONCEPTO aislada, no el sistema de
+   produccion: declara su propia rampa a proposito y vive tras una ruta de
+   desarrollo. Los contratos de abajo protegen el sistema vigente, asi que la
+   excluyen. El test "la maqueta V2 no puede llegar a produccion" es la
+   contrapartida que hace segura esa exclusion. */
+const CONCEPTO = new Set(['design-v2.css']);
+
 const readStyles = () => fs.readdirSync(path.join(root, 'src/styles'))
-  .filter(name => name.endsWith('.css'))
+  .filter(name => name.endsWith('.css') && !CONCEPTO.has(name))
   .map(name => ({ name, css: read(`src/styles/${name}`) }));
 
 const system = () => read('src/styles/design-system.css');
@@ -339,4 +346,42 @@ test('el tema oscuro del perfil no se toca', () => {
     assert.ok(sel.includes('.theme-light'),
       `el override "${sel.slice(0, 60)}" no esta acotado al tema claro y afectaria al oscuro`);
   }
+});
+
+test('la maqueta V2 no puede llegar a producción', () => {
+  // La exclusion de design-v2.css en los contratos de arriba solo es segura
+  // mientras la maqueta siga siendo inalcanzable en produccion.
+  const main = read('src/main.js');
+  assert.match(main, /import\.meta\.env\.DEV && hash\.startsWith\('#\/design-v2-preview'\)/,
+    'la ruta de la maqueta debe seguir detras de import.meta.env.DEV');
+
+  // No puede haber ningun enlace hacia ella desde la navegacion real.
+  const enlaces = [];
+  const recorrer = dir => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const completo = path.join(dir, e.name);
+      if (e.isDirectory()) { recorrer(completo); continue; }
+      if (!e.name.endsWith('.js') || e.name === 'main.js' || e.name === 'designV2Preview.js') continue;
+      if (fs.readFileSync(completo, 'utf8').includes('design-v2-preview')) {
+        enlaces.push(path.relative(root, completo));
+      }
+    }
+  };
+  recorrer(path.join(root, 'src'));
+  assert.deepEqual(enlaces, [], 'ningún archivo de producto debe enlazar la maqueta');
+
+  // Y el CSS del concepto no lo importa ninguna pantalla real.
+  const importadores = [];
+  const buscar = dir => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const completo = path.join(dir, e.name);
+      if (e.isDirectory()) { buscar(completo); continue; }
+      if (!e.name.endsWith('.js') || e.name === 'designV2Preview.js') continue;
+      if (fs.readFileSync(completo, 'utf8').includes('design-v2.css')) {
+        importadores.push(path.relative(root, completo));
+      }
+    }
+  };
+  buscar(path.join(root, 'src'));
+  assert.deepEqual(importadores, [], 'solo la maqueta puede importar design-v2.css');
 });

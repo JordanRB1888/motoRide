@@ -86,6 +86,15 @@ async function router() {
     const hash = window.location.hash || '#/';
     const user = authService.getCurrentUser();
 
+    // Maqueta de concepto V2. Solo en desarrollo, sin enlace desde la
+    // navegacion de produccion y sin tocar estado, sesion ni API.
+    if (import.meta.env.DEV && hash.startsWith('#/design-v2-preview')) {
+        import('./pages/designV2Preview.js')
+            .then(({ renderDesignV2Preview }) => renderDesignV2Preview(appContainer))
+            .catch(error => console.warn('[v2] maqueta no disponible:', error?.message));
+        return;
+    }
+
     if (hash === '#/') {
         if (user) {
             window.navigateTo(`#/${user.role}`);
