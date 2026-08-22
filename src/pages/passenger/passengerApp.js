@@ -29,6 +29,7 @@ import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 import { safeCoordinate } from '../../utils/safeDom.js';
+import { isInsideMaracaiboServiceArea, MARACAIBO_SERVICE_CENTER } from '../../utils/operatingArea.js';
 
 export function renderPassengerApp(container) {
   let currentState = 'IDLE';
@@ -326,7 +327,7 @@ export function renderPassengerApp(container) {
     container.classList.remove('manual-pickup-mode');
   }
 
-  function beginManualPickupSelection(place) {
+  function beginManualPickupSelection(place, { recenterToMaracaibo = false } = {}) {
     pendingDestinationAfterPermission = { ...place };
     setState('SELECTING_PICKUP');
     mapComponent.clearRoute();
@@ -334,6 +335,9 @@ export function renderPassengerApp(container) {
     mapComponent.addMarker([Number(place.lat), Number(place.lon)], 'destination');
     bottomSheet.collapse();
     showManualPickupBanner();
+    if (recenterToMaracaibo) {
+      mapComponent.centerOn(MARACAIBO_SERVICE_CENTER.lat, MARACAIBO_SERVICE_CENTER.lng, 13);
+    }
   }
 
   function cancelManualPickupSelection() {
@@ -654,6 +658,14 @@ export function renderPassengerApp(container) {
       showToast('No pudimos identificar las coordenadas de ese destino.', 'error');
       return;
     }
+    if (!isInsideMaracaiboServiceArea({ lat, lng: lon })) {
+      setState('IDLE');
+      mapComponent.clearRoute();
+      mapComponent.clearMarkers('destination');
+      mapComponent.centerOn(MARACAIBO_SERVICE_CENTER.lat, MARACAIBO_SERVICE_CENTER.lng, 13);
+      showToast('Ese punto está fuera de la zona +58Express. Elige un destino en Maracaibo.', 'error', 7000);
+      return;
+    }
 
     let origin = originOverride;
     if (!origin) {
@@ -668,6 +680,12 @@ export function renderPassengerApp(container) {
       locationToast?.close();
     }
     if (selectionId !== destinationSelectionId || !origin) return;
+
+    if (!isInsideMaracaiboServiceArea(origin)) {
+      showToast('Tu GPS aparece fuera de Maracaibo. Marca en el mapa el punto real donde debe recogerte el conductor.', 'error', 9000);
+      beginManualPickupSelection(place, { recenterToMaracaibo: true });
+      return;
+    }
 
     selectedPickupLocation = { ...origin };
     const pickup = [selectedPickupLocation.lat, selectedPickupLocation.lng];
