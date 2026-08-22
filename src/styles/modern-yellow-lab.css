@@ -95,7 +95,7 @@ html.modern-yellow-lab :is(input, select, textarea, .search-input-wrapper,
   box-shadow: none !important;
 }
 
-html.modern-yellow-lab :is(input, textarea)::placeholder { color: #656976 !important; }
+html.modern-yellow-lab :is(input, textarea)::placeholder { color: #817e77 !important; }
 
 /* +58Express — Cyber Tachometer & Holographic Glass Experience */
 html.modern-yellow-lab .landing-container.cyber-moto-experience {
@@ -256,7 +256,7 @@ html.modern-yellow-lab .speed-unit {
   font-family: sans-serif;
   font-size: 0.52rem;
   font-weight: 800;
-  color: #8fa0b5;
+  color: #a3a09a;
   letter-spacing: 0.05em;
 }
 
@@ -289,7 +289,7 @@ html.modern-yellow-lab .liquid-brand-title .liquid-highlight {
 
 html.modern-yellow-lab .liquid-brand-subtitle {
   font-size: 0.84rem !important;
-  color: #8fa0b5 !important;
+  color: #a3a09a !important;
   margin: 0 !important;
   font-weight: 500;
 }
@@ -417,7 +417,7 @@ html.modern-yellow-lab .role-tab {
   border-radius: 999px !important;
   border: 1px solid transparent !important;
   background: transparent !important;
-  color: #8c97aa !important;
+  color: #a3a09a !important;
   font-size: 0.78rem !important;
   font-weight: 700 !important;
   cursor: pointer !important;
@@ -480,7 +480,7 @@ html.modern-yellow-lab .auth-tab {
   border-radius: 11px !important;
   border: none !important;
   background: transparent !important;
-  color: #8c97aa !important;
+  color: #a3a09a !important;
   font-size: 0.82rem !important;
   font-weight: 700 !important;
   cursor: pointer !important;
@@ -592,7 +592,7 @@ html.modern-yellow-lab .country-pill {
 html.modern-yellow-lab .liquid-eye-toggle {
   border: none !important;
   background: transparent !important;
-  color: #7b8699 !important;
+  color: #817e77 !important;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -619,7 +619,7 @@ html.modern-yellow-lab .liquid-checkbox-label {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #8fa0b5;
+  color: #a3a09a;
   cursor: pointer;
   user-select: none;
 }
@@ -735,7 +735,7 @@ html.modern-yellow-lab .conductor-recruitment-banner {
 }
 
 html.modern-yellow-lab .conductor-recruitment-banner p {
-  color: #8fa0b5;
+  color: #a3a09a;
   font-size: 0.78rem;
   margin: 0 0 6px;
 }
@@ -767,7 +767,7 @@ html.modern-yellow-lab .register-link {
   margin-top: 14px !important;
   text-align: center;
   font-size: 0.82rem;
-  color: #7b889b;
+  color: #817e77;
 }
 
 html.modern-yellow-lab .register-link a {
@@ -862,7 +862,7 @@ html.modern-yellow-lab .liquid-social-note {
 }
 
 html.modern-yellow-lab .landing-footer p {
-  color: #485263 !important;
+  color: #56534c !important;
   font-size: 0.74rem;
   margin: 0;
 }
@@ -939,7 +939,7 @@ html.modern-yellow-lab .top-search-bar {
 }
 
 html.modern-yellow-lab .passenger-dock-handle,
-html.modern-yellow-lab .trip-sheet-handle { background: #555865 !important; }
+html.modern-yellow-lab .trip-sheet-handle { background: #56534c !important; }
 
 html.modern-yellow-lab .passenger-search-title {
   font-size: 1.32rem !important;
@@ -1165,7 +1165,7 @@ html.modern-yellow-lab .real-profile-verified,
 html.modern-yellow-lab .real-profile-joined,
 .real-profile-joined {
   margin: 6px 0 16px !important;
-  color: #7b889b !important;
+  color: #817e77 !important;
   font-size: 0.66rem !important;
   font-weight: 600 !important;
 }
@@ -1200,7 +1200,7 @@ html.modern-yellow-lab .real-profile-details span,
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
-  color: #7b889b !important;
+  color: #817e77 !important;
   font-weight: 600 !important;
 }
 
@@ -1243,7 +1243,7 @@ html.modern-yellow-lab .real-profile-stats article span,
 
 html.modern-yellow-lab .real-profile-stats small,
 .real-profile-stats small {
-  color: #7b889b !important;
+  color: #817e77 !important;
   font-size: 0.52rem !important;
   font-weight: 800 !important;
   letter-spacing: 0.06em !important;
@@ -1287,8 +1287,8 @@ html.modern-yellow-lab .real-profile-support,
   width: 100% !important;
   padding: 14px 16px !important;
   border-radius: 20px !important;
-  border: 1px solid rgba(16, 203, 232, 0.3) !important;
-  background: linear-gradient(145deg, rgba(16, 203, 232, 0.08), rgba(14,13,11, 0.95)) !important;
+  border: 1px solid rgba(255,255,255, 0.3) !important;
+  background: linear-gradient(145deg, rgba(255,255,255, 0.08), rgba(14,13,11, 0.95)) !important;
   color: #10cbe8 !important;
   display: flex !important;
   align-items: center !important;
@@ -1306,7 +1306,7 @@ html.modern-yellow-lab .real-profile-support strong,
 
 html.modern-yellow-lab .real-profile-support small,
 .real-profile-support small {
-  color: #7b889b !important;
+  color: #817e77 !important;
   font-size: 0.58rem !important;
 }
 
@@ -1348,7 +1348,7 @@ html.modern-yellow-lab .stat-item {
   border-color: var(--lab-line) !important;
   background: transparent !important;
 }
-html.modern-yellow-lab .stat-label { color: #737785 !important; }
+html.modern-yellow-lab .stat-label { color: #817e77 !important; }
 html.modern-yellow-lab .stat-value { color: var(--lab-white) !important; }
 html.modern-yellow-lab .stat-item:nth-child(2) .stat-value,
 html.modern-yellow-lab .stat-item:nth-child(3) .stat-value { color: var(--lab-yellow) !important; }
@@ -1364,7 +1364,7 @@ html.modern-yellow-lab .btn-connect {
 html.modern-yellow-lab .waiting-badge {
   color: var(--lab-green) !important;
   background: rgba(30,28,25, .92) !important;
-  border-color: rgba(85, 226, 154, .32) !important;
+  border-color: rgba(255,255,255, .32) !important;
 }
 html.modern-yellow-lab :is(.driver-trip-sheet, .active-trip-panel, .incoming-request-card,
   .driver-rating-premium) {
@@ -1446,7 +1446,7 @@ html.modern-yellow-lab .nav-item {
   min-height: 52px !important;
   margin-bottom: 6px !important;
   border-radius: 17px !important;
-  color: #858997 !important;
+  color: #817e77 !important;
 }
 html.modern-yellow-lab .nav-item.active {
   color: var(--lab-yellow) !important;
@@ -1586,7 +1586,7 @@ html.modern-yellow-lab.theme-light :is(input, select, textarea, .search-input-wr
   box-shadow: 0 1px 2px rgba(22,21,18, .05) !important;
 }
 
-html.modern-yellow-lab.theme-light :is(input, textarea)::placeholder { color: #8b90a0 !important; }
+html.modern-yellow-lab.theme-light :is(input, textarea)::placeholder { color: #a3a09a !important; }
 
 /* Estados hover y focus */
 html.modern-yellow-lab.theme-light :is(button, a, input, select, textarea):focus-visible {
@@ -1699,7 +1699,7 @@ html.modern-yellow-lab.theme-light :is(.bottom-nav, .driver-nav-tabs) {
   box-shadow: 0 18px 44px rgba(30,28,25, .14) !important;
 }
 
-html.modern-yellow-lab.theme-light :is(.nav-btn, .nav-tab) { color: #6b7183 !important; }
+html.modern-yellow-lab.theme-light :is(.nav-btn, .nav-tab) { color: #817e77 !important; }
 
 html.modern-yellow-lab.theme-light :is(.nav-btn.active, .nav-tab.active) {
   color: var(--lab-yellow-ink) !important;
@@ -1719,7 +1719,7 @@ html.modern-yellow-lab.theme-light .top-search-bar {
 }
 
 html.modern-yellow-lab.theme-light :is(.passenger-dock-handle, .trip-sheet-handle) {
-  background: #c7cbd8 !important;
+  background: #a3a09a !important;
 }
 
 html.modern-yellow-lab.theme-light .search-icon { color: var(--lab-yellow-ink) !important; }
@@ -1830,7 +1830,7 @@ html.modern-yellow-lab.theme-light :is(.admin-sidebar, .admin-header) {
   border-color: var(--lab-line) !important;
 }
 
-html.modern-yellow-lab.theme-light .nav-item { color: #666c7e !important; }
+html.modern-yellow-lab.theme-light .nav-item { color: #817e77 !important; }
 
 html.modern-yellow-lab.theme-light .nav-item.active {
   color: var(--lab-yellow-ink) !important;
@@ -1932,7 +1932,7 @@ html.modern-yellow-lab.theme-light :is(.liquid-brand-title, .role-tab:hover, .au
 
 html.modern-yellow-lab.theme-light :is(.liquid-brand-subtitle, .liquid-checkbox-label,
   .liquid-social-note, .liquid-social-divider) {
-  color: #657080 !important;
+  color: #817e77 !important;
 }
 
 html.modern-yellow-lab.theme-light :is(.liquid-role-pills, .liquid-auth-tabs) {

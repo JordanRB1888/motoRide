@@ -30,7 +30,7 @@
 
 .local-avatar--passenger {
   --local-avatar-bg: #262420;
-  --local-avatar-fg: #cfe0ff;
+  --local-avatar-fg: #f7f6f3;
 }
 
 .local-avatar--driver {
@@ -44,7 +44,7 @@
 }
 
 :root.theme-light .local-avatar--passenger {
-  --local-avatar-bg: #dce6ff;
+  --local-avatar-bg: #f7f6f3;
   --local-avatar-fg: #262420;
 }
 
@@ -54,6 +54,6 @@
 }
 
 :root.theme-light .local-avatar--admin {
-  --local-avatar-bg: #e9dfff;
+  --local-avatar-bg: #f7f6f3;
   --local-avatar-fg: #262420;
 }
