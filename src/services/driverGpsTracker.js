@@ -143,6 +143,12 @@ class DriverGpsTracker {
     const socket = socketClient.getSocket();
     if (socket && socket.connected) {
       socket.emit('driver:location_update', payload);
+    } else {
+      // La telemetría REST puede continuar en Android aun cuando Socket.IO
+      // perdió cobertura. Cada muestra regulada vuelve a activar la conexión;
+      // el listener `connect` de startTracking re-registra al conductor como
+      // AVAILABLE antes de que pueda recibir la siguiente oferta.
+      socketClient.connect();
     }
 
     // Persistencia asíncrona mediante REST API si la socket no responde
