@@ -24,12 +24,12 @@
   letter-spacing: 0.02em;
   text-transform: uppercase;
   user-select: none;
-  background: var(--local-avatar-bg, #2a2d3a);
+  background: var(--local-avatar-bg, #262420);
   color: var(--local-avatar-fg, #f7f7fa);
 }
 
 .local-avatar--passenger {
-  --local-avatar-bg: #26304a;
+  --local-avatar-bg: #262420;
   --local-avatar-fg: #cfe0ff;
 }
 
@@ -39,13 +39,13 @@
 }
 
 .local-avatar--admin {
-  --local-avatar-bg: #2b2340;
+  --local-avatar-bg: #262420;
   --local-avatar-fg: #e0d0ff;
 }
 
 :root.theme-light .local-avatar--passenger {
   --local-avatar-bg: #dce6ff;
-  --local-avatar-fg: #1c2b4d;
+  --local-avatar-fg: #262420;
 }
 
 :root.theme-light .local-avatar--driver {
@@ -55,5 +55,5 @@
 
 :root.theme-light .local-avatar--admin {
   --local-avatar-bg: #e9dfff;
-  --local-avatar-fg: #33235c;
+  --local-avatar-fg: #262420;
 }

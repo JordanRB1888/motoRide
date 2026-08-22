@@ -916,7 +916,7 @@ html.modern-yellow-lab :is(.bottom-nav, .driver-nav-tabs) {
 html.modern-yellow-lab :is(.nav-btn, .nav-tab) {
   min-height: 56px !important;
   border-radius: 18px !important;
-  color: #747886 !important;
+  color: #807a70 !important;
   transition: color .2s, background .2s, transform .2s !important;
 }
 
