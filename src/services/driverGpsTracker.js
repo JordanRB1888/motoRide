@@ -14,6 +14,42 @@ class DriverGpsTracker {
     this.activeUser = null;
     this.heartbeatTimer = null;
     this.locationThrottle = createLocationThrottle();
+    this.realtimeState = 'OFFLINE';
+    this.socket = socketClient.getSocket();
+    this._onSocketConnect = () => {
+      if (!this.isTracking) return;
+      this._setRealtimeState('RECONNECTING', 'socket_connected');
+      this._registerDriver();
+    };
+    this._onSocketDisconnect = () => {
+      if (!this.isTracking) return;
+      this._setRealtimeState(typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'RECONNECTING', 'socket_disconnected');
+    };
+    this._onDriverConnected = () => {
+      if (!this.isTracking) return;
+      this._setRealtimeState('CONNECTED', 'driver_registered');
+      eventLogger.log('GPS_TRACKER', 'driver_reregistered');
+      if (this.lastPosition) {
+        // La reconexión necesita una posición fresca, pero incluso esta vía
+        // pasa por el único regulador de telemetría del sistema.
+        this.locationThrottle.reset();
+        const now = Date.now();
+        if (this.locationThrottle.shouldSend(this.lastPosition, now)) {
+          this.locationThrottle.markSent(this.lastPosition, now);
+          this.socket?.emit('driver:location_update', this.lastPosition);
+        }
+      }
+      window.dispatchEvent(new CustomEvent('58express:driver-realtime-restored'));
+    };
+    this.socket?.on('connect', this._onSocketConnect);
+    this.socket?.on('disconnect', this._onSocketDisconnect);
+    this.socket?.on('driver:connected', this._onDriverConnected);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('58express:socket-state', event => {
+        if (!this.isTracking || event.detail?.state === 'CONNECTED') return;
+        this._setRealtimeState(event.detail?.state || 'RECONNECTING', event.detail?.trigger);
+      });
+    }
   }
 
   async startTracking(user) {
@@ -34,14 +70,15 @@ class DriverGpsTracker {
       return false;
     }
 
+    this.isTracking = true;
+    this._setRealtimeState(typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'RECONNECTING', 'tracking_started');
+
     // 1. Conectar Socket.IO real con handshake JWT
     const socket = socketClient.connect();
 
-    // 2. Transmitir registro de conductor al socket
-    socket.emit('driver:connect', {
-      userId: this.activeUser.id,
-      status: 'AVAILABLE'
-    });
+    // 2. Registrar solo sobre un transporte confirmado. Socket.IO no debe
+    // almacenar dos driver:connect durante una pérdida de red.
+    if (socket?.connected) this._registerDriver();
 
     eventLogger.log('GPS_TRACKER', `Conductor [${this.activeUser.id}] registrando sesión en Socket.IO`);
 
@@ -69,16 +106,6 @@ class DriverGpsTracker {
       }
     );
 
-    // 5. Configurar listener de reconexión automática en Socket.IO
-    socket.on('connect', () => {
-      eventLogger.log('GPS_TRACKER', `Socket.IO reconectado. Re-registrando estado AVAILABLE para [${this.activeUser.id}]`);
-      socket.emit('driver:connect', {
-        userId: this.activeUser.id,
-        status: 'AVAILABLE'
-      });
-    });
-
-    this.isTracking = true;
     showToast('Transmisión GPS en tiempo real activa en Maracaibo', 'success');
     return true;
   }
@@ -96,7 +123,7 @@ class DriverGpsTracker {
 
     if (this.activeUser && this.activeUser.id) {
       const socket = socketClient.getSocket();
-      if (socket) {
+      if (socket?.connected) {
         socket.emit('driver:status_change', {
           userId: this.activeUser.id,
           status: 'OFFLINE'
@@ -109,6 +136,7 @@ class DriverGpsTracker {
 
     this.isTracking = false;
     this.lastPosition = null;
+    this._setRealtimeState('OFFLINE', 'tracking_stopped');
   }
 
   _onPositionSuccess(pos) {
@@ -152,7 +180,9 @@ class DriverGpsTracker {
     }
 
     // Persistencia asíncrona mediante REST API si la socket no responde
-    apiService.patch('/drivers/location', payload).catch(() => {});
+    apiService.patch('/drivers/location', payload)
+      .then(result => { if (result) socketClient.notifyRestHealthy(); })
+      .catch(() => {});
 
     eventLogger.log('GPS_TRACKER', `GPS actualizado: (${latitude.toFixed(4)}, ${longitude.toFixed(4)}) · Vel: ${payload.speed} km/h · Bat: ${this.batteryLevel || 'N/A'}%`);
   }
@@ -191,6 +221,23 @@ class DriverGpsTracker {
 
   getIsTracking() {
     return this.isTracking;
+  }
+
+  _registerDriver() {
+    if (!this.socket?.connected || !this.activeUser?.id) return;
+    this.socket.emit('driver:connect', { userId: this.activeUser.id, status: 'AVAILABLE' });
+    eventLogger.log('GPS_TRACKER', `Socket.IO conectado. Registrando estado AVAILABLE para [${this.activeUser.id}]`);
+  }
+
+  _setRealtimeState(state, trigger) {
+    this.realtimeState = state;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('58express:driver-realtime-state', { detail: { state, trigger } }));
+    }
+  }
+
+  getRealtimeState() {
+    return this.realtimeState;
   }
 }
 

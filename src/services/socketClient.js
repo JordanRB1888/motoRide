@@ -1,5 +1,6 @@
 import { io } from 'socket.io-client';
 import { eventLogger } from '../utils/logger.js';
+import { NetworkRecoveryController } from './networkRecoveryController.js';
 
 class RealSocketClient {
   constructor() {
@@ -7,6 +8,7 @@ class RealSocketClient {
     this.processedMessageIds = new Set();
     this.socketHandlers = new Map();
     this.pendingRooms = new Set();
+    this.connectionState = 'OFFLINE';
 
     // 1. Setup BroadcastChannel for 0ms cross-tab real-time sync
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -45,7 +47,7 @@ class RealSocketClient {
     }
 
     // 3. Setup Socket.IO client for backend server communication
-    const configuredSocketUrl = import.meta.env.VITE_SOCKET_URL?.replace(/\/$/, '');
+    const configuredSocketUrl = import.meta.env?.VITE_SOCKET_URL?.replace(/\/$/, '');
     const serverUrl = typeof window !== 'undefined' 
       ? (configuredSocketUrl || (['localhost','127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:4000' : 'https://motoride-production-4ce4.up.railway.app'))
       : 'http://localhost:4000';
@@ -71,6 +73,8 @@ class RealSocketClient {
         timeout: 5000
       });
       this._setupSocketListeners();
+      this.networkRecovery = new NetworkRecoveryController({ client: this });
+      this.networkRecovery.start();
     } catch (err) {
       console.warn('[SocketClient] Socket.IO connection warning:', err);
     }
@@ -80,17 +84,26 @@ class RealSocketClient {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
+      this.networkRecovery?.socketConnected();
       this.pendingRooms.forEach(room => this.socket.emit('join:room', room));
+      this.logLifecycle('socket_reconnect_success');
+      this.publishState('RECONNECTING', 'socket_connected');
       eventLogger.info(`⚡ [Socket.IO Client] Conectado al Servidor Backend Real ID: ${this.socket.id}`);
     });
 
     this.socket.on('disconnect', (reason) => {
+      this.networkRecovery?.socketDisconnected();
+      this.logLifecycle('socket_disconnect', { reason });
+      this.publishState(typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'RECONNECTING', reason);
       eventLogger.warn(`⚠️ [Socket.IO Client] Desconectado del Backend. Razón: ${reason}`);
     });
 
     this.socket.on('connect_error', () => {
-      // Quiet reconnection
+      this.networkRecovery?.socketDisconnected();
+      this.logLifecycle('socket_reconnect_failed');
     });
+
+    this.socket.io.on('reconnect_attempt', () => this.logLifecycle('socket_reconnect_start'));
   }
 
   _triggerLocalListeners(eventName, data) {
@@ -168,8 +181,52 @@ class RealSocketClient {
   }
 
   connect() {
-    if (this.socket && !this.socket.connected && this.socket.auth?.token) this.socket.connect();
+    if (this.socket && !this.socket.connected && this.socket.auth?.token) {
+      this.networkRecovery?.requestRecovery('explicit_connect');
+    }
     return this.socket;
+  }
+
+  isAuthenticated() {
+    return Boolean(this.socket?.auth?.token);
+  }
+
+  isConnected() {
+    return Boolean(this.socket?.connected);
+  }
+
+  isOpeningOrReconnecting() {
+    const managerState = this.socket?.io?._readyState;
+    const engineState = this.socket?.io?.engine?.readyState;
+    return ['opening', 'open'].includes(managerState) || ['opening', 'open'].includes(engineState) || Boolean(this.socket?.io?._reconnecting);
+  }
+
+  performRecovery({ trigger, hardReset = false } = {}) {
+    if (!this.socket || !this.isAuthenticated()) return false;
+    this.logLifecycle('socket_reconnect_start', { trigger, hardReset });
+    if (hardReset) {
+      this.logLifecycle('socket_watchdog_reset', { trigger });
+      // Conserva la misma instancia y todos sus listeners, pero descarta el
+      // Manager/Engine asociado a la interfaz de red anterior.
+      this.socket.disconnect();
+    }
+    this.socket.connect();
+    return true;
+  }
+
+  notifyRestHealthy() {
+    this.networkRecovery?.restBecameHealthy();
+  }
+
+  publishState(state, trigger) {
+    this.connectionState = state;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('58express:socket-state', { detail: { state, trigger } }));
+    }
+  }
+
+  logLifecycle(event, details = null) {
+    eventLogger.info(`[Realtime] ${event}`, details);
   }
 
   authenticate(token) {
@@ -183,6 +240,7 @@ class RealSocketClient {
     if (!this.socket) return;
     this.socket.disconnect();
     this.socket.auth = {};
+    this.publishState('OFFLINE', 'authentication_cleared');
   }
 }
 

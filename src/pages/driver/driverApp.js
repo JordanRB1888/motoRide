@@ -21,6 +21,7 @@ import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 import { notificationService } from '../../services/notificationService.js';
 import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
+import { createScreenLifecycle } from '../../utils/screenLifecycle.js';
 
 import { localAvatarHtml } from '../../utils/localAvatar.js';
 export function renderDriverApp(container) {
@@ -111,8 +112,8 @@ export function renderDriverApp(container) {
                         color: var(--success); font-weight: 800; font-size: 0.95rem;
                         box-shadow: 0 10px 25px rgba(0,0,0,0.5), 0 0 20px rgba(0,230,118,0.3);
                     ">
-                        <div class="pulsing-dot" style="width:12px; height:12px; border-radius:50%; background:var(--success); box-shadow: 0 0 10px var(--success); flex-shrink:0;"></div>
-                        <span>En línea <b aria-hidden="true">·</b> GPS activo</span>
+                        <div id="driver-realtime-dot" class="pulsing-dot" style="width:12px; height:12px; border-radius:50%; background:var(--success); box-shadow: 0 0 10px var(--success); flex-shrink:0;"></div>
+                        <span id="driver-realtime-label">En línea <b aria-hidden="true">·</b> GPS activo</span>
                     </div>
                 </div>
                 <div id="active-trip-container" class="active-trip-container hidden"></div>
@@ -144,6 +145,8 @@ export function renderDriverApp(container) {
     // con la sesion en la cabecera. Si no hay, o el acceso no corresponde,
     // el avatar neutro se queda.
     privatePhotos.applyTo(container.querySelector('#driver-avatar'), user.photoUrl, { key: 'propia' });
+    const realtimeLifecycle = createScreenLifecycle({ onFrame: () => {} });
+    realtimeLifecycle.closeWhenDetached(container.querySelector('.driver-app'));
 
     let isOnline = false;
     let currentTrip = null;
@@ -171,6 +174,9 @@ export function renderDriverApp(container) {
     const statusText = container.querySelector('#driver-status-text');
     const offlineOverlay = container.querySelector('#offline-overlay');
     const onlineOverlay = container.querySelector('#online-overlay');
+    const realtimeBadge = onlineOverlay?.querySelector('.waiting-badge');
+    const realtimeDot = container.querySelector('#driver-realtime-dot');
+    const realtimeLabel = container.querySelector('#driver-realtime-label');
     const btnConnectOverlay = container.querySelector('#btn-connect-overlay');
     const activeTripContainer = container.querySelector('#active-trip-container');
     const persistentChatBtn = container.querySelector('#driver-active-chat-btn');
@@ -216,8 +222,7 @@ export function renderDriverApp(container) {
         isOnline = online;
         toggle.checked = online;
         if (online) {
-            statusText.textContent = 'En Línea';
-            statusText.style.color = 'var(--success)';
+            renderRealtimeState(typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'RECONNECTING');
             offlineOverlay.classList.add('hidden');
             onlineOverlay.classList.remove('hidden');
             
@@ -239,6 +244,32 @@ export function renderDriverApp(container) {
             driverDispatchService.updateDriverStatus(user.id, 'OFFLINE');
         }
     }
+
+    function renderRealtimeState(state) {
+        if (!isOnline) return;
+        if (state === 'CONNECTED') {
+            statusText.textContent = 'En Línea';
+            statusText.style.color = 'var(--success)';
+            if (realtimeLabel) realtimeLabel.innerHTML = 'En línea <b aria-hidden="true">·</b> GPS activo';
+            if (realtimeBadge) realtimeBadge.style.color = realtimeBadge.style.borderColor = 'var(--success)';
+            if (realtimeDot) { realtimeDot.style.background = 'var(--success)'; realtimeDot.style.boxShadow = '0 0 10px var(--success)'; }
+        } else if (state === 'OFFLINE') {
+            statusText.textContent = 'Sin conexión';
+            statusText.style.color = 'var(--danger)';
+            if (realtimeLabel) realtimeLabel.textContent = 'Sin conexión';
+            if (realtimeBadge) realtimeBadge.style.color = realtimeBadge.style.borderColor = 'var(--danger)';
+            if (realtimeDot) { realtimeDot.style.background = 'var(--danger)'; realtimeDot.style.boxShadow = '0 0 10px var(--danger)'; }
+        } else {
+            statusText.textContent = 'Reconectando…';
+            statusText.style.color = 'var(--accent-primary)';
+            if (realtimeLabel) realtimeLabel.textContent = 'Reconectando…';
+            if (realtimeBadge) realtimeBadge.style.color = realtimeBadge.style.borderColor = 'var(--accent-primary)';
+            if (realtimeDot) { realtimeDot.style.background = 'var(--accent-primary)'; realtimeDot.style.boxShadow = '0 0 10px var(--accent-primary)'; }
+        }
+        toggle.checked = true;
+    }
+
+    realtimeLifecycle.addListener(window, '58express:driver-realtime-state', event => renderRealtimeState(event.detail?.state));
 
     toggle.addEventListener('change', (e) => setOnline(e.target.checked));
     if (btnConnectOverlay) {
@@ -674,9 +705,19 @@ export function renderDriverApp(container) {
         window.dispatchEvent(new CustomEvent('58express:wallet-updated', { detail: update }));
     });
 
+    let restoreActiveTripPromise = null;
     async function restoreActiveTrip() {
+        if (restoreActiveTripPromise) return restoreActiveTripPromise;
+        restoreActiveTripPromise = restoreActiveTripOnce().finally(() => { restoreActiveTripPromise = null; });
+        return restoreActiveTripPromise;
+    }
+
+    async function restoreActiveTripOnce() {
         const active = await apiService.get('/trips/active/me');
-        if (!active?.trip || active.trip.driverId !== user.id) return;
+        if (!active?.trip || active.trip.driverId !== user.id) {
+            if (currentTrip) clearCompletedTripUi();
+            return;
+        }
         currentTrip = active.trip;
         currentPassenger = {
             id: active.passenger?.id || active.trip.passengerId,
@@ -710,6 +751,10 @@ export function renderDriverApp(container) {
         activeTripContainer.appendChild(view);
         showTripRoute(currentTrip, ['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status) ? 'DESTINATION' : 'PICKUP');
     }
+
+    realtimeLifecycle.addListener(window, '58express:driver-realtime-restored', () => {
+        restoreActiveTrip();
+    });
 
     // Auto-enable online mode by default so driver is ready immediately
     setOnline(true);
