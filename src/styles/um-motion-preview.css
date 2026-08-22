@@ -756,3 +756,28 @@
     box-sizing: border-box !important;
   }
 }
+
+/* =========================================================================
+   BOTTOM SHEET — conservar el centrado horizontal durante la entrada
+   =========================================================================
+   La animacion compartida `umModalEnter` termina en
+   `transform: translateY(0) scale(1)`. Una animacion con relleno `both` gana
+   al estilo en linea, asi que ese fotograma final borraba el
+   `translate(-50%, ...)` que bottomSheet.js aplica para centrarse: el borde
+   izquierdo de la hoja se quedaba en `left: 50%` y el panel se salia del
+   telefono hacia la derecha.
+
+   Los otros catorce modales de esa lista se centran con flexbox, asi que
+   para ellos el fotograma es correcto y se dejan como estan. La hoja es el
+   unico caso que se centra por transform, y por eso recibe su propia
+   entrada: misma duracion y misma curva, pero sin tocar transform, de modo
+   que el componente conserva el mando sobre posicion y encaje.
+   ========================================================================= */
+.um-motion-preview .bottom-sheet {
+  animation: umSheetEnter .42s cubic-bezier(.16, 1, .3, 1) both !important;
+}
+
+@keyframes umSheetEnter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

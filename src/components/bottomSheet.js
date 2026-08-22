@@ -18,6 +18,11 @@ export class BottomSheet {
     
     this._createDOM();
     this._attachEvents();
+
+    // Si cambia el ancho de la ventana, el armazon se mueve: la hoja debe
+    // seguirlo o volveria a quedar descuadrada sin que nadie la reabra.
+    this._onResize = () => this._syncToAppShell();
+    window.addEventListener('resize', this._onResize);
   }
 
   _createDOM() {
@@ -39,6 +44,8 @@ export class BottomSheet {
       position: 'fixed',
       left: '50%',
       bottom: '80px',
+      // El ancho real lo fija _syncToAppShell(): estos valores son solo el
+      // arranque antes del primer sincronizado.
       width: '94%',
       maxWidth: '460px',
       height: 'auto',
@@ -202,7 +209,41 @@ export class BottomSheet {
     this._notifyStateChange();
   }
 
+  /**
+   * Ancla la hoja al contenedor REAL de la aplicacion.
+   *
+   * La hoja es hija de <body> y usa position: fixed, asi que sin esto su
+   * ancho porcentual se resuelve contra el viewport. En movil coinciden y no
+   * se nota; en escritorio la aplicacion se dibuja dentro de un armazon de
+   * telefono mas estrecho y la hoja se salia por la derecha.
+   *
+   * Se mide el armazon vivo y se fijan centro y ancho a partir de el, de modo
+   * que left >= shell.left y right <= shell.right se cumplen en cualquier
+   * ancho, y sobreviven a abrir, arrastrar, encajar, cerrar y reabrir porque
+   * el arrastre solo toca transform.
+   */
+  _syncToAppShell() {
+    const shell = document.querySelector('.passenger-app, .driver-app, .admin-app')
+      || document.getElementById('app');
+    if (!shell) return;
+    const caja = shell.getBoundingClientRect();
+    if (!caja.width) return;
+
+    const MARGEN = 12;
+    const ancho = Math.max(0, Math.round(caja.width - MARGEN * 2));
+
+    // Prioridad `important`: varias reglas heredadas fijan el ancho de la
+    // hoja con !important y ganarian a un estilo en linea normal. Esta es la
+    // unica forma de que la medida del armazon mande, sin reescribir esas
+    // reglas ni tocar las demas hojas.
+    this.sheet.style.setProperty('width', `${ancho}px`, 'important');
+    this.sheet.style.setProperty('max-width', 'none', 'important');
+    // El centro del armazon, no el del viewport.
+    this.sheet.style.setProperty('left', `${Math.round(caja.left + caja.width / 2)}px`, 'important');
+  }
+
   open() {
+    this._syncToAppShell();
     this.sheet.style.display = 'flex';
     this.sheet.style.visibility = 'visible';
     this.overlay.style.visibility = 'visible';
@@ -214,6 +255,7 @@ export class BottomSheet {
   }
 
   expand() {
+    this._syncToAppShell();
     this.sheet.style.display = 'flex';
     this.sheet.style.visibility = 'visible';
     this.overlay.style.visibility = 'visible';
@@ -253,6 +295,7 @@ export class BottomSheet {
   }
 
   destroy() {
+    if (this._onResize) window.removeEventListener('resize', this._onResize);
     this.overlay.remove();
     this.sheet.remove();
   }
