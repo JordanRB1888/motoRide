@@ -14,7 +14,9 @@
     "db:migrate": "node scripts/postgresMigrate.js",
     "db:import:dry-run": "node scripts/sqlitePostgresMigration.js --dry-run",
     "db:import": "node scripts/sqlitePostgresMigration.js",
-    "db:verify": "node scripts/verifyPostgresMigration.js"
+    "db:verify": "node scripts/verifyPostgresMigration.js",
+    "db:cutover:preflight": "node scripts/productionCutoverPreflight.js",
+    "db:cutover:snapshot": "node scripts/productionSqliteSnapshot.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
