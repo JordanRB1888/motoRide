@@ -103,7 +103,7 @@ export function renderDriverApp(container) {
                     </button>
                 </div>
 
-                <div class="online-overlay hidden" id="online-overlay" style="text-align: center; position: absolute; top: 160px; left: 50%; transform: translateX(-50%); z-index: 15; width: 90%; max-width: 420px;">
+                <div class="online-overlay hidden" id="online-overlay" style="text-align: center; position: absolute; top: 196px; left: 50%; transform: translateX(-50%); z-index: 15; width: 90%; max-width: 420px;">
                     <div class="waiting-badge" style="
                         display: flex; align-items: center; justify-content: center; gap: 12px;
                         padding: 14px 20px; border-radius: 20px; background: rgba(15, 20, 32, 0.94);

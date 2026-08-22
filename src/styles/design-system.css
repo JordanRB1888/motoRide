@@ -528,3 +528,16 @@ textarea,
 
   .x58-grain::before { display: none; }
 }
+
+/* =========================================================================
+   EL ATRIBUTO hidden MANDA
+   =========================================================================
+   Las fotos privadas (conductor, pasajero, adjuntos) se declaran con [hidden]
+   y solo se revelan cuando el cargador les asigna su object URL. Si algo pisa
+   ese hidden, el <img> sin src se pinta igual y muestra su texto alternativo,
+   que es lo que hacia aparecer dos circulos de avatar en la cabecera y en el
+   perfil del conductor.
+   ========================================================================= */
+[hidden] {
+  display: none !important;
+}

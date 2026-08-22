@@ -57,8 +57,8 @@ export function renderDriverProfile(container, options = {}) {
             <input type="file" id="driver-photo-input" accept="image/*" style="display: none;" />
             ${avatarLocal}<img id="driver-avatar-img" hidden style="
               width: 100%; height: 100%; border-radius: 50%;
-              border: 3.5px solid var(--accent-secondary);
-              box-shadow: 0 0 25px rgba(0,210,255,0.35);
+              border: 3.5px solid var(--x58-border-strong);
+              box-shadow: 0 8px 24px rgba(0,0,0,.34);
               object-fit: cover;
             ">
             

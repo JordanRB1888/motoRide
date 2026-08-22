@@ -478,7 +478,7 @@ html.theme-light .driver-app{--cockpit:var(--x58-surface-2);--cockpit-line:var(-
 /* Expose the online/GPS pill below the compact metrics strip */
 .driver-app .stats-bar{transform:translateY(-6px)!important}
 .driver-app .online-overlay{top:calc(max(12px,env(safe-area-inset-top)) + 160px)!important}
-@media(max-width:390px){.driver-app .stats-bar{transform:translateY(-5px)!important}.driver-app .online-overlay{top:calc(max(12px,env(safe-area-inset-top)) + 145px)!important}}
+@media(max-width:390px){.driver-app .stats-bar{transform:translateY(-5px)!important}.driver-app .online-overlay{top:calc(max(12px,env(safe-area-inset-top)) + 184px)!important}}
 @media(min-width:700px){.driver-app .stats-bar{transform:translateY(-7px)!important}.driver-app .online-overlay{top:196px!important}}
 
 /* Movimiento de marca y microinteracciones del cockpit del conductor */
@@ -532,3 +532,66 @@ html.theme-light .driver-app{--cockpit:var(--x58-surface-2);--cockpit-line:var(-
 
 /* Premium post-trip passenger rating */
 .driver-rating-overlay{position:fixed;inset:0;z-index:99999;padding:16px;display:grid;place-items:center;overflow-y:auto;background:radial-gradient(circle at 50% 15%,rgba(255,196,0,.13),transparent 27%),rgba(10,9,8,.96);backdrop-filter:blur(18px)}.driver-rating-premium{width:min(100%,440px);max-height:94dvh;padding:23px;overflow-y:auto;text-align:center;border:1px solid rgba(255,196,0,.45);border-radius:28px;background:linear-gradient(160deg,#1e1c19,#0e0d0b);color:#f8fafc;box-shadow:0 32px 80px rgba(0,0,0,.7)}.rating-success-header{display:grid;place-items:center}.rating-brand{color:var(--x58-yellow);font-size:1.18rem;font-weight:950;letter-spacing:-.04em}.rating-brand span{display:block;margin-top:-2px;color:#fff;font-size:.43rem;letter-spacing:.32em}.rating-completed{margin-top:12px;padding:7px 12px;display:flex;align-items:center;gap:6px;border:1px solid rgba(0,223,120,.35);border-radius:999px;background:rgba(0,223,120,.08);color:#00df78;font-size:.67rem;font-weight:900}.rating-success-header>small{margin-top:7px;color:#a3a09a;font-size:.58rem}.rating-passenger-avatar{width:76px;height:76px;margin:17px auto 9px;padding:3px;border:1px solid var(--x58-yellow);border-radius:50%;background:#0e0d0b}.rating-passenger-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}.driver-rating-premium h2{margin:0;font-size:1.15rem}.driver-rating-premium>p{margin:4px 0 0;color:#a3a09a;font-size:.66rem}.driver-rating-stars{margin-top:15px;display:flex;justify-content:center;gap:5px}.star-btn-driver{width:44px;height:44px;padding:0;border:0;background:transparent;color:#56534c;font-size:2rem;line-height:1;transition:.15s}.star-btn-driver.selected{color:var(--x58-yellow);filter:drop-shadow(0 0 8px rgba(255,196,0,.3));transform:scale(1.04)}.rating-label{display:block;margin-top:5px;color:var(--x58-yellow);font-size:.72rem}.driver-rating-premium h3{margin:17px 0 9px;color:#a3a09a;font-size:.68rem}.driver-rating-tags{display:flex;flex-wrap:wrap;justify-content:center;gap:7px}.tag-driver-btn{min-height:35px;padding:0 12px;border:1px solid rgba(255,196,0,.35);border-radius:999px;background:transparent;color:#f7f6f3;font-size:.58rem;font-weight:850}.tag-driver-btn.selected{border-color:var(--x58-yellow);background:rgba(255,196,0,.13);color:var(--x58-yellow)}.driver-rating-premium textarea{width:100%;margin-top:15px;padding:12px;border:1px solid rgba(163,160,154,.24);border-radius:13px;background:#0e0d0b;color:#fff;font:inherit;font-size:.65rem;resize:none}.driver-rating-submit{width:100%;height:50px;margin-top:12px;border:0;border-radius:14px;background:linear-gradient(135deg,#ffd429,#ffb100);color:#0e0d0b;font-size:.73rem;font-weight:950}.driver-rating-skip{width:100%;height:35px;border:0;background:transparent;color:#a3a09a;font-size:.61rem;font-weight:800}.rating-safety-note{margin-top:7px;display:flex;align-items:center;justify-content:center;gap:5px;color:#817e77;font-size:.53rem}.rating-safety-note svg{color:var(--x58-yellow)}@media(max-width:390px){.driver-rating-overlay{padding:8px}.driver-rating-premium{padding:17px;border-radius:23px}.rating-passenger-avatar{width:66px;height:66px;margin-top:12px}.star-btn-driver{width:39px;height:39px;font-size:1.7rem}.driver-rating-premium h3{margin-top:12px}.tag-driver-btn{min-height:32px;padding-inline:10px}.driver-rating-premium textarea{margin-top:12px}.driver-rating-submit{height:46px}}
+
+/* =========================================================================
+   MAPA DEL CONDUCTOR — controles visibles y con el lenguaje de la aplicacion
+   ========================================================================= */
+
+/* El boton de ubicarse quedaba DETRAS de .driver-main-content (z-index 900):
+   respondia al toque, pero no se veia. Sube por encima de esa capa,
+   manteniendose por debajo de la navegacion (10000) y de los paneles. */
+.driver-app .gps-locate-btn {
+  z-index: 950 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .5) !important;
+}
+
+/* Los controles de zoom llegaban con el blanco por defecto de Leaflet, que
+   no pertenece a ninguna parte de +58Express. Se reducen y se visten con la
+   misma superficie, borde y radio que el resto de la interfaz. */
+.driver-app .leaflet-control-zoom,
+.passenger-app .leaflet-control-zoom {
+  border: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden;
+  border-radius: var(--x58-radius-control) !important;
+}
+
+.driver-app .leaflet-control-zoom a,
+.passenger-app .leaflet-control-zoom a {
+  width: 30px !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  border: 1px solid var(--x58-border-subtle) !important;
+  background: rgba(14, 13, 11, .88) !important;
+  color: var(--x58-text-secondary) !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  backdrop-filter: blur(12px);
+}
+
+.driver-app .leaflet-control-zoom a:first-child,
+.passenger-app .leaflet-control-zoom a:first-child {
+  border-radius: var(--x58-radius-control) var(--x58-radius-control) 0 0 !important;
+  border-bottom: 0 !important;
+}
+
+.driver-app .leaflet-control-zoom a:last-child,
+.passenger-app .leaflet-control-zoom a:last-child {
+  border-radius: 0 0 var(--x58-radius-control) var(--x58-radius-control) !important;
+}
+
+.driver-app .leaflet-control-zoom a:hover,
+.passenger-app .leaflet-control-zoom a:hover {
+  background: rgba(30, 28, 25, .94) !important;
+  color: var(--x58-yellow) !important;
+}
+
+/* El recorte circular vivia en la <img> real; cuando el conductor todavia no
+   tiene foto, el relevo de iniciales entraba cuadrado. Que herede la forma. */
+.driver-profile-avatar-wrap {
+  overflow: hidden;
+}
+
+.driver-profile-avatar-wrap > .local-avatar {
+  border-radius: 50%;
+}
