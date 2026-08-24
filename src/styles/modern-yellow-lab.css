@@ -2118,6 +2118,96 @@ html.modern-yellow-lab.theme-light .fleet-live-panel {
   background: var(--x58-surface-overlay) !important;
 }
 
+
+/* =========================================================================
+   PANEL DE ADMINISTRACION EN TEMA CLARO
+   El oscuro esta certificado y no se toca. El claro heredaba su estructura
+   pero perdia por el camino las dos cosas que le daban cuerpo: el tinte de
+   color de los iconos de metrica --que en oscuro salen de currentColor con un
+   color-mix sobre transparente, y sobre blanco se evaporan-- y la separacion
+   entre tarjeta y pagina, porque blanco puro sobre un fondo casi blanco no se
+   distingue.
+   En claro la profundidad no puede venir de la sombra: viene del borde y de
+   un matiz calido. Eso es lo que se devuelve aqui, sin inventar una direccion
+   nueva ni mover un solo color semantico.
+   ========================================================================= */
+
+/* 1. Las tarjetas vuelven a tener cuerpo: borde visible y superficie apenas
+      calida en vez de blanco puro sobre blanco roto. */
+html.modern-yellow-lab.theme-light :is(.metric-card, .ops-panel, .operations-map-card,
+  .kpi-card, .data-table-container, .topup-queue-card, .topup-kpis article) {
+  border: 1px solid rgba(30, 28, 25, .14) !important;
+  background: linear-gradient(168deg, #fffefb 0%, #fffcf3 100%) !important;
+  box-shadow: 0 1px 2px rgba(30, 28, 25, .06), 0 12px 30px rgba(30, 28, 25, .07) !important;
+}
+
+html.modern-yellow-lab.theme-light :is(.metric-card, .ops-panel):hover {
+  border-color: rgba(255, 196, 0, .45) !important;
+}
+
+/* 2. El icono de cada metrica recupera su color. El semantico se respeta:
+      verde disponible, amarillo dinero y calificacion, neutro el resto. */
+html.modern-yellow-lab.theme-light .metric-card .metric-icon {
+  background: color-mix(in srgb, currentColor 13%, #fff) !important;
+  border: 1px solid color-mix(in srgb, currentColor 38%, transparent) !important;
+}
+html.modern-yellow-lab.theme-light .metric-card.green { color: #0f7350 !important; }
+html.modern-yellow-lab.theme-light .metric-card.amber,
+html.modern-yellow-lab.theme-light .metric-card.orange { color: #8f6400 !important; }
+html.modern-yellow-lab.theme-light .metric-card.cyan { color: #5b5850 !important; }
+/* El numero grande manda sobre el color del icono: siempre tinta plena. */
+html.modern-yellow-lab.theme-light .metric-card strong { color: #1e1c19 !important; }
+html.modern-yellow-lab.theme-light .metric-card :is(small, p) { color: #5b5850 !important; }
+
+/* 3. La tabla necesitaba una cabecera que se lea como cabecera y filas que se
+      distingan entre si. */
+html.modern-yellow-lab.theme-light .data-table th {
+  background: #f3efe2 !important;
+  border-bottom: 1px solid rgba(30, 28, 25, .13) !important;
+  color: #4a473f !important;
+}
+html.modern-yellow-lab.theme-light .data-table tbody tr + tr td {
+  border-top: 1px solid rgba(30, 28, 25, .07) !important;
+}
+html.modern-yellow-lab.theme-light .data-table tbody tr:hover td {
+  background: #fffdf3 !important;
+}
+
+/* 4. Cabeceras de panel: el titulo se separa de su contenido. */
+html.modern-yellow-lab.theme-light .ops-panel > header {
+  border-bottom: 1px solid rgba(30, 28, 25, .09) !important;
+}
+
+/* 5. La barra lateral se separa del contenido y el elemento activo se lee. */
+html.modern-yellow-lab.theme-light .admin-sidebar {
+  border-right: 1px solid rgba(30, 28, 25, .10) !important;
+}
+html.modern-yellow-lab.theme-light .nav-item.active {
+  background: var(--x58-yellow-soft) !important;
+  border: 1px solid rgba(255, 196, 0, .55) !important;
+  color: #6b4e00 !important;
+}
+html.modern-yellow-lab.theme-light .admin-header {
+  border-bottom: 1px solid rgba(30, 28, 25, .10) !important;
+}
+
+/* 6. La tarjeta de ciudad, ahora que es un control, tiene que parecerlo. */
+html.modern-yellow-lab.theme-light .admin-system-card {
+  background: linear-gradient(150deg, #fffdf4, #fffefb) !important;
+  border: 1px solid rgba(30, 28, 25, .11) !important;
+}
+html.modern-yellow-lab.theme-light .admin-system-card:hover {
+  border-color: var(--x58-yellow) !important;
+  background: #fffbea !important;
+}
+
+/* 7. Las dos pildoras de la cabecera de operacion tenian el mismo peso visual
+      que el fondo. */
+html.modern-yellow-lab.theme-light :is(.ops-health, .ops-rate) {
+  border: 1px solid rgba(30, 28, 25, .11) !important;
+  background: #fffefb !important;
+}
+
 /* FIN DE LOS AJUSTES DE MODO CLARO ========================================
    Todo lo de arriba, desde <<PERFIL EN TEMA CLARO>>, corrige deudas que el
    modo claro heredaba del oscuro, y por eso va acotado a .theme-light: el

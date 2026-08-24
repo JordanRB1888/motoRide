@@ -27,7 +27,7 @@ export function renderAdminApp(container) {
   let dashboardMap = null;
   const nav = [['dashboard','grid','Centro de Operaciones'],['fleet','map','Mapa de Flota'],['applications','shield','Solicitudes'],['users','users','Usuarios'],['tariffs','dollarSign','Tarifas'],['topups','wallet','Recargas'],['finances','trending','Finanzas'],['support','message','Soporte']];
 
-  container.innerHTML = `<div class="admin-app"><aside class="admin-sidebar" id="sidebar"><div class="admin-logo"><img src="/app-icon-v2.png" alt="+58 Express"><div class="logo-text-full"><span>+58</span>express<small>Operations</small></div></div><nav class="admin-nav">${nav.map(([id,ic,label],index)=>`<button class="nav-item ${index?'':'active'}" data-target="${id}"><span class="nav-icon">${icon(ic,19)}</span><span class="nav-text">${label}</span></button>`).join('')}</nav><div class="admin-system-card"><span class="system-pin">M</span><div><strong>Maracaibo</strong><small><i></i>Sistema operativo</small></div></div><button class="sidebar-collapse" id="sidebar-collapse">${icon('chevronLeft',16)}<span class="nav-text">Contraer menú</span></button></aside><main class="admin-main"><header class="admin-header"><div class="header-left"><button class="mobile-menu-btn" id="menu-btn">${icon('menu',20)}</button><div><h2 id="page-title">Centro de Operaciones</h2><small>Control, seguridad y movilidad en tiempo real</small></div></div><div class="admin-command"><button id="admin-bell" class="admin-icon-button" title="Notificaciones">${icon('bell',20)}<span id="admin-badge"></span></button><div id="theme"></div><div class="admin-profile"><span class="admin-avatar">${escapeHtml(admin.firstName?.[0] || 'A')}</span><div><strong>Hola, ${escapeHtml(admin.firstName)}</strong><small>Administrador</small></div></div><button class="logout-btn" id="logout">Salir</button></div></header><div class="admin-content" id="admin-content"></div></main></div>`;
+  container.innerHTML = `<div class="admin-app"><aside class="admin-sidebar" id="sidebar"><div class="admin-logo"><img src="/app-icon-v2.png" alt="+58 Express"><div class="logo-text-full"><b><span>+58</span>express</b><small>Operations</small></div></div><nav class="admin-nav">${nav.map(([id,ic,label],index)=>`<button class="nav-item ${index?'':'active'}" data-target="${id}"><span class="nav-icon">${icon(ic,19)}</span><span class="nav-text">${label}</span></button>`).join('')}</nav><button type="button" class="admin-system-card" id="admin-system-card" title="Abrir el mapa de flota"><span class="system-pin">M</span><div><strong>Maracaibo</strong><small><i></i><span id="admin-system-live">Sistema operativo</span></small></div><span class="system-go">${icon('chevronRight',16)}</span></button><button class="sidebar-collapse" id="sidebar-collapse">${icon('chevronLeft',16)}<span class="nav-text">Contraer menú</span></button></aside><main class="admin-main"><header class="admin-header"><div class="header-left"><button class="mobile-menu-btn" id="menu-btn">${icon('menu',20)}</button><div><h2 id="page-title">Centro de Operaciones</h2><small>Control, seguridad y movilidad en tiempo real</small></div></div><div class="admin-command"><button id="admin-bell" class="admin-icon-button" title="Notificaciones">${icon('bell',20)}<span id="admin-badge"></span></button><div id="theme"></div><div class="admin-profile"><span class="admin-avatar">${escapeHtml(admin.firstName?.[0] || 'A')}</span><div><strong>Hola, ${escapeHtml(admin.firstName)}</strong><small>Administrador</small></div></div><button class="logout-btn" id="logout">Salir</button></div></header><div class="admin-content" id="admin-content"></div></main></div>`;
 
   container.querySelector('#theme').appendChild(initThemeToggle());
   const content = container.querySelector('#admin-content');
@@ -75,12 +75,36 @@ export function renderAdminApp(container) {
   container.querySelectorAll('.nav-item').forEach(button=>button.onclick=()=>switchTab(button.dataset.target));
   const redrawIfDashboard=()=>{if(container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();};
 
+  /**
+   * La tarjeta de ciudad era decorativa: ocupaba el pie de la barra lateral y
+   * no decia nada que cambiara. Ahora lleva el pulso de la operacion --cuantos
+   * conductores hay disponibles y cuantos viajes estan en curso-- y es el
+   * acceso directo al mapa de flota, que es lo que uno quiere ver justo
+   * despues de leer esas dos cifras.
+   *
+   * Se alimenta de `overview` cuando el servidor ya lo mando, y si no, cuenta
+   * sobre las colecciones locales: la misma regla que usa el tablero, para que
+   * las dos superficies nunca digan cosas distintas.
+   */
+  const actualizarTarjetaSistema=()=>{
+    const linea=container.querySelector('#admin-system-live');
+    if(!linea)return;
+    const users=db.getCollection('users')||[],trips=db.getCollection('trips')||[];
+    const disponibles=overview?.drivers?.available??users.filter(u=>u.role==='driver'&&['AVAILABLE','ONLINE'].includes(u.status)).length;
+    const activos=overview?.activeTrips??trips.filter(t=>ACTIVE_STATUSES.includes(t.status)).length;
+    linea.textContent=`${disponibles} en linea · ${activos} en curso`;
+    const tarjeta=container.querySelector('#admin-system-card');
+    if(tarjeta)tarjeta.title=`${disponibles} conductores disponibles y ${activos} viajes en curso. Abrir el mapa de flota`;
+  };
+  container.querySelector('#admin-system-card')?.addEventListener('click',()=>switchTab('fleet'));
+
   const applyOverview=stats=>{
     overview=stats;
     const applicationsButton=container.querySelector('[data-target="applications"]');
     if(applicationsButton)applicationsButton.dataset.count=stats?.driverApplications?.pending?String(stats.driverApplications.pending):'';
     const topupsButton=container.querySelector('[data-target="topups"]');
     if(topupsButton)topupsButton.dataset.count=stats?.walletRequests?.pendingTopups?String(stats.walletRequests.pendingTopups):'';
+    actualizarTarjetaSistema();
   };
 
   // Carga completa: solo al abrir el panel. Las listas enteras no vuelven a
