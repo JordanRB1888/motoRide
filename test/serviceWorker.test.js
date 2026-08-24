@@ -120,14 +120,27 @@ function loadServiceWorker({ networkResponses = {}, networkFailsFor = [], putDel
   return { listeners, store, caches, fetchCalls, self, dispatch, writes };
 }
 
-const CURRENT_CACHE = '58express-pwa-v11-modern-ui';
+// El nombre se lee del propio service worker en vez de repetirse aquí. Fijar
+// el literal obligaba a tocar este archivo en cada subida de versión —y una
+// subida es justo lo que hay que hacer cuando cambian los iconos, que tienen
+// nombre fijo y se sirven desde caché—. Lo que el contrato debe garantizar no
+// es «se llama así», sino que esté versionado y que solo avance.
+const CURRENT_CACHE = (fs.readFileSync(swPath, 'utf8').match(/const CACHE_NAME = '([^']+)'/) || [])[1];
 
-test('el nombre de caché está versionado y v10 ya no es la caché activa', () => {
-  const code = fs.readFileSync(swPath, 'utf8');
-  const match = code.match(/const CACHE_NAME = '([^']+)'/);
-  assert.ok(match, 'No se encontró CACHE_NAME');
-  assert.equal(match[1], CURRENT_CACHE);
-  assert.notEqual(match[1], '58express-pwa-v10-brand-icon');
+// Última versión publicada en producción. Subir este número al desplegar una
+// nueva; nunca bajarlo.
+const VERSION_MINIMA = 12;
+
+test('el nombre de caché está versionado y solo puede avanzar', () => {
+  assert.ok(CURRENT_CACHE, 'No se encontró CACHE_NAME');
+  const match = CURRENT_CACHE.match(/^58express-pwa-v(\d+)-[a-z0-9-]+$/);
+  assert.ok(match,
+    `CACHE_NAME debe seguir el patrón 58express-pwa-v<N>-<motivo>, y es "${CURRENT_CACHE}"`);
+  // Retroceder dejaría a los teléfonos ya instalados sirviendo desde su caché
+  // el esqueleto y los iconos antiguos, que es exactamente el fallo que esta
+  // versión existe para evitar.
+  assert.ok(Number(match[1]) >= VERSION_MINIMA,
+    `la versión de caché no puede retroceder: v${match[1]} es anterior a v${VERSION_MINIMA}`);
 });
 
 test('install precarga el esqueleto y llama a skipWaiting', async () => {

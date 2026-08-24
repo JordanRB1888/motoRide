@@ -162,6 +162,22 @@ export function renderDriverApp(container) {
     });
 
     const onlineFab = container.querySelector('#driver-online-fab');
+
+    /**
+     * Unico lugar que traduce «esta disponible» a como se ve el boton central.
+     * Lo llaman setOnline y renderRealtimeState: mientras el conductor sigue en
+     * linea, una caida y reconexion del socket no debe apagar el boton.
+     */
+    function reflejarDisponibilidad(online) {
+        if (!onlineFab) return;
+        onlineFab.classList.toggle('is-online', online);
+        onlineFab.setAttribute('aria-pressed', String(online));
+        onlineFab.title = online
+            ? 'Estas en linea. Pulsa para desconectarte'
+            : 'Ponerte en linea para recibir carreras';
+        const etiqueta = onlineFab.querySelector('.driver-online-fab-label');
+        if (etiqueta) etiqueta.textContent = online ? 'En linea' : 'Fuera';
+    }
     const statusText = container.querySelector('#driver-status-text');
     const onlineOverlay = container.querySelector('#online-overlay');
     const realtimeBadge = onlineOverlay?.querySelector('.waiting-badge');
@@ -208,15 +224,7 @@ export function renderDriverApp(container) {
             return;
         }
         isOnline = online;
-        // El boton central de la barra refleja el mismo estado que reflejaba
-        // el interruptor de la cabecera; no es un control paralelo.
-        if (onlineFab) {
-            onlineFab.classList.toggle('is-online', online);
-            onlineFab.setAttribute('aria-pressed', String(online));
-            onlineFab.title = online ? 'Estas en linea. Pulsa para desconectarte' : 'Ponerte en linea para recibir carreras';
-            const etiqueta = onlineFab.querySelector('.driver-online-fab-label');
-            if (etiqueta) etiqueta.textContent = online ? 'En linea' : 'Fuera';
-        }
+        reflejarDisponibilidad(online);
         if (online) {
             renderRealtimeState(typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'RECONNECTING');
             onlineOverlay.classList.remove('hidden');
@@ -260,7 +268,10 @@ export function renderDriverApp(container) {
             if (realtimeBadge) realtimeBadge.style.color = realtimeBadge.style.borderColor = 'var(--accent-primary)';
             if (realtimeDot) { realtimeDot.style.background = 'var(--accent-primary)'; realtimeDot.style.boxShadow = '0 0 10px var(--accent-primary)'; }
         }
-        toggle.checked = true;
+        // renderRealtimeState solo corre si el conductor esta en linea (vuelve
+        // arriba si no), asi que aqui se reafirma esa disponibilidad: un
+        // reintento de socket no puede dejar el boton apagado.
+        reflejarDisponibilidad(true);
     }
 
     realtimeLifecycle.addListener(window, '58express:driver-realtime-state', event => renderRealtimeState(event.detail?.state));

@@ -2123,6 +2123,102 @@ html.modern-yellow-lab.theme-light .fleet-live-panel {
    ========================================================================= */
 
 /* =========================================================================
+   PERFIL DEL CONDUCTOR — ACCIONES EN FILAS COMPACTAS
+   Antes eran tres tarjetas de 85, 155 y 52px de alto, una de ellas con
+   titulo, parrafo y un boton a ancho completo para una sola accion. Ahora
+   son tres filas del mismo alto, con la misma estructura repetida: icono,
+   texto y, si lleva a otra pantalla, un galon. La de soporte ademas
+   arrastraba cian decorativo, que ya no pertenece al sistema de color.
+   ========================================================================= */
+
+html.modern-yellow-lab .driver-profile-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+html.modern-yellow-lab .driver-profile-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 56px;
+  padding: 9px 13px;
+  text-align: left;
+  border: 1px solid var(--x58-border-subtle);
+  border-radius: 16px;
+  background: var(--x58-surface-2);
+  color: var(--x58-text-primary);
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease;
+}
+
+html.modern-yellow-lab .driver-profile-row:hover,
+html.modern-yellow-lab .driver-profile-row:focus-visible {
+  border-color: var(--x58-yellow-line);
+  background: var(--x58-surface-raised);
+}
+
+html.modern-yellow-lab .driver-profile-row-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--x58-yellow-soft);
+  color: var(--x58-yellow-text);
+}
+
+html.modern-yellow-lab .driver-profile-row-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+html.modern-yellow-lab .driver-profile-row-text strong {
+  font-size: .92rem;
+  font-weight: 700;
+  color: var(--x58-text-primary);
+}
+
+html.modern-yellow-lab .driver-profile-row-text small {
+  font-size: .72rem;
+  color: var(--x58-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.modern-yellow-lab .driver-profile-row-go {
+  display: grid;
+  place-items: center;
+  color: var(--x58-text-muted);
+}
+
+/* Cerrar sesion es la unica accion destructiva: se distingue por color, no
+   por tamano, para que no compita con las otras dos. */
+html.modern-yellow-lab .driver-profile-row--salir {
+  border-color: color-mix(in srgb, var(--x58-danger) 34%, transparent);
+  background: color-mix(in srgb, var(--x58-danger) 9%, transparent);
+}
+
+html.modern-yellow-lab .driver-profile-row--salir .driver-profile-row-icon {
+  background: color-mix(in srgb, var(--x58-danger) 14%, transparent);
+  color: var(--x58-danger);
+}
+
+html.modern-yellow-lab .driver-profile-row--salir .driver-profile-row-text strong {
+  color: var(--x58-danger);
+}
+
+html.modern-yellow-lab .driver-profile-row--salir:hover,
+html.modern-yellow-lab .driver-profile-row--salir:focus-visible {
+  border-color: color-mix(in srgb, var(--x58-danger) 55%, transparent);
+  background: color-mix(in srgb, var(--x58-danger) 14%, transparent);
+}
+
+/* =========================================================================
    BOTON CENTRAL DE CONEXION — barra del conductor
    Ponerse en linea es la accion mas importante de la pantalla y vivia como
    un interruptor pequeno en una esquina de la cabecera. Pasa al centro de

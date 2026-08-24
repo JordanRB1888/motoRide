@@ -15,14 +15,14 @@
     <link rel="manifest" href="/manifest.json">
 
     <style>
-      #app-splash{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;overflow:hidden;background:radial-gradient(circle at 50% 43%,#172234 0,#07101c 34%,#02060d 74%);opacity:1;visibility:visible;transition:opacity .38s ease,visibility .38s ease}
+      #app-splash{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;overflow:hidden;background:radial-gradient(circle at 50% 43%,#1e1c19 0,#0e0d0b 34%,#0a0908 74%);opacity:1;visibility:visible;transition:opacity .38s ease,visibility .38s ease}
       #app-splash.is-leaving{opacity:0;visibility:hidden;pointer-events:none}
       .app-splash-content{display:grid;place-items:center;text-align:center;transform:translateY(-2vh)}
       .app-splash-orbit{position:relative;width:154px;height:154px;display:grid;place-items:center;border-radius:50%}
       .app-splash-orbit:before,.app-splash-orbit:after{content:"";position:absolute;border-radius:50%;pointer-events:none}
       .app-splash-orbit:before{inset:-9px;border:2px solid rgba(255,196,0,.16);border-top-color:#ffc400;border-right-color:#ffc400;box-shadow:0 0 26px rgba(255,196,0,.18);animation:splashOrbit 1.15s linear infinite}
       .app-splash-orbit:after{inset:-20px;border:1px solid rgba(255,196,0,.1);border-left-color:rgba(255,196,0,.65);animation:splashOrbit 1.8s linear infinite reverse}
-      .app-splash-logo{width:138px;height:138px;display:block;border:3px solid #ffc400;border-radius:50%;object-fit:cover;overflow:hidden;background:#050b13;box-shadow:0 0 0 6px rgba(255,196,0,.08),0 18px 45px rgba(0,0,0,.55),0 0 36px rgba(255,196,0,.2);animation:splashLogoTurn 1.35s cubic-bezier(.45,.05,.2,1) infinite}
+      .app-splash-logo{width:138px;height:138px;display:block;border:3px solid #ffc400;border-radius:50%;object-fit:cover;overflow:hidden;background:#0a0908;box-shadow:0 0 0 6px rgba(255,196,0,.08),0 18px 45px rgba(0,0,0,.55),0 0 36px rgba(255,196,0,.2);animation:splashLogoTurn 1.35s cubic-bezier(.45,.05,.2,1) infinite}
       .app-splash-name{margin-top:30px;color:#f7f6f3;font:800 1.55rem/1.05 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:-.06em}
       .app-splash-name b{color:#ffc400}
       .app-splash-status{margin-top:10px;color:#a3a09a;font:650 .68rem/1 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.08em;text-transform:uppercase}

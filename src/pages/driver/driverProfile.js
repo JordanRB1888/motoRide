@@ -28,7 +28,7 @@ export function renderDriverProfile(container, options = {}) {
 
     container.innerHTML = `
       <div class="driver-profile-page driver-profile-premium fade-in" style="padding: 24px 16px 120px; max-width: 440px; margin: 0 auto;">
-        
+
         <!-- Header -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
           <div>
@@ -50,7 +50,7 @@ export function renderDriverProfile(container, options = {}) {
           border: 1.5px solid var(--border-gold); box-shadow: 0 20px 45px rgba(0,0,0,0.6); margin-bottom: 20px;
           position: relative; overflow: hidden;
         ">
-          <div style="position: absolute; top: 0; left: 0; right: 0; height: 5px; background: var(--x58-yellow);"></div>
+
 
           <!-- Avatar Container -->
           <div class="driver-profile-avatar-wrap" style="position: relative; width: 108px; height: 108px; margin: 0 auto 16px;">
@@ -61,7 +61,7 @@ export function renderDriverProfile(container, options = {}) {
               box-shadow: 0 8px 24px rgba(0,0,0,.34);
               object-fit: cover;
             ">
-            
+
             <button id="btn-trigger-driver-photo" style="
               position: absolute; bottom: 0; right: -2px;
               background: var(--x58-yellow); color: var(--x58-yellow-ink); font-size: 0.75rem;
@@ -231,42 +231,28 @@ export function renderDriverProfile(container, options = {}) {
           </button>
         </div>
 
-        <div class="driver-profile-documents-card">
-          <span>${icon('shield', 24)}</span>
-          <div><strong>Mis documentos</strong><small>Envía o actualiza cédula, licencia, RCV y documentos del vehículo.</small></div>
-          <button id="btn-open-driver-documents">Gestionar ${icon('chevronRight', 16)}</button>
-        </div>
-
-        <!-- Admin Direct Support Chat Button Card -->
-        <div class="diorama-card-3d driver-profile-support-card" style="
-          padding: 20px; border-radius: 24px; background: rgba(0, 210, 255, 0.08);
-          border: 1.5px solid var(--accent-secondary); margin-bottom: 24px; text-align: center;
-        ">
-          <h4 style="color: var(--text-primary); font-size: 1.1rem; font-weight: 800; margin-bottom: 4px;">
-            ${icon('message', 16)} Atención directa con Administración
-          </h4>
-          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px;">
-            ¿Tienes alguna duda con tu liquidación, documentos o viajes? Comunícate directamente con Administración +58 Express 24/7.
-          </p>
-          <button id="btn-open-admin-chat" class="btn btn-secondary-3d" style="
-            width: 100%; padding: 16px; font-weight: 800; font-size: 1rem;
-            color: var(--accent-secondary); border-color: var(--accent-secondary);
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-          ">
-            ${icon('shield', 16)} Hablar con Administración
+        <div class="driver-profile-actions">
+          <button type="button" id="btn-open-driver-documents" class="driver-profile-row">
+            <span class="driver-profile-row-icon">${icon('shield', 20)}</span>
+            <span class="driver-profile-row-text">
+              <strong>Mis documentos</strong>
+              <small>Cédula, licencia, RCV y vehículo</small>
+            </span>
+            <span class="driver-profile-row-go">${icon('chevronRight', 16)}</span>
           </button>
-        </div>
 
-        <!-- Only Logout Button (Cleaned as requested by user) -->
-        <div style="margin-top: 10px;">
-          <button id="driver-logout-btn" class="btn driver-profile-logout" style="
-            width: 100%; padding: 16px; font-weight: 900; font-size: 1.05rem;
-            background: rgba(255, 77, 77, 0.15); border: 2px solid var(--danger);
-            color: var(--danger); border-radius: 20px;
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-            box-shadow: 0 6px 15px rgba(255, 77, 77, 0.2); cursor: pointer;
-          ">
-            ${icon('logout', 20)} Cerrar Sesión / Salir
+          <button type="button" id="btn-open-admin-chat" class="driver-profile-row">
+            <span class="driver-profile-row-icon">${icon('message', 20)}</span>
+            <span class="driver-profile-row-text">
+              <strong>Hablar con Administración</strong>
+              <small>Liquidaciones, documentos o viajes · 24/7</small>
+            </span>
+            <span class="driver-profile-row-go">${icon('chevronRight', 16)}</span>
+          </button>
+
+          <button type="button" id="driver-logout-btn" class="driver-profile-row driver-profile-row--salir">
+            <span class="driver-profile-row-icon">${icon('logout', 20)}</span>
+            <span class="driver-profile-row-text"><strong>Cerrar sesión</strong></span>
           </button>
         </div>
       </div>
