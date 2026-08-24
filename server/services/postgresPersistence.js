@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import pg from 'pg';
 import { PERSISTED_TABLES } from './databasePersistence.js';
 
@@ -19,10 +20,45 @@ export const POSTGRES_TABLES = Object.freeze({
 const SSL_TRUE = new Set(['1', 'true', 'require', 'required']);
 const SSL_FALSE = new Set(['0', 'false', 'disable', 'disabled']);
 
-export function resolvePostgresSsl(value = process.env.DATABASE_SSL) {
+/**
+ * Lee el certificado raiz con el que validar al servidor.
+ *
+ * Falla cerrado a proposito. Si la ruta esta configurada pero el fichero no se
+ * puede leer, o su contenido no parece material PEM, se lanza en vez de seguir:
+ * un `ca` vacio haria que Node cayera al almacen por defecto y volveria el
+ * SELF_SIGNED_CERT_IN_CHAIN del cuarto cutover, pero disfrazado de exito de
+ * configuracion. Ninguna rama de error activa `rejectUnauthorized: false`.
+ *
+ * El error solo lleva un codigo: ni el contenido del certificado, ni la cadena
+ * de conexion, ni el error nativo de `fs` --que arrastraria rutas y
+ * descriptores-- llegan a la telemetria.
+ */
+function leerCertificadoRaiz(ruta) {
+  let contenido;
+  try {
+    contenido = fs.readFileSync(ruta, 'utf8');
+  } catch {
+    throw new Error('DATABASE_SSL_CA_UNREADABLE');
+  }
+  if (!contenido.trim() || !contenido.includes('-----BEGIN CERTIFICATE-----')) {
+    throw new Error('DATABASE_SSL_CA_INVALID');
+  }
+  return contenido;
+}
+
+export function resolvePostgresSsl(
+  value = process.env.DATABASE_SSL,
+  caFile = process.env.DATABASE_SSL_CA_FILE
+) {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!normalized) return undefined;
-  if (SSL_TRUE.has(normalized)) return { rejectUnauthorized: true };
+  if (SSL_TRUE.has(normalized)) {
+    const ruta = String(caFile ?? '').trim();
+    // Sin CA configurada se conserva el comportamiento de siempre: verificar
+    // contra el almacen por defecto de Node.
+    if (!ruta) return { rejectUnauthorized: true };
+    return { rejectUnauthorized: true, ca: leerCertificadoRaiz(ruta) };
+  }
   if (normalized === 'no-verify') return { rejectUnauthorized: false };
   if (SSL_FALSE.has(normalized)) return false;
   throw new Error('INVALID_DATABASE_SSL');
