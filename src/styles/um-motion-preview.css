@@ -440,6 +440,33 @@
    anadia una rayita blanca que no pertenece a la interfaz. */
 .um-motion-preview .passenger-app .nav-btn,
 .um-motion-preview .driver-app .nav-tab { height:55px !important;border-radius:13px !important; }
+
+/* Las dos barras compartian todo menos la tipografia de sus etiquetas, y por
+   eso se veian de fuentes distintas: la del conductor tiene una regla propia
+   --.nav-tab span{font-size:.61rem}-- y la del cliente no tenia ninguna, asi
+   que heredaba los 15px del cuerpo. A 15px y en negrita, junto a iconos de
+   22px, se leia como otra familia.
+
+   Aqui mandan las dos a la vez con los valores EXACTOS del conductor
+   --.61rem y peso 450--, que son los aprobados: la barra del conductor no
+   cambia ni un pixel y la del cliente pasa a ser la misma. Al vivir en una
+   sola regla no pueden volver a separarse. */
+.um-motion-preview .passenger-app .nav-btn > span,
+.um-motion-preview .driver-app .nav-tab > span {
+  font-size:.61rem !important;
+  font-weight:450 !important;
+  letter-spacing:.005em !important;
+  line-height:1.1 !important;
+}
+
+/* El boton de tema del cliente dejaba su icono 6px a la izquierda: el flex
+   venia con justify-content por defecto y los 14px libres se iban todos a un
+   lado. El del conductor ya se centraba con place-items; se iguala. */
+.um-motion-preview .passenger-header-actions .theme-toggle-btn,
+.um-motion-preview #header-theme-toggle-slot > button {
+  display:grid !important;
+  place-items:center !important;
+}
 .um-motion-preview .passenger-app .nav-btn.active,
 .um-motion-preview .driver-app .nav-tab.active {
   border-color:transparent !important;

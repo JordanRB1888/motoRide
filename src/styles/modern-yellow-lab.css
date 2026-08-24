@@ -1289,7 +1289,10 @@ html.modern-yellow-lab .real-profile-support,
   border-radius: 20px !important;
   border: 1px solid rgba(255,255,255, 0.3) !important;
   background: linear-gradient(145deg, rgba(255,255,255, 0.08), rgba(14,13,11, 0.95)) !important;
-  color: #10cbe8 !important;
+  /* Era cian: el unico color que quedaba fuera del sistema en esta
+     pantalla. El amarillo es el de marca y el que ya usan el resto de
+     acciones del perfil. */
+  color: var(--x58-yellow-text) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;

@@ -32,8 +32,8 @@ export function createAdminSupportChat(user) {
    */
   const chatMedia = createChatMediaLoader({ loadUrl: endpoint => apiService.getPrivateFileUrl(endpoint) });
   const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:#070b12dd;backdrop-filter:blur(12px);display:grid;place-items:center;padding:16px';
-  const modal=document.createElement('div');modal.style.cssText='width:min(460px,100%);height:min(650px,90vh);background:var(--surface-card);border:2px solid var(--accent-secondary);border-radius:26px;display:flex;flex-direction:column;overflow:hidden';overlay.appendChild(modal);
+  overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(10,9,8,.87);backdrop-filter:blur(12px);display:grid;place-items:center;padding:16px';
+  const modal=document.createElement('div');modal.style.cssText='width:min(460px,100%);height:min(650px,90vh);background:var(--surface-card);border:2px solid var(--x58-yellow);border-radius:26px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 26px 70px rgba(0,0,0,.55),0 0 0 6px rgba(255,210,31,.10)';overlay.appendChild(modal);
   let messages=[];
   let olderCursor=null;
   // Al traer mensajes anteriores no se salta al final: se perderia el punto
