@@ -24,6 +24,7 @@ import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
 import { createScreenLifecycle } from '../../utils/screenLifecycle.js';
 
 import { localAvatarHtml } from '../../utils/localAvatar.js';
+import { vehicleImage } from '../../utils/vehicleMedia.js';
 export function renderDriverApp(container) {
   // Dueno unico del object URL de la fotografia propia. Se revoca al
   // reemplazarla y en cualquier salida (clearApp cierra todos los cargadores).
@@ -70,12 +71,6 @@ export function renderDriverApp(container) {
                             ">2</span>
                         </button>
                         <div id="driver-theme-toggle-slot"></div>
-                        <div class="online-toggle-container">
-                            <label class="online-toggle-switch">
-                                <input type="checkbox" id="online-toggle" />
-                                <span class="online-toggle-slider"></span>
-                            </label>
-                        </div>
                     </div>
                 </div>
 
@@ -96,14 +91,6 @@ export function renderDriverApp(container) {
             </div>
 
             <div id="driver-main-content" class="driver-main-content">
-                <div class="offline-overlay glass-panel" id="offline-overlay" style="max-width: 440px; margin: 0 auto; padding: 24px; text-align: center;">
-                    <h2 style="color:var(--text-primary); font-size:1.4rem; font-weight:800; margin-bottom:6px;">Estás Desconectado</h2>
-                    <p style="color:var(--text-secondary); font-size:0.9rem;">Conéctate para empezar a recibir solicitudes de viajes cercanos en Maracaibo</p>
-                    <button class="btn btn-3d primary-btn btn-connect" id="btn-connect-overlay" style="width:100%; margin-top:16px; padding:16px; font-size:1.05rem; font-weight:900; display:flex; align-items:center; justify-content:center; gap:8px;">
-                        ${icon('power', 20)} CONECTARSE AHORA
-                    </button>
-                </div>
-
                 <div class="online-overlay hidden" id="online-overlay" style="text-align: center; position: absolute; top: 196px; left: 50%; transform: translateX(-50%); z-index: 15; width: 90%; max-width: 420px;">
                     <div class="waiting-badge" style="
                         display: flex; align-items: center; justify-content: center; gap: 12px;
@@ -133,6 +120,10 @@ export function renderDriverApp(container) {
             <div class="driver-nav-tabs">
                 <button class="nav-tab active" data-tab="inicio">${icon('home')} <span>Inicio</span></button>
                 <button class="nav-tab" data-tab="ganancias">${icon('wallet')} <span>Ganancias</span></button>
+                <button type="button" id="driver-online-fab" class="driver-online-fab" aria-pressed="false" title="Ponerte en linea para recibir carreras">
+                    <span class="driver-online-fab-disc">${vehicleImage('MOTO', { variant: 'card', decorative: true, className: 'driver-online-fab-moto' })}</span>
+                    <span class="driver-online-fab-label">Fuera</span>
+                </button>
                 <button class="nav-tab" data-tab="viajes">${icon('history')} <span>Viajes</span></button>
                 <button class="nav-tab" data-tab="perfil">${icon('user')} <span>Perfil</span></button>
             </div>
@@ -170,14 +161,12 @@ export function renderDriverApp(container) {
         });
     });
 
-    const toggle = container.querySelector('#online-toggle');
+    const onlineFab = container.querySelector('#driver-online-fab');
     const statusText = container.querySelector('#driver-status-text');
-    const offlineOverlay = container.querySelector('#offline-overlay');
     const onlineOverlay = container.querySelector('#online-overlay');
     const realtimeBadge = onlineOverlay?.querySelector('.waiting-badge');
     const realtimeDot = container.querySelector('#driver-realtime-dot');
     const realtimeLabel = container.querySelector('#driver-realtime-label');
-    const btnConnectOverlay = container.querySelector('#btn-connect-overlay');
     const activeTripContainer = container.querySelector('#active-trip-container');
     const persistentChatBtn = container.querySelector('#driver-active-chat-btn');
     const tripPanelToggle = container.querySelector('#driver-trip-panel-toggle');
@@ -215,15 +204,21 @@ export function renderDriverApp(container) {
 
     function setOnline(online) {
         if (online && user.isVerified === false) {
-            toggle.checked = false;
             showToast('Tu cuenta está pendiente de aprobación administrativa', 'warning');
             return;
         }
         isOnline = online;
-        toggle.checked = online;
+        // El boton central de la barra refleja el mismo estado que reflejaba
+        // el interruptor de la cabecera; no es un control paralelo.
+        if (onlineFab) {
+            onlineFab.classList.toggle('is-online', online);
+            onlineFab.setAttribute('aria-pressed', String(online));
+            onlineFab.title = online ? 'Estas en linea. Pulsa para desconectarte' : 'Ponerte en linea para recibir carreras';
+            const etiqueta = onlineFab.querySelector('.driver-online-fab-label');
+            if (etiqueta) etiqueta.textContent = online ? 'En linea' : 'Fuera';
+        }
         if (online) {
             renderRealtimeState(typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'RECONNECTING');
-            offlineOverlay.classList.add('hidden');
             onlineOverlay.classList.remove('hidden');
             
             // Iniciar seguimiento GPS continuo en tiempo real con Socket.IO & PostgreSQL
@@ -236,7 +231,6 @@ export function renderDriverApp(container) {
         } else {
             statusText.textContent = 'Desconectado';
             statusText.style.color = 'var(--text-secondary)';
-            offlineOverlay.classList.remove('hidden');
             onlineOverlay.classList.add('hidden');
             
             driverGpsTracker.stopTracking();
@@ -271,14 +265,7 @@ export function renderDriverApp(container) {
 
     realtimeLifecycle.addListener(window, '58express:driver-realtime-state', event => renderRealtimeState(event.detail?.state));
 
-    toggle.addEventListener('change', (e) => setOnline(e.target.checked));
-    if (btnConnectOverlay) {
-        btnConnectOverlay.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setOnline(true);
-        });
-    }
+    onlineFab?.addEventListener('click', () => setOnline(!isOnline));
     if (driverHeaderBtn) driverHeaderBtn.addEventListener('click', () => switchTab('perfil'));
 
 

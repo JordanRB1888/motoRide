@@ -328,7 +328,14 @@ test('el tema oscuro del perfil no se toca', () => {
   const lab = read('src/styles/modern-yellow-lab.css');
   const inicio = lab.indexOf('PERFIL EN TEMA CLARO');
   assert.notEqual(inicio, -1, 'falta el bloque de perfil claro');
-  const bloque = lab.slice(inicio);
+  // La region vigilada es la SECCION de modo claro, no <<todo lo que se anada
+  // al archivo a partir de aqui>>: sin ese cierre, cualquier componente nuevo
+  // que se escriba mas abajo hace fallar el contrato sin haber tocado el
+  // oscuro. Debajo del cierre siguen mandando los contratos sistemicos de
+  // color, que recorren la hoja entera.
+  const fin = lab.indexOf('FIN DE LOS AJUSTES DE MODO CLARO', inicio);
+  assert.notEqual(fin, -1, 'falta la marca de cierre de la seccion de modo claro');
+  const bloque = lab.slice(inicio, fin);
 
   const PINTA = /(?<![-a-z])(color|background|border[a-z-]*color|box-shadow|fill|stroke|outline-color)\s*:/;
 

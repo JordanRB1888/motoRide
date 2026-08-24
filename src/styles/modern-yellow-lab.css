@@ -2114,3 +2114,124 @@ html.modern-yellow-lab.theme-light .driver-app .stats-bar .stat-item:nth-child(3
 html.modern-yellow-lab.theme-light .fleet-live-panel {
   background: var(--x58-surface-overlay) !important;
 }
+
+/* FIN DE LOS AJUSTES DE MODO CLARO ========================================
+   Todo lo de arriba, desde <<PERFIL EN TEMA CLARO>>, corrige deudas que el
+   modo claro heredaba del oscuro, y por eso va acotado a .theme-light: el
+   oscuro ya estaba certificado. Debajo de esta linea empiezan componentes
+   nuevos, que se pintan con tokens y valen para los dos temas.
+   ========================================================================= */
+
+/* =========================================================================
+   BOTON CENTRAL DE CONEXION — barra del conductor
+   Ponerse en linea es la accion mas importante de la pantalla y vivia como
+   un interruptor pequeno en una esquina de la cabecera. Pasa al centro de
+   la barra, con la moto de la marca y el verde que ya significa «activo»
+   en el resto de la aplicacion. El interruptor de la cabecera desaparece:
+   este boton pasa a ser el unico control de disponibilidad.
+   ========================================================================= */
+
+html.modern-yellow-lab .driver-app .driver-nav-tabs .driver-online-fab {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  /* Sube sobre la barra sin empujar a las pestanas ni crecer su altura. */
+  margin-top: -22px;
+  align-self: start;
+}
+
+html.modern-yellow-lab .driver-app .driver-online-fab-disc {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 1px solid var(--x58-border-strong);
+  background: var(--x58-surface-raised);
+  color: var(--x58-text-secondary);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .42);
+  transition: transform .2s var(--x58-ease-out), background .2s ease,
+              color .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+html.modern-yellow-lab .driver-app .driver-online-fab-label {
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--x58-text-muted);
+  transition: color .2s ease;
+}
+
+/* Conectado: el verde de estado, el mismo de «En linea · GPS activo». */
+html.modern-yellow-lab .driver-app .driver-online-fab.is-online .driver-online-fab-disc {
+  border-color: transparent;
+  background: var(--x58-success);
+  color: var(--x58-yellow-ink);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45),
+              0 0 0 6px color-mix(in srgb, var(--x58-success) 16%, transparent);
+}
+
+html.modern-yellow-lab .driver-app .driver-online-fab.is-online .driver-online-fab-label {
+  color: var(--x58-success);
+}
+
+html.modern-yellow-lab .driver-app .driver-online-fab:active .driver-online-fab-disc {
+  transform: scale(.94);
+}
+
+html.modern-yellow-lab .driver-app .driver-online-fab:focus-visible .driver-online-fab-disc {
+  outline: 2px solid var(--x58-yellow);
+  outline-offset: 3px;
+}
+
+/* Latido suave mientras esta disponible: comunica que sigue escuchando.
+   Se respeta la preferencia de movimiento reducido. */
+@media (prefers-reduced-motion: no-preference) {
+  html.modern-yellow-lab .driver-app .driver-online-fab.is-online .driver-online-fab-disc {
+    animation: fabLatido 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes fabLatido {
+  0%, 100% { box-shadow: 0 8px 22px rgba(0, 0, 0, .45), 0 0 0 6px color-mix(in srgb, var(--x58-success) 16%, transparent); }
+  50%      { box-shadow: 0 8px 22px rgba(0, 0, 0, .45), 0 0 0 11px color-mix(in srgb, var(--x58-success) 5%, transparent); }
+}
+
+/* La barra recortaba con overflow:hidden los 15px que el boton sobresale por
+   arriba, asi que el circulo aparecia cortado en seco. Que se vea entero. */
+html.modern-yellow-lab .driver-app .driver-nav-tabs {
+  overflow: visible !important;
+}
+
+/* La moto real, la misma que el cliente ve al elegir vehiculo. Un pictograma
+   generico se leia como bicicleta. */
+html.modern-yellow-lab .driver-app .driver-online-fab-moto {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  /* Apagada mientras esta fuera de linea; a todo color al conectarse. */
+  filter: grayscale(1) brightness(1.5) opacity(.65);
+  transition: filter .22s ease, transform .22s var(--x58-ease-out);
+}
+
+html.modern-yellow-lab .driver-app .driver-online-fab.is-online .driver-online-fab-moto {
+  filter: none;
+  transform: scale(1.06);
+}
+
+/* Con la moto dentro, el disco crece un poco y el verde se lleva al aro para
+   que la fotografia no compita con un fondo saturado. */
+html.modern-yellow-lab .driver-app .driver-online-fab-disc {
+  width: 56px;
+  height: 56px;
+}
+
+html.modern-yellow-lab .driver-app .driver-online-fab.is-online .driver-online-fab-disc {
+  background: color-mix(in srgb, var(--x58-success) 22%, var(--x58-surface-raised));
+  border: 2px solid var(--x58-success);
+}
