@@ -119,8 +119,8 @@ const comoDestino = filas => Object.fromEntries(
 
 /* ========================================================================= */
 
-test('el orden de borrado cubre las diez tablas y va de hijas a raices', () => {
-  assert.equal(CANONICAL_DELETE_ORDER.length, 10);
+test('el orden de borrado cubre las once tablas y va de hijas a raices', () => {
+  assert.equal(CANONICAL_DELETE_ORDER.length, 11);
   assert.deepEqual([...CANONICAL_DELETE_ORDER].sort(), [...PERSISTED_TABLES].sort());
   assert.deepEqual(CANONICAL_INSERT_ORDER, [...CANONICAL_DELETE_ORDER].reverse());
   // Cada hija se borra antes que su padre.

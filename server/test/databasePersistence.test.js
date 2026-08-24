@@ -410,8 +410,8 @@ test('la persistencia exige conexión y colecciones', () => {
   assert.throws(() => createDatabasePersistence({ sqlite: abrirBase() }), /PERSISTENCE_REQUIRES_DATABASE/);
 });
 
-test('se cubren las diez colecciones del servidor', () => {
-  assert.equal(PERSISTED_TABLES.length, 10);
+test('se cubren las once colecciones del servidor', () => {
+  assert.equal(PERSISTED_TABLES.length, 11);
   const sqlite = abrirBase();
   const database = baseVacia();
   const persistencia = createDatabasePersistence({ sqlite, database });

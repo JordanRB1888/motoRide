@@ -40,6 +40,7 @@ export const CANONICAL_DELETE_ORDER = Object.freeze([
   'messages',           // -> trips, users
   'supportMessages',    // -> users
   'notifications',      // -> users
+  'pushSubscriptions',  // -> users
   'transactions',       // -> users, trips
   'trips',              // -> users
   'driverApplications', // -> users

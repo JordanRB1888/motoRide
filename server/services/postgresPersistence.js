@@ -14,7 +14,8 @@ export const POSTGRES_TABLES = Object.freeze({
   transactions: 'transactions',
   driverApplications: 'driver_applications',
   driverDocuments: 'driver_documents',
-  adminActions: 'admin_actions'
+  adminActions: 'admin_actions',
+  pushSubscriptions: 'push_subscriptions'
 });
 
 const SSL_TRUE = new Set(['1', 'true', 'require', 'required']);

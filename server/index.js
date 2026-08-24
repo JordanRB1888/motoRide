@@ -40,6 +40,8 @@ import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch
 import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_TRIP_USER_IDS } from './domain/tripFilters.js';
 import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
+import { createPushRouter } from './routes/push.js';
+import { createPushNotificationService } from './services/pushNotificationService.js';
 
 const app = express();
 const allowedOrigins = String(process.env.CLIENT_ORIGIN || 'https://plus58express.vercel.app,http://localhost:3000,http://localhost:5173,http://127.0.0.1:4173')
@@ -296,7 +298,8 @@ const initialDatabase = {
   transactions: [],
   driverApplications: [],
   driverDocuments: [],
-  adminActions: []
+  adminActions: [],
+  pushSubscriptions: []
 };
 
 const migrationsDirectory = path.join(serverDir, 'migrations');
@@ -571,6 +574,28 @@ function requireApprovedDriver(req, res, next) {
   if (!req.user.isVerified || req.user.status === 'SUSPENDED') return res.status(403).json({ error: 'DRIVER_NOT_APPROVED' });
   next();
 }
+
+// Web Push (PUSH-1): solo los cimientos.
+//
+// El servicio queda instalado y probado, pero NADIE lo llama todavia: el
+// despacho de carreras no se toca en esta fase. Conectar `notifyRideOffer`
+// dentro de `offerNext` es PUSH-3a, y sera sin `await` para que un proveedor
+// lento no pueda robar segundos de la ventana de quince.
+//
+// Sin `sender` no hay adaptador real: aunque WEB_PUSH_ENABLED estuviera
+// encendido, el servicio no contacta con ningun proveedor. Eso llega en PUSH-4.
+const pushService = createPushNotificationService({
+  database,
+  persistRecord,
+  logger: console
+});
+
+app.use('/api', createPushRouter({
+  database,
+  persistHttp,
+  requireAuth,
+  pushService
+}));
 
 app.use('/api', createDriverApplicationsRouter({
   database,
