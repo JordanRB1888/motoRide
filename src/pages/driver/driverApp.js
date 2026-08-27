@@ -20,7 +20,7 @@ import { eventLogger } from '../../utils/logger.js';
 import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 import { notificationService } from '../../services/notificationService.js';
-import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
+import { canonicalPhotoPath, createPrivatePhotoLoader, hydratePrivatePhotos, userPhotoEndpoint } from '../../utils/privatePhoto.js';
 import { createScreenLifecycle } from '../../utils/screenLifecycle.js';
 import { getPushSubscriptionService, PUSH_RESULT } from '../../services/pushSubscriptionService.js';
 import { PUSH_NAVIGATE_EVENT } from '../../services/pushClientMessages.js';
@@ -534,6 +534,13 @@ export function renderDriverApp(container) {
         currentMap.clearRoute();
         currentMap.clearMarkers('pickup');
         currentMap.clearMarkers('destination');
+        // Al cerrar el viaje se revoca SOLO la foto de este pasajero: la
+        // clave es su ruta canonica, LA MISMA que derivo la tarjeta al
+        // hidratarse (con o sin photoUrl en el perfil). El avatar propio del
+        // conductor ('propia') no se toca.
+        const fotoPasajero = canonicalPhotoPath(currentPassenger?.avatar)
+            || (currentPassenger?.id ? userPhotoEndpoint(currentPassenger.id) : null);
+        if (fotoPasajero) privatePhotos.release(fotoPasajero);
         currentTrip = null;
         currentPassenger = null;
         setOnline(true);
@@ -618,6 +625,10 @@ export function renderDriverApp(container) {
         );
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(enRouteView);
+        // La foto privada del pasajero se pide DESPUES de conectar la vista:
+        // el cargador solo pinta sobre elementos vivos, y si no hay foto o el
+        // acceso no corresponde, el avatar local se queda tal cual.
+        hydratePrivatePhotos(enRouteView, privatePhotos);
         showTripRoute(trip, 'PICKUP');
     }
 
@@ -644,6 +655,7 @@ export function renderDriverApp(container) {
         );
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(waitingView);
+        hydratePrivatePhotos(waitingView, privatePhotos);
         showTripRoute(trip, 'PICKUP');
     }
 
@@ -661,6 +673,7 @@ export function renderDriverApp(container) {
         );
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(inTripView);
+        hydratePrivatePhotos(inTripView, privatePhotos);
         showTripRoute(trip, 'DESTINATION');
     }
 
@@ -851,6 +864,7 @@ export function renderDriverApp(container) {
         }
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(view);
+        hydratePrivatePhotos(view, privatePhotos);
         showTripRoute(currentTrip, ['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status) ? 'DESTINATION' : 'PICKUP');
     }
 

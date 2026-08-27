@@ -1,8 +1,9 @@
 import { icon } from '../../utils/icons.js';
 import { paymentLabel } from '../../utils/paymentLabels.js';
 
-import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
+import { canonicalPhotoPath, userPhotoEndpoint } from '../../utils/privatePhoto.js';
 import { localAvatarHtml } from '../../utils/localAvatar.js';
+import { escapeHtml } from '../../utils/safeDom.js';
 const fareOf = trip => Number(trip?.pricing?.fareUSD ?? trip?.fareUSD ?? trip?.fareEUR ?? trip?.fare ?? 0);
 
 function createTripSheet({ trip, passenger, stage, title, status, actionLabel, onAction, onChat, onCall, timer = false }) {
@@ -12,6 +13,20 @@ function createTripSheet({ trip, passenger, stage, title, status, actionLabel, o
     const duration = Number(trip?.durationMin ?? trip?.duration ?? 0);
     const name = passenger?.name || trip?.passengerName || 'Cliente Pruebas';
     const avatar = localAvatarHtml({ name, role: 'passenger', label: name });
+    // La fotografia real del pasajero es privada: el marcado nace con el
+    // avatar local visible y un <img hidden> marcado para hidratacion. El
+    // cargador autenticado del driverApp la pide con la sesion y, si el
+    // backend la autoriza (contrapartes de un viaje activo), la imagen
+    // sustituye visualmente al avatar; si no hay foto, falla la descarga o el
+    // acceso no corresponde, el avatar local se queda. Mismo patron que la
+    // tarjeta del conductor en el lado pasajero.
+    //
+    // La oferta entrante no trae la ruta de la foto, solo el id: se deriva la
+    // ruta canonica y punto. Eso NO decide ningun acceso --la unica autoridad
+    // es el backend, que responde 404/403 cuando no corresponde, y entonces
+    // el avatar local se queda.
+    const privatePhoto = canonicalPhotoPath(passenger?.avatar)
+        || (passenger?.id ? userPhotoEndpoint(passenger.id) : '');
     const pickup = trip?.pickup?.address || 'Mi ubicación actual';
     const destination = trip?.destination?.address || 'Basílica de Nuestra Señora de Chiquinquirá, Maracaibo';
 
@@ -24,7 +39,7 @@ function createTripSheet({ trip, passenger, stage, title, status, actionLabel, o
         </header>
 
         <div class="trip-passenger-row">
-            ${avatar}
+            <span class="trip-passenger-avatar">${avatar}<img hidden data-private-photo="${escapeHtml(privatePhoto)}" alt="Foto de ${escapeHtml(name)}"></span>
             <div><strong>${name}</strong><span>★ ${passenger?.rating || 4.9} · Pasajero VIP</span></div>
             <button class="trip-contact-btn btn-driver-chat" type="button" aria-label="Abrir chat">${icon('message', 20)}</button>
             <button class="trip-contact-btn call btn-driver-call" type="button" aria-label="Llamar pasajero">${icon('phone', 20)}</button>
