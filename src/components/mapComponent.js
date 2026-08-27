@@ -537,6 +537,27 @@ export class MapComponent {
     banner.innerHTML = `<div>${icon('chevronUp', 24)}</div><div style="min-width:0;flex:1"><strong style="display:block;font-size:.92rem">Continúa por la ruta marcada</strong><small style="color:#a7f3d0">${distance} km · ${duration} min hasta el destino</small></div><a href="${googleUrl}" target="_blank" rel="noopener" style="padding:8px 10px;border-radius:12px;background:#00E676;color:#101722;text-decoration:none;font-size:.75rem;font-weight:900">NAVEGAR</a>`;
   }
 
+  /**
+   * Pinta una ruta de navegación NORMALIZADA (MAPS-2B: contrato neutro de
+   * navigationRoute.js, venga de Google Routes o del respaldo OSRM).
+   *
+   * Es una capacidad de render pura: no calcula nada, no toca la tarifa
+   * --que sigue su camino OSRM propio via drawRoute/fareCalculator-- y no
+   * gestiona banner de guía (eso es MAPS-2C). Devuelve true si pintó.
+   */
+  drawNavigationRoute(route, { color = '#00D2FF' } = {}) {
+    if (this._defer('drawNavigationRoute', [route, { color }])) return false;
+    if (!this.map || !Array.isArray(route?.path) || route.path.length < 2) return false;
+    this.clearRoute();
+    const latlngs = route.path.map(p => [p.lat, p.lng]);
+    this.routeLayer = this.engine.crearPolyline(latlngs, {
+      color: resolveRouteColor(color), weight: 8, opacity: 1
+    });
+    this._routePoints = latlngs;
+    this.fitBounds();
+    return true;
+  }
+
   clearRoute() {
     if (this.routeLayer) {
       this.routeLayer.remove();
