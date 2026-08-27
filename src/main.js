@@ -20,6 +20,7 @@ import { renderAdminApp } from './pages/admin/adminApp.js';
 import { disposeAllPrivateDocumentViewers } from './pages/admin/driverApplicationsManagement.js';
 import { disposeAllPrivatePhotos } from './utils/privatePhoto.js';
 import { notificationService } from './services/notificationService.js';
+import { installPushMessageHandler } from './services/pushClientMessages.js';
 import {
     MODERN_EXPERIENCE_CLASS,
     applyTheme,
@@ -120,6 +121,13 @@ window.addEventListener('hashchange', router);
 async function initApp() {
     try {
         await seedDatabase();
+        // Puente con el service worker. Se instala una sola vez y solo
+        // reacciona a dos mensajes conocidos; cualquier otro se ignora.
+        installPushMessageHandler({
+            getCurrentUser: () => authService.getCurrentUser(),
+            getPushService: () => import('./services/pushSubscriptionService.js')
+                .then(modulo => modulo.getPushSubscriptionService())
+        });
         if (authService.isAuthenticated()) {
             const refreshedUser = await authService.refreshSession();
             if (!refreshedUser) authService.logout();

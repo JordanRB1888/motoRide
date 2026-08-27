@@ -22,6 +22,8 @@ import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 import { notificationService } from '../../services/notificationService.js';
 import { createPrivatePhotoLoader } from '../../utils/privatePhoto.js';
 import { createScreenLifecycle } from '../../utils/screenLifecycle.js';
+import { getPushSubscriptionService, PUSH_RESULT } from '../../services/pushSubscriptionService.js';
+import { PUSH_NAVIGATE_EVENT } from '../../services/pushClientMessages.js';
 
 import { localAvatarHtml } from '../../utils/localAvatar.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
@@ -276,7 +278,104 @@ export function renderDriverApp(container) {
 
     realtimeLifecycle.addListener(window, '58express:driver-realtime-state', event => renderRealtimeState(event.detail?.state));
 
-    onlineFab?.addEventListener('click', () => setOnline(!isOnline));
+    /* ----------------------------------------------------------------------
+     * Notificaciones push del conductor
+     *
+     * Push es una MEJORA y nunca un requisito: si el navegador no lo admite,
+     * si la persona lo rechaza o si el servidor lo tiene apagado, ponerse en
+     * linea sigue funcionando exactamente igual. Por eso `setOnline` se llama
+     * SIEMPRE primero y la tarjeta de permiso aparece despues.
+     * -------------------------------------------------------------------- */
+
+    const CLAVE_PUSH_PREGUNTADO = `58express_push_asked_${user.id || 'driver'}`;
+
+    const yaSePregunto = () => {
+        try { return localStorage.getItem(CLAVE_PUSH_PREGUNTADO) === 'yes'; } catch { return false; }
+    };
+    const marcarPreguntado = () => {
+        try { localStorage.setItem(CLAVE_PUSH_PREGUNTADO, 'yes'); } catch { /* sin almacenamiento */ }
+    };
+
+    /**
+     * Tarjeta contextual. Reutiliza el sistema de diseno existente --las
+     * mismas variables de color y el mismo lenguaje de tarjeta que el resto de
+     * la aplicacion-- y no redisena nada.
+     */
+    function mostrarTarjetaPermisoPush() {
+        if (container.querySelector('#driver-push-permission')) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'driver-push-permission';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:30000;background:rgba(8,13,22,.88);display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(16px)';
+        overlay.innerHTML = `<div style="width:100%;max-width:420px;padding:24px;border-radius:26px;background:var(--surface-card);border:2px solid var(--accent-primary);box-shadow:0 24px 60px rgba(0,0,0,.65)"><div style="text-align:center">${icon('bell', 32)}</div><h3 style="color:var(--text-primary);text-align:center;margin:10px 0 8px">Avisos de carreras</h3><p style="color:var(--text-secondary);line-height:1.5;font-size:.9rem">Activa las notificaciones para avisarte cuando tengas una solicitud de viaje, aunque tengas la aplicación en segundo plano.</p><button id="driver-push-allow" style="width:100%;padding:15px;border:0;border-radius:16px;background:linear-gradient(135deg,#FFC107,#FF9800);color:#121824;font-weight:950;cursor:pointer">ACTIVAR NOTIFICACIONES</button><button id="driver-push-later" style="width:100%;padding:12px;margin-top:8px;border:0;background:none;color:var(--text-secondary);font-weight:800;cursor:pointer">Ahora no</button></div>`;
+        container.appendChild(overlay);
+
+        const cerrar = () => { marcarPreguntado(); overlay.remove(); };
+
+        overlay.querySelector('#driver-push-later').addEventListener('click', cerrar);
+        overlay.querySelector('#driver-push-allow').addEventListener('click', async () => {
+            marcarPreguntado();
+            overlay.remove();
+            // El dialogo del navegador SOLO puede pedirse desde este gesto.
+            const servicio = await getPushSubscriptionService();
+            const { result } = await servicio.subscribe({ requestPermission: true });
+
+            if (result === PUSH_RESULT.SUBSCRIBED || result === PUSH_RESULT.ALREADY_SUBSCRIBED) {
+                showToast('Notificaciones activadas', 'success');
+            } else if (result === PUSH_RESULT.PERMISSION_DENIED) {
+                showToast('Notificaciones bloqueadas. Puedes habilitarlas en los ajustes del navegador.', 'info');
+            } else if (result === PUSH_RESULT.PUSH_DISABLED) {
+                // Estado normal mientras la funcionalidad no este activada en
+                // el servidor. No es un error y no se muestra como tal.
+                eventLogger.info('[push] el servidor aun no tiene push activado');
+            }
+        });
+    }
+
+    /**
+     * Se llama al ponerse en linea. No pide permiso: solo decide si merece la
+     * pena ensenar la explicacion. Si ya se pregunto una vez, no se insiste.
+     */
+    async function ofrecerNotificacionesSiProcede() {
+        try {
+            const servicio = await getPushSubscriptionService();
+            if (!servicio.detectSupport().supported) return;
+            const permiso = servicio.getPermissionState();
+            if (permiso === 'granted') {
+                // Ya concedido: se reconcilia en silencio, sin dialogos.
+                await servicio.reconcile();
+                return;
+            }
+            if (permiso !== 'default') return;   // denegado: no se insiste
+            if (yaSePregunto()) return;
+            mostrarTarjetaPermisoPush();
+        } catch (error) {
+            eventLogger.warn('[push] no se pudo preparar la suscripcion', error?.message);
+        }
+    }
+
+    // Reconciliacion en primer plano: es el camino fiable cuando el navegador
+    // rota el endpoint, porque el service worker no puede registrar en el
+    // backend sin sesion. Idempotente y silenciosa.
+    getPushSubscriptionService()
+        .then(servicio => servicio.reconcile())
+        .catch(() => {});
+
+    // Un toque en la notificacion trae la aplicacion al frente. El payload no
+    // es fuente de verdad: se relee el estado autorizado del backend, y si el
+    // viaje caduco o lo acepto otro conductor, se ve lo que hay de verdad.
+    realtimeLifecycle.addListener(window, PUSH_NAVIGATE_EVENT, () => {
+        switchTab('inicio');
+        restoreActiveTrip();
+    });
+
+    onlineFab?.addEventListener('click', () => {
+        const siguiente = !isOnline;
+        // La disponibilidad se resuelve ANTES y con independencia de push:
+        // ninguna rama de notificaciones puede impedir ponerse en linea.
+        setOnline(siguiente);
+        if (siguiente && isOnline) ofrecerNotificacionesSiProcede();
+    });
     if (driverHeaderBtn) driverHeaderBtn.addEventListener('click', () => switchTab('perfil'));
 
 

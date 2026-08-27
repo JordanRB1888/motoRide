@@ -1,4 +1,4 @@
-const CACHE_NAME = '58express-pwa-v12-iconos-marca';
+const CACHE_NAME = '58express-pwa-v13-push';
 // Prefijo común de todas las cachés de la aplicación: permite retirar las
 // versiones anteriores sin tocar cachés de terceros.
 const CACHE_PREFIX = '58express-pwa-';
@@ -203,44 +203,156 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(handleOtherSameOrigin(request));
 });
 
-// Push Notification Listeners for Background Alerts
-self.addEventListener('push', (event) => {
-  let data = { title: '⚡ ¡NUEVA SOLICITUD DE CARRERA!', body: 'Un cliente está solicitando mototaxi cerca de ti.' };
-  if (event.data) {
-    try {
-      data = event.data.json();
-    } catch (e) {
-      data.body = event.data.text();
-    }
-  }
+/* ==========================================================================
+ * Web Push
+ *
+ * El manejador anterior pintaba en la pantalla de bloqueo lo que viniera del
+ * servidor: `event.data.text()` caia directo al cuerpo de la notificacion. Un
+ * payload equivocado --o un error de programacion en el backend-- podia
+ * mostrar la direccion de recogida o el nombre del pasajero en una pantalla
+ * que se ve sin desbloquear el telefono.
+ *
+ * Aqui el payload es una estructura CERRADA: version, tipo y el identificador
+ * de enrutado. El texto vive en este fichero, no viaja. No existe ningun
+ * camino por el que una cadena del servidor llegue a la notificacion.
+ * ========================================================================== */
 
-  const options = {
-    body: data.body || 'Entra a la app para aceptar el viaje.',
-    icon: data.icon || '/notification-icon-brand-192.png',
-    badge: data.badge || '/notification-badge-brand-96.png',
-    vibrate: [300, 100, 300, 100, 300],
-    data: { url: '/#/driver' },
-    actions: [
-      { action: 'accept', title: '⚡ ACEPTAR CARRERA' },
-      { action: 'dismiss', title: 'Cerrar' }
-    ]
+const PUSH_PAYLOAD_VERSION = 1;
+
+/**
+ * Unica fuente de los textos. Un tipo desconocido no se muestra: no se inventa
+ * un texto por defecto, porque ese texto por defecto seria justamente la
+ * puerta por la que volveria a colarse contenido no previsto.
+ */
+const PUSH_TEXTS = {
+  ride_request: {
+    title: 'Nueva solicitud de viaje',
+    body: 'Tienes una nueva solicitud disponible.'
+  }
+};
+
+/**
+ * @returns {{tipo: string, tripId: string|null}|null} null significa
+ *   «no mostrar nada»: payload ausente, ilegible, de otra version o de un tipo
+ *   que este worker no conoce.
+ */
+function leerPayloadPush(event) {
+  if (!event || !event.data) return null;
+
+  let datos;
+  try {
+    datos = event.data.json();
+  } catch {
+    // Ni siquiera se intenta `event.data.text()`: ese era el fallo original.
+    return null;
+  }
+  if (!datos || typeof datos !== 'object') return null;
+  if (datos.v !== PUSH_PAYLOAD_VERSION) return null;
+
+  const tipo = datos.t;
+  // hasOwnProperty y no `PUSH_TEXTS[tipo]`: un tipo como "constructor" o
+  // "__proto__" encontraria algo en la cadena de prototipos y pasaria por
+  // valido.
+  if (typeof tipo !== 'string' || !Object.prototype.hasOwnProperty.call(PUSH_TEXTS, tipo)) return null;
+
+  const tripId = typeof datos.tripId === 'string' && datos.tripId !== '' ? datos.tripId : null;
+  return { tipo, tripId };
+}
+
+self.addEventListener('push', (event) => {
+  const payload = leerPayloadPush(event);
+  if (!payload) return;
+
+  const textos = PUSH_TEXTS[payload.tipo];
+  const opciones = {
+    body: textos.body,
+    icon: '/notification-icon-brand-192.png',
+    badge: '/notification-badge-brand-96.png',
+    vibrate: [300, 100, 300],
+    // Una etiqueta por viaje: repetir el aviso de la misma carrera reemplaza
+    // la notificacion en vez de apilar una torre. El identificador de viaje no
+    // revela nada privado por si solo.
+    tag: payload.tripId ? `ride-request:${payload.tripId}` : 'ride-request',
+    renotify: true,
+    // Solo lo minimo para enrutar al abrir. Ni nombre, ni telefono, ni
+    // direcciones, ni importe.
+    data: { v: PUSH_PAYLOAD_VERSION, t: payload.tipo, tripId: payload.tripId }
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  // Deliberadamente SIN `actions`. El worker declaraba «ACEPTAR CARRERA» y
+  // `notificationclick` ni siquiera leia `event.action`: prometia algo que no
+  // hacia. Aceptar un viaje exige sesion autenticada y pasa por el flujo de la
+  // aplicacion, no por un boton de la pantalla de bloqueo.
+  event.waitUntil(self.registration.showNotification(textos.title, opciones));
 });
+
+/** Ventana de esta misma aplicacion, sea cual sea la ruta que tenga abierta. */
+function esClientePropio(cliente) {
+  try {
+    return new URL(cliente.url).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (let client of clientList) {
-        if (client.url.includes('#/driver') && 'focus' in client) {
-          return client.focus();
-        }
+
+  const datos = event.notification.data || {};
+  const tripId = typeof datos.tripId === 'string' && datos.tripId !== '' ? datos.tripId : null;
+
+  event.waitUntil((async () => {
+    const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Antes solo se enfocaba una ventana cuya URL contuviera `#/driver`. Con
+    // la aplicacion abierta en la pantalla de inicio no coincidia, asi que se
+    // abria una SEGUNDA ventana del PWA teniendo una delante. Ahora vale
+    // cualquier ventana del mismo origen y la navegacion se pide por mensaje.
+    const propia = ventanas.find(esClientePropio);
+
+    if (propia) {
+      if (typeof propia.focus === 'function') await propia.focus();
+      propia.postMessage({ type: 'push:navigate', target: 'driver_ride_request', tripId });
+      return;
+    }
+
+    if (typeof self.clients.openWindow === 'function') {
+      await self.clients.openWindow('/#/driver');
+    }
+  })());
+});
+
+/**
+ * El navegador rota el endpoint cada cierto tiempo. Si nadie se entera, la
+ * suscripcion muere en silencio.
+ *
+ * Aqui NO se contacta con el backend. Un service worker no tiene sesion: no
+ * guarda el JWT ni puede obtenerlo, y mandar un alta sin autenticar seria un
+ * endpoint anonimo capaz de escribir en la base. Lo que se hace es resuscribir
+ * en el navegador --que si es posible sin credenciales-- y avisar a las
+ * ventanas abiertas de que hace falta volver a registrar en el servidor. Si no
+ * hay ninguna abierta, la reconciliacion del proximo arranque en primer plano
+ * lo resuelve.
+ */
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    let resuscrita = false;
+    try {
+      const clave = event.oldSubscription?.options?.applicationServerKey;
+      if (clave && self.registration?.pushManager?.subscribe) {
+        await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: clave
+        });
+        resuscrita = true;
       }
-      if (clients.openWindow) {
-        return clients.openWindow('/#/driver');
-      }
-    })
-  );
+    } catch {
+      resuscrita = false;
+    }
+
+    const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const cliente of ventanas) {
+      if (!esClientePropio(cliente)) continue;
+      cliente.postMessage({ type: 'push:resubscribe-required', resubscribed: resuscrita });
+    }
+  })());
 });
