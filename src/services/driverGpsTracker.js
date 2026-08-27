@@ -4,12 +4,16 @@ import { apiService } from './apiService.js';
 import { eventLogger } from '../utils/logger.js';
 import { showToast } from '../components/toast.js';
 import { createLocationThrottle } from '../utils/locationThrottle.js';
+import { evaluateLocationSample, normalizeLocationSample } from '../utils/locationQuality.js';
 
 class DriverGpsTracker {
   constructor() {
     this.watchId = null;
     this.isTracking = false;
     this.lastPosition = null;
+    // Última muestra ACEPTADA por el filtro de calidad (GPS-1): es la vara
+    // contra la que se evalúa cada lectura nueva. Solo lecturas reales.
+    this.lastAcceptedSample = null;
     this.batteryLevel = null;
     this.activeUser = null;
     this.heartbeatTimer = null;
@@ -136,6 +140,7 @@ class DriverGpsTracker {
 
     this.isTracking = false;
     this.lastPosition = null;
+    this.lastAcceptedSample = null;
     this._setRealtimeState('OFFLINE', 'tracking_stopped');
   }
 
@@ -143,14 +148,32 @@ class DriverGpsTracker {
     const { latitude, longitude, heading, speed } = pos.coords;
     const now = Date.now();
 
+    // GPS-1: cada lectura pasa por el filtro de calidad ANTES de convertirse
+    // en estado. Una lectura de caché vieja, un salto que la física no
+    // explica o una lectura de torre pisando a un GPS bueno y reciente no
+    // mueven el marcador ni viajan a la red. El rechazo se registra solo por
+    // su categoría: las coordenadas rechazadas no se apuntan en ningún sitio.
+    const sample = normalizeLocationSample(pos);
+    const veredicto = evaluateLocationSample(sample, { previous: this.lastAcceptedSample, now });
+    if (!veredicto.accept) {
+      eventLogger.log('GPS_TRACKER', `Muestra GPS descartada: ${veredicto.reason} (calidad ${veredicto.quality})`);
+      return;
+    }
+    this.lastAcceptedSample = sample;
+
     const payload = {
       userId: this.activeUser.id,
       latitude,
       longitude,
+      // La precisión viaja con la muestra: el backend documental la conserva
+      // sin migración y las fases siguientes podrán leerla.
+      accuracy: sample.accuracy,
       heading: heading || 0,
       speed: speed ? Math.round(speed * 3.6) : 0, // Convert m/s to km/h
       batteryLevel: this.batteryLevel,
-      timestamp: now,
+      // El momento de la MEDICIÓN, no el del procesamiento: una reconexión
+      // que reenvíe esta muestra no puede rejuvenecerla.
+      timestamp: sample.timestamp ?? now,
     };
 
     this.lastPosition = payload;

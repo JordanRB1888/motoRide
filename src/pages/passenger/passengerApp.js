@@ -10,6 +10,7 @@ import { fareCalculator } from '../../services/fareCalculator.js';
 import { renderFarePreview, renderSearchingState, renderDriverCard } from './requestRide.js';
 import { renderActiveRide, renderTripComplete } from './activeRide.js';
 import { createPrivatePhotoLoader, hydratePrivatePhotos, neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
+import { evaluateLocationSample, normalizeLocationSample } from '../../utils/locationQuality.js';
 import { createPrivatePhotoScope } from '../../utils/privatePhotoScope.js';
 import { renderRideHistory } from './rideHistory.js';
 import { renderWallet } from './wallet.js';
@@ -1059,19 +1060,31 @@ export function renderPassengerApp(container) {
     activeChat.open();
   }
 
+  // Última muestra del pasajero ACEPTADA por el filtro de calidad (GPS-1):
+  // la vara contra la que se evalúa cada lectura del watch del viaje activo.
+  let passengerAcceptedSample = null;
+
   function startPassengerTracking() {
     if (passengerWatchId !== null || !navigator.geolocation) return;
     passengerWatchId = navigator.geolocation.watchPosition(position => {
+      // GPS-1: una lectura de caché vieja, un salto imposible o una lectura
+      // de torre pisando a un GPS bueno reciente no mueven el marcador ni se
+      // emiten al conductor. Sin fabricar nada: si se rechaza, no pasa nada.
+      const sample = normalizeLocationSample(position);
+      const veredicto = evaluateLocationSample(sample, { previous: passengerAcceptedSample });
+      if (!veredicto.accept) return;
+      passengerAcceptedSample = sample;
+
       setPassengerLocation({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-        capturedAt: position.timestamp
+        lat: sample.lat,
+        lng: sample.lng,
+        accuracy: sample.accuracy,
+        capturedAt: sample.timestamp
       });
       socket.emit('passenger:location_update', {
         tripId: currentTrip?.id,
-        latitude: passengerLocation.lat,
-        longitude: passengerLocation.lng,
+        latitude: sample.lat,
+        longitude: sample.lng,
         heading: position.coords.heading || 0
       });
     }, () => {}, { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 });
