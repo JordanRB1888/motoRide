@@ -258,14 +258,25 @@ test('sin soporte no se ensena nada y no se rompe la pantalla', () => {
   assert.match(bloque, /catch \(error\)/);
 });
 
-test('el servidor apagado no se muestra como error a la persona', () => {
+test('el servidor apagado se responde, y no como un error', () => {
   const bloque = driverApp.slice(
     driverApp.indexOf("driver-push-allow').addEventListener"),
     driverApp.indexOf('async function ofrecerNotificacionesSiProcede')
   );
   assert.match(bloque, /PUSH_RESULT\.PUSH_DISABLED/);
-  // Se registra en la consola, no se enseña un toast de error.
-  assert.ok(!/PUSH_DISABLED[\s\S]{0,160}showToast\([^)]*'error'/.test(bloque));
+
+  // Se mira todo lo que sigue a la rama, sin presupuesto de caracteres: un
+  // comentario largo no puede hacer que la comprobacion deje de ver la llamada.
+  const trasLaRama = bloque.slice(bloque.indexOf('PUSH_RESULT.PUSH_DISABLED'));
+
+  // No es un error, asi que no puede salir un toast de error.
+  assert.ok(!/showToast\([^)]*'error'\)/.test(trasLaRama),
+    'el servidor apagado no es un fallo de la persona');
+
+  // Pero tampoco puede quedar en silencio: acaba de aceptar en el dialogo del
+  // navegador, y sin respuesta parece que el boton no hizo nada.
+  assert.match(trasLaRama, /showToast\([^)]*'info'\)/,
+    'conceder el permiso debe tener alguna respuesta visible');
 });
 
 test('el toque en la notificacion relee el estado autorizado del backend', () => {

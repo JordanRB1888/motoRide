@@ -326,8 +326,13 @@ export function renderDriverApp(container) {
                 showToast('Notificaciones bloqueadas. Puedes habilitarlas en los ajustes del navegador.', 'info');
             } else if (result === PUSH_RESULT.PUSH_DISABLED) {
                 // Estado normal mientras la funcionalidad no este activada en
-                // el servidor. No es un error y no se muestra como tal.
+                // el servidor. No es un error y no se muestra como tal, pero
+                // tampoco puede quedar en silencio: la persona acaba de aceptar
+                // en el dialogo del navegador y merece saber que su permiso
+                // quedo guardado. Cuando push se active, la reconciliacion la
+                // suscribe sola, sin volver a preguntarle nada.
                 eventLogger.info('[push] el servidor aun no tiene push activado');
+                showToast('Permiso concedido. Te avisaremos cuando esté disponible.', 'info');
             }
         });
     }

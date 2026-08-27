@@ -129,7 +129,7 @@ const CURRENT_CACHE = (fs.readFileSync(swPath, 'utf8').match(/const CACHE_NAME =
 
 // Última versión publicada en producción. Subir este número al desplegar una
 // nueva; nunca bajarlo.
-const VERSION_MINIMA = 12;
+const VERSION_MINIMA = 13;
 
 test('el nombre de caché está versionado y solo puede avanzar', () => {
   assert.ok(CURRENT_CACHE, 'No se encontró CACHE_NAME');

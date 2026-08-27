@@ -153,43 +153,20 @@ export function createPushSubscriptionService({
   }
 
   /**
-   * Flujo completo de alta. `requestPermission` a true SOLO desde un gesto
-   * explicito de la persona: los navegadores lo exigen, y un dialogo no
-   * solicitado se rechaza casi siempre y de forma practicamente definitiva.
+   * Consigue una suscripcion del navegador y la registra en el backend.
+   *
+   * Presupone que ya se comprobaron soporte, permiso y configuracion: lo
+   * comparten `subscribe` --tras el gesto-- y `reconcile` --en silencio--, y
+   * por eso la configuracion se pasa como argumento en vez de volver a
+   * pedirla.
    */
-  async function subscribe({ requestPermission = false } = {}) {
-    const soporte = detectSupport();
-    if (!soporte.supported) return { result: PUSH_RESULT.UNSUPPORTED, missing: soporte.missing };
-
-    let permiso = windowRef.Notification.permission;
-    if (permiso === 'denied') return { result: PUSH_RESULT.PERMISSION_DENIED };
-    if (permiso === 'default') {
-      if (!requestPermission) return { result: PUSH_RESULT.PERMISSION_DISMISSED };
-      try {
-        permiso = await windowRef.Notification.requestPermission();
-      } catch {
-        return { result: PUSH_RESULT.PERMISSION_DISMISSED };
-      }
-      if (permiso === 'denied') return { result: PUSH_RESULT.PERMISSION_DENIED };
-      if (permiso !== 'granted') return { result: PUSH_RESULT.PERMISSION_DISMISSED };
-    }
-
-    // Se consulta al servidor DESPUES del permiso pero ANTES de suscribir: con
-    // la funcionalidad apagada no tiene sentido crear una suscripcion en el
-    // navegador que nadie va a usar.
-    const config = await fetchConfig();
-    if (!config.enabled) return { result: PUSH_RESULT.PUSH_DISABLED };
-    if (!config.publicKey) return { result: PUSH_RESULT.INVALID_PUBLIC_KEY };
-
+  async function asegurarSuscripcion(registro, config) {
     let claveAplicacion;
     try {
       claveAplicacion = base64ToBytes(config.publicKey);
     } catch {
       return { result: PUSH_RESULT.INVALID_PUBLIC_KEY };
     }
-
-    const registro = await obtenerRegistro();
-    if (!registro?.pushManager) return { result: PUSH_RESULT.UNSUPPORTED, missing: ['pushManager'] };
 
     // Se reutiliza la suscripcion que ya tenga el navegador en vez de crear
     // otra a ciegas: crear una nueva rota el endpoint anterior y deja una fila
@@ -232,6 +209,41 @@ export function createPushSubscriptionService({
   }
 
   /**
+   * Flujo completo de alta. `requestPermission` a true SOLO desde un gesto
+   * explicito de la persona: los navegadores lo exigen, y un dialogo no
+   * solicitado se rechaza casi siempre y de forma practicamente definitiva.
+   */
+  async function subscribe({ requestPermission = false } = {}) {
+    const soporte = detectSupport();
+    if (!soporte.supported) return { result: PUSH_RESULT.UNSUPPORTED, missing: soporte.missing };
+
+    let permiso = windowRef.Notification.permission;
+    if (permiso === 'denied') return { result: PUSH_RESULT.PERMISSION_DENIED };
+    if (permiso === 'default') {
+      if (!requestPermission) return { result: PUSH_RESULT.PERMISSION_DISMISSED };
+      try {
+        permiso = await windowRef.Notification.requestPermission();
+      } catch {
+        return { result: PUSH_RESULT.PERMISSION_DISMISSED };
+      }
+      if (permiso === 'denied') return { result: PUSH_RESULT.PERMISSION_DENIED };
+      if (permiso !== 'granted') return { result: PUSH_RESULT.PERMISSION_DISMISSED };
+    }
+
+    // Se consulta al servidor DESPUES del permiso pero ANTES de suscribir: con
+    // la funcionalidad apagada no tiene sentido crear una suscripcion en el
+    // navegador que nadie va a usar.
+    const config = await fetchConfig();
+    if (!config.enabled) return { result: PUSH_RESULT.PUSH_DISABLED };
+    if (!config.publicKey) return { result: PUSH_RESULT.INVALID_PUBLIC_KEY };
+
+    const registro = await obtenerRegistro();
+    if (!registro?.pushManager) return { result: PUSH_RESULT.UNSUPPORTED, missing: ['pushManager'] };
+
+    return asegurarSuscripcion(registro, config);
+  }
+
+  /**
    * Reconciliacion en primer plano.
    *
    * Es el camino fiable para la rotacion de endpoint: el service worker no
@@ -243,26 +255,29 @@ export function createPushSubscriptionService({
   async function reconcile() {
     const soporte = detectSupport();
     if (!soporte.supported) return { result: PUSH_RESULT.UNSUPPORTED, missing: soporte.missing };
+    // Sin permiso concedido no hay nada que reconciliar, y NUNCA se pide aqui:
+    // la reconciliacion es silenciosa por contrato.
     if (windowRef.Notification.permission !== 'granted') return { result: PUSH_RESULT.NOTHING_TO_DO };
 
     const registro = await obtenerRegistro();
     if (!registro?.pushManager) return { result: PUSH_RESULT.NOTHING_TO_DO };
 
-    let existente = null;
-    try {
-      existente = await registro.pushManager.getSubscription();
-    } catch {
-      existente = null;
-    }
-    if (!existente) return { result: PUSH_RESULT.NOTHING_TO_DO };
-
     const config = await fetchConfig();
     if (!config.enabled) return { result: PUSH_RESULT.PUSH_DISABLED };
+    if (!config.publicKey) return { result: PUSH_RESULT.INVALID_PUBLIC_KEY };
 
-    const id = await registrarEnBackend(existente);
-    return id
-      ? { result: PUSH_RESULT.ALREADY_SUBSCRIBED, subscriptionId: id }
-      : { result: PUSH_RESULT.REGISTRATION_FAILED };
+    // Autocuracion, y es la razon por la que este camino existe.
+    //
+    // Mientras push estuvo apagado en el servidor, quien concedio el permiso NO
+    // llego a crear ninguna suscripcion en el navegador: `subscribe` se detiene
+    // en PUSH_DISABLED antes de tocar `pushManager`. Ademas queda marcado que ya
+    // se pregunto, asi que la tarjeta no vuelve a ofrecerse.
+    //
+    // Si la reconciliacion se limitara a re-registrar lo que ya existe, esas
+    // personas --las que dijeron que si-- se quedarian sin push para siempre el
+    // dia que se active. Por eso aqui se crea la suscripcion que falte. No hay
+    // dialogo de por medio: el permiso ya esta concedido.
+    return asegurarSuscripcion(registro, config);
   }
 
   /**

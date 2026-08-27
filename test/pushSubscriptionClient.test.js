@@ -342,11 +342,56 @@ test('sin permiso concedido la reconciliacion no hace nada', async () => {
   }
 });
 
-test('sin suscripcion previa la reconciliacion no crea ninguna', async () => {
+test('la reconciliacion CREA la suscripcion que falte, sin pedir permiso', async () => {
+  // Autocuracion, y es el caso que de verdad importa al publicar.
+  //
+  // Mientras push estuvo apagado en el servidor, quien concedio el permiso no
+  // llego a crear ninguna suscripcion: `subscribe` se detiene en PUSH_DISABLED
+  // antes de tocar `pushManager`. Y como queda marcado que ya se pregunto, la
+  // tarjeta no vuelve a ofrecerse. Si la reconciliacion solo re-registrara lo
+  // existente, esas personas --las que dijeron que si-- se quedarian sin push
+  // para siempre el dia que se active.
   const { servicio, llamadas } = montar({ permiso: 'granted', endpointExistente: null });
+
   const r = await servicio.reconcile();
-  assert.equal(r.result, PUSH_RESULT.NOTHING_TO_DO);
+
+  assert.equal(r.result, PUSH_RESULT.SUBSCRIBED);
+  assert.equal(llamadas.subscribe.length, 1, 'debia crear la suscripcion que faltaba');
+  assert.equal(llamadas.subscribe[0].userVisibleOnly, true);
+  assert.equal(llamadas.post.length, 1, 'y registrarla en el backend');
+  assert.equal(llamadas.requestPermission, 0, 'sin abrir ningun dialogo: el permiso ya estaba');
+});
+
+test('con el servidor apagado la reconciliacion NO crea suscripcion', async () => {
+  // Es el estado de produccion hasta la activacion controlada: no tiene sentido
+  // crear en el navegador una suscripcion que nadie va a usar.
+  const { servicio, llamadas } = montar({
+    permiso: 'granted',
+    endpointExistente: null,
+    config: { enabled: false, publicKey: null }
+  });
+
+  const r = await servicio.reconcile();
+
+  assert.equal(r.result, PUSH_RESULT.PUSH_DISABLED);
   assert.equal(llamadas.subscribe.length, 0);
+  assert.equal(llamadas.post.length, 0);
+});
+
+test('la secuencia completa apagado -> encendido acaba suscribiendo', async () => {
+  // Reproduce el recorrido real de un conductor a traves de las dos fases.
+  const apagado = montar({ permiso: 'default', permisoTrasPedir: 'granted', config: { enabled: false, publicKey: null } });
+  const primera = await apagado.servicio.subscribe({ requestPermission: true });
+  assert.equal(primera.result, PUSH_RESULT.PUSH_DISABLED);
+  assert.equal(apagado.llamadas.subscribe.length, 0, 'con el servidor apagado no se crea nada');
+
+  // Mas adelante, con el servidor ya encendido y el permiso ya concedido, sin
+  // que vuelva a aparecer ninguna tarjeta ni ningun dialogo.
+  const encendido = montar({ permiso: 'granted', endpointExistente: null });
+  const segunda = await encendido.servicio.reconcile();
+
+  assert.equal(segunda.result, PUSH_RESULT.SUBSCRIBED);
+  assert.equal(encendido.llamadas.requestPermission, 0);
 });
 
 test('la reconciliacion es idempotente: repetirla no duplica nada', async () => {
