@@ -41,6 +41,7 @@ import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_T
 import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 import { createPushRouter } from './routes/push.js';
+import { createTripOfflineEventsRouter } from './routes/tripOfflineEvents.js';
 import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
 import { createWebPushSender } from './services/webPushSender.js';
 
@@ -549,6 +550,52 @@ function emitCompletedTripWalletUpdates(trip, settlement) {
   }
 }
 
+/**
+ * LA transicion de negocio del conductor (OFFLINE-TRIP-1A).
+ *
+ * Unico lugar donde una accion del conductor (ARRIVED / IN_PROGRESS /
+ * COMPLETED) se convierte en estado: guardia de cartera, maquina de estados
+ * canonica, liberacion del conductor y liquidacion. La llaman DOS
+ * transportes --el evento de socket en linea y la reconciliacion sin
+ * conexion-- y por construccion no pueden divergir. No persiste ni anuncia:
+ * eso lo hace quien llama, tras un persist correcto.
+ */
+function aplicarTransicionDelConductor(trip, status, driverId) {
+  if (status === TRIP_STATUS.COMPLETED) {
+    try {
+      ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
+    } catch (error) {
+      return { ok: false, code: error.code, balance: error.balance, required: error.required };
+    }
+  }
+  try {
+    transitionTrip(trip, status, { actorId: driverId, actorRole: 'driver' });
+  } catch (error) {
+    return { ok: false, code: error.code || 'INVALID_TRIP_TRANSITION' };
+  }
+  if ([TRIP_STATUS.COMPLETED, TRIP_STATUS.CANCELLED].includes(trip.status)) {
+    const assignedDriver = database.users.find(user => user.id === trip.driverId);
+    if (assignedDriver) assignedDriver.status = DRIVER_STATUS.AVAILABLE;
+    tripLocks.delete(trip.id);
+  }
+  const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
+  return { ok: true, settlement };
+}
+
+/**
+ * Anuncio en tiempo real de una transicion YA persistida. Payload construido
+ * por el servidor a partir del viaje: nunca se retransmite lo recibido.
+ */
+function anunciarTransicionDelConductor(trip, settlement) {
+  emitCompletedTripWalletUpdates(trip, settlement);
+  io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
+    tripId: trip.id,
+    status: trip.status,
+    canonicalStatus: trip.status,
+    updatedAt: trip.updatedAt
+  });
+}
+
 function requireAuth(req, res, next) {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ error: 'AUTH_REQUIRED' });
@@ -635,6 +682,18 @@ app.use('/api', createPushRouter({
   persistHttp,
   requireAuth,
   pushService
+}));
+
+// OFFLINE-TRIP-1A: reconciliacion idempotente de acciones del conductor
+// registradas sin conexion. Usa LA MISMA transicion de negocio que el evento
+// de socket en linea (aplicar/anunciar) — un solo juego de reglas.
+app.use('/api', createTripOfflineEventsRouter({
+  database,
+  requireAuth,
+  requireApprovedDriver,
+  applyTransition: (trip, status, driverId) => aplicarTransicionDelConductor(trip, status, driverId),
+  announceTransition: (trip, settlement) => anunciarTransicionDelConductor(trip, settlement),
+  persistDatabase
 }));
 
 app.use('/api', createDriverApplicationsRouter({
@@ -2118,6 +2177,11 @@ io.on('connection', (socket) => {
   });
 
   // Trip Status Transition Event ('ARRIVED', 'IN_PROGRESS', 'COMPLETED')
+  //
+  // OFFLINE-TRIP-1A: la logica de negocio vive en
+  // aplicarTransicionDelConductor / anunciarTransicionDelConductor, LAS
+  // MISMAS que usa la reconciliacion sin conexion. Este handler solo
+  // traduce el transporte socket: online y offline no pueden divergir.
   on('tripStatusUpdated', async (data = {}) => {
     if (!allowSocketRole(socket, 'driver')) return;
     // Del payload del conductor solo se leen estos dos campos; cualquier otra
@@ -2133,39 +2197,19 @@ io.on('connection', (socket) => {
       socket.emit('tripStatusRejected', { tripId, status: null, error: 'INVALID_TRIP_STATUS' });
       return;
     }
-    if (status === TRIP_STATUS.COMPLETED) {
-      try {
-        ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
-      } catch (error) {
-        socket.emit('tripStatusRejected', { tripId, status, error: error.code, balance: error.balance, required: error.required });
-        return;
-      }
-    }
-    try {
-      transitionTrip(trip, status, { actorId: socket.data.auth.userId, actorRole: 'driver' });
-    } catch (error) {
-      socket.emit('tripStatusRejected', { tripId, status, error: error.code || 'INVALID_TRIP_TRANSITION' });
+    const resultado = aplicarTransicionDelConductor(trip, status, socket.data.auth.userId);
+    if (!resultado.ok) {
+      socket.emit('tripStatusRejected', {
+        tripId, status, error: resultado.code,
+        balance: resultado.balance, required: resultado.required
+      });
       return;
     }
-    if ([TRIP_STATUS.COMPLETED, TRIP_STATUS.CANCELLED].includes(trip.status)) {
-      const assignedDriver = database.users.find(user => user.id === trip.driverId);
-      if (assignedDriver) assignedDriver.status = DRIVER_STATUS.AVAILABLE;
-      tripLocks.delete(tripId);
-    }
-    const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
     if (!await persistDatabase()) {
       socket.emit('tripStatusRejected', { tripId, status, error: 'DATABASE_WRITE_FAILED' });
       return;
     }
-    emitCompletedTripWalletUpdates(trip, settlement);
-    // Payload construido por el servidor a partir del viaje ya persistido:
-    // nunca se retransmite el objeto recibido del conductor.
-    io.to(`user:${trip.passengerId}`).to(`user:${socket.data.auth.userId}`).to('admins').emit('tripStatusUpdated', {
-      tripId: trip.id,
-      status: trip.status,
-      canonicalStatus: trip.status,
-      updatedAt: trip.updatedAt
-    });
+    anunciarTransicionDelConductor(trip, resultado.settlement);
   });
 
   // Passenger Ride Cancelled Event

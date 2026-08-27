@@ -643,3 +643,9 @@ html.theme-light .driver-app{--cockpit:var(--x58-surface-2);--cockpit-line:var(-
 .driver-nav-footer{margin-top:8px;padding-top:7px;display:flex;align-items:center;gap:10px;border-top:1px solid rgba(255,255,255,.12);color:#cbd5e1;font-size:.68rem;font-weight:800}
 .driver-nav-footer .driver-nav-eta{color:#00E676}
 .driver-nav-footer .driver-nav-target{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:auto;font-weight:600;color:#94a3b8}
+
+/* OFFLINE-TRIP-1A — pill de estado de sincronizacion del viaje */
+#trip-sync-pill{position:absolute;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:960;max-width:92%;padding:8px 14px;border-radius:999px;background:rgba(12,19,31,.94);color:#ffd970;border:1px solid rgba(255,196,0,.5);font-size:.68rem;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+#trip-sync-pill[hidden]{display:none}
+#trip-sync-pill.is-error{border-color:rgba(255,92,115,.6);color:#ffb4c0}
+#trip-sync-pill.is-ok{border-color:rgba(0,223,120,.55);color:#7ff0bb}

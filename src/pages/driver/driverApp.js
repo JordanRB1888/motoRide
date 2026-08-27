@@ -24,6 +24,8 @@ import { canonicalPhotoPath, createPrivatePhotoLoader, hydratePrivatePhotos, use
 import { createNavigationBanner } from '../../components/navigationBanner.js';
 import { NAVIGATION_PHASE, createDriverNavigation } from '../../services/driverNavigation.js';
 import { distanceBetweenMeters } from '../../utils/locationQuality.js';
+import { createTripEventQueue } from '../../services/tripEventQueue.js';
+import { SYNC_STATE, createTripTransitionSync } from '../../services/tripTransitionSync.js';
 import { createScreenLifecycle } from '../../utils/screenLifecycle.js';
 import { getPushSubscriptionService, PUSH_RESULT } from '../../services/pushSubscriptionService.js';
 import { PUSH_NAVIGATE_EVENT } from '../../services/pushClientMessages.js';
@@ -159,6 +161,64 @@ export function renderDriverApp(container) {
     // Navegacion dentro de la app (MAPS-2C): banner de guia + controlador.
     // Las muestras llegan YA aceptadas por GPS-1 (el rastreador solo emite
     // aceptadas); la posicion inicial de cada fase es la ultima aceptada.
+    // OFFLINE-TRIP-1A: cola durable de acciones del viaje (con ambito de
+    // cuenta) + sincronizador idempotente. El pill informa SIEMPRE la verdad:
+    // «guardado en este dispositivo» no es «confirmado por el servidor».
+    const tripQueue = createTripEventQueue({ userId: user.id });
+    const syncPill = document.createElement('div');
+    syncPill.id = 'trip-sync-pill';
+    syncPill.hidden = true;
+    document.getElementById('driver-map')?.appendChild(syncPill);
+    const pintarEstadoSync = (estado, detalle = {}) => {
+        const textos = {
+            [SYNC_STATE.PENDING]: detalle.savedOffline
+                ? 'Accion guardada · Pendiente de sincronizacion'
+                : `Pendiente de sincronizacion (${detalle.pending ?? ''})`,
+            [SYNC_STATE.SYNCING]: 'Sincronizando…',
+            [SYNC_STATE.SYNCED]: 'Viaje sincronizado',
+            [SYNC_STATE.ERROR]: 'Error de sincronizacion · se reintentara'
+        };
+        const texto = textos[estado];
+        syncPill.hidden = !texto;
+        if (texto) syncPill.textContent = texto;
+        syncPill.classList.toggle('is-error', estado === SYNC_STATE.ERROR);
+        syncPill.classList.toggle('is-ok', estado === SYNC_STATE.SYNCED);
+        if (estado === SYNC_STATE.SYNCED) {
+            window.setTimeout(() => { if (syncPill.classList.contains('is-ok')) syncPill.hidden = true; }, 4000);
+        }
+    };
+    const tripSync = createTripTransitionSync({
+        queue: tripQueue,
+        apiService,
+        onStateChange: pintarEstadoSync,
+        onEventResult: (resultado) => {
+            if (resultado.result === 'APPLIED' && resultado.status === 'COMPLETED') {
+                tripQueue.clearActiveTripSnapshot();
+            }
+            if (resultado.result === 'REJECTED' && resultado.code === 'INSUFFICIENT_WALLET_BALANCE') {
+                showToast('El cobro del viaje quedo pendiente: saldo del pasajero insuficiente. Se reintentara.', 'warning');
+            }
+        }
+    });
+    // Disparadores de reconciliacion: volver la red, restaurarse el realtime
+    // y abrir la aplicacion. Nunca por render ni en bucle.
+    realtimeLifecycle.addListener(window, 'online', () => tripSync.flush().catch(() => {}));
+
+    /** Instantanea minima y durable del viaje activo para operar sin red. */
+    const guardarSnapshotDeViaje = (trip, passenger, estadoLocal) => {
+        if (!trip?.id) return;
+        tripQueue?.saveActiveTripSnapshot({
+            tripId: trip.id,
+            status: estadoLocal || trip.status,
+            pickup: trip.pickup ? { lat: trip.pickup.lat, lng: trip.pickup.lng, address: trip.pickup.address } : null,
+            destination: trip.destination ? { lat: trip.destination.lat, lng: trip.destination.lng, address: trip.destination.address } : null,
+            fareUSD: Number(trip?.pricing?.fareUSD ?? trip.fareUSD ?? trip.fare ?? 0),
+            paymentMethod: trip.paymentMethod || null,
+            rideType: trip.rideType || 'MOTO',
+            passenger: passenger ? { id: passenger.id, name: passenger.name, rating: passenger.rating } : null
+        });
+    };
+
     const navBanner = createNavigationBanner(document.getElementById('driver-map'));
     const driverNav = createDriverNavigation({
         map: currentMap,
@@ -628,6 +688,7 @@ export function renderDriverApp(container) {
         if (modal) modal.remove();
         currentTrip = trip;
         currentPassenger = passenger;
+        guardarSnapshotDeViaje(trip, passenger, 'EN_ROUTE');
         notifyDriver('ACCEPTED', 'Carrera aceptada', `Vas a recoger a ${passenger?.name || 'el pasajero'} en ${trip.pickup?.address || 'su ubicación'}.`, 'TRIP', trip.id);
         persistentChatBtn.classList.remove('hidden');
         
@@ -662,9 +723,16 @@ export function renderDriverApp(container) {
 
     function arrivePickup(trip, passenger) {
         eventLogger.log('DRIVER', `Conductor llegó al punto de recogida [${trip.id}]`);
+        const estadoPrevio = trip.status;
         trip.status = 'ARRIVED';
         notifyDriver('ARRIVED', 'Llegaste al punto de recogida', `Avisamos a ${passenger?.name || 'el pasajero'} que ya estás esperando.`, 'TRIP', trip.id);
-        socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'ARRIVED' });
+        // OFFLINE-TRIP-1A: durable primero, entrega idempotente despues. Con
+        // red se aplica al instante; sin red queda guardada y sincroniza sola.
+        tripSync.recordTransition({
+            tripId: trip.id, action: 'ARRIVED', expectedTripState: estadoPrevio,
+            location: driverGpsTracker.lastAcceptedSample
+        });
+        guardarSnapshotDeViaje(trip, passenger, 'ARRIVED');
         const waitingView = renderWaitingPassenger(
             trip, 
             passenger, 
@@ -680,9 +748,14 @@ export function renderDriverApp(container) {
 
     function startTrip(trip, passenger) {
         eventLogger.log('DRIVER', `Pasajero abordó. Viaje iniciado en progreso [${trip.id}]`);
+        const estadoPrevio = trip.status;
         trip.status = 'IN_PROGRESS';
         notifyDriver('STARTED', 'Viaje iniciado', `Navega hacia ${trip.destination?.address || 'el destino indicado'}.`, 'TRIP', trip.id);
-        socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'IN_PROGRESS' });
+        tripSync.recordTransition({
+            tripId: trip.id, action: 'IN_PROGRESS', expectedTripState: estadoPrevio,
+            location: driverGpsTracker.lastAcceptedSample
+        });
+        guardarSnapshotDeViaje(trip, passenger, 'IN_PROGRESS');
         const inTripView = renderInTrip(
             trip, 
             () => completeTrip(trip, passenger),
@@ -698,9 +771,16 @@ export function renderDriverApp(container) {
 
     function completeTrip(trip, passenger) {
         eventLogger.log('DRIVER', `Viaje completado exitosamente [${trip.id}]`);
+        const estadoPrevio = trip.status;
         trip.status = 'COMPLETED';
         notifyDriver('COMPLETED', 'Viaje completado', `La carrera finalizó. Tarifa: $${tripFare(trip).toFixed(2)} USD.`, 'TRIP', trip.id);
-        socket.emit('tripStatusUpdated', { tripId: trip.id, status: 'COMPLETED' });
+        tripSync.recordTransition({
+            tripId: trip.id, action: 'COMPLETED', expectedTripState: estadoPrevio,
+            location: driverGpsTracker.lastAcceptedSample
+        });
+        if (navigator.onLine === false) {
+            showToast('Finalizacion guardada en este dispositivo. Se sincronizara al volver la conexion.', 'info', 6000);
+        }
         persistentChatBtn.classList.add('hidden');
         
         const ratingModal = createDriverRatingModal({
@@ -852,8 +932,25 @@ export function renderDriverApp(container) {
 
     async function restoreActiveTripOnce() {
         const active = await apiService.get('/trips/active/me');
+        // Sin red no hay veredicto del servidor: NO se limpia nada. Si hay
+        // una instantanea local durable, el conductor sigue operando su viaje
+        // desde este dispositivo; la cola sincronizara al volver la red.
+        if (active === null && (apiService.lastError?.status === 0 || apiService.lastError?.error === 'NETWORK_ERROR')) {
+            restaurarViajeDesdeSnapshot();
+            return;
+        }
         if (!active?.trip || active.trip.driverId !== user.id) {
+            // El servidor manda: si ya no hay viaje activo (p. ej. la
+            // finalizacion pendiente se aplico), se limpia la instantanea.
+            tripQueue?.clearActiveTripSnapshot();
             if (currentTrip) clearCompletedTripUi();
+            tripSync.flush().catch(() => {});
+            return;
+        }
+        // Si la finalizacion esta guardada localmente pero el servidor aun no
+        // la recibio, no se re-pinta el viaje activo: se sincroniza.
+        if (tripQueue?.hasPendingAction(active.trip.id, 'COMPLETED')) {
+            tripSync.flush().catch(() => {});
             return;
         }
         currentTrip = active.trip;
@@ -889,6 +986,61 @@ export function renderDriverApp(container) {
         activeTripContainer.appendChild(view);
         hydratePrivatePhotos(view, privatePhotos);
         showTripRoute(currentTrip, ['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status) ? 'DESTINATION' : 'PICKUP');
+        guardarSnapshotDeViaje(currentTrip, currentPassenger, currentTrip.status);
+        tripSync.flush().catch(() => {});
+    }
+
+    /**
+     * Restauracion SIN servidor (OFFLINE-TRIP-1A): la instantanea durable
+     * pinta la vista del estado local para que el conductor pueda seguir
+     * registrando acciones. Nada de esto se presenta como confirmado.
+     */
+    function restaurarViajeDesdeSnapshot() {
+        const snapshot = tripQueue?.loadActiveTripSnapshot();
+        if (!snapshot?.tripId) return;
+        if (tripQueue.hasPendingAction(snapshot.tripId, 'COMPLETED')) {
+            pintarEstadoSync(SYNC_STATE.PENDING, { pending: tripQueue.size() });
+            return;
+        }
+        currentTrip = {
+            id: snapshot.tripId,
+            status: snapshot.status,
+            pickup: snapshot.pickup,
+            destination: snapshot.destination,
+            fareUSD: snapshot.fareUSD,
+            paymentMethod: snapshot.paymentMethod,
+            rideType: snapshot.rideType
+        };
+        currentPassenger = snapshot.passenger
+            ? { id: snapshot.passenger.id, name: snapshot.passenger.name, rating: snapshot.passenger.rating }
+            : null;
+        persistentChatBtn.classList.remove('hidden');
+        onlineOverlay.classList.add('hidden');
+        showTripPanel();
+        let view;
+        if (snapshot.status === 'ARRIVED') {
+            view = renderWaitingPassenger(currentTrip, currentPassenger,
+                () => startTrip(currentTrip, currentPassenger),
+                () => openChatWithPassenger(currentTrip, currentPassenger),
+                () => callPassenger(currentPassenger));
+        } else if (['IN_PROGRESS', 'IN_TRIP'].includes(snapshot.status)) {
+            view = renderInTrip(currentTrip,
+                () => completeTrip(currentTrip, currentPassenger),
+                () => openChatWithPassenger(currentTrip, currentPassenger),
+                () => callPassenger(currentPassenger),
+                currentPassenger);
+        } else {
+            view = renderEnRouteToPickup(currentTrip,
+                () => arrivePickup(currentTrip, currentPassenger),
+                () => openChatWithPassenger(currentTrip, currentPassenger),
+                () => callPassenger(currentPassenger),
+                currentPassenger);
+        }
+        activeTripContainer.innerHTML = '';
+        activeTripContainer.appendChild(view);
+        showTripRoute(currentTrip, ['IN_PROGRESS', 'IN_TRIP'].includes(snapshot.status) ? 'DESTINATION' : 'PICKUP');
+        showToast('Viaje activo guardado en este dispositivo. Sin conexion con el servidor.', 'info', 6000);
+        pintarEstadoSync(SYNC_STATE.PENDING, { pending: tripQueue.size() });
     }
 
     realtimeLifecycle.addListener(window, '58express:driver-realtime-restored', () => {
