@@ -1,29 +1,22 @@
 /**
  * Motor de render sobre Leaflet.
  *
- * Es el comportamiento que la aplicacion ha tenido siempre --mismas teselas de
- * CARTO, misma atribucion, mismos divIcon-- encapsulado tras la interfaz de
- * motor que `MapComponent` consume. Cuando Google Maps no esta configurado o
+ * Es el comportamiento Leaflet de siempre --mismos divIcon, misma semantica--
+ * encapsulado tras la interfaz de motor que `MapComponent` consume. Las
+ * teselas son OpenStreetMap (ver utils/mapTiles.js): CARTO empezo a exigir
+ * clave y estampaba «API KEY REQUIRED» en cada tesela. Cuando Google Maps no esta configurado o
  * no puede cargar, este motor es el respaldo y la experiencia es la de
  * siempre: un fallo de Google jamas deja a la aplicacion sin mapa.
  */
 
-const tileUrlForTheme = theme => (theme === 'dark'
-  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png');
-
-const OPCIONES_TILES = {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  subdomains: 'abcd',
-  maxZoom: 20
-};
+import { OSM_TILE_URL, tileLayerOptionsForTheme } from '../utils/mapTiles.js';
 
 export function createLeafletEngine({ container, center, zoom = 14, theme = 'dark' } = {}) {
   if (typeof L === 'undefined') throw new Error('LEAFLET_NOT_LOADED');
   if (!container) throw new Error('LEAFLET_ENGINE_REQUIRES_CONTAINER');
 
   const map = L.map(container, { zoomControl: true }).setView([center.lat, center.lng], zoom);
-  let tileLayer = L.tileLayer(tileUrlForTheme(theme), OPCIONES_TILES).addTo(map);
+  let tileLayer = L.tileLayer(OSM_TILE_URL, tileLayerOptionsForTheme(theme)).addTo(map);
 
   return {
     kind: 'leaflet',
@@ -31,7 +24,7 @@ export function createLeafletEngine({ container, center, zoom = 14, theme = 'dar
 
     setTheme(nuevoTema) {
       if (tileLayer) map.removeLayer(tileLayer);
-      tileLayer = L.tileLayer(tileUrlForTheme(nuevoTema), OPCIONES_TILES).addTo(map);
+      tileLayer = L.tileLayer(OSM_TILE_URL, tileLayerOptionsForTheme(nuevoTema)).addTo(map);
       tileLayer.bringToBack();
     },
 

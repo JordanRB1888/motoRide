@@ -4,6 +4,7 @@ import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 import { accumulatePage } from '../../utils/liveUpdates.js';
+import { OSM_TILE_URL, tileLayerOptionsForTheme } from '../../utils/mapTiles.js';
 
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 import { localAvatarHtml } from '../../utils/localAvatar.js';
@@ -56,10 +57,7 @@ async function initializeFleetMap(container) {
   if (!mapElement || typeof L === 'undefined') return;
 
   const map = L.map(mapElement, { zoomControl: true, attributionControl: true }).setView([10.6427, -71.6125], 13);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap contributors © CARTO',
-    maxZoom: 19
-  }).addTo(map);
+  L.tileLayer(OSM_TILE_URL, tileLayerOptionsForTheme('dark')).addTo(map);
 
   const markers = new Map();
   const drivers = new Map();

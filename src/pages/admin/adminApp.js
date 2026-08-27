@@ -1,4 +1,5 @@
 import { db, apiService } from '../../services/apiService.js';
+import { OSM_TILE_URL, tileLayerOptionsForTheme } from '../../utils/mapTiles.js';
 import { mergeById, createCoalescer, withCanonicalId, accumulatePage } from '../../utils/liveUpdates.js';
 import { authService } from '../../services/authService.js';
 import { renderFleetMap } from './fleetMap.js';
@@ -47,7 +48,7 @@ export function renderAdminApp(container) {
     if(!target || typeof L==='undefined') return;
     if(dashboardMap){dashboardMap.remove();dashboardMap=null;}
     dashboardMap=L.map(target,{zoomControl:false,attributionControl:false,dragging:true,scrollWheelZoom:false}).setView([10.6427,-71.6125],12);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(dashboardMap);
+    L.tileLayer(OSM_TILE_URL,tileLayerOptionsForTheme('dark')).addTo(dashboardMap);
     users.filter(u=>u.role==='driver'&&Number.isFinite(u.location?.lat)&&Number.isFinite(u.location?.lng)).forEach(driver=>{
       const tone=['AVAILABLE','ONLINE'].includes(driver.status)?'#20dc8e':['BUSY','IN_TRIP'].includes(driver.status)?'#22c7e8':'#ffb800';
       const marker=L.divIcon({className:'ops-driver-marker',html:`<span style="--marker-tone:${tone}">${vehicleImage(driver.vehicleType,{variant:'map',className:'ops-real-vehicle',decorative:true})}</span>`,iconSize:[38,38],iconAnchor:[19,19]});

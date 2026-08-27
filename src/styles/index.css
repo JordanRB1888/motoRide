@@ -889,3 +889,11 @@ html.theme-light .btn-secondary {
   .chat-modal-overlay { padding: 0; align-items: flex-end; }
   .chat-modal-content { width: 100%; height: min(82dvh, 720px); border-radius: 28px 28px 0 0; padding-bottom: env(safe-area-inset-bottom); }
 }
+
+
+/* Teselas OSM en modo oscuro. OpenStreetMap no tiene variante nocturna, asi
+   que se invierte SOLO el contenedor de teselas: los marcadores y las rutas
+   viven en otros panes de Leaflet y conservan sus colores. */
+.x58-osm-dark-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.65);
+}

@@ -245,7 +245,9 @@ test('sin clave configurada se usa Leaflet directamente: el comportamiento de si
     assert.equal(registroL.mapas, 1, 'el mapa Leaflet debe existir de inmediato');
     assert.ok(mapa.map, 'this.map queda listo en el constructor, como siempre');
     assert.equal(mapa.engine.kind, 'leaflet');
-    assert.ok(registroL.tiles[0].url.includes('cartocdn'), 'mismas teselas CARTO de siempre');
+    // CARTO empezo a exigir clave y estampaba «API KEY REQUIRED» en cada
+    // tesela: el respaldo sirve ahora OpenStreetMap, que no pide clave.
+    assert.ok(registroL.tiles[0].url.includes('tile.openstreetmap.org'), 'las teselas del respaldo son OSM');
 
     mapa.setUserLocation(10.64, -71.61);
     assert.equal(registroL.marcadores.length, 1);
