@@ -43,6 +43,7 @@ import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 import { createPushRouter } from './routes/push.js';
 import { createTripOfflineEventsRouter } from './routes/tripOfflineEvents.js';
 import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
+import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
 
 const app = express();
@@ -666,6 +667,11 @@ function construirPushSender() {
     return { sender: null, enabled: false };
   }
 }
+
+// DISPATCH-2A: ranking por ETA real de carretera, DORMIDO por defecto
+// (DISPATCH_ROUTE_MATRIX_ENABLED=false). Solo reordena a los YA elegibles;
+// cualquier fallo devuelve el orden actual y el despacho ni se entera.
+const dispatchRanker = createDispatchRanker();
 
 const { sender: pushSender, enabled: pushEnabled } = construirPushSender();
 
@@ -1904,9 +1910,25 @@ function dispatchTripToDrivers(trip) {
     dispatchTimers.set(trip.id, timer);
   };
 
-  offerNext().catch(error => {
+  const iniciarOfertas = () => offerNext().catch(error => {
     console.error('[+58express Dispatcher] No se pudo iniciar el despacho:', error.message);
   });
+
+  if (dispatchRanker.enabled && session.candidates.length > 1) {
+    // DISPATCH-2A: UNA llamada acotada de matriz por ciclo de despacho, con
+    // su propio timeout duro, ANTES de la primera oferta. La ventana de
+    // 15000 ms por conductor no se toca: son relojes distintos. El ranking
+    // devuelve SIEMPRE el mismo conjunto (jamas añade ni quita elegibles);
+    // cualquier fallo → el orden geografico actual.
+    dispatchRanker.rank({ pickup: { lat: pickupLat, lng: pickupLng }, candidates: session.candidates })
+      .then(({ candidates }) => {
+        if (candidates.length === session.candidates.length) session.candidates = candidates;
+        iniciarOfertas();
+      })
+      .catch(() => iniciarOfertas());
+  } else {
+    iniciarOfertas();
+  }
 }
 
 // Socket.IO Server Setup
