@@ -7,17 +7,42 @@ import {
   createPostgresPool,
   loadPostgresDatabase
 } from './postgresPersistence.js';
+import { runStartupWithRetry } from './startupRetry.js';
 
-export async function openDatabaseBackend({ dataFile, migrationsDirectory, logger = console } = {}) {
+export async function openDatabaseBackend({
+  dataFile,
+  migrationsDirectory,
+  logger = console,
+  // Inyectables SOLO para pruebas: producción usa los reales.
+  postgres = { createPool: createPostgresPool, load: loadPostgresDatabase, createPersistence: createPostgresPersistence },
+  retryOptions = {}
+} = {}) {
   if (process.env.DATABASE_URL) {
-    const pool = createPostgresPool({
-      connectionString: process.env.DATABASE_URL,
-      max: Number(process.env.DATABASE_POOL_MAX || 10)
+    // DB-STARTUP-RESILIENCE-1: un corte transitorio del pooler (el incidente
+    // real: Supavisor sin upstream unos minutos) ya no mata el arranque al
+    // primer golpe. CADA intento es completo y autocontenido: crea SU pool
+    // y, si falla, lo cierra antes de reintentar — jamás sobreviven dos
+    // pools. El fail-closed sigue intacto: errores permanentes (auth, TLS,
+    // configuración) fallan rápido, y la ventana de reintentos es finita.
+    return runStartupWithRetry({
+      logger,
+      ...retryOptions,
+      attempt: async () => {
+        const pool = postgres.createPool({
+          connectionString: process.env.DATABASE_URL,
+          max: Number(process.env.DATABASE_POOL_MAX || 10)
+        });
+        try {
+          await pool.query('select 1 as ready');
+          const database = await postgres.load(pool);
+          const persistence = await postgres.createPersistence({ pool, database, logger });
+          return { kind: 'postgres', database, persistence, close: () => persistence.close() };
+        } catch (error) {
+          await pool.end?.().catch?.(() => {});
+          throw error;
+        }
+      }
     });
-    await pool.query('select 1 as ready');
-    const database = await loadPostgresDatabase(pool);
-    const persistence = await createPostgresPersistence({ pool, database, logger });
-    return { kind: 'postgres', database, persistence, close: () => persistence.close() };
   }
 
   fs.mkdirSync(path.dirname(dataFile), { recursive: true });
