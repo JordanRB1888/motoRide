@@ -26,12 +26,12 @@ const indexCodigo = indexSource
 /**
  * Guarda de regresion alrededor del despacho, escrita ANTES de tocarlo.
  *
- * PUSH-1 instala los cimientos de Web Push y no conecta nada: el despacho debe
- * quedar exactamente como estaba. PUSH-3a enchufara `notifyRideOffer` dentro de
- * `offerNext`, y cuando eso ocurra estas pruebas son las que diran si el cambio
- * se salio de su carril.
+ * PUSH-1 instalo los cimientos sin conectar nada. PUSH-3A conecta UNA cosa:
+ * `notifyRideOffer` dentro de `offerNext`, sin await, acompanando a la oferta
+ * de socket. Estas pruebas fijan que esa es la UNICA puerta y que todo lo
+ * demas --elegibilidad, orden, ventana-- quedo exactamente como estaba.
  *
- * La decision de producto es PUSH-3a, no PUSH-3b: la elegibilidad NO cambia.
+ * La decision de producto es PUSH-3A, no PUSH-3B: la elegibilidad NO cambia.
  * Un conductor sin socket sigue sin ser candidato, la posicion sigue caducando
  * y la ventana sigue siendo de quince segundos. Aqui se fija todo eso.
  */
@@ -57,18 +57,39 @@ const viaje = { id: 'trip_1', rideType: 'MOTO' };
 const recogida = { lat: 10.6427, lng: -71.6125 };
 
 // --------------------------------------------------------------------------
-// PUSH-1 no puede haber conectado push al despacho
+// PUSH-3A: el despacho invoca push SOLO por la puerta semantica autorizada
 // --------------------------------------------------------------------------
 
-test('el despacho no invoca push en ningun punto', () => {
-  // La conexion es PUSH-3a y necesita su propia autorizacion. Si alguien la
-  // adelanta, esta prueba lo dice.
-  for (const invocacion of ['notifyRideOffer(', 'notifyUser(', 'pushService.notify']) {
-    assert.ok(
-      !indexCodigo.includes(invocacion),
-      `el despacho ya llama a ${invocacion}: eso es PUSH-3a, no PUSH-1`
-    );
-  }
+test('el despacho invoca exactamente la operacion semantica de PUSH-3A y nada mas', () => {
+  // Hasta PUSH-1 esta prueba exigia CERO llamadas. PUSH-3A autoriza UNA:
+  // `pushService.notifyRideOffer(...)` dentro de `offerNext`, acompanando a
+  // la oferta de Socket.IO ya emitida. Cualquier segunda llamada, o una
+  // llamada directa a `notifyUser`, seria un canal nuevo sin autorizar.
+  const llamadas = indexCodigo.match(/pushService\.notifyRideOffer\(/g) || [];
+  assert.equal(llamadas.length, 1, 'debe existir exactamente UNA invocacion semantica');
+  assert.ok(!indexCodigo.includes('pushService.notifyUser('),
+    'el despacho no llama al transporte generico: solo a la operacion de oferta');
+
+  // Y esa unica llamada vive dentro de offerNext, DESPUES de emitir la oferta
+  // por socket al conductor concreto: push acompana a la oferta, nunca la
+  // precede ni la sustituye.
+  const offerNextSrc = indexCodigo.slice(
+    indexCodigo.indexOf('const offerNext = async () =>'),
+    indexCodigo.indexOf('offerNext().catch')
+  );
+  const posSocket = offerNextSrc.indexOf("io.to(socketId).emit('rideRequested', offer)");
+  const posPush = offerNextSrc.indexOf('pushService.notifyRideOffer(');
+  assert.ok(posSocket >= 0, 'la oferta por socket debe seguir en offerNext');
+  assert.ok(posPush > posSocket, 'push debe ir despues de la oferta por socket, en offerNext');
+});
+
+test('la llamada de PUSH-3A es fuego y olvido: sin await y con catch', () => {
+  // La ventana de quince segundos no puede depender del proveedor: un `await`
+  // aqui seria exactamente la regresion que PUSH-3A prohibe.
+  assert.ok(!/await\s+pushService\./.test(indexCodigo),
+    'el despacho no puede esperar a push en ningun punto');
+  assert.match(indexCodigo, /pushService\.notifyRideOffer\(trip, candidate\.driver\.id\)\.catch\(/,
+    'la invocacion debe llevar su catch: ningun rechazo puede quedar sin manejar');
 });
 
 test('el adaptador real solo se construye con la funcionalidad encendida', () => {

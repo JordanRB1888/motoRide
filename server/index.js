@@ -578,9 +578,12 @@ function requireApprovedDriver(req, res, next) {
 
 // Web Push.
 //
-// El despacho de carreras NO llama a este servicio todavia: conectar
-// `notifyRideOffer` dentro de `offerNext` es PUSH-3a, y sera sin `await` para
-// que un proveedor lento no pueda robar segundos de la ventana de quince.
+// El despacho invoca `notifyRideOffer` dentro de `offerNext` (PUSH-3A) como
+// aviso de atencion de mejor esfuerzo, sin `await`, para que un proveedor
+// lento no pueda robar segundos de la ventana de quince. El despacho solo
+// conoce esta operacion semantica: nunca importa web-push, VAPID ni el
+// formato de las suscripciones, y por eso FCM/APNs podran sumarse manana
+// como transportes del mismo servicio sin tocar la seleccion ni los tiempos.
 //
 // El adaptador real solo se construye si la funcionalidad esta encendida. Con
 // la bandera apagada --que es el valor por defecto y el estado de produccion--
@@ -1825,6 +1828,15 @@ function dispatchTripToDrivers(trip) {
     if (socketId) {
       io.to(socketId).emit('rideRequested', offer);
       console.log(`[+58express Dispatcher] ${JSON.stringify({ event: 'driver_offer_emitted', tripId: trip.id, emitted: true })}`);
+      // PUSH-3A: aviso de atencion que acompana a ESTA misma oferta, para
+      // ESTE mismo conductor. Es mejor esfuerzo puro: sin `await`, porque la
+      // ventana de quince segundos no puede depender de un proveedor de push.
+      // El servicio nunca rechaza por contrato --clasifica y absorbe todos
+      // los desenlaces--; el `catch` es la red de ultima instancia por si ese
+      // contrato se rompiera algun dia, y no registra mas que el nombre.
+      pushService.notifyRideOffer(trip, candidate.driver.id).catch(error => {
+        console.error(`[+58express Push] rechazo inesperado de notifyRideOffer: ${error?.name || 'UNKNOWN'}`);
+      });
     }
     io.to('admins').emit('rideRequested', offer);
     const timer = setTimeout(() => offerNext().catch(error => {

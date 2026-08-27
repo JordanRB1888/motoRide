@@ -315,16 +315,21 @@ test('main.js instala el puente una sola vez y le pasa la sesion', () => {
 });
 
 // --------------------------------------------------------------------------
-// El despacho no se toca
+// El despacho: PUSH-3A conecta UNA cosa y nada mas
 // --------------------------------------------------------------------------
 
-test('PUSH-2 no conecta push con el despacho', () => {
+test('PUSH-3A conecta exactamente una llamada semantica sin tocar la ventana ni la elegibilidad', () => {
+  // Hasta PUSH-2 aqui se exigia CERO conexiones. PUSH-3A autoriza una unica
+  // puerta: `pushService.notifyRideOffer` en offerNext, sin await, como aviso
+  // de atencion que acompana a la oferta de socket. Todo lo demas sigue
+  // intacto, y esta guarda lo vigila desde el lado del cliente.
   const index = leer('server/index.js')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/^[ \t]*\/\/[^\n]*$/gm, ' ');
-  for (const invocacion of ['notifyRideOffer(', 'notifyUser(', 'pushService.notify']) {
-    assert.ok(!index.includes(invocacion), `el despacho ya llama a ${invocacion}`);
-  }
+  const llamadas = index.match(/pushService\.notifyRideOffer\(/g) || [];
+  assert.equal(llamadas.length, 1, 'debe existir exactamente UNA invocacion semantica');
+  assert.ok(!index.includes('pushService.notifyUser('), 'el despacho no usa el transporte generico');
+  assert.ok(!/await\s+pushService\./.test(index), 'el despacho no puede esperar a push');
   assert.ok(index.includes('offerExpiresAt: Date.now() + 15000'), 'la ventana de oferta cambio');
   const eligibility = leer('server/domain/dispatchEligibility.js');
   assert.match(eligibility, /if \(!hasSocket\) return \{ eligible: false, reason: DISPATCH_REJECTION\.NO_SOCKET \};/);

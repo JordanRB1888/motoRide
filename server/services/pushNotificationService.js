@@ -187,10 +187,10 @@ export function createPushNotificationService({
   /**
    * Aviso de oferta de carrera a un conductor.
    *
-   * PUSH-1 lo deja instalado y probado, pero NADIE lo llama: el despacho no
-   * se toca en esta fase. Conectarlo dentro de `offerNext` es PUSH-3a, y
-   * cuando se haga será sin `await`, para que un proveedor lento no pueda
-   * robar segundos de la ventana de quince.
+   * Desde PUSH-3A lo invoca `offerNext` en el despacho, sin `await`: es un
+   * aviso de atencion que acompana a la oferta de Socket.IO ya emitida al
+   * MISMO conductor, y un proveedor lento no puede robar segundos de la
+   * ventana de quince. Como todo el servicio, nunca rechaza.
    */
   async function notifyRideOffer(trip, driverId, contexto = {}) {
     const tripId = trip?.id;
