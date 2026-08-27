@@ -11,6 +11,10 @@ import { renderFarePreview, renderSearchingState, renderDriverCard } from './req
 import { renderActiveRide, renderTripComplete } from './activeRide.js';
 import { createPrivatePhotoLoader, hydratePrivatePhotos, neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 import { evaluateLocationSample, normalizeLocationSample } from '../../utils/locationQuality.js';
+import { fromMapPoint, fromPreset } from '../../utils/canonicalLocation.js';
+import { KNOWN_PLACES, findKnownPlace } from '../../utils/knownPlaces.js';
+import { createDestinationSearch } from '../../services/destinationSearch.js';
+import { getPlacesProvider } from '../../services/placesService.js';
 import { createPrivatePhotoScope } from '../../utils/privatePhotoScope.js';
 import { renderRideHistory } from './rideHistory.js';
 import { renderWallet } from './wallet.js';
@@ -333,7 +337,7 @@ export function renderPassengerApp(container) {
     setState('SELECTING_PICKUP');
     mapComponent.clearRoute();
     mapComponent.clearMarkers('destination');
-    mapComponent.addMarker([Number(place.lat), Number(place.lon)], 'destination');
+    mapComponent.addMarker([Number(place.lat), Number(place.lng)], 'destination');
     bottomSheet.collapse();
     showManualPickupBanner();
     if (recenterToMaracaibo) {
@@ -434,11 +438,7 @@ export function renderPassengerApp(container) {
       return;
     }
     if (currentState === 'IDLE' || currentState === 'SELECTING_DESTINATION' || currentState === 'FARE_PREVIEW') {
-      selectDestination({
-        display_name: 'Punto de Destino en Maracaibo',
-        lat: latlng.lat,
-        lon: latlng.lng
-      });
+      selectDestination(fromMapPoint({ lat: latlng.lat, lng: latlng.lng }));
     }
   });
 
@@ -528,53 +528,18 @@ export function renderPassengerApp(container) {
           <ul class="search-results" id="search-results"></ul>
 
           <div class="recent-places" style="display:flex; flex-direction:column; gap:12px;">
-          <div class="place-item preset-place" data-name="Basílica de Nuestra Señora de Chiquinquirá, Maracaibo" data-lat="10.6427" data-lon="-71.6125" 
+          ${KNOWN_PLACES.map(lugar => `
+          <div class="place-item preset-place" data-preset-id="${lugar.id}"
                style="display:flex; align-items:center; gap:14px; padding:12px 16px; background:var(--surface-elevated); border-radius:16px; border:1px solid var(--border-color); cursor:pointer; transition:all 0.2s ease;">
-            <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,193,7,0.15); display:flex; align-items:center; justify-content:center; color:var(--x58-yellow-text); flex-shrink:0;">
-              ${icon('home', 20)}
+            <div style="width:40px; height:40px; border-radius:50%; background:${lugar.tone}; display:flex; align-items:center; justify-content:center; color:${lugar.color}; flex-shrink:0;">
+              ${icon(lugar.icon, 20)}
             </div>
             <div class="place-info" style="flex:1;">
-              <strong style="display:block; color:var(--text-primary); font-size:0.98rem; font-weight:600;">Basílica de La Chiquinquirá</strong>
-              <span style="color:var(--text-secondary); font-size:0.82rem;">Casco Central, Maracaibo</span>
+              <strong style="display:block; color:var(--text-primary); font-size:0.98rem; font-weight:600;">${lugar.label}</strong>
+              <span style="color:var(--text-secondary); font-size:0.82rem;">${lugar.secondary}</span>
             </div>
-            <span style="color:var(--x58-yellow-text); font-size:1.1rem;">➔</span>
-          </div>
-
-          <div class="place-item preset-place" data-name="Centro Comercial Sambil Maracaibo" data-lat="10.6975" data-lon="-71.6342" 
-               style="display:flex; align-items:center; gap:14px; padding:12px 16px; background:var(--surface-elevated); border-radius:16px; border:1px solid var(--border-color); cursor:pointer; transition:all 0.2s ease;">
-            <div style="width:40px; height:40px; border-radius:50%; background:rgba(0,210,255,0.15); display:flex; align-items:center; justify-content:center; color:var(--accent-secondary); flex-shrink:0;">
-              ${icon('briefcase', 20)}
-            </div>
-            <div class="place-info" style="flex:1;">
-              <strong style="display:block; color:var(--text-primary); font-size:0.98rem; font-weight:600;">Sambil Maracaibo</strong>
-              <span style="color:var(--text-secondary); font-size:0.82rem;">Av. Goajira, Maracaibo</span>
-            </div>
-            <span style="color:var(--accent-secondary); font-size:1.1rem;">➔</span>
-          </div>
-
-          <div class="place-item preset-place" data-name="Vereda del Lago Maracaibo" data-lat="10.6658" data-lon="-71.5975" 
-               style="display:flex; align-items:center; gap:14px; padding:12px 16px; background:var(--surface-elevated); border-radius:16px; border:1px solid var(--border-color); cursor:pointer; transition:all 0.2s ease;">
-            <div style="width:40px; height:40px; border-radius:50%; background:rgba(0,230,118,0.15); display:flex; align-items:center; justify-content:center; color:var(--success); flex-shrink:0;">
-              ${icon('mapPin', 20)}
-            </div>
-            <div class="place-info" style="flex:1;">
-              <strong style="display:block; color:var(--text-primary); font-size:0.98rem; font-weight:600;">Vereda del Lago</strong>
-              <span style="color:var(--text-secondary); font-size:0.82rem;">Av. El Milagro, Maracaibo</span>
-            </div>
-            <span style="color:var(--success); font-size:1.1rem;">➔</span>
-          </div>
-
-          <div class="place-item preset-place" data-name="Calle 72 / 5 de Julio, Maracaibo" data-lat="10.6689" data-lon="-71.6167" 
-               style="display:flex; align-items:center; gap:14px; padding:12px 16px; background:var(--surface-elevated); border-radius:16px; border:1px solid var(--border-color); cursor:pointer; transition:all 0.2s ease;">
-            <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,152,0,0.15); display:flex; align-items:center; justify-content:center; color:var(--warning); flex-shrink:0;">
-              ${icon('mapPin', 20)}
-            </div>
-            <div class="place-info" style="flex:1;">
-              <strong style="display:block; color:var(--text-primary); font-size:0.98rem; font-weight:600;">5 de Julio / Calle 72</strong>
-              <span style="color:var(--text-secondary); font-size:0.82rem;">Sector Tierra Negra, Maracaibo</span>
-            </div>
-            <span style="color:var(--warning); font-size:1.1rem;">➔</span>
-          </div>
+            <span style="color:${lugar.color}; font-size:1.1rem;">➔</span>
+          </div>`).join('')}
           </div>
         </div>
       </div>
@@ -594,11 +559,10 @@ export function renderPassengerApp(container) {
     bottomSheet.content.onclick = (e) => {
       const preset = e.target.closest('.preset-place');
       if (preset) {
-        selectDestination({
-          display_name: preset.dataset.name,
-          lat: preset.dataset.lat,
-          lon: preset.dataset.lon
-        });
+        // El marcado solo lleva el id: las coordenadas canonicas viven en
+        // knownPlaces y no pueden divergir de lo que se muestra.
+        const lugar = findKnownPlace(preset.dataset.presetId);
+        if (lugar) selectDestination(fromPreset(lugar));
       }
     };
 
@@ -607,58 +571,110 @@ export function renderPassengerApp(container) {
       liveInput.focus();
       liveInput.addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
-        const query = e.target.value;
+        const query = e.target.value.trim();
         if (query.length > 2) {
-          searchTimeout = setTimeout(() => fetchNominatim(query), 500);
+          searchTimeout = setTimeout(() => ejecutarBusquedaDestino(query), 500);
+        } else {
+          // Campo vacio o muy corto: se invalida lo que este en vuelo para
+          // que una respuesta tardia no repueble una lista ya limpia.
+          buscadorDestinos.cancel();
+          const resultsContainer = document.getElementById('search-results');
+          if (resultsContainer) resultsContainer.innerHTML = '';
         }
       });
     }
   }
 
-  async function fetchNominatim(query) {
-    const resultsContainer = document.getElementById('search-results');
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Maracaibo, Zulia, Venezuela')}&limit=5`);
-      const data = await res.json();
-      resultsContainer.innerHTML = '';
-      (Array.isArray(data) ? data : []).forEach(item => {
-        // Nominatim es un servicio externo: sus coordenadas se validan y su
-        // texto nunca entra por innerHTML.
-        const lat = safeCoordinate(item?.lat, 'lat');
-        const lon = safeCoordinate(item?.lon, 'lng');
-        const label = String(item?.display_name ?? '').trim();
-        if (lat === null || lon === null || !label) return;
+  /** Nominatim crudo: el respaldo de siempre, con sus validaciones. */
+  async function buscarNominatim(query) {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Maracaibo, Zulia, Venezuela')}&limit=5`);
+    const data = await res.json();
+    // Nominatim es un servicio externo: sus coordenadas se validan y su
+    // texto nunca entra por innerHTML.
+    return (Array.isArray(data) ? data : []).filter(item =>
+      safeCoordinate(item?.lat, 'lat') !== null
+      && safeCoordinate(item?.lon, 'lng') !== null
+      && String(item?.display_name ?? '').trim());
+  }
 
-        const li = document.createElement('li');
-        li.style.cssText = 'padding:12px; border-bottom:1px solid var(--border-color); cursor:pointer; color:var(--text-primary); display:flex; align-items:center; gap:10px;';
-        // El icono es markup propio de la aplicación; la dirección va como texto.
-        const pin = document.createElement('span');
-        pin.className = 'search-result-pin';
-        pin.innerHTML = icon('mapPin');
-        const name = document.createElement('span');
-        name.textContent = label;
-        li.append(pin, name);
-        li.addEventListener('click', () => selectDestination({ ...item, lat, lon, display_name: label }));
-        resultsContainer.appendChild(li);
+  // Google Places cuando este configurado y disponible; Nominatim como
+  // respaldo. Cada busqueda invalida a las anteriores: una respuesta lenta
+  // jamas pisa a una mas nueva (MAPS-2A).
+  const buscadorDestinos = createDestinationSearch({
+    placesProvider: getPlacesProvider(),
+    nominatimSearch: buscarNominatim
+  });
+
+  async function ejecutarBusquedaDestino(query) {
+    const resultsContainer = document.getElementById('search-results');
+    if (!resultsContainer) return;
+    let respuesta;
+    try {
+      respuesta = await buscadorDestinos.search(query);
+    } catch {
+      return;
+    }
+    if (respuesta.stale) return;
+
+    resultsContainer.innerHTML = '';
+    for (const candidato of respuesta.candidates) {
+      const li = document.createElement('li');
+      li.style.cssText = 'padding:12px; border-bottom:1px solid var(--border-color); cursor:pointer; color:var(--text-primary); display:flex; align-items:center; gap:10px;';
+      // El icono es markup propio de la aplicacion; los textos del proveedor
+      // van como texto plano, nunca por innerHTML.
+      const pin = document.createElement('span');
+      pin.className = 'search-result-pin';
+      pin.innerHTML = icon('mapPin');
+      const textos = document.createElement('span');
+      textos.style.cssText = 'display:flex;flex-direction:column;min-width:0';
+      const titulo = document.createElement('strong');
+      titulo.style.cssText = 'font-size:.92rem;font-weight:600';
+      titulo.textContent = candidato.title;
+      textos.appendChild(titulo);
+      if (candidato.subtitle) {
+        const detalle = document.createElement('small');
+        detalle.style.cssText = 'color:var(--text-secondary);font-size:.78rem';
+        detalle.textContent = candidato.subtitle;
+        textos.appendChild(detalle);
+      }
+      li.append(pin, textos);
+      li.addEventListener('click', async () => {
+        // `resolve()` entrega la ubicacion canonica DEFINITIVA del proveedor
+        // que mostro el resultado. Sus coordenadas ya no cambian nunca.
+        let canonica = null;
+        try {
+          canonica = await candidato.resolve();
+        } catch {
+          canonica = null;
+        }
+        if (!canonica) {
+          showToast('No pudimos confirmar ese destino. Intenta con otro resultado.', 'error');
+          return;
+        }
+        selectDestination(canonica);
       });
-    } catch (err) {
-      console.error('Nominatim error', err);
+      resultsContainer.appendChild(li);
     }
   }
 
   let selectedPaymentMethod = 'pago_movil';
 
   let currentSelectedDestinationName = 'Vereda del Lago, Maracaibo';
+  // La ubicacion canonica seleccionada (MAPS-2A): marcador, ruta y payload
+  // del viaje leen de ESTE objeto. Es inmutable y nadie re-geocodifica su
+  // texto: sus lat/lng son la autoridad final.
+  let currentSelectedDestination = null;
 
-  async function selectDestination(place, { originOverride = null } = {}) {
+  async function selectDestination(location, { originOverride = null } = {}) {
     const selectionId = ++destinationSelectionId;
-    currentSelectedDestinationName = place.display_name || 'Punto de Destino en Maracaibo';
-    const lat = safeCoordinate(place?.lat, 'lat');
-    const lon = safeCoordinate(place?.lon, 'lng');
+    currentSelectedDestinationName = location?.displayName || 'Punto de Destino en Maracaibo';
+    const lat = safeCoordinate(location?.lat, 'lat');
+    const lon = safeCoordinate(location?.lng, 'lng');
     if (lat === null || lon === null) {
       showToast('No pudimos identificar las coordenadas de ese destino.', 'error');
       return;
     }
+    currentSelectedDestination = location;
     if (!isInsideMaracaiboServiceArea({ lat, lng: lon })) {
       setState('IDLE');
       mapComponent.clearRoute();
@@ -675,7 +691,7 @@ export function renderPassengerApp(container) {
         origin = await getPassengerOrigin();
       } catch (error) {
         locationToast?.close();
-        beginManualPickupSelection(place);
+        beginManualPickupSelection(location);
         return;
       }
       locationToast?.close();
@@ -684,7 +700,7 @@ export function renderPassengerApp(container) {
 
     if (!isInsideMaracaiboServiceArea(origin)) {
       showToast('Tu GPS aparece fuera de Maracaibo. Marca en el mapa el punto real donde debe recogerte el conductor.', 'error', 9000);
-      beginManualPickupSelection(place, { recenterToMaracaibo: true });
+      beginManualPickupSelection(location, { recenterToMaracaibo: true });
       return;
     }
 
@@ -828,7 +844,13 @@ export function renderPassengerApp(container) {
         accuracy: pickupLocation.accuracy || null,
         source: pickupLocation.source || 'gps'
       },
-      destination: { address: currentSelectedDestinationName || 'Vereda del Lago, Maracaibo', lat: destCoords[0], lng: destCoords[1] },
+      // El destino del viaje sale del MISMO objeto canonico que pinto el
+      // marcador y pidio la ruta: cero deriva de coordenadas (MAPS-2A).
+      destination: {
+        address: currentSelectedDestination?.displayName || currentSelectedDestinationName || 'Vereda del Lago, Maracaibo',
+        lat: currentSelectedDestination?.lat ?? destCoords[0],
+        lng: currentSelectedDestination?.lng ?? destCoords[1]
+      },
       fareEUR: fareUSD,
       distanceKm: fareData?.distanceKm,
       durationMin: fareData?.durationMin,

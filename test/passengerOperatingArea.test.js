@@ -34,5 +34,7 @@ test('PassengerApp valida destino y origen antes de crear la carrera', () => {
   const source = fs.readFileSync(path.join(root, 'src/pages/passenger/passengerApp.js'), 'utf8');
   assert.match(source, /isInsideMaracaiboServiceArea\(\{ lat, lng: lon \}\)/);
   assert.match(source, /isInsideMaracaiboServiceArea\(origin\)/);
-  assert.match(source, /beginManualPickupSelection\(place, \{ recenterToMaracaibo: true \}\)/);
+  // Desde MAPS-2A el destino elegido es la ubicacion canonica `location`;
+  // la guardia de re-centrado es la misma.
+  assert.match(source, /beginManualPickupSelection\(location, \{ recenterToMaracaibo: true \}\)/);
 });
