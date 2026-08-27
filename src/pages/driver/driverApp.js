@@ -165,26 +165,71 @@ export function renderDriverApp(container) {
     // cuenta) + sincronizador idempotente. El pill informa SIEMPRE la verdad:
     // «guardado en este dispositivo» no es «confirmado por el servidor».
     const tripQueue = createTripEventQueue({ userId: user.id });
+    // OFFLINE-1B: el indicador vive EN la tarjeta del viaje (donde el
+    // conductor mira) y el pill flotante queda como respaldo SOLO cuando no
+    // hay tarjeta visible (finalizacion pendiente tras cerrar el viaje, o
+    // panel minimizado, que ademas marca su boton con un punto ambar). En la
+    // prueba de campo real el pill anterior quedo detras de la barra
+    // inferior y de la tarjeta: por eso ahora el estado se pinta DONDE se
+    // opera el viaje.
     const syncPill = document.createElement('div');
     syncPill.id = 'trip-sync-pill';
     syncPill.hidden = true;
-    document.getElementById('driver-map')?.appendChild(syncPill);
+    syncPill.setAttribute('aria-live', 'polite');
+    container.querySelector('.driver-app')?.appendChild(syncPill);
+    let ultimoEstadoSync = null;
+    let ultimoDetalleSync = {};
     const pintarEstadoSync = (estado, detalle = {}) => {
+        ultimoEstadoSync = estado;
+        ultimoDetalleSync = detalle;
         const textos = {
             [SYNC_STATE.PENDING]: detalle.savedOffline
-                ? 'Accion guardada · Pendiente de sincronizacion'
-                : `Pendiente de sincronizacion (${detalle.pending ?? ''})`,
+                ? 'Guardado sin conexion · Pendiente de sincronizacion'
+                : 'Pendiente de sincronizacion',
             [SYNC_STATE.SYNCING]: 'Sincronizando…',
             [SYNC_STATE.SYNCED]: 'Viaje sincronizado',
-            [SYNC_STATE.ERROR]: 'Error de sincronizacion · se reintentara'
+            [SYNC_STATE.ERROR]: 'No se pudo sincronizar · Se reintentara'
         };
         const texto = textos[estado];
-        syncPill.hidden = !texto;
+        const persistente = estado === SYNC_STATE.PENDING || estado === SYNC_STATE.ERROR;
+
+        // 1) La franja integrada en la tarjeta activa (si esta montada).
+        const integrados = [...document.querySelectorAll('[data-trip-sync]')]
+            .filter(elemento => elemento.isConnected);
+        for (const franja of integrados) {
+            franja.hidden = !texto;
+            if (texto) franja.textContent = texto;
+            franja.classList.toggle('is-error', estado === SYNC_STATE.ERROR);
+            franja.classList.toggle('is-ok', estado === SYNC_STATE.SYNCED);
+        }
+
+        // 2) El pill flotante: respaldo cuando NO hay franja visible (sin
+        //    tarjeta, o panel minimizado).
+        const franjaVisible = integrados.length > 0 && !tripPanelCollapsed;
+        syncPill.hidden = !texto || franjaVisible;
         if (texto) syncPill.textContent = texto;
         syncPill.classList.toggle('is-error', estado === SYNC_STATE.ERROR);
         syncPill.classList.toggle('is-ok', estado === SYNC_STATE.SYNCED);
+
+        // 3) El boton de restaurar el panel marca los pendientes.
+        tripPanelToggle?.classList.toggle('has-pending-sync', persistente);
+
         if (estado === SYNC_STATE.SYNCED) {
-            window.setTimeout(() => { if (syncPill.classList.contains('is-ok')) syncPill.hidden = true; }, 4000);
+            // El exito no ocupa la interfaz para siempre; lo pendiente y el
+            // error si son persistentes hasta que el sincronizador diga otra
+            // cosa (jamas un timeout marca algo como sincronizado).
+            window.setTimeout(() => {
+                if (ultimoEstadoSync === SYNC_STATE.SYNCED) {
+                    syncPill.hidden = true;
+                    for (const franja of document.querySelectorAll('[data-trip-sync]')) franja.hidden = true;
+                }
+            }, 4000);
+        }
+    };
+    /** Reaplica el ultimo estado sobre una vista recien montada. */
+    const reaplicarEstadoSync = () => {
+        if (ultimoEstadoSync && ultimoEstadoSync !== SYNC_STATE.IDLE) {
+            pintarEstadoSync(ultimoEstadoSync, ultimoDetalleSync);
         }
     };
     const tripSync = createTripTransitionSync({
@@ -587,6 +632,7 @@ export function renderDriverApp(container) {
 
     function setTripPanelCollapsed(collapsed) {
         tripPanelCollapsed = Boolean(collapsed);
+        reaplicarEstadoSync();
         activeTripContainer.classList.toggle('trip-panel-collapsed', tripPanelCollapsed);
         tripPanelToggle.setAttribute('aria-expanded', String(!tripPanelCollapsed));
         tripPanelToggle.querySelector('.trip-toggle-icon').textContent = tripPanelCollapsed ? '⌃' : '⌄';
@@ -709,6 +755,7 @@ export function renderDriverApp(container) {
         // el cargador solo pinta sobre elementos vivos, y si no hay foto o el
         // acceso no corresponde, el avatar local se queda tal cual.
         hydratePrivatePhotos(enRouteView, privatePhotos);
+        reaplicarEstadoSync();
         showTripRoute(trip, 'PICKUP');
     }
 
@@ -743,6 +790,7 @@ export function renderDriverApp(container) {
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(waitingView);
         hydratePrivatePhotos(waitingView, privatePhotos);
+        reaplicarEstadoSync();
         showTripRoute(trip, 'PICKUP');
     }
 
@@ -766,6 +814,7 @@ export function renderDriverApp(container) {
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(inTripView);
         hydratePrivatePhotos(inTripView, privatePhotos);
+        reaplicarEstadoSync();
         showTripRoute(trip, 'DESTINATION');
     }
 
@@ -985,6 +1034,7 @@ export function renderDriverApp(container) {
         activeTripContainer.innerHTML = '';
         activeTripContainer.appendChild(view);
         hydratePrivatePhotos(view, privatePhotos);
+        reaplicarEstadoSync();
         showTripRoute(currentTrip, ['IN_PROGRESS', 'IN_TRIP'].includes(currentTrip.status) ? 'DESTINATION' : 'PICKUP');
         guardarSnapshotDeViaje(currentTrip, currentPassenger, currentTrip.status);
         tripSync.flush().catch(() => {});

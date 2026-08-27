@@ -644,8 +644,24 @@ html.theme-light .driver-app{--cockpit:var(--x58-surface-2);--cockpit-line:var(-
 .driver-nav-footer .driver-nav-eta{color:#00E676}
 .driver-nav-footer .driver-nav-target{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:auto;font-weight:600;color:#94a3b8}
 
-/* OFFLINE-TRIP-1A — pill de estado de sincronizacion del viaje */
-#trip-sync-pill{position:absolute;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:960;max-width:92%;padding:8px 14px;border-radius:999px;background:rgba(12,19,31,.94);color:#ffd970;border:1px solid rgba(255,196,0,.5);font-size:.68rem;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+/* =========================================================================
+   OFFLINE-TRIP-1B — estado de sincronizacion SIEMPRE visible
+   La prueba de campo real demostro que el pill anclado al fondo del mapa
+   (bottom:14px) quedaba DETRAS de la barra inferior (franja 10-76px) y de
+   la tarjeta del viaje (desde 84px). Ahora el estado vive EN la tarjeta
+   (franja integrada) y el pill flotante es respaldo: fixed, centrado JUSTO
+   encima de la barra inferior, en el hueco de la tarjeta cuando esta no
+   existe o esta minimizada. Nada tapa: boton primario (debajo de la franja
+   en el flujo), banner de navegacion (arriba), atribucion de Google (mas
+   abajo), barra inferior (z y posicion respetados).
+   ========================================================================= */
+.trip-sync-status{margin-top:9px;padding:8px 11px;border-radius:12px;background:rgba(255,196,0,.09);border:1px solid rgba(255,196,0,.45);color:#ffd970;font-size:.62rem;font-weight:850;text-align:center}
+.trip-sync-status[hidden]{display:none}
+.trip-sync-status.is-error{background:rgba(255,92,115,.09);border-color:rgba(255,92,115,.55);color:#ffb4c0}
+.trip-sync-status.is-ok{background:rgba(0,223,120,.09);border-color:rgba(0,223,120,.5);color:#7ff0bb}
+#trip-sync-pill{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:1200;max-width:92%;padding:8px 14px;border-radius:999px;background:rgba(12,19,31,.96);color:#ffd970;border:1px solid rgba(255,196,0,.5);font-size:.68rem;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 8px 22px rgba(0,0,0,.4)}
 #trip-sync-pill[hidden]{display:none}
 #trip-sync-pill.is-error{border-color:rgba(255,92,115,.6);color:#ffb4c0}
 #trip-sync-pill.is-ok{border-color:rgba(0,223,120,.55);color:#7ff0bb}
+/* El boton de restaurar el panel minimizado marca los pendientes. */
+.driver-trip-panel-toggle.has-pending-sync::after{content:"";position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;background:var(--x58-yellow);border:2px solid #0e0d0b;box-shadow:0 0 8px rgba(255,196,0,.8)}

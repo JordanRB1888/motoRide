@@ -58,6 +58,7 @@ function createTripSheet({ trip, passenger, stage, title, status, actionLabel, o
             <i class="destination"></i><div><small>Destino</small><strong>${destination}</strong></div>
         </div>
         ${stage === 'trip' ? '<div class="trip-progress"><span></span></div>' : ''}
+        <div class="trip-sync-status" data-trip-sync hidden aria-live="polite"></div>
         <button class="trip-primary-action" type="button">${actionLabel}</button>
     `;
 
