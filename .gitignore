@@ -10,3 +10,9 @@ server/data/*.sqlite-wal
 server/data/*.sqlite-shm
 server/data/private-uploads/
 .claude/
+# Credenciales y material sensible: jamas al repositorio
+.env.*
+!.env.example
+*.pem
+*.key
+coverage/
