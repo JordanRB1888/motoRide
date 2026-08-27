@@ -3,6 +3,33 @@ import { fareCalculator } from '../services/fareCalculator.js';
 import { showToast } from './toast.js';
 import { normalizeVehicleType, vehicleImage } from '../utils/vehicleMedia.js';
 import { readAppliedTheme } from '../utils/themePreference.js';
+import { getGoogleMapsLoader } from '../services/googleMapsService.js';
+import { createGoogleMapEngine } from './googleMapEngine.js';
+import { createLeafletEngine } from './leafletMapEngine.js';
+
+/**
+ * Componente de mapa de +58Express.
+ *
+ * Desde GOOGLE-MAPS-1 el render se delega en un MOTOR intercambiable:
+ *
+ *   - con VITE_GOOGLE_MAPS_API_KEY configurada, se intenta Google Maps;
+ *   - sin clave, o si Google no puede cargar (clave rechazada, red caida,
+ *     cuota agotada), se usa Leaflet: la experiencia de siempre, intacta.
+ *
+ * El fallo de Google NUNCA deja la pantalla sin mapa ni rompe la aplicacion:
+ * degrada al respaldo y las operaciones pedidas mientras se decidia el motor
+ * se reproducen en orden sobre el que haya ganado.
+ *
+ * Lo que NO cambia con el motor:
+ *
+ *   - el arte aprobado de los marcadores (vehiculos animados, pasajero
+ *     esperando, bandera de destino) es el mismo HTML en ambos;
+ *   - la geolocalizacion del dispositivo sigue siendo navigator.geolocation,
+ *     nunca un servicio de Google;
+ *   - la ruta y su distancia siguen saliendo de OSRM via fareCalculator: el
+ *     motor solo PINTA la geometria. Google no participa en la tarifa, en el
+ *     despacho ni en el area de servicio de Maracaibo.
+ */
 
 const vehicleMarkerArtwork = vehicleType => vehicleImage(vehicleType, {
   variant: 'map',
@@ -32,6 +59,26 @@ const waitingPassengerHtml = () => `
     <span class="passenger-status-label">Esperando</span>
   </div>`;
 
+const userLocationHtml = () => `<div style="width: 24px; height: 24px; background-color: var(--accent-secondary, #00D2FF); border-radius: 50%; border: 3px solid white; box-shadow: 0 0 15px rgba(0,210,255,0.8); animation: pulse 2s infinite;"></div>`;
+
+const destinationFlagHtml = () => `
+  <div class="flag-3d-container">
+    <div class="flag-head">${icon('flag', 16)}</div>
+    <div class="beacon-pillar" style="background: linear-gradient(to top, rgba(255,77,77,0.8), rgba(255,77,77,0)); box-shadow: 0 0 15px var(--danger);"></div>
+  </div>`;
+
+/**
+ * El motor de Google no entiende var(--…) de CSS: el color de la ruta se
+ * traduce a un valor concreto antes de llegar a cualquier motor.
+ */
+const resolveRouteColor = (color) => {
+  if (typeof color === 'string' && color.startsWith('var(')) {
+    const respaldo = color.match(/,\s*([^)]+)\)/);
+    return respaldo ? respaldo[1].trim() : '#00D2FF';
+  }
+  return color || '#00D2FF';
+};
+
 export class MapComponent {
   constructor(containerId, options = {}) {
     this.targetElement = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
@@ -42,15 +89,24 @@ export class MapComponent {
       is3D: false, // Standard 2D flat mode
       ...options
     };
-    
+
     this.markers = new Map();
     this.routeLayer = null;
     this.userMarker = null;
     this.pickupMarker = null;
     this.destinationMarker = null;
-    this.tileLayer = null;
     this.is3DActive = false;
     this._destroyed = false;
+
+    // Motor de render. `map` se conserva como bandera de listo porque todos
+    // los metodos historicos preguntan `if (!this.map)`.
+    this.engine = null;
+    this.map = null;
+    this._pendingOps = null;
+    this._clickCallback = null;
+    this._routePoints = null;
+    this._resolveEngineReady = null;
+    this._engineReady = new Promise(resolve => { this._resolveEngineReady = resolve; });
 
     this._initMap();
     this._createLocationButton();
@@ -60,40 +116,99 @@ export class MapComponent {
 
   _initMap() {
     if (!this.targetElement) return;
-    try {
-      this.map = L.map(this.targetElement, { zoomControl: true }).setView(this.options.center, this.options.zoom);
-      
-      // El mapa arranca con el mismo tema que el resto de la interfaz: antes
-      // caía en 'light' por omisión y mostraba tiles claros sobre una interfaz
-      // oscura en la primera visita.
-      this.tileLayer = L.tileLayer(this._tileUrlForTheme(readAppliedTheme(document.documentElement)), {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 20
-      }).addTo(this.map);
+    // `options.mapsLoader` existe para las pruebas: permite ejercitar la rama
+    // de Google y la degradacion sin tocar el singleton ni la red.
+    const loader = this.options.mapsLoader || getGoogleMapsLoader();
+    if (loader.isConfigured()) {
+      // La carga de Google es asincrona: mientras se decide, las operaciones
+      // se encolan y se reproducen sobre el motor que gane.
+      this._pendingOps = [];
+      this._initGoogle(loader);
+    } else {
+      this._initLeaflet();
+    }
+  }
 
+  _initLeaflet() {
+    try {
+      this.engine = createLeafletEngine({
+        container: this.targetElement,
+        center: { lat: this.options.center[0], lng: this.options.center[1] },
+        zoom: this.options.zoom,
+        // El mapa arranca con el mismo tema que el resto de la interfaz: antes
+        // caía en 'light' por omisión y mostraba tiles claros sobre una
+        // interfaz oscura en la primera visita.
+        theme: readAppliedTheme(document.documentElement)
+      });
+      this.map = this.engine.map;
       this._createMapLegend();
+      this._drainPendingOps();
     } catch (err) {
       console.error('[MapComponent] Map init error:', err);
     }
   }
 
-  _tileUrlForTheme(theme) {
-    return theme === 'dark'
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  async _initGoogle(loader) {
+    try {
+      const maps = await loader.load();
+      if (this._destroyed) return;
+      this.engine = createGoogleMapEngine({
+        maps,
+        container: this.targetElement,
+        center: { lat: this.options.center[0], lng: this.options.center[1] },
+        zoom: this.options.zoom,
+        theme: readAppliedTheme(document.documentElement)
+      });
+      this.map = this.engine.map;
+      this._createMapLegend();
+      this._drainPendingOps();
+    } catch (error) {
+      // El codigo del fallo es escueto (NO_KEY, AUTH_FAILED, LOAD_TIMEOUT…) y
+      // NUNCA contiene la clave. Un fallo de Google no deja la pantalla sin
+      // mapa: se degrada al motor de siempre y se reproduce la cola.
+      console.warn(`[MapComponent] Google Maps no disponible (${error?.message || 'desconocido'}); usando el mapa de respaldo`);
+      if (!this._destroyed) this._initLeaflet();
+    }
+  }
+
+  /**
+   * Reproduce en orden las operaciones pedidas mientras el motor cargaba.
+   * Con el motor Leaflet sincrono la cola no existe y esto no hace nada.
+   */
+  _drainPendingOps() {
+    const cola = this._pendingOps;
+    this._pendingOps = null;
+    if (this._resolveEngineReady) {
+      this._resolveEngineReady();
+      this._resolveEngineReady = null;
+    }
+    if (cola) {
+      for (const [metodo, args] of cola) {
+        try {
+          this[metodo](...args);
+        } catch (err) {
+          console.warn(`[MapComponent] operación diferida ${metodo} falló:`, err?.message);
+        }
+      }
+    }
+    if (this._clickCallback) this.onMapClick(this._clickCallback);
+  }
+
+  /** true = la operacion quedo encolada porque el motor aun se decide. */
+  _defer(metodo, args) {
+    if (!this.map && this._pendingOps) {
+      this._pendingOps.push([metodo, args]);
+      return true;
+    }
+    return false;
   }
 
   setMapTheme(theme = 'light') {
     // Un cambio de tema que llegue tarde no debe tocar un mapa ya desechado.
-    if (this._destroyed || !this.map) return;
-    if (this.tileLayer) this.map.removeLayer(this.tileLayer);
-    this.tileLayer = L.tileLayer(this._tileUrlForTheme(theme), {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20
-    }).addTo(this.map);
-    this.tileLayer.bringToBack();
+    if (this._destroyed) return;
+    if (this._defer('setMapTheme', [theme])) return;
+    if (!this.engine) return;
+    this.engine.setTheme(theme);
   }
 
   _createMapLegend() {
@@ -108,28 +223,15 @@ export class MapComponent {
       position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
       z-index: 1000; background: var(--x58-surface-overlay); backdrop-filter: blur(16px);
       border: 1.5px solid var(--border-gold, #FFC107); border-radius: 20px;
-      padding: 8px 16px; display: flex; align-items: center; gap: 16px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.6); pointer-events: auto;
+      padding: 6px 14px; display: flex; gap: 14px; align-items: center;
+      font-size: 0.68rem; font-weight: 800; color: var(--text-primary); pointer-events: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35); white-space: nowrap;
     `;
-
     legend.innerHTML = `
-      <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
-        <span style="width:10px; height:10px; border-radius:50%; background:#00E676; box-shadow:0 0 8px #00E676;"></span>
-        Mi ubicación
-      </div>
-      <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
-        <span style="width:10px; height:10px; border-radius:50%; background:#FFC107; box-shadow:0 0 8px #FFC107;"></span>
-        Compañeros
-      </div>
-      <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:800; color:var(--text-primary);">
-        <span style="width:10px; height:10px; border-radius:50%; background:#FF4D4D; box-shadow:0 0 8px #FF4D4D;"></span>
-        SOS activos
-      </div>
+      <span style="display:flex;align-items:center;gap:5px"><i style="width:9px;height:9px;border-radius:50%;background:#00E676;display:inline-block;box-shadow:0 0 8px #00E676"></i>Moto</span>
+      <span style="display:flex;align-items:center;gap:5px"><i style="width:9px;height:9px;border-radius:50%;background:#FFC107;display:inline-block;box-shadow:0 0 8px #FFC107"></i>Carro</span>
+      <span style="display:flex;align-items:center;gap:5px"><i style="width:9px;height:9px;border-radius:50%;background:#00D2FF;display:inline-block;box-shadow:0 0 8px #00D2FF"></i>Tú</span>
     `;
-
-    if (getComputedStyle(this.targetElement).position === 'static') {
-      this.targetElement.style.position = 'relative';
-    }
     this.targetElement.appendChild(legend);
   }
 
@@ -149,80 +251,68 @@ export class MapComponent {
       width: '48px',
       height: '48px',
       borderRadius: '50%',
-      backgroundColor: 'var(--x58-surface-overlay)',
-      backdropFilter: 'blur(16px)',
-      border: '1.5px solid var(--accent-primary)',
-      color: 'var(--x58-yellow-text)',
-      fontSize: '1.3rem',
-      cursor: 'pointer',
+      border: '1.5px solid var(--border-gold, #FFC107)',
+      background: 'var(--x58-surface-overlay)',
+      color: 'var(--text-primary)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      boxShadow: '0 8px 20px rgba(0,0,0,0.5), 0 0 15px rgba(255,193,7,0.25)',
-      transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+      cursor: 'pointer',
+      backdropFilter: 'blur(16px)',
+      boxShadow: '0 8px 24px rgba(0,0,0,.35)'
     });
 
-    this.locateBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      this.locateBtn.style.transform = 'scale(0.85)';
-      setTimeout(() => this.locateBtn.style.transform = 'scale(1)', 150);
+    this.locateBtn.addEventListener('click', async () => {
+      this.locateBtn.disabled = true;
       try {
-        const loc = await this.getUserLocation({ allowFallback: false });
-        this.centerOn(loc.lat, loc.lng, 15);
-        this.setUserLocation(loc.lat, loc.lng);
-        showToast('🎯 Ubicación centrada en tu GPS', 'info');
-      } catch (error) {
-        showToast('No se pudo obtener tu GPS. Revisa el permiso de ubicación precisa.', 'error');
+        const coords = await this.getUserLocation();
+        this.setUserLocation(coords.lat, coords.lng);
+        this.centerOn(coords.lat, coords.lng, 16);
+      } catch {
+        showToast('No pudimos obtener tu ubicación. Activa el GPS.', 'error');
+      } finally {
+        this.locateBtn.disabled = false;
       }
     });
 
-    if (getComputedStyle(this.targetElement).position === 'static') {
-      this.targetElement.style.position = 'relative';
-    }
     this.targetElement.appendChild(this.locateBtn);
   }
 
-  toggle3DMode() {
-    // 2D flat mode locked
-  }
-
   onMapClick(callback) {
+    if (typeof callback !== 'function') return;
+    this._clickCallback = callback;
     if (!this.map) return;
-    this.map.on('click', (e) => {
-      if (typeof callback === 'function') {
-        callback(e.latlng);
-      }
-    });
+    this.engine.onClick(({ latlng }) => callback(latlng));
   }
 
   init(center = { lat: 10.6427, lng: -71.6125 }, zoom = 14) {
-    if (this.map) {
-      const c = Array.isArray(center) ? center : [center.lat, center.lng];
-      this.map.setView(c, zoom);
-    }
+    const c = Array.isArray(center) ? { lat: center[0], lng: center[1] } : center;
+    this.initMap(c.lat, c.lng, zoom);
   }
 
   initMap(lat = 10.6427, lng = -71.6125, zoom = 14) {
-    if (this.map) {
-      this.map.setView([lat, lng], zoom);
-    }
+    if (this._defer('initMap', [lat, lng, zoom])) return;
+    if (!this.map) return;
+    this.engine.setView(lat, lng, zoom);
   }
 
   setUserLocation(lat, lng) {
+    if (this._defer('setUserLocation', [lat, lng])) return;
     if (!this.map) return;
     if (this.userMarker) {
       this.userMarker.setLatLng([lat, lng]);
       return;
     }
-    
-    const userIcon = L.divIcon({
+
+    this.userMarker = this.engine.crearMarcadorHtml({
+      lat,
+      lng,
+      html: userLocationHtml(),
       className: 'user-location-marker',
-      html: `<div style="width: 24px; height: 24px; background-color: var(--accent-secondary, #00D2FF); border-radius: 50%; border: 3px solid white; box-shadow: 0 0 15px rgba(0,210,255,0.8); animation: pulse 2s infinite;"></div>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
+      size: [24, 24],
+      anchor: [12, 12],
+      zIndex: 500
     });
-    
-    this.userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(this.map);
   }
 
   setDriverLocation(lat, lng) {
@@ -230,35 +320,36 @@ export class MapComponent {
   }
 
   addDriverMarker(id, lat, lng, heading = 0, info = {}) {
+    if (this._defer('addDriverMarker', [id, lat, lng, heading, info])) return null;
     if (!this.map) return null;
     if (this.markers.has(id)) {
       this.updateDriverMarker(id, lat, lng, heading);
       return this.markers.get(id);
     }
-    
+
     const vehicleType = normalizeVehicleType(info.vehicleType || info.rideType || info.vehicle?.type);
-    const svgIcon = L.divIcon({
-      className: 'driver-3d-marker live-map-marker',
+    const tooltip = vehicleType === 'CAR' ? 'Automóvil en movimiento' : 'Mototaxi en movimiento';
+
+    const marker = this.engine.crearMarcadorHtml({
+      lat,
+      lng,
       html: vehicleMarkerHtml(vehicleType, heading),
-      iconSize: [58, 58],
-      iconAnchor: [29, 29],
-      tooltipAnchor: [0, -26]
+      className: 'driver-3d-marker live-map-marker',
+      size: [58, 58],
+      anchor: [29, 29],
+      tooltipAnchor: [0, -26],
+      tooltip,
+      tooltipClass: 'live-marker-tooltip',
+      title: tooltip,
+      zIndex: 600
     });
-    
-    const marker = L.marker([lat, lng], { icon: svgIcon, riseOnHover: true }).addTo(this.map);
     marker._vehicleType = vehicleType;
     marker._lastHeading = Number(heading) || 0;
-    marker.bindTooltip(vehicleType === 'CAR' ? 'Automóvil en movimiento' : 'Mototaxi en movimiento', {
-      direction: 'top',
-      className: 'live-marker-tooltip',
-      opacity: 0.96
-    });
     this.markers.set(id, marker);
     return marker;
   }
 
   addMarker(latlng, type = 'driver', options = {}) {
-    if (!this.map) return;
     const coords = Array.isArray(latlng) ? latlng : [latlng.lat, latlng.lng];
     if (type === 'destination') {
       this.setDestinationMarker(coords[0], coords[1]);
@@ -271,15 +362,16 @@ export class MapComponent {
   }
 
   clearMarkers(type = null) {
+    if (this._defer('clearMarkers', [type])) return;
     if (!this.map) return;
     if (type === 'destination' && this.destinationMarker) {
-      this.map.removeLayer(this.destinationMarker);
+      this.destinationMarker.remove();
       this.destinationMarker = null;
     } else if (type === 'pickup' && this.pickupMarker) {
-      this.map.removeLayer(this.pickupMarker);
+      this.pickupMarker.remove();
       this.pickupMarker = null;
-    } else {
-      this.markers.forEach(marker => this.map.removeLayer(marker));
+    } else if (!type) {
+      this.markers.forEach(marker => marker.remove());
       this.markers.clear();
     }
   }
@@ -321,96 +413,99 @@ export class MapComponent {
     const startTime = performance.now();
     const endLat = Number(newLatLng[0]);
     const endLng = Number(newLatLng[1]);
-    
+
     const animate = (currentTime) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      
+
       const eased = 1 - Math.pow(1 - progress, 3);
       const lat = start.lat + (endLat - start.lat) * eased;
       const lng = start.lng + (endLng - start.lng) * eased;
-      
+
       marker.setLatLng([lat, lng]);
-      
+
       if (progress < 1) marker._animationFrame = requestAnimationFrame(animate);
       else marker._animationFrame = null;
     };
-    
+
     marker._animationFrame = requestAnimationFrame(animate);
   }
 
   removeDriverMarker(id) {
+    if (this._defer('removeDriverMarker', [id])) return;
     const marker = this.markers.get(id);
     if (marker) {
-      this.map.removeLayer(marker);
+      marker.remove();
       this.markers.delete(id);
     }
   }
 
   setPickupMarker(lat, lng) {
+    if (this._defer('setPickupMarker', [lat, lng])) return;
     if (!this.map) return;
     if (this.pickupMarker) {
       this._animateMarker(this.pickupMarker, [lat, lng], 700);
       return;
     }
-    
-    const pickupIcon = L.divIcon({
-      className: 'pickup-beacon-marker waiting-map-marker',
+
+    this.pickupMarker = this.engine.crearMarcadorHtml({
+      lat,
+      lng,
       html: waitingPassengerHtml(),
-      iconSize: [58, 72],
-      iconAnchor: [29, 62],
-      tooltipAnchor: [0, -55]
-    });
-    
-    this.pickupMarker = L.marker([lat, lng], { icon: pickupIcon, riseOnHover: true }).addTo(this.map);
-    this.pickupMarker.bindTooltip('Pasajero esperando aquí', {
-      direction: 'top',
-      className: 'live-marker-tooltip passenger-tooltip',
-      opacity: 0.96
+      className: 'pickup-beacon-marker waiting-map-marker',
+      size: [58, 72],
+      anchor: [29, 62],
+      tooltipAnchor: [0, -55],
+      tooltip: 'Pasajero esperando aquí',
+      tooltipClass: 'live-marker-tooltip passenger-tooltip',
+      title: 'Pasajero esperando aquí',
+      zIndex: 650
     });
   }
 
   setDestinationMarker(lat, lng) {
+    if (this._defer('setDestinationMarker', [lat, lng])) return;
     if (!this.map) return;
     if (this.destinationMarker) {
       this.destinationMarker.setLatLng([lat, lng]);
       return;
     }
-    
-    const destIcon = L.divIcon({
+
+    this.destinationMarker = this.engine.crearMarcadorHtml({
+      lat,
+      lng,
+      html: destinationFlagHtml(),
       className: 'destination-flag-marker',
-      html: `
-        <div class="flag-3d-container">
-          <div class="flag-head">${icon('flag', 16)}</div>
-          <div class="beacon-pillar" style="background: linear-gradient(to top, rgba(255,77,77,0.8), rgba(255,77,77,0)); box-shadow: 0 0 15px var(--danger);"></div>
-        </div>
-      `,
-      iconSize: [28, 68],
-      iconAnchor: [14, 68]
+      size: [28, 68],
+      anchor: [14, 68],
+      zIndex: 640
     });
-    
-    this.destinationMarker = L.marker([lat, lng], { icon: destIcon }).addTo(this.map);
   }
 
+  /**
+   * La ruta se calcula con fareCalculator (OSRM), como siempre: esa cifra
+   * alimenta la tarifa y NO cambia con el motor de render. El motor solo
+   * recibe la geometria ya resuelta y la pinta.
+   */
   async drawRoute(start, end, color = 'var(--accent-secondary, #00D2FF)') {
     this.clearRoute();
+    // Con el motor aun decidiendose se espera a que gane uno: drawRoute ya es
+    // asincrono y el resultado (distancia/tiempo) no depende del motor.
+    if (!this.map && this._pendingOps) await this._engineReady;
     if (!this.map) return { distance: 3000, duration: 300 };
 
     const pickupLat = Array.isArray(start) ? start[0] : start.lat;
     const pickupLng = Array.isArray(start) ? start[1] : start.lng;
     const destLat = Array.isArray(end) ? end[0] : end.lat;
     const destLng = Array.isArray(end) ? end[1] : end.lng;
+    const strokeColor = resolveRouteColor(color);
 
     try {
       const routeInfo = await fareCalculator.calculateRoute(pickupLat, pickupLng, destLat, destLng);
       if (routeInfo && routeInfo.geometry && routeInfo.geometry.coordinates) {
         const latlngs = routeInfo.geometry.coordinates.map(c => [c[1], c[0]]);
-        this.routeLayer = L.polyline(latlngs, {
-          color: color,
-          weight: 8,
-          opacity: 1,
-          lineCap: 'round'
-        }).addTo(this.map);
+        this.routeLayer = this.engine.crearPolyline(latlngs, { color: strokeColor, weight: 8, opacity: 1 });
+        this._routePoints = latlngs;
 
         this.fitBounds();
         this._showNavigationBanner(routeInfo, { lat: destLat, lng: destLng });
@@ -421,12 +516,9 @@ export class MapComponent {
     }
 
     const fallbackCoords = [[pickupLat, pickupLng], [destLat, destLng]];
-    this.routeLayer = L.polyline(fallbackCoords, {
-      color: color,
-      weight: 8,
-      opacity: 1
-    }).addTo(this.map);
-    
+    this.routeLayer = this.engine.crearPolyline(fallbackCoords, { color: strokeColor, weight: 8, opacity: 1 });
+    this._routePoints = fallbackCoords;
+
     return { distance: 3500, duration: 420 };
   }
 
@@ -446,30 +538,31 @@ export class MapComponent {
   }
 
   clearRoute() {
-    if (this.routeLayer && this.map) {
-      this.map.removeLayer(this.routeLayer);
+    if (this.routeLayer) {
+      this.routeLayer.remove();
       this.routeLayer = null;
     }
+    this._routePoints = null;
     this.targetElement?.querySelector('.driver-navigation-banner')?.remove();
   }
 
   fitBounds() {
+    if (this._defer('fitBounds', [])) return;
     if (!this.map) return;
-    const latlngs = [];
-    if (this.userMarker) latlngs.push(this.userMarker.getLatLng());
-    if (this.pickupMarker) latlngs.push(this.pickupMarker.getLatLng());
-    if (this.destinationMarker) latlngs.push(this.destinationMarker.getLatLng());
-    if (this.routeLayer) latlngs.push(...this.routeLayer.getLatLngs());
-    
-    if (latlngs.length > 0) {
-      this.map.fitBounds(L.latLngBounds(latlngs), { padding: [50, 50] });
-    }
+    const puntos = [];
+    const aPar = (p) => (Array.isArray(p) ? p : [p.lat, p.lng]);
+    if (this.userMarker) puntos.push(aPar(this.userMarker.getLatLng()));
+    if (this.pickupMarker) puntos.push(aPar(this.pickupMarker.getLatLng()));
+    if (this.destinationMarker) puntos.push(aPar(this.destinationMarker.getLatLng()));
+    if (this._routePoints) puntos.push(...this._routePoints);
+
+    if (puntos.length > 0) this.engine.fitBounds(puntos);
   }
 
   centerOn(lat, lng, zoom = null) {
-    if (this.map) {
-      this.map.setView([lat, lng], zoom || this.map.getZoom(), { animate: true });
-    }
+    if (this._defer('centerOn', [lat, lng, zoom])) return;
+    if (!this.map) return;
+    this.engine.setView(lat, lng, zoom);
   }
 
   getUserLocation({ allowFallback = false } = {}) {
@@ -479,7 +572,7 @@ export class MapComponent {
         else reject(new Error('La geolocalización no está disponible en este dispositivo'));
         return;
       }
-      
+
       navigator.geolocation.getCurrentPosition(
         (position) => {
           resolve({
@@ -504,6 +597,7 @@ export class MapComponent {
     // destrucción del mismo mapa más de una vez.
     if (this._destroyed) return;
     this._destroyed = true;
+    this._pendingOps = null;
 
     if (this._themeHandler) {
       window.removeEventListener('58express:theme-change', this._themeHandler);
@@ -520,15 +614,16 @@ export class MapComponent {
     }
     this.markers.clear();
 
-    if (this.map) {
-      this.map.remove();
-      this.map = null;
+    if (this.engine) {
+      this.engine.destroy();
+      this.engine = null;
     }
+    this.map = null;
 
     this.routeLayer = null;
+    this._routePoints = null;
     this.userMarker = null;
     this.pickupMarker = null;
     this.destinationMarker = null;
-    this.tileLayer = null;
   }
 }
