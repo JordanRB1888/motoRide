@@ -302,7 +302,9 @@ const initialDatabase = {
   driverApplications: [],
   driverDocuments: [],
   adminActions: [],
-  pushSubscriptions: []
+  pushSubscriptions: [],
+  transportSubscriptions: [],
+  scheduledRides: []
 };
 
 const migrationsDirectory = path.join(serverDir, 'migrations');

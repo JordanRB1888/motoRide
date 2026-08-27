@@ -119,14 +119,15 @@ const comoDestino = filas => Object.fromEntries(
 
 /* ========================================================================= */
 
-test('el orden de borrado cubre las once tablas y va de hijas a raices', () => {
-  assert.equal(CANONICAL_DELETE_ORDER.length, 11);
+test('el orden de borrado cubre las trece tablas y va de hijas a raices', () => {
+  assert.equal(CANONICAL_DELETE_ORDER.length, 13);
   assert.deepEqual([...CANONICAL_DELETE_ORDER].sort(), [...PERSISTED_TABLES].sort());
   assert.deepEqual(CANONICAL_INSERT_ORDER, [...CANONICAL_DELETE_ORDER].reverse());
   // Cada hija se borra antes que su padre.
   const posicion = t => CANONICAL_DELETE_ORDER.indexOf(t);
   for (const [hija, padre] of [['adminActions', 'transactions'], ['driverDocuments', 'driverApplications'],
-                               ['messages', 'trips'], ['transactions', 'trips'], ['trips', 'users']]) {
+                               ['messages', 'trips'], ['transactions', 'trips'], ['trips', 'users'],
+                               ['scheduledRides', 'transportSubscriptions'], ['transportSubscriptions', 'users']]) {
     assert.ok(posicion(hija) < posicion(padre), `${hija} debe borrarse antes que ${padre}`);
   }
 });

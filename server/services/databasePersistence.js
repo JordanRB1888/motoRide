@@ -28,7 +28,9 @@ export const PERSISTED_TABLES = Object.freeze([
   'driverApplications',
   'driverDocuments',
   'adminActions',
-  'pushSubscriptions'
+  'pushSubscriptions',
+  'transportSubscriptions',
+  'scheduledRides'
 ]);
 
 // Los nombres de tabla se interpolan en SQL, así que nunca pueden venir de

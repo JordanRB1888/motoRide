@@ -21,7 +21,7 @@
  * anterior.
  *
  * Nunca se tocan `schema_migrations`, los esquemas de plataforma de Supabase,
- * su capa de autenticación ni ninguna tabla fuera de las diez canónicas.
+ * su capa de autenticación ni ninguna tabla fuera de las trece canónicas.
  */
 
 import { isDeepStrictEqual } from 'node:util';
@@ -41,9 +41,11 @@ export const CANONICAL_DELETE_ORDER = Object.freeze([
   'supportMessages',    // -> users
   'notifications',      // -> users
   'pushSubscriptions',  // -> users
+  'scheduledRides',     // -> transportSubscriptions, users
   'transactions',       // -> users, trips
   'trips',              // -> users
   'driverApplications', // -> users
+  'transportSubscriptions', // -> users
   'settings',           // sin dependencias
   'users'               // raíz
 ]);
