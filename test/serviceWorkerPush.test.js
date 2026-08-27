@@ -363,3 +363,69 @@ test('el worker NO guarda credenciales ni envia altas sin autenticar', () => {
   const bloquePush = fuente.slice(fuente.indexOf('const PUSH_PAYLOAD_VERSION'));
   assert.ok(!/fetch\(/.test(bloquePush), 'el bloque de push no puede hacer peticiones');
 });
+
+
+// --------------------------------------------------------------------------
+// Compatibilidad con el emisor real (PUSH-4A)
+// --------------------------------------------------------------------------
+
+test('el payload que produce el backend es exactamente el que este worker entiende', async () => {
+  // Las dos mitades se escribieron en fases distintas y con semanas de por
+  // medio. Comprobar cada una contra su propia idea del contrato no demuestra
+  // que encajen: aqui se toma el payload REAL del servicio de backend y se
+  // mete por el manejador REAL del service worker.
+  const { buildRideOfferPayload } = await import('../server/services/pushNotificationService.js');
+  const payload = buildRideOfferPayload('trp_compat');
+
+  const sw = cargarWorker();
+  await sw.dispatch('push', eventoPush(payload));
+
+  assert.equal(sw.notificaciones.length, 1, 'el worker debia aceptar el payload del backend');
+  assert.equal(sw.notificaciones[0].title, 'Nueva solicitud de viaje');
+  assert.equal(sw.notificaciones[0].options.tag, 'ride-request:trp_compat');
+  // Se compara por JSON: el objeto nace dentro del contexto `vm`, asi que su
+  // prototipo es el de ese realm y la comparacion estricta fallaria por eso
+  // aunque los valores coincidan.
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(sw.notificaciones[0].options.data)),
+    { v: 1, t: 'ride_request', tripId: 'trp_compat' }
+  );
+});
+
+test('las dos mitades coinciden campo a campo', async () => {
+  const { buildRideOfferPayload, PUSH_TYPE } = await import('../server/services/pushNotificationService.js');
+  const payload = buildRideOfferPayload('trp_1');
+  const fuente = fs.readFileSync(swPath, 'utf8');
+
+  // La version que emite el backend es la que exige el worker.
+  assert.equal(payload.v, 1);
+  assert.match(fuente, /const PUSH_PAYLOAD_VERSION = 1;/);
+
+  // Y el tipo que emite el backend esta en la tabla de textos del worker.
+  assert.equal(payload.t, PUSH_TYPE.RIDE_REQUEST);
+  const tabla = fuente.slice(fuente.indexOf('const PUSH_TEXTS'), fuente.indexOf('function leerPayloadPush'));
+  assert.ok(tabla.includes(`${payload.t}:`), `el worker no conoce el tipo ${payload.t}`);
+});
+
+// --------------------------------------------------------------------------
+// La clave privada no puede existir en el navegador
+// --------------------------------------------------------------------------
+
+test('ni el worker ni el frontend tienen noción de clave privada VAPID', () => {
+  const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sospechosos = [
+    'public/sw.js',
+    'src/services/pushSubscriptionService.js',
+    'src/services/pushClientMessages.js',
+    'src/pages/driver/driverApp.js',
+    'src/main.js'
+  ];
+
+  for (const relativo of sospechosos) {
+    const contenido = fs.readFileSync(path.join(raiz, relativo), 'utf8');
+    assert.ok(!/PRIVATE_KEY/.test(contenido), `${relativo} menciona una clave privada`);
+    assert.ok(!/VITE_WEB_PUSH/.test(contenido), `${relativo} expondria configuracion de push al bundle`);
+    // Una clave VAPID real son 87-88 caracteres base64url empezando por B.
+    assert.ok(!/['"`]B[A-Za-z0-9_-]{80,}['"`]/.test(contenido), `${relativo} tiene una clave codificada`);
+  }
+});

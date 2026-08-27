@@ -41,7 +41,8 @@ import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_T
 import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 import { createPushRouter } from './routes/push.js';
-import { createPushNotificationService } from './services/pushNotificationService.js';
+import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
+import { createWebPushSender } from './services/webPushSender.js';
 
 const app = express();
 const allowedOrigins = String(process.env.CLIENT_ORIGIN || 'https://plus58express.vercel.app,http://localhost:3000,http://localhost:5173,http://127.0.0.1:4173')
@@ -575,18 +576,54 @@ function requireApprovedDriver(req, res, next) {
   next();
 }
 
-// Web Push (PUSH-1): solo los cimientos.
+// Web Push.
 //
-// El servicio queda instalado y probado, pero NADIE lo llama todavia: el
-// despacho de carreras no se toca en esta fase. Conectar `notifyRideOffer`
-// dentro de `offerNext` es PUSH-3a, y sera sin `await` para que un proveedor
-// lento no pueda robar segundos de la ventana de quince.
+// El despacho de carreras NO llama a este servicio todavia: conectar
+// `notifyRideOffer` dentro de `offerNext` es PUSH-3a, y sera sin `await` para
+// que un proveedor lento no pueda robar segundos de la ventana de quince.
 //
-// Sin `sender` no hay adaptador real: aunque WEB_PUSH_ENABLED estuviera
-// encendido, el servicio no contacta con ningun proveedor. Eso llega en PUSH-4.
+// El adaptador real solo se construye si la funcionalidad esta encendida. Con
+// la bandera apagada --que es el valor por defecto y el estado de produccion--
+// no se lee ninguna variable VAPID, no se configura nada y no existe forma de
+// contactar con un proveedor.
+function construirPushSender() {
+  if (!isWebPushEnabled()) return { sender: null, enabled: false };
+  try {
+    const sender = createWebPushSender({
+      publicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY,
+      privateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY,
+      subject: process.env.WEB_PUSH_VAPID_SUBJECT,
+      logger: console
+    });
+    console.log('[+58express Push] adaptador real configurado');
+    return { sender, enabled: true };
+  } catch (error) {
+    // Falla cerrado, pero SIN tumbar el servidor.
+    //
+    // Push es entrega auxiliar de mejor esfuerzo: dejar sin servicio el
+    // despacho de carreras de toda la plataforma porque falta una clave de
+    // notificaciones seria desproporcionado, y contradice la regla que rige
+    // desde PUSH-1 --un fallo de push nunca puede impedir que se cree y
+    // despache un viaje--.
+    //
+    // Lo que si se apaga es push ENTERO, no solo el envio: con `enabled` en
+    // falso el alta de suscripciones tambien se rechaza. Aceptar endpoints
+    // para una funcionalidad que no puede entregar seria acumular material
+    // sensible a cambio de nada.
+    //
+    // El codigo es escueto y nunca lleva material de clave dentro.
+    console.error(`[+58express Push] configuracion VAPID invalida: ${error.message}. Push queda DESACTIVADO.`);
+    return { sender: null, enabled: false };
+  }
+}
+
+const { sender: pushSender, enabled: pushEnabled } = construirPushSender();
+
 const pushService = createPushNotificationService({
   database,
   persistRecord,
+  sender: pushSender,
+  enabled: pushEnabled,
   logger: console
 });
 

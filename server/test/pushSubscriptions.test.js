@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import webpush from 'web-push';
 
 const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -26,6 +27,22 @@ const CLAVES = { p256dh: 'BFakeKeyMaterialParaPruebas0123', auth: 'YXV0aC1kZS1wc
 
 let puertoSiguiente = 11700;
 
+/**
+ * Claves VAPID de usar y tirar, generadas en memoria al arrancar la suite.
+ *
+ * Desde PUSH-4A, encender `WEB_PUSH_ENABLED` sin una configuracion VAPID
+ * valida deja push APAGADO a proposito: aceptar endpoints para una
+ * funcionalidad que no puede entregar seria acumular material sensible a
+ * cambio de nada. Estas pruebas necesitan push realmente encendido, asi que
+ * aportan una configuracion valida.
+ *
+ * Se generan en el momento y nunca se escriben en disco: no hay ningun
+ * material de clave en el repositorio. `generateVAPIDKeys` es criptografia
+ * local, sin una sola peticion de red.
+ */
+const VAPID = webpush.generateVAPIDKeys();
+const VAPID_SUBJECT = 'mailto:pruebas@ejemplo.local';
+
 async function startServer(t, { env = {}, dataFile } = {}) {
   const tempDir = dataFile ? null : await mkdtemp(path.join(tmpdir(), 'plus58express-push-'));
   const ruta = dataFile || path.join(tempDir, 'database.sqlite');
@@ -38,6 +55,9 @@ async function startServer(t, { env = {}, dataFile } = {}) {
       DATA_FILE: ruta,
       JWT_SECRET: 'push-test-secret',
       WEB_PUSH_ENABLED: 'true',
+      WEB_PUSH_VAPID_PUBLIC_KEY: VAPID.publicKey,
+      WEB_PUSH_VAPID_PRIVATE_KEY: VAPID.privateKey,
+      WEB_PUSH_VAPID_SUBJECT: VAPID_SUBJECT,
       ...env
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -366,8 +386,9 @@ test('la clave pública informa del estado sin exponer configuración privada', 
   const { url } = await startServer(t, {
     env: {
       WEB_PUSH_ENABLED: 'true',
-      WEB_PUSH_VAPID_PUBLIC_KEY: 'BClavePublicaDePrueba',
-      WEB_PUSH_VAPID_PRIVATE_KEY: 'PRIVADA-QUE-NUNCA-DEBE-SALIR'
+      WEB_PUSH_VAPID_PUBLIC_KEY: VAPID.publicKey,
+      WEB_PUSH_VAPID_PRIVATE_KEY: VAPID.privateKey,
+      WEB_PUSH_VAPID_SUBJECT: VAPID_SUBJECT
     }
   });
   const cuenta = await nuevaCuenta(url);
@@ -376,11 +397,11 @@ test('la clave pública informa del estado sin exponer configuración privada', 
   assert.equal(respuesta.status, 200);
   const texto = await respuesta.text();
 
-  assert.ok(!texto.includes('PRIVADA-QUE-NUNCA-DEBE-SALIR'), 'la clave privada no puede salir jamás');
+  assert.ok(!texto.includes(VAPID.privateKey), 'la clave privada no puede salir jamás');
   const cuerpo = JSON.parse(texto);
   assert.deepEqual(Object.keys(cuerpo).sort(), ['enabled', 'publicKey']);
   assert.equal(cuerpo.enabled, true);
-  assert.equal(cuerpo.publicKey, 'BClavePublicaDePrueba');
+  assert.equal(cuerpo.publicKey, VAPID.publicKey);
 });
 
 // --------------------------------------------------------------------------

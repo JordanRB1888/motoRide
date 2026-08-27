@@ -71,15 +71,26 @@ test('el despacho no invoca push en ningun punto', () => {
   }
 });
 
-test('el servicio de push se construye sin adaptador de envio', () => {
-  // Sin `sender` no hay proveedor real: aunque la bandera estuviera encendida,
-  // PUSH-1 no puede enviar nada a nadie.
+test('el adaptador real solo se construye con la funcionalidad encendida', () => {
+  // En PUSH-1 esta prueba exigia que NO hubiera ningun `sender`, porque
+  // entonces no existia. PUSH-4A instala el adaptador real, asi que lo que hay
+  // que fijar ya no es su ausencia sino su GUARDA: con la bandera apagada no
+  // se construye, y ni siquiera se leen las variables VAPID.
   const construccion = indexCodigo.slice(
-    indexCodigo.indexOf('createPushNotificationService({'),
-    indexCodigo.indexOf('createPushRouter({')
+    indexCodigo.indexOf('function construirPushSender'),
+    indexCodigo.indexOf('const pushService = createPushNotificationService')
   );
-  assert.ok(construccion.length > 0, 'el servicio debia construirse en index.js');
-  assert.ok(!/\bsender\b/.test(construccion), 'PUSH-1 no puede inyectar un sender real');
+  assert.ok(construccion.length > 0, 'el adaptador debia construirse tras una guarda');
+
+  const posGuarda = construccion.indexOf('if (!isWebPushEnabled()) return');
+  const posClave = construccion.indexOf('WEB_PUSH_VAPID_PUBLIC_KEY');
+  assert.ok(posGuarda >= 0, 'falta la guarda de la bandera');
+  assert.ok(posClave > posGuarda, 'las claves no pueden leerse antes de la guarda');
+
+  // Y la configuracion invalida no puede tumbar el servidor: push es entrega
+  // auxiliar, no un requisito del despacho de carreras.
+  assert.match(construccion, /catch \(error\)/);
+  assert.ok(!/process\.exit/.test(construccion), 'un fallo de push no puede matar el proceso');
 });
 
 // --------------------------------------------------------------------------
