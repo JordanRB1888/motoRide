@@ -188,31 +188,20 @@ class DriverGpsTracker {
   }
 
   _onPositionError(err) {
-    eventLogger.log('GPS_TRACKER', `Error de lectura GPS: ${err.message}. Usando coordenadas por defecto en Maracaibo`);
-    
-    // Fallback a coordenadas del centro de Maracaibo (10.6427, -71.6125)
-    const fallbackPayload = {
-      userId: this.activeUser?.id || 'd1',
-      latitude: 10.6427,
-      longitude: -71.6125,
-      heading: 0,
-      speed: 0,
-      batteryLevel: this.batteryLevel,
-      timestamp: Date.now(),
-    };
-
-    // Los errores de GPS --permiso denegado, señal perdida-- pueden repetirse
-    // en ráfaga, y esta rama emitía sin regular. La posición de reserva es
-    // siempre la misma, así que el regulador la deja pasar como señal de vida
-    // espaciada en vez de una vez por error.
-    const now = Date.now();
-    if (!this.locationThrottle.shouldSend(fallbackPayload, now)) return;
-    this.locationThrottle.markSent(fallbackPayload, now);
-
-    const socket = socketClient.getSocket();
-    if (socket && socket.connected) {
-      socket.emit('driver:location_update', fallbackPayload);
-    }
+    // GPS-0: un fallo de GPS NO produce coordenadas. Esta rama fabricaba el
+    // centro de Maracaibo (10.6427, -71.6125) y lo emitia como posicion real
+    // del conductor: el servidor lo tomaba como GPS fresco y el despacho podia
+    // ofrecerle carreras en un punto donde no estaba. El centro de Maracaibo
+    // es un recurso VISUAL del mapa (viewport inicial), jamas una posicion
+    // operativa.
+    //
+    // Sin coordenadas nuevas, la ultima posicion REAL enviada conserva su
+    // marca de tiempo original en el servidor y caduca sola por la regla de
+    // frescura existente (STALE_LOCATION a los 120 s): el conductor deja de
+    // ser candidato de forma natural, que es exactamente lo correcto cuando
+    // no se sabe donde esta. `lastPosition` local tampoco se toca: es la
+    // ultima lectura verdadera, no se refresca artificialmente.
+    eventLogger.log('GPS_TRACKER', `Error de lectura GPS: ${err.message}. Sin posicion operativa hasta recuperar señal.`);
   }
 
   getLastPosition() {
