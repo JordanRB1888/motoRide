@@ -15,6 +15,7 @@ import { fromMapPoint, fromPreset } from '../../utils/canonicalLocation.js';
 import { KNOWN_PLACES, findKnownPlace } from '../../utils/knownPlaces.js';
 import { createDestinationSearch } from '../../services/destinationSearch.js';
 import { getPlacesProvider } from '../../services/placesService.js';
+import { createNavigationRouteService } from '../../services/navigationRoute.js';
 import { createPrivatePhotoScope } from '../../utils/privatePhotoScope.js';
 import { renderRideHistory } from './rideHistory.js';
 import { renderWallet } from './wallet.js';
@@ -657,6 +658,12 @@ export function renderPassengerApp(container) {
     }
   }
 
+  // MAPS-2C: geometria de Google Routes SOLO como mejora visual del
+  // trazado del pasajero. Sin respaldo OSRM propio: la polilinea OSRM ya
+  // esta pintada por drawRoute (y es la que fija la tarifa); si Google no
+  // responde, no se repinta nada y no se duplica ninguna llamada.
+  const rutaVisualGoogle = createNavigationRouteService({ osrmRoute: async () => null });
+
   let selectedPaymentMethod = 'pago_movil';
 
   let currentSelectedDestinationName = 'Vereda del Lago, Maracaibo';
@@ -734,6 +741,20 @@ export function renderPassengerApp(container) {
       const realDurMin = routeInfo?.durationMin || (routeInfo?.duration ? (routeInfo.duration / 60) : calcDurMin);
       const realFare = fareCalculator.calculateFare(realDistKm, realDurMin, selectedRideType);
       showFarePreview(currentSelectedDestinationName, { distanceKm: realDistKm, durationMin: realDurMin }, realFare, [lat, lon]);
+
+      // MAPS-2C: mejora visual progresiva. Con la TARIFA ya fijada por el
+      // routeInfo de OSRM de arriba, se pide la geometria de Google Routes y,
+      // si llega, sustituye SOLO el trazado pintado. Si Google no esta o
+      // falla, la polilinea OSRM visible se queda tal cual. El precio no se
+      // recalcula: navegar y cobrar siguen separados.
+      rutaVisualGoogle.computeNavigationRoute({
+        origin: { lat: pickup[0], lng: pickup[1] },
+        destination: { lat, lng: lon }
+      }).then(({ stale, route }) => {
+        if (stale || !route || route.provider !== 'google') return;
+        if (selectionId !== destinationSelectionId) return;
+        mapComponent.drawNavigationRoute(route);
+      }).catch(() => {});
     }).catch(err => console.warn('Map route draw info:', err));
   }
 

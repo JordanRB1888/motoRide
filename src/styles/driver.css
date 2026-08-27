@@ -624,3 +624,22 @@ html.theme-light .driver-app{--cockpit:var(--x58-surface-2);--cockpit-line:var(-
   height: 58px !important;
   padding: 5px 8px !important;
 }
+
+/* =========================================================================
+   MAPS-2C — Banner de guia de navegacion del conductor
+   Ocupa el sitio del banner anterior (arriba del mapa) sin tapar la tarjeta
+   del viaje, los botones de accion, la barra inferior ni la atribucion de
+   Google (que vive abajo). Sin enlace externo: la guia es de la aplicacion.
+   ========================================================================= */
+.driver-nav-banner{position:absolute;top:calc(145px + env(safe-area-inset-top, 0px));left:12px;right:12px;z-index:950;padding:11px 13px;border-radius:18px;background:rgba(12,19,31,.94);color:#fff;border:1px solid rgba(0,230,118,.55);box-shadow:0 10px 28px rgba(0,0,0,.45);pointer-events:none}
+.driver-nav-banner[hidden]{display:none}
+.driver-nav-banner.is-degraded{border-color:rgba(163,160,154,.45)}
+.driver-nav-main{display:flex;align-items:center;gap:12px;min-width:0}
+.driver-nav-glyph{width:38px;height:38px;display:grid;place-items:center;flex-shrink:0;border-radius:12px;background:rgba(0,230,118,.14);color:#00E676;font-size:1.35rem;line-height:1}
+.driver-nav-banner.is-degraded .driver-nav-glyph{background:rgba(163,160,154,.14);color:#cbd5e1}
+.driver-nav-texts{min-width:0;flex:1}
+.driver-nav-instruction{display:block;font-size:.88rem;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.driver-nav-maneuver-distance{display:block;margin-top:2px;color:#a7f3d0;font-size:.78rem;font-weight:800}
+.driver-nav-footer{margin-top:8px;padding-top:7px;display:flex;align-items:center;gap:10px;border-top:1px solid rgba(255,255,255,.12);color:#cbd5e1;font-size:.68rem;font-weight:800}
+.driver-nav-footer .driver-nav-eta{color:#00E676}
+.driver-nav-footer .driver-nav-target{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:auto;font-weight:600;color:#94a3b8}

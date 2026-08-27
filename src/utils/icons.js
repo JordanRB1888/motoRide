@@ -3,6 +3,14 @@
  */
 
 export const icons = {
+  // Maniobras de navegacion (MAPS-2C): flechas locales de la familia oficial.
+  navStraight: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+  navTurnLeft: '<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
+  navTurnRight: '<polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>',
+  navSlightLeft: '<line x1="17" y1="17" x2="7" y2="7"/><polyline points="7 17 7 7 17 7"/>',
+  navSlightRight: '<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
+  navUturn: '<path d="M16 20v-9a4 4 0 0 0-8 0v9"/><polyline points="12 16 16 20 20 16"/>',
+  navRoundabout: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
   menu: '<path d="M3 12h18M3 6h18M3 18h18" />',
   maximize: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
   arrowRight: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',

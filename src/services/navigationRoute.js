@@ -214,11 +214,14 @@ export function createNavigationRouteService({
             origin: { location: { lat: desde.lat, lng: desde.lng } },
             destination: { location: { lat: hasta.lat, lng: hasta.lng } },
             travelMode,
-            // ETA con tráfico cuando la API lo soporte para la petición; el
-            // proveedor lo ignora limpiamente si no aplica.
+            // ETA con tráfico: aceptado por la superficie real (verificado en
+            // producción durante la activación de Routes).
             routingPreference: 'TRAFFIC_AWARE',
-            languageCode: 'es-419',
-            units: 'METRIC',
+            // OJO: la librería JS RECHAZA `languageCode` y `units` como
+            // propiedades desconocidas (verificado contra la API real desde
+            // el origen de producción). El idioma lo resuelve el runtime de
+            // Maps —las instrucciones llegan en español igualmente— y las
+            // unidades las formatea la aplicación en local (navFormat.js).
             fields: [...GOOGLE_ROUTE_FIELDS]
           }));
           if (mia !== generation) return { stale: true, route: null };

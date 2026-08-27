@@ -508,7 +508,6 @@ export class MapComponent {
         this._routePoints = latlngs;
 
         this.fitBounds();
-        this._showNavigationBanner(routeInfo, { lat: destLat, lng: destLng });
         return routeInfo;
       }
     } catch (e) {
@@ -522,20 +521,9 @@ export class MapComponent {
     return { distance: 3500, duration: 420 };
   }
 
-  _showNavigationBanner(routeInfo, destination) {
-    if (!this.options.navigation || !this.targetElement) return;
-    let banner = this.targetElement.querySelector('.driver-navigation-banner');
-    if (!banner) {
-      banner = document.createElement('div');
-      banner.className = 'driver-navigation-banner';
-      banner.style.cssText = 'position:absolute;top:145px;left:12px;right:12px;z-index:950;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;background:rgba(12,19,31,.94);color:white;border:1px solid rgba(0,230,118,.55);box-shadow:0 10px 28px rgba(0,0,0,.45);pointer-events:auto';
-      this.targetElement.appendChild(banner);
-    }
-    const distance = Number(routeInfo?.distanceKm || 0).toFixed(1);
-    const duration = Math.max(1, Math.round(Number(routeInfo?.durationMin || 0)));
-    const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}&travelmode=driving`;
-    banner.innerHTML = `<div>${icon('chevronUp', 24)}</div><div style="min-width:0;flex:1"><strong style="display:block;font-size:.92rem">Continúa por la ruta marcada</strong><small style="color:#a7f3d0">${distance} km · ${duration} min hasta el destino</small></div><a href="${googleUrl}" target="_blank" rel="noopener" style="padding:8px 10px;border-radius:12px;background:#00E676;color:#101722;text-decoration:none;font-size:.75rem;font-weight:900">NAVEGAR</a>`;
-  }
+  // MAPS-2C: el banner con el enlace externo NAVEGAR desaparecio. La guia
+  // vive dentro de la aplicacion (navigationBanner + routeProgress) y la
+  // ruta del conductor entra por drawNavigationRoute.
 
   /**
    * Pinta una ruta de navegación NORMALIZADA (MAPS-2B: contrato neutro de
@@ -564,7 +552,6 @@ export class MapComponent {
       this.routeLayer = null;
     }
     this._routePoints = null;
-    this.targetElement?.querySelector('.driver-navigation-banner')?.remove();
   }
 
   fitBounds() {

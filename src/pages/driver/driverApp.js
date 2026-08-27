@@ -21,6 +21,9 @@ import { driverDispatchService } from '../../services/driverDispatchService.js';
 import { driverGpsTracker } from '../../services/driverGpsTracker.js';
 import { notificationService } from '../../services/notificationService.js';
 import { canonicalPhotoPath, createPrivatePhotoLoader, hydratePrivatePhotos, userPhotoEndpoint } from '../../utils/privatePhoto.js';
+import { createNavigationBanner } from '../../components/navigationBanner.js';
+import { NAVIGATION_PHASE, createDriverNavigation } from '../../services/driverNavigation.js';
+import { distanceBetweenMeters } from '../../utils/locationQuality.js';
 import { createScreenLifecycle } from '../../utils/screenLifecycle.js';
 import { getPushSubscriptionService, PUSH_RESULT } from '../../services/pushSubscriptionService.js';
 import { PUSH_NAVIGATE_EVENT } from '../../services/pushClientMessages.js';
@@ -153,6 +156,16 @@ export function renderDriverApp(container) {
     let currentMap = new MapComponent('driver-map', { is3D: true, navigation: true });
     const ownDriverMarkerId = `self:${user.id || 'driver'}`;
 
+    // Navegacion dentro de la app (MAPS-2C): banner de guia + controlador.
+    // Las muestras llegan YA aceptadas por GPS-1 (el rastreador solo emite
+    // aceptadas); la posicion inicial de cada fase es la ultima aceptada.
+    const navBanner = createNavigationBanner(document.getElementById('driver-map'));
+    const driverNav = createDriverNavigation({
+        map: currentMap,
+        banner: navBanner,
+        getCurrentPosition: () => driverGpsTracker.lastAcceptedSample
+    });
+
     window.addEventListener('58express:driver-position', event => {
         const position = event.detail || {};
         const lat = Number(position.latitude ?? position.lat);
@@ -161,6 +174,8 @@ export function renderDriverApp(container) {
         currentMap.addDriverMarker(ownDriverMarkerId, lat, lng, Number(position.heading || 0), {
             vehicleType: currentTrip?.rideType || user.vehicleType || user.vehicle?.type || 'MOTO'
         });
+        // Progresion local de la guia: cero llamadas a Google por tick.
+        driverNav.onPositionSample({ lat, lng, accuracy: position.accuracy });
     });
 
     const onlineFab = container.querySelector('#driver-online-fab');
@@ -531,6 +546,7 @@ export function renderDriverApp(container) {
         activeTripContainer.innerHTML = '';
         persistentChatBtn.classList.add('hidden');
         activeChat?.close();
+        driverNav.stop();
         currentMap.clearRoute();
         currentMap.clearMarkers('pickup');
         currentMap.clearMarkers('destination');
@@ -568,14 +584,17 @@ export function renderDriverApp(container) {
         if (Number.isFinite(Number(destination?.lat)) && Number.isFinite(Number(destination?.lng))) {
             currentMap.setDestinationMarker(Number(destination.lat), Number(destination.lng));
         }
-        const driverPosition = driverGpsTracker.getLastPosition();
-        const start = stage === 'DESTINATION' ? pickup : (driverPosition && {
-            lat: driverPosition.latitude,
-            lng: driverPosition.longitude
-        });
+        // MAPS-2C: la ruta del conductor es NAVEGACION por fases (Google con
+        // respaldo OSRM, normalizada). La fase parte SIEMPRE de la posicion
+        // GPS aceptada actual: la ruta a la recogida jamas se reutiliza hacia
+        // el destino.
         const end = stage === 'DESTINATION' ? destination : pickup;
-        if (start && end && Number.isFinite(Number(start.lat)) && Number.isFinite(Number(start.lng)) && Number.isFinite(Number(end.lat)) && Number.isFinite(Number(end.lng))) {
-            currentMap.drawRoute(start, end, stage === 'DESTINATION' ? '#00E676' : '#FFC107');
+        if (end && Number.isFinite(Number(end.lat)) && Number.isFinite(Number(end.lng))) {
+            driverNav.startPhase(
+                stage === 'DESTINATION' ? NAVIGATION_PHASE.DESTINATION : NAVIGATION_PHASE.PICKUP,
+                { lat: Number(end.lat), lng: Number(end.lng) },
+                { label: (stage === 'DESTINATION' ? destination?.address : pickup?.address) || '' }
+            );
         }
         currentMap.fitBounds();
     }
@@ -787,15 +806,19 @@ export function renderDriverApp(container) {
             // redrawing toward pickup here used to erase navigation.
             return;
         }
+        // Solo un movimiento MATERIAL del punto de recogida reinicia la fase
+        // de navegacion: el vaiven normal del GPS del pasajero no puede
+        // convertirse en recalculos contra Google.
+        const previo = currentTrip.pickup;
+        const movimiento = (Number.isFinite(Number(previo?.lat)) && Number.isFinite(Number(previo?.lng)))
+            ? distanceBetweenMeters({ lat: Number(previo.lat), lng: Number(previo.lng) }, { lat, lng })
+            : Infinity;
         currentTrip.pickup = { ...(currentTrip.pickup || {}), lat, lng };
         currentMap.setPickupMarker(lat, lng);
-        const driverPosition = driverGpsTracker.getLastPosition();
-        if (driverPosition?.latitude && driverPosition?.longitude) {
-            currentMap.drawRoute(
-                { lat: driverPosition.latitude, lng: driverPosition.longitude },
-                { lat, lng },
-                '#FFC107'
-            );
+        if (movimiento >= 50) {
+            driverNav.startPhase(NAVIGATION_PHASE.PICKUP, { lat, lng }, {
+                label: currentTrip.pickup?.address || ''
+            });
         }
     });
 

@@ -210,7 +210,10 @@ test('si tambien OSRM falla, la respuesta es honesta: route null, sin lanzar', a
 // §5/§6 — La peticion a Google usa la superficie y la mascara declaradas
 // --------------------------------------------------------------------------
 
-test('computeRoutes recibe DRIVING, es-419, METRIC y SOLO los campos de la mascara', async () => {
+test('computeRoutes usa la forma REAL aceptada: DRIVING + mascara, sin languageCode ni units', async () => {
+  // La activacion de Routes en produccion demostro que la libreria JS
+  // RECHAZA languageCode y units como propiedades desconocidas: si vuelven
+  // al request, Google fallaria SIEMPRE y todo caeria a OSRM en silencio.
   const { servicio, llamadas } = montarServicio({
     google: { routes: [rutaGoogleCruda()] },
     osrm: OSRM_OK
@@ -219,8 +222,9 @@ test('computeRoutes recibe DRIVING, es-419, METRIC y SOLO los campos de la masca
   assert.equal(route.provider, 'google');
   const request = llamadas.compute[0];
   assert.equal(request.travelMode, 'DRIVING');
-  assert.equal(request.languageCode, 'es-419');
-  assert.equal(request.units, 'METRIC');
+  assert.ok(!('languageCode' in request), 'languageCode no existe en la superficie JS real');
+  assert.ok(!('units' in request), 'units no existe en la superficie JS real');
+  assert.equal(request.routingPreference, 'TRAFFIC_AWARE');
   assert.deepEqual(request.fields, [...GOOGLE_ROUTE_FIELDS]);
   assert.deepEqual(request.origin, { location: { lat: 10.64, lng: -71.61 } });
   // Y sin DirectionsService ni DistanceMatrix en ninguna parte del modulo.
@@ -310,12 +314,14 @@ test('el despacho ni conoce el modulo de navegacion', () => {
 });
 
 // --------------------------------------------------------------------------
-// §14 — NAVEGAR sigue en su sitio
+// MAPS-2C — el NAVEGAR verde externo desaparecio: la guia es de la app
 // --------------------------------------------------------------------------
 
-test('el boton NAVEGAR sigue presente: la navegacion interna aun no esta validada', () => {
+test('el boton NAVEGAR verde externo ya no existe y no dejo hueco', () => {
   const mapa = leer('src/components/mapComponent.js');
-  assert.ok(mapa.includes('>NAVEGAR</a>'), 'NAVEGAR no puede retirarse hasta MAPS-2C');
+  assert.ok(!mapa.includes('>NAVEGAR</a>'), 'el enlace externo prominente no puede volver');
+  assert.ok(!mapa.includes('google.com/maps/dir'), 'ninguna URL de navegacion externa en el mapa');
+  assert.ok(!mapa.includes('_showNavigationBanner'), 'el banner viejo se retiro entero, sin hueco');
 });
 
 // --------------------------------------------------------------------------
