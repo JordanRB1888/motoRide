@@ -51,7 +51,12 @@ export function createTransportSubscriptionsRouter({
 
   const responder = (res, resultado, status = 200) => resultado.ok
     ? res.status(status).json({ subscription: resultado.subscription })
-    : res.status(resultado.status).json({ error: resultado.code });
+    : res.status(resultado.status).json({
+      error: resultado.code,
+      // Facturación (2A): el 402 lleva lo necesario para que la pantalla
+      // diga cuánto falta, sin inventar números en el cliente.
+      ...(resultado.required !== undefined ? { required: resultado.required, balance: resultado.balance } : {})
+    });
 
   router.post('/transport/subscriptions', requireAuth, requirePassenger, soloPiloto, escrituras, async (req, res) => {
     responder(res, await safeTransport.createSubscription(req.user, req.body ?? {}), 201);

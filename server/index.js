@@ -44,7 +44,11 @@ import { createPushRouter } from './routes/push.js';
 import { createTripOfflineEventsRouter } from './routes/tripOfflineEvents.js';
 import { createTransportSubscriptionsRouter } from './routes/transportSubscriptions.js';
 import { createTransportDriverRouter } from './routes/transportDriver.js';
-import { createSafeTransportService } from './services/safeTransport.js';
+import {
+  createSafeTransportService,
+  DEFAULT_SAFE_TRANSPORT_PRICING,
+  sanitizeSafeTransportPricing
+} from './services/safeTransport.js';
 import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
@@ -318,6 +322,15 @@ console.log(`[+58express Database] backend = ${databaseBackend.kind}`);
 const storedPricing = database.settings.find(item => item.id === 'pricing');
 if (storedPricing?.value) pricingConfig = { ...pricingConfig, ...storedPricing.value };
 
+// SAFE-2A: tarifas del plan de Transporte Seguro (fijas por categoría + %
+// de la plataforma), editables por el ADMIN y persistidas en settings.
+let safeTransportPricing = { ...DEFAULT_SAFE_TRANSPORT_PRICING };
+{
+  const guardada = database.settings.find(item => item.id === 'safeTransportPricing');
+  const valida = sanitizeSafeTransportPricing(guardada?.value);
+  if (valida) safeTransportPricing = valida;
+}
+
 async function ensureSeedCredentials() {
   let changed = false;
   for (const seedUser of initialDatabase.users) {
@@ -495,7 +508,13 @@ function settleDriverForCompletedTrip(trip) {
   const driver = database.users.find(user => user.id === trip.driverId);
   if (!driver) return null;
   const gross = tripFareUSD(trip);
-  const commission = roundMoney(gross * Number(pricingConfig.commissionRate || 0.15));
+  // SAFE-2A: un viaje puede traer SU tasa de comisión (los del plan de
+  // Transporte Seguro llevan la del plan, 20% por defecto); sin ella rige la
+  // tasa general de siempre. Ningún viaje normal cambia.
+  const tasaComision = Number.isFinite(Number(trip.commissionRate))
+    ? Number(trip.commissionRate)
+    : Number(pricingConfig.commissionRate || 0.15);
+  const commission = roundMoney(gross * tasaComision);
   const net = Math.max(0, roundMoney(gross - commission));
   const platformCollectedPayment = isWalletPayment(trip.paymentMethod);
   const amount = platformCollectedPayment ? net : -commission;
@@ -751,13 +770,17 @@ const safeTransportTripBridge = {
     const distanceKm = Math.round(calculateDistance(pickup.lat, pickup.lng, destination.lat, destination.lng) * 100) / 100;
     const durationMin = Math.max(1, Math.round((distanceKm / 25) * 60));
     const instante = new Date().toISOString();
+    const cobroPorWallet = safeTransport.billingEnabled;
     const trip = {
       id: `trip_sched_${ride.id}`,   // determinista: EL candado de unicidad
       scheduledRideId: ride.id,      // referencia de auditoría y reconciliación
       pickup: tripLocation(pickup),
       destination: tripLocation(destination),
       rideType: ride.vehiclePreference === 'CAR' ? 'CAR' : 'MOTO',
-      paymentMethod: PAYMENT_METHODS.CASH, // MVP: efectivo; créditos, en su fase
+      // SAFE-2A: con la facturación del plan encendida, la carrera se paga de
+      // la WALLET de la clienta al completarse (80% conductor / % plataforma
+      // del plan). Apagada, sigue el efectivo del piloto inicial.
+      paymentMethod: cobroPorWallet ? PAYMENT_METHODS.WALLET : PAYMENT_METHODS.CASH,
       exchangeRateType: 'BCV',
       distanceKm,
       durationMin,
@@ -771,12 +794,28 @@ const safeTransportTripBridge = {
       updatedAt: instante,
       statusHistory: [{ status: TRIP_STATUS.SEARCHING, at: instante, actorId: 'system:safe-transport' }]
     };
-    trip.pricing = calculateFare({
-      distanceKm, durationMin, exchangeRateType: 'BCV', rideType: trip.rideType
-    }, pricingConfig);
-    trip.fareUSD = trip.pricing.fareUSD;
-    trip.fareVES = trip.pricing.fareVES;
-    trip.fareSource = 'SERVER_CALCULATED';
+    if (cobroPorWallet) {
+      // Tarifa FIJA por categoría (config del admin) — el precio pactado del
+      // plan, no el metro del taxímetro.
+      const pricing = safeTransport.getEffectivePricing();
+      trip.fareUSD = pricing.perRide[trip.rideType === 'CAR' ? 'CAR' : 'MOTO'];
+      trip.fareVES = roundMoney(trip.fareUSD * Number(pricingConfig.bcvRate || 0));
+      trip.fareSource = 'SUBSCRIPTION_FIXED';
+      trip.commissionRate = pricing.platformFeeRate;
+      // Cero deuda: sin saldo para ESTA carrera, el viaje no nace.
+      try {
+        ensureWalletCanCoverTrip(trip, passenger);
+      } catch (error) {
+        return { ok: false, code: 'INSUFFICIENT_WALLET_BALANCE', required: error.required, balance: error.balance };
+      }
+    } else {
+      trip.pricing = calculateFare({
+        distanceKm, durationMin, exchangeRateType: 'BCV', rideType: trip.rideType
+      }, pricingConfig);
+      trip.fareUSD = trip.pricing.fareUSD;
+      trip.fareVES = trip.pricing.fareVES;
+      trip.fareSource = 'SERVER_CALCULATED';
+    }
     trip.routeMetricsSource = 'HAVERSINE_URBAN_ESTIMATE';
 
     if (driver) {
@@ -822,6 +861,9 @@ const safeTransport = createSafeTransportService({
   database,
   persistRecord,
   tripBridge: safeTransportTripBridge,
+  // SAFE-2A: las tarifas del plan llegan por función para que la edición del
+  // admin rija EN CALIENTE, sin reiniciar.
+  getPricing: () => safeTransportPricing,
   logger: console
 });
 app.use('/api', createTransportSubscriptionsRouter({
@@ -1228,6 +1270,36 @@ app.get('/api/drivers/nearby', requireAuth, limitadores.cercania, (req, res) => 
       heading: Number(driver.location.heading || 0),
       updatedAt: driver.location.updatedAt || null
     })));
+});
+
+// SAFE-2A: tarifas del plan de Transporte Seguro — el ADMIN las lee y las
+// edita aquí (tarifa fija por categoría + % de la plataforma). Persisten en
+// settings y rigen EN CALIENTE para las próximas carreras del plan.
+app.get('/api/admin/safe-transport/pricing', requireAuth, requireRole('admin'), limitadores.administracion, (_req, res) => {
+  res.json(safeTransportPricing);
+});
+
+app.patch('/api/admin/safe-transport/pricing', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {
+  const propuesta = {
+    perRide: {
+      MOTO: req.body?.perRide?.MOTO ?? safeTransportPricing.perRide.MOTO,
+      CAR: req.body?.perRide?.CAR ?? safeTransportPricing.perRide.CAR
+    },
+    platformFeeRate: req.body?.platformFeeRate ?? safeTransportPricing.platformFeeRate
+  };
+  const valida = sanitizeSafeTransportPricing(propuesta);
+  if (!valida) return res.status(400).json({ error: 'INVALID_SAFE_TRANSPORT_PRICING' });
+  const anterior = safeTransportPricing;
+  safeTransportPricing = valida;
+  const registro = database.settings.find(item => item.id === 'safeTransportPricing');
+  if (registro) registro.value = valida;
+  else database.settings.push({ id: 'safeTransportPricing', value: valida });
+  if (!await persistHttp(res)) {
+    safeTransportPricing = anterior;
+    return;
+  }
+  io.to('admins').emit('admin:safe_transport_pricing_updated', valida);
+  res.json(valida);
 });
 
 app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), limitadores.administracion, async (req, res) => {

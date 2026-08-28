@@ -78,6 +78,42 @@ export function resolvePilotUserIds(value = process.env.SAFE_TRANSPORT_PILOT_USE
   return ids;
 }
 
+/**
+ * Facturación del plan — SAFE-TRANSPORT-2A. Modelo fijado por el dueño:
+ * la clienta mantiene SALDO en su wallet y cada carrera REALIZADA se debita
+ * al completarse (tarifa FIJA por categoría); el conductor cobra el 80% al
+ * instante y la plataforma retiene el 20%. Carrera no realizada = no se
+ * cobra. Sin saldo para la carrera: el viaje NO se crea (cero deuda) y el
+ * plan queda SUSPENDED_PAYMENT hasta recargar y reanudar.
+ * Todo detrás de SAFE_TRANSPORT_BILLING_ENABLED (apagada = efectivo, como
+ * el piloto inicial). Los montos los edita el ADMIN (config persistida).
+ */
+export function isSafeTransportBillingEnabled(value = process.env.SAFE_TRANSPORT_BILLING_ENABLED) {
+  return VALORES_VERDADEROS.has(String(value ?? '').trim().toLowerCase());
+}
+
+export const DEFAULT_SAFE_TRANSPORT_PRICING = Object.freeze({
+  perRide: Object.freeze({ MOTO: 1.2, CAR: 2 }),
+  platformFeeRate: 0.2
+});
+
+/** Valida/normaliza la configuración de precios del plan (para el PUT del
+ *  admin y para la carga desde settings). Devuelve null si es inválida. */
+export function sanitizeSafeTransportPricing(valor) {
+  if (!valor || typeof valor !== 'object') return null;
+  const moto = Number(valor.perRide?.MOTO);
+  const car = Number(valor.perRide?.CAR);
+  const fee = Number(valor.platformFeeRate);
+  if (!Number.isFinite(moto) || moto <= 0 || moto > 100) return null;
+  if (!Number.isFinite(car) || car <= 0 || car > 100) return null;
+  if (!Number.isFinite(fee) || fee < 0 || fee > 0.9) return null;
+  const redondear = n => Math.round(n * 100) / 100;
+  return {
+    perRide: { MOTO: redondear(moto), CAR: redondear(car) },
+    platformFeeRate: Math.round(fee * 1000) / 1000
+  };
+}
+
 /** Cadencia del materializador. El candado es la base de datos, no el reloj. */
 export const DEFAULT_MATERIALIZER_INTERVAL_MS = 5 * 60_000;
 const MIN_INTERVAL_MS = 30_000;
@@ -223,6 +259,8 @@ export function createSafeTransportService({
   persistRecord,
   tripBridge = null,
   pilotUserIds = resolvePilotUserIds(),
+  billingEnabled = isSafeTransportBillingEnabled(),
+  getPricing = () => DEFAULT_SAFE_TRANSPORT_PRICING,
   enabled = isSafeTransportEnabled(),
   horizonMs = DEFAULT_MATERIALIZATION_HORIZON_MS,
   intervalMs = resolveMaterializerIntervalMs(),
@@ -240,6 +278,22 @@ export function createSafeTransportService({
   const pilotoAbierto = pilotUserIds.has(PILOT_OPEN_TOKEN);
   const hasPilotAccess = user =>
     Boolean(user?.id) && (pilotoAbierto || pilotUserIds.has(user.id));
+
+  // --- Facturación del plan (2A): tarifas vigentes y costos derivados.
+  const precios = () => sanitizeSafeTransportPricing(getPricing()) ?? DEFAULT_SAFE_TRANSPORT_PRICING;
+  const tarifaDeCarrera = vehiclePreference =>
+    precios().perRide[vehiclePreference === 'CAR' ? 'CAR' : 'MOTO'];
+  /** Costo estimado de UNA quincena del plan: tarifa × días × tramos × 2
+   *  semanas. Es el requisito de ENTRADA (crear/reanudar); el cobro real es
+   *  por carrera realizada. */
+  function costoQuincenal(suscripcion) {
+    const patron = suscripcion.pattern ?? {};
+    const dias = (patron.weekdays ?? []).length;
+    const tramos = (patron.outbound?.time ? 1 : 0) + (patron.return?.time ? 1 : 0);
+    return Math.round(tarifaDeCarrera(suscripcion.vehiclePreference) * dias * tramos * 2 * 100) / 100;
+  }
+  const saldoDe = userId =>
+    Math.round(Number(users().find(u => u.id === userId)?.walletBalance || 0) * 100) / 100;
 
   /**
    * TODA reconciliación pasa por UNA cola: dos invocaciones «paralelas» en el
@@ -363,6 +417,16 @@ export function createSafeTransportService({
     try { ensayarCalendario(suscripcion); }
     catch { return err(400, 'INVALID_SCHEDULE'); }
 
+    // Facturación (2A): la entrada al plan exige saldo para UNA quincena.
+    // No se debita nada aquí — el cobro real es por carrera realizada.
+    if (billingEnabled) {
+      const requerido = costoQuincenal(suscripcion);
+      const saldo = saldoDe(user.id);
+      if (saldo < requerido) {
+        return { ok: false, status: 402, code: 'INSUFFICIENT_WALLET_BALANCE', required: requerido, balance: saldo };
+      }
+    }
+
     subs().push(suscripcion);
     if (!await guardar('transportSubscriptions', suscripcion)) {
       subs().pop();
@@ -442,11 +506,12 @@ export function createSafeTransportService({
     return { ok: true, subscription: candidata };
   }
 
-  /** ACTIVE→PAUSED, PAUSED→ACTIVE, viva→CANCELLED. Nada más existe en 1C. */
+  /** Transiciones que el DUEÑO del plan puede pedir. Reanudar desde la
+   *  suspensión por pago (2A) exige de nuevo el saldo de una quincena. */
   const TRANSICIONES = Object.freeze({
     PAUSED: ['ACTIVE'],
-    ACTIVE: ['PAUSED'],
-    CANCELLED: ['ACTIVE', 'PAUSED']
+    ACTIVE: ['PAUSED', 'SUSPENDED_PAYMENT'],
+    CANCELLED: ['ACTIVE', 'PAUSED', 'SUSPENDED_PAYMENT']
   });
 
   async function setSubscriptionStatus(user, id, destino) {
@@ -454,6 +519,13 @@ export function createSafeTransportService({
     if (!suscripcion) return err(404, 'SUBSCRIPTION_NOT_FOUND');
     if (!TRANSICIONES[destino]?.includes(suscripcion.status)) {
       return err(409, 'INVALID_STATUS_TRANSITION');
+    }
+    if (billingEnabled && destino === 'ACTIVE' && suscripcion.status === 'SUSPENDED_PAYMENT') {
+      const requerido = costoQuincenal(suscripcion);
+      const saldo = saldoDe(user.id);
+      if (saldo < requerido) {
+        return { ok: false, status: 402, code: 'INSUFFICIENT_WALLET_BALANCE', required: requerido, balance: saldo };
+      }
     }
     const anterior = suscripcion.status;
     suscripcion.status = destino;
@@ -912,11 +984,29 @@ export function createSafeTransportService({
     reconciled: 0,
     driverInvalidated: 0,
     missed: 0,
+    billingSuspended: 0,
     completedSynced: 0,
     cancelledSynced: 0,
     persistFailures: 0,
     errors: 0
   });
+
+  /** Suspensión por pago (2A): el plan se detiene SIN generar deuda y la
+   *  clienta se entera con honestidad y con la salida clara (recargar). */
+  async function suspenderPorPago(suscripcion) {
+    if (!suscripcion || suscripcion.status !== 'ACTIVE') return false;
+    const anterior = suscripcion.status;
+    suscripcion.status = 'SUSPENDED_PAYMENT';
+    suscripcion.updatedAt = new Date(now()).toISOString();
+    if (!await guardar('transportSubscriptions', suscripcion)) {
+      suscripcion.status = anterior;
+      return false;
+    }
+    await notificar(suscripcion.passengerId, 'subscription_suspended_payment',
+      'Tu plan de traslados quedó en pausa por saldo',
+      'Tu wallet no cubre la próxima carrera del plan. Recarga tu Billetera Express y reanuda el plan cuando quieras.');
+    return true;
+  }
 
   /**
    * Handoff de UNA ocurrencia. Exactamente-una-vez por construcción:
@@ -945,7 +1035,19 @@ export function createSafeTransportService({
       if (estado === 'COMPLETED') {
         if (await transicionDeCobertura(ride, 'TRIP_COMPLETED', r => {
           r.serviceStatus = 'COMPLETED';
-        }, resumen)) resumen.completedSynced += 1;
+        }, resumen)) {
+          resumen.completedSynced += 1;
+          // Contador de uso del plan (2A, SOLO con facturación encendida):
+          // una carrera realizada. Idempotente porque esta transición ocurre
+          // UNA sola vez por ocurrencia. La liquidación del dinero (wallet
+          // 80/20) la hizo el MOTOR NORMAL al completarse el viaje; aquí
+          // solo se lleva la cuenta del plan.
+          const sub = subs().find(s => s.id === ride.subscriptionId);
+          if (billingEnabled && sub?.plan && Number.isInteger(sub.plan.ridesUsed)) {
+            sub.plan.ridesUsed += 1;
+            await guardar('transportSubscriptions', sub);
+          }
+        }
       } else if (estado === 'CANCELLED') {
         if (await transicionDeCobertura(ride, 'TRIP_CANCELLED', r => {
           r.serviceStatus = 'CANCELLED_TRIP_CANCELLED';
@@ -1026,6 +1128,18 @@ export function createSafeTransportService({
     // EL viaje. Orden sagrado: crear (id determinista) → enlazar → efectos.
     const creado = await tripBridge.createTripForRide({ ride, driver: conductorConfirmado });
     if (!creado.ok) {
+      if (creado.code === 'INSUFFICIENT_WALLET_BALANCE') {
+        // Facturación (2A): sin saldo para ESTA carrera no se genera deuda —
+        // el viaje no nace, la ocurrencia muere con su motivo y el plan se
+        // suspende hasta que la clienta recargue y reanude.
+        if (!await transicionDeCobertura(ride, 'CANCELLED_INSUFFICIENT_BALANCE', r => {
+          r.serviceStatus = 'CANCELLED_INSUFFICIENT_BALANCE';
+          r.currentOffer = null;
+        }, resumen)) return;
+        await suspenderPorPago(sub);
+        resumen.billingSuspended += 1;
+        return;
+      }
       resumen.persistFailures += 1;
       return; // la siguiente pasada reintenta; el id determinista impide duplicar
     }
@@ -1308,7 +1422,10 @@ export function createSafeTransportService({
 
   return {
     enabled,
+    billingEnabled,
     hasPilotAccess,
+    getEffectivePricing: precios,
+    quincenalCostOf: costoQuincenal,
     intervalMs,
     horizonMs,
     createSubscription,

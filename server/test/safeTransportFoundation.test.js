@@ -312,9 +312,12 @@ test('SAFE-1E: bandera apagada por defecto; el motor de viajes SOLO via el puent
   }
   // El servicio no conoce middlewares HTTP: los roles se deciden en las rutas.
   assert.ok(!servicio.includes('requireApprovedDriver'));
-  // Ningun consumo de creditos: ridesUsed solo aparece inicializado a cero.
-  assert.ok(!/ridesUsed\s*(\+=|=\s*[^0])/.test(servicio.replace(/plan\.ridesUsed/g, 'X')),
-    'ridesUsed jamas se incrementa en 1C');
+  // Contador del plan (2A): ridesUsed sube UNICAMENTE en la sincronizacion
+  // de TRIP_COMPLETED del evaluador — jamas desde una peticion del cliente.
+  const incrementos = [...servicio.matchAll(/ridesUsed \+= 1/g)];
+  assert.equal(incrementos.length, 1, 'un unico punto de incremento');
+  const alrededor = servicio.slice(Math.max(0, incrementos[0].index - 600), incrementos[0].index);
+  assert.ok(alrededor.includes("'TRIP_COMPLETED'"), 'solo al completarse la carrera');
   // Y las ocurrencias nacen sin conductor y sin viaje.
   assert.ok(servicio.includes("assignmentStatus: 'UNASSIGNED'"));
   assert.ok(servicio.includes('tripId: null'));
