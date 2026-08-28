@@ -291,6 +291,19 @@ export function renderSafeTransport(container, { onClose, onOpenWallet } = {}) {
       Para activar el plan necesitas saldo para una quincena.</p>`;
   };
 
+  /** Lo que cuesta cada carrera, en el plan que ya está andando. Antes solo
+   *  se veía al darse de alta: quien ya tenía plan no tenía dónde mirarlo. */
+  const tarifaDelPlan = () => {
+    if (!preciosPlan) return '';
+    const tarifa = Number(preciosPlan[suscripcion.vehiclePreference === 'CAR' ? 'CAR' : 'MOTO'] || 0);
+    if (!tarifa) return '';
+    return `
+      <p class="st-tarifa-vigente">${icon('wallet', 14)}
+        <span>Tarifa actual por carrera <strong>$${tarifa.toFixed(2)}</strong></span>
+        <small>Se descuenta de tu Billetera Express solo por carrera realizada.</small>
+      </p>`;
+  };
+
   const tarjetaConductor = conductor => {
     if (!conductor) return '';
     const nombre = `${conductor.firstName || 'Conductor'} ${conductor.lastName || ''}`.trim();
@@ -355,18 +368,14 @@ export function renderSafeTransport(container, { onClose, onOpenWallet } = {}) {
         ${patron.outbound?.time ? filaResumen('Ida', escapeHtml(patron.outbound.time)) : ''}
         ${patron.return?.time ? filaResumen('Regreso', escapeHtml(patron.return.time)) : ''}
       </div>
+      ${tarifaDelPlan()}
+      ${suspendido || pausado ? `
       <div class="st-plan-actions">
-        <button type="button" class="st-secondary" data-editar>${icon('edit', 16)} Editar horario</button>
         ${suspendido ? `
           <button type="button" class="st-primary" data-recargar>${icon('wallet', 16)} Recargar wallet</button>
           <button type="button" class="st-secondary" data-reanudar>${icon('check', 16)} Reanudar plan</button>`
-          : pausado
-          ? `<button type="button" class="st-secondary" data-reanudar>${icon('check', 16)} Reanudar</button>`
-          : `<button type="button" class="st-secondary" data-pausar>${icon('minus', 16)} Pausar</button>`}
-        <button type="button" class="st-danger" data-cancelar aria-live="polite">
-          ${confirmandoCancelacion ? '¿Seguro? Toca de nuevo para cancelar' : `${icon('close', 16)} Cancelar plan`}
-        </button>
-      </div>
+          : `<button type="button" class="st-primary" data-reanudar>${icon('check', 16)} Reanudar plan</button>`}
+      </div>` : ''}
     </section>
     <section class="st-rides">
       <h3>Próximos traslados</h3>
@@ -376,6 +385,19 @@ export function renderSafeTransport(container, { onClose, onOpenWallet } = {}) {
             ? 'Tu plan está en pausa: no se programarán traslados hasta que lo reanudes.'
             : 'Tus próximos traslados aparecerán aquí a medida que se programen.'}</p></div>`}
       ${historicos.length ? `<h3>Recientes</h3>${historicos.slice(-3).reverse().map(tarjetaTraslado).join('')}` : ''}
+    </section>
+    <!-- Gestión del plan: se toca de tanto en tanto, así que va DESPUÉS de lo
+         que se mira a diario. Y cancelar, que no tiene vuelta atrás, deja de
+         competir en tamaño con las acciones normales. -->
+    <section class="st-plan-manage">
+      <h3>Ajustes del plan</h3>
+      <div class="st-manage-row">
+        <button type="button" class="st-secondary" data-editar>${icon('edit', 16)} Editar horario</button>
+        ${suspendido || pausado ? '' : `<button type="button" class="st-secondary" data-pausar>${icon('minus', 16)} Pausar</button>`}
+      </div>
+      <button type="button" class="st-danger st-danger--sutil" data-cancelar aria-live="polite">
+        ${confirmandoCancelacion ? '¿Seguro? Toca de nuevo para cancelar el plan' : `${icon('close', 16)} Cancelar plan`}
+      </button>
     </section>`;
   };
 

@@ -261,7 +261,22 @@
   gap: 6px 10px;
   align-items: center;
 }
-.st-summary-route strong { grid-column: 2; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* La dirección es EL dato del plan: a dónde va cada día. Recortarla a una
+   línea para que todo midiera igual escondía justo el significado. Se le dan
+   dos líneas, y solo entonces se recorta. */
+.st-summary-route strong {
+  grid-column: 2;
+  font-size: 0.9rem;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.35;
+}
+.st-summary-route { align-items: start; }
+.st-summary-route .st-dot { margin-top: 5px; }
 .st-summary-route i {
   grid-column: 1;
   justify-self: center;
@@ -277,6 +292,37 @@
 .st-summary-grid small { display: block; color: var(--x58-text-muted, var(--text-secondary)); font-size: 0.7rem; letter-spacing: 0.08em; }
 .st-summary-grid strong { font-size: 0.92rem; }
 .st-plan-actions { display: flex; flex-direction: column; gap: 8px; }
+/* Tarifa vigente dentro del plan activo. */
+.st-tarifa-vigente {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  color: var(--x58-text-secondary, var(--text-secondary));
+  font-size: 0.78rem;
+}
+.st-tarifa-vigente svg { grid-row: 1; }
+.st-tarifa-vigente span { grid-column: 2; }
+.st-tarifa-vigente strong { color: var(--x58-text-primary, var(--text-primary)); font-size: 0.92rem; }
+.st-tarifa-vigente small { grid-column: 2; color: var(--x58-text-muted, var(--text-secondary)); font-size: 0.68rem; line-height: 1.4; }
+/* Ajustes del plan: se usan de tanto en tanto, así que viven bajo lo que se
+   consulta a diario y con menos peso visual que un traslado. */
+.st-plan-manage { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.st-plan-manage h3 { margin: 0; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--x58-text-muted, var(--text-secondary)); }
+.st-manage-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+/* Cancelar no tiene vuelta atrás: sigue siendo alcanzable y de 44px, pero
+   deja de gritar como si fuera la acción principal de la pantalla. */
+.st-danger--sutil {
+  min-height: 44px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 0.82rem;
+}
+.st-danger--sutil:hover, .st-danger--sutil:focus-visible {
+  border-color: var(--x58-danger, var(--danger));
+  background: color-mix(in srgb, var(--x58-danger, var(--danger)) 10%, transparent);
+}
 
 /* --- Traslados (ocurrencias) --------------------------------------------- */
 
