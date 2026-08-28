@@ -15,6 +15,7 @@ class NotificationService {
                 title: payload.title || 'Aviso de +58express',
                 message: payload.message || '',
                 category: payload.category || 'SYSTEM',
+                event: payload.event,
                 icon: payload.icon || '🔔',
                 createdAt: payload.createdAt,
                 read: Boolean(payload.read)
@@ -61,7 +62,7 @@ class NotificationService {
         return normalized;
     }
 
-    addNotification(userId, { id, title, message, category = 'SYSTEM', icon = '🔔', createdAt, timestamp, read = false }) {
+    addNotification(userId, { id, title, message, category = 'SYSTEM', event, icon = '🔔', createdAt, timestamp, read = false }) {
         const list = this.getNotifications(userId);
         if (id && list.some(item => item.id === id)) return list.find(item => item.id === id);
         const newNotif = {
@@ -69,6 +70,10 @@ class NotificationService {
             title,
             message,
             category,
+            // El evento decide a dónde lleva el aviso al tocarlo; sin él, un
+            // recién llegado por socket navegaría peor que el mismo aviso
+            // traído del servidor.
+            event,
             icon,
             read,
             timestamp: timestamp || createdAt || new Date().toISOString()
@@ -143,6 +148,16 @@ class NotificationService {
         });
         this.triggerNativeNotification(`📢 ${title}`, message);
         return globalNotif;
+    }
+
+    /**
+     * Marca UNA notificación como leída también en el servidor, para que no
+     * vuelva como nueva en la próxima sincronización. Las creadas solo en el
+     * cliente no existen allá: ni se intenta.
+     */
+    async markAsRead(notificationId) {
+        if (!/^notification_/.test(String(notificationId || ''))) return;
+        await apiService.patch(`/notifications/${notificationId}/read`, {});
     }
 
     async markAllAsRead(userId) {

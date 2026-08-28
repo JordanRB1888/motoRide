@@ -2,11 +2,21 @@ import { notificationService } from '../services/notificationService.js';
 import { audioEffects } from '../utils/audioEffects.js';
 import { showToast } from './toast.js';
 import { icon } from '../utils/icons.js';
+import { resolveNotificationTarget } from '../utils/notificationTargets.js';
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 
-export function createNotificationCenterModal(user, onClose) {
+/**
+ * @param {object} user
+ * @param {Function} [onClose]
+ * @param {{onNavigate?: (tab: string) => void}} [options] onNavigate lleva a
+ *   la pantalla del aviso al tocarlo; cada app pasa su propia navegación.
+ */
+export function createNotificationCenterModal(user, onClose, { onNavigate } = {}) {
     const userId = user?.id || 'global';
     let filterCategory = 'ALL';
+    // Un aviso solo se comporta como enlace si de verdad lleva a algún sitio
+    // Y esta app sabe navegar: si no, se queda en un aviso que se marca leído.
+    const destinoDe = item => (onNavigate ? resolveNotificationTarget(item, user?.role) : null);
 
     const overlay = document.createElement('div');
     overlay.className = 'notification-center-overlay fade-in';
@@ -67,8 +77,10 @@ export function createNotificationCenterModal(user, onClose) {
             </nav>
 
             <div class="notification-list">
-                ${notifications.length ? notifications.map(item => `
-                    <article class="notif-item-card ${item.read ? 'is-read' : 'is-unread'} ${String(item.category || '').toLowerCase()}" data-id="${item.id}">
+                ${notifications.length ? notifications.map(item => {
+                    const navegable = Boolean(destinoDe(item));
+                    return `
+                    <article class="notif-item-card ${item.read ? 'is-read' : 'is-unread'} ${String(item.category || '').toLowerCase()} ${navegable ? 'is-navigable' : ''}" data-id="${item.id}"${navegable ? ' role="button" tabindex="0"' : ''}>
                         <div class="notification-item-icon">
                             ${item.category === 'TRIP' ? icon('navigation', 20) : item.category === 'FINANCE' ? icon('dollarSign', 20) : icon('bell', 20)}
                         </div>
@@ -80,9 +92,9 @@ export function createNotificationCenterModal(user, onClose) {
                             <p>${escapeHtml(item.message)}</p>
                         </div>
                         ${item.read ? '' : '<span class="notification-new-dot" aria-label="No leída"></span>'}
-                        <span class="notification-chevron" aria-hidden="true">›</span>
+                        ${navegable ? '<span class="notification-chevron" aria-hidden="true">›</span>' : ''}
                     </article>
-                `).join('') : `
+                `; }).join('') : `
                     <div class="notification-empty">
                         ${icon('bell', 32)}
                         <p>No tienes notificaciones en esta categoría</p>
@@ -119,14 +131,32 @@ export function createNotificationCenterModal(user, onClose) {
             });
         });
         modal.querySelectorAll('.notif-item-card').forEach(card => {
-            card.addEventListener('click', () => {
+            // UN solo toque: se marca leída (aquí y en el servidor) y, si el
+            // aviso lleva a algún sitio, el centro se cierra y la app abre esa
+            // pantalla. Sin segundo toque y sin buscarla a mano.
+            const abrir = () => {
                 const list = notificationService.getNotifications(userId);
                 const item = list.find(notification => notification.id === card.dataset.id);
                 if (!item) return;
-                item.read = true;
-                notificationService.saveNotifications(userId, list);
-                updateHeaderBadges();
+                if (!item.read) {
+                    item.read = true;
+                    notificationService.saveNotifications(userId, list);
+                    notificationService.markAsRead(item.id);
+                    updateHeaderBadges();
+                }
+                const destino = destinoDe(item);
+                if (destino) {
+                    closeModal();
+                    onNavigate(destino);
+                    return;
+                }
                 render();
+            };
+            card.addEventListener('click', abrir);
+            card.addEventListener('keydown', event => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                abrir();
             });
         });
     };

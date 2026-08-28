@@ -346,7 +346,9 @@ export function renderDriverApp(container) {
     updateDriverNotificationBadge();
     if (driverNotifBtn) {
         driverNotifBtn.addEventListener('click', () => {
-            const modal = createNotificationCenterModal(user);
+            // Tocar un aviso abre su pantalla: la oferta programada, las
+            // ganancias o el viaje, sin buscarlas a mano.
+            const modal = createNotificationCenterModal(user, null, { onNavigate: switchTab });
             container.appendChild(modal);
         });
     }

@@ -249,7 +249,14 @@ export function renderPassengerApp(container) {
   const notifBtn = container.querySelector('#header-notif-btn-passenger');
   if (notifBtn) {
     notifBtn.addEventListener('click', () => {
-      const modal = createNotificationCenterModal(user);
+      const modal = createNotificationCenterModal(user, null, {
+        // Tocar un aviso abre su pantalla y deja la pestaña marcada como si
+        // la hubiera pulsado la propia persona.
+        onNavigate: tab => {
+          container.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+          handleNavigation(tab);
+        }
+      });
       container.appendChild(modal);
     });
   }

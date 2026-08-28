@@ -41,7 +41,8 @@ export function renderAdminApp(container) {
   container.querySelector('#logout').onclick=()=>{disposeDriverApplicationsManagement(content);authService.logout();window.navigateTo('#/');};
   const updateBadge=()=>{const count=notificationService.getUnreadCount(admin.id),badge=container.querySelector('#admin-badge');badge.textContent=count>99?'99+':count;badge.hidden=!count;};
   updateBadge(); window.addEventListener('58express:notifications-updated',updateBadge);
-  container.querySelector('#admin-bell').onclick=()=>container.appendChild(createNotificationCenterModal(admin));
+  // Tocar un aviso abre su sección (finanzas, soporte, operación) de una vez.
+  container.querySelector('#admin-bell').onclick=()=>container.appendChild(createNotificationCenterModal(admin,null,{onNavigate:id=>switchTab(id)}));
 
   const initDashboardMap = users => requestAnimationFrame(() => {
     const target=container.querySelector('#operations-map');
