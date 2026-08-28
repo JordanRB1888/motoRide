@@ -574,6 +574,7 @@ export function createSafeTransportService({
     rescheduled: 0,
     revived: 0,
     cancelledObsolete: 0,
+    commitmentsReleased: 0,
     persistFailures: 0,
     errors: 0
   });
@@ -581,6 +582,29 @@ export function createSafeTransportService({
   /** Estados de cobertura SIN compromiso: ofertas y contabilidad, pero ningún
    *  conductor ha consentido todavía. */
   const SIN_COMPROMISO = new Set(['UNASSIGNED', 'OFFERED_PREFERRED', 'ASSIGNING', 'BACKUP_REQUIRED', 'AT_RISK']);
+
+  /** Estados en los que un conductor YA consintió cubrir la ocurrencia. */
+  const COMPROMISO_CONFIRMADO = new Set(['DRIVER_CONFIRMED', 'COVERAGE_CONFIRMED']);
+
+  /** Una suscripción solo manda mientras está EN SERVICIO. Cancelada, pausada
+   *  o suspendida por pago, sus ocurrencias no representan nada operativo. */
+  const suscripcionOperativa = subscriptionId =>
+    subs().find(s => s.id === subscriptionId)?.status === 'ACTIVE';
+
+  /**
+   * EL predicado del compromiso, en un solo sitio (y de aquí lo toman la
+   * agenda del conductor, el conflicto horario y la revalidación del accept).
+   * Un compromiso vale mientras la ocurrencia siga viva, sin viaje, con un
+   * conductor que consintió Y con su plan en servicio: un plan cancelado no
+   * ocupa la agenda de nadie.
+   */
+  const esCompromisoOperativo = ride =>
+    Boolean(ride)
+    && !ride.tripId
+    && ride.serviceStatus === 'PLANNED'
+    && Boolean(ride.assignedDriverId)
+    && COMPROMISO_CONFIRMADO.has(ride.assignmentStatus)
+    && suscripcionOperativa(ride.subscriptionId);
 
   /** ¿Esta ocurrencia puede tocarla la reconciliación? Solo si nadie se ha
    *  comprometido con ella: sin viaje, sin conductor CONFIRMADO, planificada o
@@ -673,18 +697,44 @@ export function createSafeTransportService({
       }
     }
 
-    // 2) Lo que SOBRA: futura, libre, aún PLANNED y ya fuera de la agenda.
+    // 2) Lo que SOBRA. Dos reglas distintas, y la diferencia importa:
+    //
+    //    · Con el plan EN SERVICIO, un cambio de agenda jamás rompe un
+    //      compromiso ya aceptado (política de 1D): solo se retira lo libre.
+    //    · Con el plan FUERA DE SERVICIO (cancelado, pausado o suspendido) no
+    //      va a haber traslado. TODA ocurrencia futura sin viaje muere,
+    //      incluida la comprometida: si no, el conductor seguiría viéndola
+    //      como suya y —peor— seguiría ocupando su agenda, bloqueando las
+    //      ofertas de los planes nuevos a esa misma hora.
+    const enServicio = suscripcion.status === 'ACTIVE';
     for (const ride of propias) {
       if (esperadasPorClave.has(ride.occurrenceKey)) continue;
-      if (!esFutura(ride, ahora) || !esLibre(ride) || ride.serviceStatus !== 'PLANNED') continue;
+      if (!esFutura(ride, ahora) || ride.serviceStatus !== 'PLANNED' || ride.tripId) continue;
+      const comprometida = Boolean(ride.assignedDriverId);
+      if (comprometida && enServicio) continue;   // el compromiso manda
+      if (!comprometida && !esLibre(ride)) continue;
       const previa = structuredClone(ride);
-      ride.serviceStatus = suscripcion.status === 'ACTIVE'
+      ride.serviceStatus = enServicio
         ? 'CANCELLED_SCHEDULE_CHANGE'
         : (suscripcion.status === 'PAUSED' ? 'CANCELLED_SUBSCRIPTION_PAUSED' : 'CANCELLED_SUBSCRIPTION_INACTIVE');
+      if (comprometida) {
+        // Quién lo tenía queda escrito para la auditoría; la asignación
+        // OPERATIVA se libera, que es lo que miran agenda y conflictos.
+        ride.releasedDriverId = ride.assignedDriverId;
+        ride.assignedDriverId = null;
+        anotar(ride, 'COMMITMENT_RELEASED', ahora);
+      }
       reiniciarCobertura(ride);
       anotar(ride, ride.serviceStatus, ahora);
       if (await guardar('scheduledRides', ride)) {
         resumen.cancelledObsolete += 1;
+        if (comprometida) {
+          resumen.commitmentsReleased += 1;
+          // Exactamente una vez: cuelga de la transición ya persistida.
+          await notificar(previa.assignedDriverId, 'scheduled_ride_cancelled',
+            'Traslado programado cancelado',
+            `El pasajero canceló el traslado programado del ${etiquetaDeRide(ride)}. Ya no necesitas cubrirlo.`);
+        }
       } else {
         restaurar(ride, previa);
         resumen.persistFailures += 1;
@@ -770,11 +820,11 @@ export function createSafeTransportService({
   const finDeOfertaPreferida = pickupMs => pickupMs - COVERAGE_WINDOWS.primaryConfirmationDeadlineMs;
   const umbralDeRiesgo = pickupMs => pickupMs - COVERAGE_WINDOWS.backupThresholdMs;
 
-  /** Recogidas YA comprometidas del conductor (futuras, planificadas). */
+  /** Recogidas YA comprometidas del conductor: SOLO compromisos operativos —
+   *  uno de un plan cancelado no le ocupa la agenda ni le quita ofertas. */
   function recogidasComprometidas(driverId, exceptoRideId = null) {
     return rides()
-      .filter(r => r.assignedDriverId === driverId && r.serviceStatus === 'PLANNED'
-        && !r.tripId && r.id !== exceptoRideId)
+      .filter(r => r.assignedDriverId === driverId && r.id !== exceptoRideId && esCompromisoOperativo(r))
       .map(r => Date.parse(r.scheduledPickupAt))
       .filter(Number.isFinite);
   }
@@ -1251,7 +1301,9 @@ export function createSafeTransportService({
     const ahora = now();
     return rides()
       .filter(r => r.currentOffer?.driverId === user.id
-        && r.serviceStatus === 'PLANNED' && !r.assignedDriverId && !r.tripId)
+        && r.serviceStatus === 'PLANNED' && !r.assignedDriverId && !r.tripId
+        // Ninguna oferta rancia de un plan que ya no está en servicio.
+        && suscripcionOperativa(r.subscriptionId))
       .filter(r => Date.parse(r.currentOffer.expiresAt) > ahora)
       .filter(r => {
         const t = Date.parse(r.scheduledPickupAt);
@@ -1265,7 +1317,8 @@ export function createSafeTransportService({
   function listDriverCommitments(user) {
     const ahora = now();
     return rides()
-      .filter(r => r.assignedDriverId === user.id && r.serviceStatus === 'PLANNED' && !r.tripId)
+      // Solo lo accionable: nada terminal y nada de un plan fuera de servicio.
+      .filter(r => r.assignedDriverId === user.id && esCompromisoOperativo(r))
       .filter(r => {
         const t = Date.parse(r.scheduledPickupAt);
         return Number.isFinite(t) && t > ahora - DIA_MS && t <= ahora + 7 * DIA_MS;
@@ -1289,6 +1342,9 @@ export function createSafeTransportService({
       }
       if (ride.assignedDriverId) return err(409, 'RIDE_ALREADY_COVERED');
       if (ride.serviceStatus !== 'PLANNED' || ride.tripId) return err(409, 'RIDE_NOT_AVAILABLE');
+      // Un accept rezagado sobre el plan que la pasajera acaba de cancelar
+      // muere aquí: jamás nace un compromiso de algo que no va a ocurrir.
+      if (!suscripcionOperativa(ride.subscriptionId)) return err(409, 'RIDE_NOT_AVAILABLE');
       const oferta = ride.currentOffer;
       if (!oferta || oferta.driverId !== user.id) return err(409, 'NO_ACTIVE_OFFER');
       const ahora = now();

@@ -160,7 +160,11 @@ test('ENCENDIDA: oferta sin direccion → accept con consentimiento → identida
     .filter(({ doc }) => Date.parse(doc.scheduledPickupAt) > Date.now() + 60 * 60_000)
     .sort((x, y) => Date.parse(x.doc.scheduledPickupAt) - Date.parse(y.doc.scheduledPickupAt));
   assert.ok(filas.length >= 1, 'la suscripcion materializo ocurrencias futuras');
-  const objetivo = filas[0];
+  // La IDA a propósito: su recogida es la CASA, que es la dirección sensible
+  // que esta prueba vigila. Coger «la más próxima» hacía que el resultado
+  // dependiera de la hora a la que se corriera la suite: por la tarde la más
+  // próxima es la VUELTA, y entonces la recogida es el trabajo.
+  const objetivo = filas.find(({ doc }) => doc.direction === 'OUTBOUND') ?? filas[0];
   objetivo.doc.assignmentStatus = 'ASSIGNING';
   objetivo.doc.currentOffer = {
     driverId: conductorA.id, kind: 'BACKUP',
