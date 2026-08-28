@@ -14,6 +14,7 @@ import {
   reanudarSuscripcion,
   cancelarSuscripcion,
   listarTrasladosProgramados,
+  obtenerPreciosDelPlan,
   estadoDeCoberturaEnHumano,
   mensajeDeError,
   ESTADOS_SUSCRIPCION,
@@ -44,11 +45,12 @@ const fechaHumana = ride => {
     : fecha.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'short' });
 };
 
-export function renderSafeTransport(container, { onClose } = {}) {
+export function renderSafeTransport(container, { onClose, onOpenWallet } = {}) {
   let vista = 'cargando';
   let suscripcion = null;
   let traslados = [];
   let conductoresPrevios = [];
+  let preciosPlan = null; // tarifas por carrera (2A), si la facturacion esta activa
   let enviando = false;
   let confirmandoCancelacion = false;
   let editando = false;
@@ -97,6 +99,7 @@ export function renderSafeTransport(container, { onClose } = {}) {
   // --- Carga --------------------------------------------------------------
 
   async function cargar() {
+    obtenerPreciosDelPlan().then(p => { preciosPlan = p; }).catch(() => {});
     const respuesta = await listarSuscripciones();
     if (!respuesta) {
       vista = apiService.lastError?.status === 404 ? 'no-disponible'
@@ -265,9 +268,27 @@ export function renderSafeTransport(container, { onClose } = {}) {
         ${borrador.inicio ? filaResumen('Empieza', escapeHtml(borrador.inicio)) : ''}
       </div>
       ${preferido ? `<p class="st-hint">${icon('info', 14)} Tu conductor preferido debe aceptar cada traslado. Si no puede, buscaremos respaldo.</p>` : ''}
+      ${resumenDePrecio()}
     </section>
     <button type="button" class="st-primary" data-confirmar ${enviando ? 'disabled' : ''}>${enviando ? 'Creando…' : 'Confirmar plan'}</button>
     <button type="button" class="st-secondary" data-editar-borrador>Volver a editar</button>`;
+  };
+
+  /** Precio honesto del plan (2A): tarifa por carrera y quincena ESTIMADA.
+   *  Solo se cobra por carrera realizada, desde la Billetera Express. */
+  const resumenDePrecio = () => {
+    if (!preciosPlan) return '';
+    const tarifa = Number(preciosPlan[borrador.vehiculo === 'CAR' ? 'CAR' : 'MOTO'] || 0);
+    if (!tarifa) return '';
+    const tramos = 1 + (borrador.incluirRegreso ? 1 : 0);
+    const quincena = tarifa * borrador.weekdays.length * tramos * 2;
+    return `
+      <div class="st-summary-grid st-precio">
+        ${filaResumen('Tarifa por carrera', `$${tarifa.toFixed(2)}`)}
+        ${filaResumen('Quincena estimada', `$${quincena.toFixed(2)}`)}
+      </div>
+      <p class="st-hint">${icon('info', 14)} Se descuenta de tu Billetera Express solo por carrera realizada.
+      Para activar el plan necesitas saldo para una quincena.</p>`;
   };
 
   const tarjetaConductor = conductor => {
@@ -312,14 +333,18 @@ export function renderSafeTransport(container, { onClose } = {}) {
     const dias = DIAS_SEMANA.filter(d => (patron.weekdays ?? []).includes(d.valor));
     const estadoPlan = ESTADOS_SUSCRIPCION[suscripcion.status] ?? 'Activo';
     const pausado = suscripcion.status === 'PAUSED';
+    const suspendido = suscripcion.status === 'SUSPENDED_PAYMENT';
     const proximos = traslados.filter(r => r.serviceStatus === 'PLANNED' || r.serviceStatus === 'ACTIVE');
     const historicos = traslados.filter(r => r.serviceStatus === 'COMPLETED');
     return `
     ${cabecera('Tu plan de traslados')}
     <section class="st-plan ${pausado ? 'st-plan--pausado' : ''}">
       <header>
-        <span class="st-pill ${pausado ? 'st-pill--buscando' : 'st-pill--confirmado'}">${escapeHtml(estadoPlan)}</span>
+        <span class="st-pill ${suspendido ? 'st-pill--atencion' : pausado ? 'st-pill--buscando' : 'st-pill--confirmado'}">${escapeHtml(estadoPlan)}</span>
       </header>
+      ${suspendido ? `
+      <p class="st-atencion-copy">${icon('alertTriangle', 14)} Tu plan está en pausa por saldo:
+      tu Billetera Express no cubre la próxima carrera. Recarga y reanuda cuando quieras.</p>` : ''}
       <div class="st-summary-route">
         <span class="st-dot casa"></span><strong>${escapeHtml(suscripcion.route?.home?.address ?? 'Casa')}</strong>
         <i aria-hidden="true"></i>
@@ -332,7 +357,10 @@ export function renderSafeTransport(container, { onClose } = {}) {
       </div>
       <div class="st-plan-actions">
         <button type="button" class="st-secondary" data-editar>${icon('edit', 16)} Editar horario</button>
-        ${pausado
+        ${suspendido ? `
+          <button type="button" class="st-primary" data-recargar>${icon('wallet', 16)} Recargar wallet</button>
+          <button type="button" class="st-secondary" data-reanudar>${icon('check', 16)} Reanudar plan</button>`
+          : pausado
           ? `<button type="button" class="st-secondary" data-reanudar>${icon('check', 16)} Reanudar</button>`
           : `<button type="button" class="st-secondary" data-pausar>${icon('minus', 16)} Pausar</button>`}
         <button type="button" class="st-danger" data-cancelar aria-live="polite">
@@ -344,7 +372,7 @@ export function renderSafeTransport(container, { onClose } = {}) {
       <h3>Próximos traslados</h3>
       ${proximos.length
         ? proximos.map(tarjetaTraslado).join('')
-        : `<div class="st-empty st-empty--mini"><span>${icon('calendar', 24)}</span><p>${pausado
+        : `<div class="st-empty st-empty--mini"><span>${icon('calendar', 24)}</span><p>${(pausado || suspendido)
             ? 'Tu plan está en pausa: no se programarán traslados hasta que lo reanudes.'
             : 'Tus próximos traslados aparecerán aquí a medida que se programen.'}</p></div>`}
       ${historicos.length ? `<h3>Recientes</h3>${historicos.slice(-3).reverse().map(tarjetaTraslado).join('')}` : ''}
@@ -560,6 +588,9 @@ export function renderSafeTransport(container, { onClose } = {}) {
           await cargar();
         });
       };
+      container.querySelector('[data-recargar]')?.addEventListener('click', () => {
+        if (typeof onOpenWallet === 'function') onOpenWallet();
+      });
       accion('[data-pausar]', pausarSuscripcion, 'Plan en pausa. Reanúdalo cuando quieras.');
       accion('[data-reanudar]', reanudarSuscripcion, 'Plan reanudado.');
       container.querySelector('[data-cancelar]')?.addEventListener('click', async event => {

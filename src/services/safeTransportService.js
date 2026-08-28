@@ -20,6 +20,13 @@ export const consultarAcceso = async () => {
   return Boolean(respuesta?.available);
 };
 
+/** Precios del plan (2A): tarifa por carrera por categoría, si la
+ *  facturación está activa; null si no aplica. Vienen del servidor. */
+export const obtenerPreciosDelPlan = async () => {
+  const respuesta = await apiService.get('/transport/access');
+  return respuesta?.pricing?.perRide ?? null;
+};
+
 // --- Pasajero -------------------------------------------------------------
 
 export const crearSuscripcion = body => apiService.post('/transport/subscriptions', body);
@@ -114,6 +121,13 @@ const MENSAJES = Object.freeze({
 export function mensajeDeError(porDefecto = 'No se pudo completar la acción. Intenta de nuevo.') {
   const ultimo = apiService.lastError;
   if (!ultimo) return porDefecto;
+  if (ultimo.error === 'INSUFFICIENT_WALLET_BALANCE') {
+    // 2A: el 402 trae los números reales del servidor.
+    const falta = Math.max(0, Number(ultimo.required || 0) - Number(ultimo.balance || 0));
+    return falta > 0
+      ? `Tu saldo no alcanza para la quincena del plan: te faltan $${falta.toFixed(2)}. Recarga tu Billetera Express e inténtalo de nuevo.`
+      : 'Tu saldo no alcanza para la quincena del plan. Recarga tu Billetera Express.';
+  }
   if (ultimo.status === 404) return 'Esta función no está disponible por ahora.';
   if (ultimo.status === 401 || ultimo.status === 403) return 'Tu sesión no tiene acceso a esta función.';
   return MENSAJES[ultimo.error] ?? porDefecto;

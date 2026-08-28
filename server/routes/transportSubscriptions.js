@@ -46,7 +46,13 @@ export function createTransportSubscriptionsRouter({
   // autorizada recibe {available:true}; cualquier otra, el mismo 404. No
   // revela ninguna otra identidad del piloto.
   router.get('/transport/access', requireAuth, lecturas, soloPiloto, (_req, res) => {
-    res.json({ available: true });
+    const respuesta = { available: true };
+    // Facturación (2A): la clienta ve el PRECIO por carrera para decidir con
+    // números reales. El % de la plataforma es asunto interno: no viaja.
+    if (safeTransport.billingEnabled) {
+      respuesta.pricing = { perRide: safeTransport.getEffectivePricing().perRide };
+    }
+    res.json(respuesta);
   });
 
   const responder = (res, resultado, status = 200) => resultado.ok

@@ -552,7 +552,11 @@ export function renderPassengerApp(container) {
       else if (tab === 'transporte-seguro') {
         // SAFE-1F: página del Transporte Seguro; su botón «volver» y el paso
         // a un viaje activo regresan al Inicio (la pantalla de viaje normal).
-        renderSafeTransport(wrapper, { onClose: () => handleNavigation('home') });
+        renderSafeTransport(wrapper, {
+          onClose: () => handleNavigation('home'),
+          // 2B: desde la suspensión por saldo, la salida directa es recargar.
+          onOpenWallet: () => handleNavigation('wallet')
+        });
       }
     }
   }

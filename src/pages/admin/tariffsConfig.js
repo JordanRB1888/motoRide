@@ -16,6 +16,39 @@ export async function renderTariffsConfig(container) {
         <section class="diorama-card-3d" style="padding:22px;border-radius:22px;background:var(--surface-card)"><h3 class="pricing-vehicle-heading">${vehicleImage('CAR', { decorative: true })}<span>Automóvil</span></h3><div style="display:grid;gap:13px">${field('c-base','Tarifa base USD',car.baseFareUSD)}${field('c-km','Precio por km',car.pricePerKmUSD)}${field('c-min','Precio por minuto',car.pricePerMinuteUSD)}${field('c-minimum','Tarifa mínima',car.minimumFareUSD)}</div></section>
         <section class="diorama-card-3d" style="padding:22px;border-radius:22px;background:var(--surface-card)"><h3>Parámetros generales</h3><div style="display:grid;gap:13px">${field('night','Multiplicador nocturno',config.nightMultiplier)}${field('peak','Multiplicador hora pico',config.peakMultiplier)}${field('commission','Comisión de plataforma (%)',Number(config.commissionRate || .15)*100,'1')}${field('bcv','Tasa BCV Bs./USD',config.bcvRate)}${field('parallel','Tasa alternativa Bs./USD',config.parallelRate)}</div><button class="btn btn-3d primary-btn" style="width:100%;margin-top:18px;padding:14px" type="submit">Guardar y aplicar</button></section>
       </form>`;
+    // SAFE-2B: tarifas del PLAN de Transporte Seguro (fijas por carrera +
+    // comisión propia del plan), con su formulario y guardado independientes.
+    const st = await apiService.get('/admin/safe-transport/pricing');
+    if (st?.perRide) {
+      const seccion = document.createElement('section');
+      seccion.className = 'diorama-card-3d';
+      seccion.style.cssText = 'padding:22px;border-radius:22px;background:var(--surface-card);margin-top:18px';
+      seccion.innerHTML = `
+        <h3 style="display:flex;align-items:center;gap:8px;margin-top:0">Transporte Seguro — plan quincenal</h3>
+        <small style="color:var(--text-secondary);display:block;margin-bottom:14px">
+          Tarifa FIJA por carrera del plan (se descuenta de la wallet de la clienta al completarse;
+          el conductor recibe el resto tras la comisión del plan). Rige en caliente para las próximas carreras.
+        </small>
+        <form id="st-pricing-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:13px">
+          ${field('st-moto', 'Carrera en MOTO (USD)', st.perRide.MOTO)}
+          ${field('st-car', 'Carrera en AUTO (USD)', st.perRide.CAR)}
+          ${field('st-fee', 'Comisión del plan (%)', Number(st.platformFeeRate || 0.2) * 100, '1')}
+          <button class="btn btn-3d primary-btn" style="padding:14px;align-self:end" type="submit">Guardar plan</button>
+        </form>`;
+      container.querySelector('#pricing-form')?.after(seccion);
+      seccion.querySelector('#st-pricing-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        const n = id => Number(seccion.querySelector(`#${id}`).value);
+        const guardado = await apiService.patch('/admin/safe-transport/pricing', {
+          perRide: { MOTO: n('st-moto'), CAR: n('st-car') },
+          platformFeeRate: n('st-fee') / 100
+        });
+        showToast(guardado
+          ? 'Tarifas del Transporte Seguro guardadas y activas'
+          : 'No se pudieron guardar las tarifas del plan (revisa los valores)', guardado ? 'success' : 'error');
+      });
+    }
+
     container.querySelector('#pricing-form').addEventListener('submit', async event => {
       event.preventDefault();
       const n = id => Number(container.querySelector(`#${id}`).value);

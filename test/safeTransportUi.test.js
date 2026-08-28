@@ -285,11 +285,31 @@ test('accesibilidad: controles de solo icono con etiqueta y estados anunciados',
   assert.ok(/min-height:\s*4[4-8]px/.test(css), 'objetivos tactiles al estandar de la app');
 });
 
-test('sin administracion del Transporte Seguro en 1F', () => {
+test('la UNICA administracion del Transporte Seguro es la de tarifas del plan (2B)', () => {
   const adminDir = path.join(root, 'src/pages/admin');
   for (const entrada of fs.readdirSync(adminDir)) {
     const codigo = leer(path.join('src/pages/admin', entrada));
-    assert.ok(!codigo.includes('transport/subscriptions') && !codigo.includes('safeTransport'),
-      `sin UI admin del traslado seguro: ${entrada}`);
+    assert.ok(!codigo.includes('transport/subscriptions'),
+      `el admin no toca los planes de nadie: ${entrada}`);
   }
+  const tarifas = leer('src/pages/admin/tariffsConfig.js');
+  assert.ok(tarifas.includes('/admin/safe-transport/pricing'), 'la seccion de tarifas del plan existe');
+  assert.ok(tarifas.includes('Transporte Seguro'), 'nombrada con claridad para el dueño');
+});
+
+test('FACTURACION (2B): precio honesto, 402 con monto y salida clara de la suspension', () => {
+  // El 402 llega en humano y con los numeros DEL SERVIDOR.
+  assert.ok(servicio.includes('INSUFFICIENT_WALLET_BALANCE'));
+  assert.ok(servicio.includes('te faltan $'), 'el faltante exacto, no un mensaje generico');
+  // El resumen muestra tarifa por carrera y quincena estimada, con honestidad.
+  assert.ok(pasajero.includes('Tarifa por carrera'));
+  assert.ok(pasajero.includes('Quincena estimada'));
+  assert.ok(pasajero.includes('solo por carrera realizada'), 'el modelo del dueño, dicho tal cual');
+  // La suspension por saldo tiene salida directa: recargar y reanudar.
+  assert.ok(pasajero.includes("'SUSPENDED_PAYMENT'"));
+  assert.ok(pasajero.includes('data-recargar') && pasajero.includes('Recargar wallet'));
+  assert.ok(pasajero.includes('data-reanudar'));
+  // El % de la plataforma es interno: jamas se pinta al pasajero.
+  assert.ok(!pasajero.includes('platformFeeRate') && !/comisi[oó]n/i.test(pasajero),
+    'el fee del plan no viaja a la pantalla de la clienta');
 });
