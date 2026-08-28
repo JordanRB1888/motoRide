@@ -1008,6 +1008,18 @@ export function createSafeTransportService({
     return true;
   }
 
+  /** Aviso al conductor COMPROMETIDO cuando su ocurrencia muere en T-0 sin
+   *  convertirse en viaje (cierre 2B): jamás debe quedarse esperando una
+   *  recogida que no ocurrirá. El motivo es genérico a propósito — ni el
+   *  saldo ni ningún detalle financiero de la clienta viajan al conductor. */
+  async function avisarCancelacionAlConductorComprometido(ride) {
+    if (!ride?.assignedDriverId) return;
+    if (!['DRIVER_CONFIRMED', 'COVERAGE_CONFIRMED'].includes(ride.assignmentStatus)) return;
+    await notificar(ride.assignedDriverId, 'scheduled_ride_cancelled',
+      'Traslado programado cancelado',
+      `El traslado programado del ${etiquetaDeRide(ride)} fue cancelado. No necesitas hacer nada.`);
+  }
+
   /**
    * Handoff de UNA ocurrencia. Exactamente-una-vez por construcción:
    *
@@ -1080,7 +1092,10 @@ export function createSafeTransportService({
       if (await transicionDeCobertura(ride, 'CANCELLED_SUBSCRIPTION_INACTIVE', r => {
         r.serviceStatus = 'CANCELLED_SUBSCRIPTION_INACTIVE';
         r.currentOffer = null;
-      }, resumen)) resumen.missed += 1;
+      }, resumen)) {
+        resumen.missed += 1;
+        await avisarCancelacionAlConductorComprometido(ride);
+      }
       return;
     }
 
@@ -1089,7 +1104,10 @@ export function createSafeTransportService({
       if (await transicionDeCobertura(ride, 'CANCELLED_MISSED_HANDOFF', r => {
         r.serviceStatus = 'CANCELLED_MISSED_HANDOFF';
         r.currentOffer = null;
-      }, resumen)) resumen.missed += 1;
+      }, resumen)) {
+        resumen.missed += 1;
+        await avisarCancelacionAlConductorComprometido(ride);
+      }
       return;
     }
 
@@ -1136,6 +1154,9 @@ export function createSafeTransportService({
           r.serviceStatus = 'CANCELLED_INSUFFICIENT_BALANCE';
           r.currentOffer = null;
         }, resumen)) return;
+        // El conductor comprometido se entera con motivo genérico: su
+        // recogida no ocurrirá y no debe seguir esperándola.
+        await avisarCancelacionAlConductorComprometido(ride);
         await suspenderPorPago(sub);
         resumen.billingSuspended += 1;
         return;

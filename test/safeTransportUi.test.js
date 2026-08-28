@@ -302,7 +302,11 @@ test('FACTURACION (2B): precio honesto, 402 con monto y salida clara de la suspe
   assert.ok(servicio.includes('INSUFFICIENT_WALLET_BALANCE'));
   assert.ok(servicio.includes('te faltan $'), 'el faltante exacto, no un mensaje generico');
   // El resumen muestra tarifa por carrera y quincena estimada, con honestidad.
-  assert.ok(pasajero.includes('Tarifa por carrera'));
+  // «actual» a propósito: la política de precio es CURRENT_PRICE_AT_HANDOFF
+  // (rige la tarifa vigente en cada carrera) y la pantalla no debe prometer
+  // un precio congelado para toda la quincena.
+  assert.ok(pasajero.includes('Tarifa actual por carrera'));
+  assert.ok(!/fija (para|durante) toda/i.test(pasajero), 'sin promesas de precio congelado');
   assert.ok(pasajero.includes('Quincena estimada'));
   assert.ok(pasajero.includes('solo por carrera realizada'), 'el modelo del dueño, dicho tal cual');
   // La suspension por saldo tiene salida directa: recargar y reanudar.

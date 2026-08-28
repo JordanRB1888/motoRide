@@ -194,10 +194,35 @@ test('sin saldo para la carrera: el viaje NO nace, la ocurrencia muere con motiv
   const avisos = entorno.database.notifications.filter(n =>
     n.userId === 'p1' && n.event === 'subscription_suspended_payment');
   assert.equal(avisos.length, 1, 'aviso honesto con la salida clara');
+  // El conductor COMPROMETIDO también se entera (cierre 2B): su recogida no
+  // ocurrirá y no debe seguir esperándola — con motivo genérico, sin saldo
+  // ni ningún detalle financiero de la clienta.
+  const avisosConductor = entorno.database.notifications.filter(n =>
+    n.userId === 'drv_a' && n.event === 'scheduled_ride_cancelled');
+  assert.equal(avisosConductor.length, 1, 'el conductor comprometido recibe el aviso');
+  assert.match(avisosConductor[0].message, /fue cancelado/);
+  assert.doesNotMatch(`${avisosConductor[0].title} ${avisosConductor[0].message}`, /saldo|wallet|billetera|\$/i,
+    'jamás detalles financieros de la clienta hacia el conductor');
+  // Y desaparece de su agenda de compromisos.
+  const driver = entorno.database.users.find(u => u.id === 'drv_a');
+  assert.equal(entorno.servicio.listDriverCommitments(driver).length, 0);
   // Estable: repetir la pasada no duplica nada.
   await entorno.servicio.runSafeTransportHandoff();
   assert.equal(entorno.database.notifications.filter(n => n.event === 'subscription_suspended_payment').length, 1);
+  assert.equal(entorno.database.notifications.filter(n => n.event === 'scheduled_ride_cancelled').length, 1);
   assert.equal(entorno.database.trips.length, 0);
+});
+
+test('la quincena usa la agenda REAL: dias elegidos x tramos x 2 semanas (jamas 20 fijo)', async () => {
+  // 3 días ida+vuelta: 3 × 2 × 2 × $1.20 = $14.40
+  const tresDias = crearEntorno({ saldo: 14 });
+  const cuerpo = cuerpoLV({ pattern: { weekdays: [1, 3, 5], outbound: { time: '07:00' }, return: { time: '17:00' }, timezone: 'America/Caracas' } });
+  const rechazo = await tresDias.servicio.createSubscription(PASAJERO, cuerpo);
+  assert.equal(rechazo.ok, false);
+  assert.equal(rechazo.required, 14.4);
+  tresDias.database.users[0].walletBalance = 14.4;
+  assert.equal((await tresDias.servicio.createSubscription(PASAJERO, cuerpo)).ok, true);
+  assert.equal(tresDias.database.users[0].walletBalance, 14.4, 'la entrada sigue sin debitar');
 });
 
 test('reanudar desde la suspension exige saldo de quincena; con saldo, vuelve a ACTIVE', async () => {
@@ -216,6 +241,7 @@ test('reanudar desde la suspension exige saldo de quincena; con saldo, vuelve a 
   const reanudar = await entorno.servicio.setSubscriptionStatus(PASAJERO, sub.id, 'ACTIVE');
   assert.equal(reanudar.ok, true);
   assert.equal(sub.status, 'ACTIVE');
+  assert.equal(entorno.database.users[0].walletBalance, 50, 'reanudar TAMPOCO debita: solo verifica saldo');
   // Y desde la suspensión también puede cancelar del todo.
   const otra = crearEntorno({ saldo: 30 });
   await llevarHastaHandoff(otra);
@@ -248,4 +274,56 @@ test('el rescate sin conductor comprometido cobra IGUAL: misma wallet, misma tar
   assert.equal(trip.status, 'SEARCHING');
   assert.equal(trip.paymentMethod, 'WALLET');
   assert.equal(trip.fareUSD, DEFAULT_SAFE_TRANSPORT_PRICING.perRide.MOTO);
+  assert.equal(trip.commissionRate, DEFAULT_SAFE_TRANSPORT_PRICING.platformFeeRate,
+    'el rescate lleva el MISMO % del plan, lo tome quien lo tome');
+});
+
+test('la tarifa se toma de la config VIGENTE en el T-0 (politica: precio actual al handoff)', async () => {
+  // El plan nace con la moto a $1.20; el admin la sube ANTES del T-0.
+  const config = { valor: { perRide: { MOTO: 1.2, CAR: 2 }, platformFeeRate: 0.2 } };
+  const database = {
+    users: [
+      { id: 'p1', role: 'passenger', firstName: 'Ana', walletBalance: 30 },
+      { id: 'drv_a', role: 'driver', isVerified: true, status: 'AVAILABLE', accountStatus: 'ACTIVE', acceptsScheduledRides: true, vehicleType: 'MOTO', firstName: 'Conductor', lastName: 'A' }
+    ],
+    transportSubscriptions: [], scheduledRides: [], notifications: [], trips: []
+  };
+  const reloj = { ms: LUNES };
+  const bridge = {
+    findTripForRide: ride => database.trips.find(t => t.scheduledRideId === ride.id) ?? null,
+    driverById: id => database.users.find(u => u.id === id && u.role === 'driver') ?? null,
+    driverHasActiveTrip: () => false,
+    tripStatusOf: tripId => database.trips.find(t => t.id === tripId)?.status ?? null,
+    async createTripForRide({ ride, driver = null }) {
+      const vigente = config.valor; // como el puente real: getEffectivePricing() en el T-0
+      const trip = {
+        id: `trip_sched_${ride.id}`, scheduledRideId: ride.id,
+        passengerId: ride.passengerId, driverId: driver?.id ?? null,
+        status: driver ? 'DRIVER_ASSIGNED' : 'SEARCHING',
+        paymentMethod: 'WALLET',
+        fareUSD: vigente.perRide[ride.vehiclePreference === 'CAR' ? 'CAR' : 'MOTO'],
+        fareSource: 'SUBSCRIPTION_FIXED',
+        commissionRate: vigente.platformFeeRate
+      };
+      database.trips.push(trip);
+      return { ok: true, trip };
+    },
+    async announceAssignedTrip() {},
+    dispatchTrip: () => {}
+  };
+  const servicio = createSafeTransportService({
+    database, persistRecord: async () => true, tripBridge: bridge,
+    enabled: true, pilotUserIds: resolvePilotUserIds('*'), billingEnabled: true,
+    getPricing: () => config.valor, now: () => reloj.ms, logger: silencioso
+  });
+  const cuerpo = cuerpoLV({ pattern: { weekdays: [1], outbound: { time: '07:00' }, timezone: 'America/Caracas' } });
+  assert.equal((await servicio.createSubscription(PASAJERO, cuerpo)).ok, true);
+  await servicio.runSafeTransportCoverage();
+  const driver = database.users.find(u => u.id === 'drv_a');
+  assert.equal((await servicio.acceptScheduledRide(driver, database.scheduledRides[0].id)).ok, true);
+
+  config.valor = { perRide: { MOTO: 1.5, CAR: 2 }, platformFeeRate: 0.2 }; // el admin sube el precio
+  reloj.ms = RECOGIDA + MIN;
+  await servicio.runSafeTransportHandoff();
+  assert.equal(database.trips[0].fareUSD, 1.5, 'rige el precio VIGENTE al handoff, no el del alta');
 });

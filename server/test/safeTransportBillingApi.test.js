@@ -170,6 +170,20 @@ test('el dinero completo: 402 de entrada → plan → carrera WALLET → 80/20 r
   const perfilConductor = await (await pedir(`${url}/api/auth/me`, conductor.token)).json();
   assert.equal(Number(perfilConductor.walletBalance), 0.96, 'el 80% de $1.20');
 
+  // EXACTAMENTE-UNA-VEZ: la re-entrega del cierre (el MISMO lote offline
+  // reenviado, y un lote nuevo con otro COMPLETED) no vuelve a mover dinero.
+  assert.equal((await pedir(`${url}/api/trips/${tripId}/offline-events`, conductor.token, {
+    method: 'POST', body: JSON.stringify({ events: eventos })
+  })).status, 200, 'reenviar el mismo lote es inofensivo');
+  await pedir(`${url}/api/trips/${tripId}/offline-events`, conductor.token, {
+    method: 'POST',
+    body: JSON.stringify({ events: [{ eventId: crypto.randomUUID(), action: 'COMPLETED', sequence: 9, deviceTimestamp: new Date().toISOString() }] })
+  });
+  assert.equal(Number((await (await pedir(`${url}/api/auth/me`, pasajera.token)).json()).walletBalance), 18.8,
+    'la clienta se debitó UNA sola vez');
+  assert.equal(Number((await (await pedir(`${url}/api/auth/me`, conductor.token)).json()).walletBalance), 0.96,
+    'el conductor cobró UNA sola vez');
+
   // El contador del plan sube en la siguiente pasada del planificador (el
   // reinicio dispara el tick inicial).
   await new Promise(res => setTimeout(res, 300));
@@ -182,6 +196,24 @@ test('el dinero completo: 402 de entrada → plan → carrera WALLET → 80/20 r
     await new Promise(res => setTimeout(res, 500));
   }
   assert.equal(ridesUsed, 1, 'una carrera consumida en el plan');
+
+  // VIAJES NORMALES intactos: un viaje pedido por la vía común NO lleva el %
+  // del plan ni su fuente de tarifa, aun con la facturación encendida, y no
+  // toca el contador del plan.
+  const normal = await pedir(`${url2}/api/trips/create`, pasajera.token, {
+    method: 'POST',
+    body: JSON.stringify({
+      pickup: { lat: 10.64, lng: -71.61, address: 'Casa de prueba' },
+      destination: { lat: 10.69, lng: -71.63, address: 'Trabajo de prueba' },
+      rideType: 'MOTO', paymentMethod: 'CASH', fareUSD: 2.5
+    })
+  });
+  assert.equal(normal.status, 200);
+  const tripNormal = (await normal.json()).trip;
+  assert.equal(tripNormal.commissionRate, undefined, 'sin override del plan');
+  assert.notEqual(tripNormal.fareSource, 'SUBSCRIPTION_FIXED');
+  const subsTrasNormal = await (await pedir(`${url2}/api/transport/subscriptions`, pasajera.token)).json();
+  assert.equal(subsTrasNormal.subscriptions?.[0]?.plan?.ridesUsed, 1, 'el viaje normal no consume el plan');
 });
 
 test('el ADMIN edita las tarifas del plan: validado, persistido y solo para administración', async (t) => {

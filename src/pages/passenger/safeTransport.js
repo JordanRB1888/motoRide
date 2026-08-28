@@ -284,7 +284,7 @@ export function renderSafeTransport(container, { onClose, onOpenWallet } = {}) {
     const quincena = tarifa * borrador.weekdays.length * tramos * 2;
     return `
       <div class="st-summary-grid st-precio">
-        ${filaResumen('Tarifa por carrera', `$${tarifa.toFixed(2)}`)}
+        ${filaResumen('Tarifa actual por carrera', `$${tarifa.toFixed(2)}`)}
         ${filaResumen('Quincena estimada', `$${quincena.toFixed(2)}`)}
       </div>
       <p class="st-hint">${icon('info', 14)} Se descuenta de tu Billetera Express solo por carrera realizada.
