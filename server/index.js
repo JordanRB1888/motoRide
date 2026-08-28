@@ -42,6 +42,8 @@ import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 import { createPushRouter } from './routes/push.js';
 import { createTripOfflineEventsRouter } from './routes/tripOfflineEvents.js';
+import { createTransportSubscriptionsRouter } from './routes/transportSubscriptions.js';
+import { createSafeTransportService } from './services/safeTransport.js';
 import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
@@ -715,6 +717,22 @@ app.use('/api', createDriverApplicationsRouter({
   bcrypt,
   privateStorage
 }));
+
+// SAFE-TRANSPORT-1C: suscripciones del traslado recurrente y materializador
+// idempotente. TODO detrás de SAFE_TRANSPORT_ENABLED (apagada por defecto):
+// sin bandera no hay API ni pasadas. Sin ofertas a conductores, sin traspaso
+// a viajes y sin consumo de créditos en esta fase.
+const safeTransport = createSafeTransportService({
+  database,
+  persistRecord,
+  logger: console
+});
+app.use('/api', createTransportSubscriptionsRouter({
+  safeTransport,
+  requireAuth,
+  requirePassenger: requireRole('passenger')
+}));
+safeTransport.startMaterializer();
 
 // Driver Dispatch Registry & Atomic Lock Map
 const driverRegistry = new Map();

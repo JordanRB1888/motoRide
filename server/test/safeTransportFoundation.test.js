@@ -19,6 +19,7 @@ import {
   validateSubscriptionPayload
 } from '../domain/scheduleCalendar.js';
 import { openDatabaseBackend } from '../services/databaseBackend.js';
+import { isSafeTransportEnabled } from '../services/safeTransport.js';
 import { PERSISTED_TABLES } from '../services/databasePersistence.js';
 import { POSTGRES_TABLES } from '../services/postgresPersistence.js';
 
@@ -280,19 +281,36 @@ test('roundtrip: guardar y recargar una suscripcion y una ocurrencia', async (t)
 });
 
 // --------------------------------------------------------------------------
-// DORMIDO: nada de comportamiento se activo
+// Fronteras de fase (actualizado en SAFE-1C): la bandera manda, y NADA de
+// conductores, viajes ni creditos existe todavia en el traslado seguro.
 // --------------------------------------------------------------------------
 
-test('la funcionalidad esta DORMIDA: sin scheduler, sin API, sin handoff, sin creditos', () => {
-  const indice = leer('server/index.js').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/[^\n]*$/gm, ' ');
-  assert.ok(!indice.includes('generateOccurrences'), 'ningun materializador registrado');
-  assert.ok(!indice.includes('scheduleCalendar'), 'index.js ni importa el calendario');
-  assert.ok(!/transportSubscriptions(?!: \[\])/.test(indice.replace('transportSubscriptions: []', '')),
-    'ninguna logica de negocio toca las suscripciones');
-  assert.ok(!indice.includes('scheduled_ride') && !indice.includes('scheduledRideHandoff'),
-    'ningun handoff de viaje programado');
-  // Y ninguna ruta nueva de API de suscripciones.
-  const rutas = fs.readdirSync(path.join(serverDir, 'routes'));
-  assert.ok(!rutas.some(nombre => /transport|subscription|scheduled/i.test(nombre)),
-    'sin endpoints de suscripciones en SAFE-1B');
+test('SAFE-1C: bandera apagada por defecto; sin ofertas, sin handoff, sin creditos', () => {
+  // La bandera solo enciende con la lista explicita de verdaderos.
+  assert.equal(isSafeTransportEnabled(undefined), false, 'sin variable = apagado');
+  assert.equal(isSafeTransportEnabled(''), false);
+  assert.equal(isSafeTransportEnabled('off'), false);
+  assert.equal(isSafeTransportEnabled('TRUE'), true);
+  assert.equal(isSafeTransportEnabled('1'), true);
+
+  const quitarComentarios = texto => texto.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/[^\n]*$/gm, ' ');
+  const servicio = quitarComentarios(leer('server/services/safeTransport.js'));
+  const rutas = quitarComentarios(leer('server/routes/transportSubscriptions.js'));
+  const codigo = servicio + rutas;
+
+  // SAFE-1D todavia no existe: ninguna comunicacion con conductores.
+  for (const prohibido of ['dispatchTripToDrivers', 'offerNext', 'notifyRideOffer',
+    'selectEligibleDrivers', 'requireApprovedDriver', 'io.to(', 'driverRegistry']) {
+    assert.ok(!codigo.includes(prohibido), `el traslado seguro no debe tocar «${prohibido}»`);
+  }
+  // Ningun traspaso a viajes reales ni estados del despacho inmediato.
+  for (const prohibido of ['database.trips', "'SEARCHING'", "'DRIVER_ASSIGNED'"]) {
+    assert.ok(!codigo.includes(prohibido), `sin handoff: «${prohibido}»`);
+  }
+  // Ningun consumo de creditos: ridesUsed solo aparece inicializado a cero.
+  assert.ok(!/ridesUsed\s*(\+=|=\s*[^0])/.test(servicio.replace(/plan\.ridesUsed/g, 'X')),
+    'ridesUsed jamas se incrementa en 1C');
+  // Y las ocurrencias nacen sin conductor y sin viaje.
+  assert.ok(servicio.includes("assignmentStatus: 'UNASSIGNED'"));
+  assert.ok(servicio.includes('tripId: null'));
 });

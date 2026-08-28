@@ -32,6 +32,10 @@ const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // La forma no basta: '2026-13-40' pasa el regex y Date.UTC lo normalizaría en
 // silencio a otra fecha. Una fecha solo vale si el calendario la devuelve igual.
+export function isValidCalendarDate(valor) {
+  return esFechaCalendarioValida(valor);
+}
+
 function esFechaCalendarioValida(valor) {
   if (!FECHA_RE.test(String(valor ?? ''))) return false;
   const [y, m, d] = String(valor).split('-').map(Number);
