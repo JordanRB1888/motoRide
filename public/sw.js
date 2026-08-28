@@ -1,4 +1,4 @@
-const CACHE_NAME = '58express-pwa-v13-push';
+const CACHE_NAME = '58express-pwa-v14-scheduled-push';
 // Prefijo común de todas las cachés de la aplicación: permite retirar las
 // versiones anteriores sin tocar cachés de terceros.
 const CACHE_PREFIX = '58express-pwa-';
@@ -228,6 +228,21 @@ const PUSH_TEXTS = {
   ride_request: {
     title: 'Nueva solicitud de viaje',
     body: 'Tienes una nueva solicitud disponible.'
+  },
+  // Transporte Seguro. Los textos viven AQUI, como los demas: el servidor
+  // manda un tipo, nunca una cadena, asi que por esta puerta no puede
+  // colarse una direccion ni un nombre a la pantalla de bloqueo.
+  scheduled_offer: {
+    title: 'Traslado programado disponible',
+    body: 'Te ofrecen cubrir un traslado programado. Abre la app para verlo.'
+  },
+  scheduled_pickup_due: {
+    title: 'Es hora de tu traslado programado',
+    body: 'Tu traslado programado comienza ahora. Abre la app para ir a la recogida.'
+  },
+  scheduled_cancelled: {
+    title: 'Traslado programado cancelado',
+    body: 'Un traslado que tenias comprometido fue cancelado.'
   }
 };
 
@@ -272,7 +287,7 @@ self.addEventListener('push', (event) => {
     // Una etiqueta por viaje: repetir el aviso de la misma carrera reemplaza
     // la notificacion en vez de apilar una torre. El identificador de viaje no
     // revela nada privado por si solo.
-    tag: payload.tripId ? `ride-request:${payload.tripId}` : 'ride-request',
+    tag: payload.tripId ? `${payload.tipo}:${payload.tripId}` : payload.tipo,
     renotify: true,
     // Solo lo minimo para enrutar al abrir. Ni nombre, ni telefono, ni
     // direcciones, ni importe.

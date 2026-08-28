@@ -94,11 +94,14 @@ const ventana = (url, { conFoco = true } = {}) => {
 // Generacion de cache
 // --------------------------------------------------------------------------
 
-test('la generacion de cache subio exactamente una vez, a v13', () => {
+test('la generacion de cache subio exactamente una vez, a v14', () => {
+  // v14: el worker aprendio los avisos del Transporte Seguro. Sin subir la
+  // generacion los telefonos seguirian con el worker viejo, y para ese worker
+  // los tipos nuevos son desconocidos: no pintaria nada.
   const fuente = fs.readFileSync(swPath, 'utf8');
   const nombres = fuente.match(/const CACHE_NAME = '([^']+)'/g) || [];
   assert.equal(nombres.length, 1, 'solo puede declararse un CACHE_NAME');
-  assert.match(fuente, /const CACHE_NAME = '58express-pwa-v13-push';/);
+  assert.match(fuente, /const CACHE_NAME = '58express-pwa-v14-scheduled-push';/);
 });
 
 // --------------------------------------------------------------------------
@@ -195,16 +198,45 @@ test('ningun dato privado del viaje puede llegar a la notificacion', async () =>
   assert.deepEqual(Object.keys(sw.notificaciones[0].options.data).sort(), ['t', 'tripId', 'v']);
 });
 
-test('la etiqueta agrupa por viaje y no expone contenido privado', async () => {
+test('la etiqueta agrupa por tipo y viaje, y no expone contenido privado', async () => {
+  // La etiqueta lleva el TIPO desde que existen varios: si todos compartieran
+  // una etiqueta generica, una cancelacion taparia una oferta pendiente.
   const sw = cargarWorker();
   await sw.dispatch('push', eventoPush({ v: 1, t: 'ride_request', tripId: 'trp_555' }));
-  assert.equal(sw.notificaciones[0].options.tag, 'ride-request:trp_555');
+  assert.equal(sw.notificaciones[0].options.tag, 'ride_request:trp_555');
   assert.equal(sw.notificaciones[0].options.renotify, true);
 
   // Sin tripId sigue habiendo etiqueta estable: dos avisos no se apilan.
   const sw2 = cargarWorker();
   await sw2.dispatch('push', eventoPush({ v: 1, t: 'ride_request' }));
-  assert.equal(sw2.notificaciones[0].options.tag, 'ride-request');
+  assert.equal(sw2.notificaciones[0].options.tag, 'ride_request');
+
+  // Y tipos distintos NO comparten etiqueta: cada uno vive por su cuenta.
+  const sw3 = cargarWorker();
+  await sw3.dispatch('push', eventoPush({ v: 1, t: 'scheduled_offer' }));
+  await sw3.dispatch('push', eventoPush({ v: 1, t: 'scheduled_cancelled' }));
+  assert.equal(sw3.notificaciones.length, 2);
+  assert.notEqual(sw3.notificaciones[0].options.tag, sw3.notificaciones[1].options.tag);
+});
+
+test('el worker pinta los avisos del Transporte Seguro con SU texto fijo', async () => {
+  const esperados = {
+    scheduled_offer: 'Traslado programado disponible',
+    scheduled_pickup_due: 'Es hora de tu traslado programado',
+    scheduled_cancelled: 'Traslado programado cancelado'
+  };
+  for (const [tipo, titulo] of Object.entries(esperados)) {
+    const sw = cargarWorker();
+    await sw.dispatch('push', eventoPush({ v: 1, t: tipo }));
+    assert.equal(sw.notificaciones.length, 1, tipo);
+    assert.equal(sw.notificaciones[0].title, titulo);
+    assert.ok(sw.notificaciones[0].options.body.length > 0, `${tipo} tiene cuerpo`);
+    // El texto es del worker: el payload no trae ni una cadena del servidor.
+    assert.deepEqual(
+      Object.keys(JSON.parse(JSON.stringify(sw.notificaciones[0].options.data))).sort(),
+      ['t', 'tripId', 'v']
+    );
+  }
 });
 
 test('ya no se declaran acciones que el worker no atiende', async () => {
@@ -382,7 +414,7 @@ test('el payload que produce el backend es exactamente el que este worker entien
 
   assert.equal(sw.notificaciones.length, 1, 'el worker debia aceptar el payload del backend');
   assert.equal(sw.notificaciones[0].title, 'Nueva solicitud de viaje');
-  assert.equal(sw.notificaciones[0].options.tag, 'ride-request:trp_compat');
+  assert.equal(sw.notificaciones[0].options.tag, 'ride_request:trp_compat');
   // Se compara por JSON: el objeto nace dentro del contexto `vm`, asi que su
   // prototipo es el de ese realm y la comparacion estricta fallaria por eso
   // aunque los valores coincidan.

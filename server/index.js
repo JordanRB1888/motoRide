@@ -857,10 +857,36 @@ const safeTransportTripBridge = {
 // idempotente. TODO detrás de SAFE_TRANSPORT_ENABLED (apagada por defecto):
 // sin bandera no hay API ni pasadas. Sin ofertas a conductores, sin traspaso
 // a viajes y sin consumo de créditos en esta fase.
+/**
+ * Entrega de los avisos del Transporte Seguro. El motor decide QUÉ se avisa;
+ * esta frontera decide CÓMO llega: en vivo a la app abierta y, en lo
+ * accionable, al teléfono. Ambas vías son mejor esfuerzo — un socket muerto o
+ * un proveedor de push lento no pueden robarle tiempo al motor de cobertura,
+ * así que el push va sin `await`, igual que en el despacho inmediato.
+ */
+const safeTransportNotifier = {
+  live(userId, doc) {
+    io.to(`user:${userId}`).emit('platform:notification', {
+      id: doc.id,
+      title: doc.title,
+      message: doc.message,
+      category: doc.category,
+      event: doc.event,
+      createdAt: doc.createdAt,
+      read: false
+    });
+  },
+  push(userId, tipo, tripId) {
+    pushService.notifyScheduledEvent(userId, tipo, tripId)
+      .catch(error => console.error(`[+58express Push] aviso programado no enviado: ${error?.name || 'UNKNOWN'}`));
+  }
+};
+
 const safeTransport = createSafeTransportService({
   database,
   persistRecord,
   tripBridge: safeTransportTripBridge,
+  notifier: safeTransportNotifier,
   // SAFE-2A: las tarifas del plan llegan por función para que la edición del
   // admin rija EN CALIENTE, sin reiniciar.
   getPricing: () => safeTransportPricing,

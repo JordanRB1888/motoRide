@@ -258,6 +258,10 @@ export function createSafeTransportService({
   database,
   persistRecord,
   tripBridge = null,
+  // Entrega de avisos (socket en vivo + push). Opcional a propósito: sin él
+  // el motor sigue funcionando y los avisos quedan en el centro de
+  // notificaciones, como hasta ahora.
+  notifier = null,
   pilotUserIds = resolvePilotUserIds(),
   billingEnabled = isSafeTransportBillingEnabled(),
   getPricing = () => DEFAULT_SAFE_TRANSPORT_PRICING,
@@ -842,12 +846,28 @@ export function createSafeTransportService({
   }
 
   /**
-   * Notificación SEMÁNTICA en la app (documento durable de `notifications`).
-   * El texto jamás lleva dirección, coordenadas ni teléfono. El transporte
-   * push llegará en fases posteriores por ESTA misma frontera — la lógica de
-   * cobertura no conoce Web Push.
+   * Los avisos del plan que EXIGEN que el teléfono suene: hay algo que hacer
+   * (una oferta que aceptar, una recogida que empieza) o algo que dejar de
+   * hacer (un traslado cancelado). Los demás avisos llegan en vivo y quedan
+   * en el centro de notificaciones, sin despertar a nadie.
    */
-  async function notificar(userId, event, title, message) {
+  const PUSH_POR_EVENTO = Object.freeze({
+    scheduled_driver_offer: 'scheduled_offer',
+    scheduled_pickup_due: 'scheduled_pickup_due',
+    scheduled_ride_cancelled: 'scheduled_cancelled'
+  });
+
+  /**
+   * Notificación SEMÁNTICA en la app (documento durable de `notifications`).
+   * El texto jamás lleva dirección, coordenadas ni teléfono.
+   *
+   * La ENTREGA va detrás y es mejor esfuerzo puro: aviso en vivo por socket
+   * para quien tenga la app abierta y, en los eventos accionables, push al
+   * teléfono. Sin esto un aviso existía en la base pero no llegaba a nadie:
+   * había que entrar a mirar. Nada de esto puede tumbar el motor ni deshacer
+   * lo ya persistido — el push no lleva texto del servidor, solo un tipo.
+   */
+  async function notificar(userId, event, title, message, { tripId = null } = {}) {
     if (!userId || !Array.isArray(database.notifications)) return false;
     const doc = {
       id: `notification_${crypto.randomUUID()}`,
@@ -863,6 +883,13 @@ export function createSafeTransportService({
     if (!await guardar('notifications', doc)) {
       database.notifications.splice(database.notifications.indexOf(doc), 1);
       return false;
+    }
+    try {
+      notifier?.live?.(userId, doc);
+      const tipoPush = PUSH_POR_EVENTO[event];
+      if (tipoPush) notifier?.push?.(userId, tipoPush, tripId);
+    } catch (error) {
+      logger.warn(`[+58express SafeTransport] aviso ${event} no entregado: ${error?.message ?? 'desconocido'}`);
     }
     return true;
   }
@@ -1226,6 +1253,12 @@ export function createSafeTransportService({
       resumen.coveredHandoffs += 1;
       // Con conductor comprometido JAMÁS se despacha: cero ofertas de 15 s.
       await tripBridge.announceAssignedTrip(creado.trip);
+      // Y se le avisa de verdad: es la hora. Sin esto, un conductor con la
+      // app cerrada no se enteraba de que su traslado comprometido empezaba.
+      await notificar(conductorConfirmado.id, 'scheduled_pickup_due',
+        'Es hora de tu traslado programado',
+        'Tu traslado programado comienza ahora. Abre la app para ir a la recogida.',
+        { tripId: creado.trip.id });
     } else {
       resumen.fallbackHandoffs += 1;
       // El rescate de última hora: EL MISMO despacho inmediato de siempre

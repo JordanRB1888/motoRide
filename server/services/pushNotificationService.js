@@ -46,7 +46,12 @@ export function isWebPushEnabled(value = process.env.WEB_PUSH_ENABLED) {
  * ahí, ni siquiera por error de programación.
  */
 export const PUSH_TYPE = Object.freeze({
-  RIDE_REQUEST: 'ride_request'
+  RIDE_REQUEST: 'ride_request',
+  // Transporte Seguro: los tres avisos que EXIGEN que el teléfono suene,
+  // porque hay algo que hacer o que dejar de hacer.
+  SCHEDULED_OFFER: 'scheduled_offer',
+  SCHEDULED_PICKUP_DUE: 'scheduled_pickup_due',
+  SCHEDULED_CANCELLED: 'scheduled_cancelled'
 });
 
 const PAYLOAD_VERSION = 1;
@@ -54,6 +59,13 @@ const PAYLOAD_VERSION = 1;
 /** Solo el identificador de enrutado. Nada más cabe aquí. */
 export function buildRideOfferPayload(tripId) {
   return { v: PAYLOAD_VERSION, t: PUSH_TYPE.RIDE_REQUEST, tripId };
+}
+
+/** Igual de austero para los avisos del plan: tipo y, si acaso, el viaje. */
+export function buildScheduledPayload(type, tripId = null) {
+  const payload = { v: PAYLOAD_VERSION, t: type };
+  if (tripId) payload.tripId = tripId;
+  return payload;
 }
 
 export function createPushNotificationService({
@@ -198,10 +210,29 @@ export function createPushNotificationService({
     return notifyUser(driverId, buildRideOfferPayload(tripId), { tripId, ...contexto });
   }
 
+  /**
+   * Aviso del Transporte Seguro (oferta programada, hora de recogida,
+   * cancelación). Igual que `notifyRideOffer`, es una operación SEMÁNTICA con
+   * su lista blanca: el resto del servidor no toca el transporte genérico, y
+   * un tipo que no esté aquí no puede salir a ningún teléfono.
+   */
+  const TIPOS_PROGRAMADOS = new Set([
+    PUSH_TYPE.SCHEDULED_OFFER, PUSH_TYPE.SCHEDULED_PICKUP_DUE, PUSH_TYPE.SCHEDULED_CANCELLED
+  ]);
+
+  async function notifyScheduledEvent(userId, type, tripId = null, contexto = {}) {
+    if (!userId || !TIPOS_PROGRAMADOS.has(type)) {
+      registrar('push_scheduled_type_rejected', {});
+      return { sent: 0, skipped: true, results: [] };
+    }
+    return notifyUser(userId, buildScheduledPayload(type, tripId), { ...contexto });
+  }
+
   return {
     enabled,
     notifyUser,
     notifyRideOffer,
+    notifyScheduledEvent,
     newSubscriptionId: () => `sub_${crypto.randomUUID()}`
   };
 }

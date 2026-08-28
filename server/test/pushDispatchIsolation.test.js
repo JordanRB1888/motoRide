@@ -63,12 +63,19 @@ const recogida = { lat: 10.6427, lng: -71.6125 };
 test('el despacho invoca exactamente la operacion semantica de PUSH-3A y nada mas', () => {
   // Hasta PUSH-1 esta prueba exigia CERO llamadas. PUSH-3A autoriza UNA:
   // `pushService.notifyRideOffer(...)` dentro de `offerNext`, acompanando a
-  // la oferta de Socket.IO ya emitida. Cualquier segunda llamada, o una
-  // llamada directa a `notifyUser`, seria un canal nuevo sin autorizar.
+  // la oferta de Socket.IO ya emitida. Cualquier segunda llamada seria un
+  // canal nuevo sin autorizar.
   const llamadas = indexCodigo.match(/pushService\.notifyRideOffer\(/g) || [];
   assert.equal(llamadas.length, 1, 'debe existir exactamente UNA invocacion semantica');
+  // La regla de fondo NO cambia: el servidor jamas toca el transporte
+  // generico. Cada aviso sale por una operacion CON NOMBRE y lista blanca
+  // propia. El Transporte Seguro anadio la suya (`notifyScheduledEvent`,
+  // autorizada por el dueno para que la oferta programada y la hora de
+  // recogida suenen); `notifyUser` sigue prohibido aqui.
   assert.ok(!indexCodigo.includes('pushService.notifyUser('),
-    'el despacho no llama al transporte generico: solo a la operacion de oferta');
+    'el servidor no llama al transporte generico: solo operaciones semanticas');
+  const programados = indexCodigo.match(/pushService\.notifyScheduledEvent\(/g) || [];
+  assert.equal(programados.length, 1, 'un solo punto de entrada para los avisos del plan');
 
   // Y esa unica llamada vive dentro de offerNext, DESPUES de emitir la oferta
   // por socket al conductor concreto: push acompana a la oferta, nunca la
