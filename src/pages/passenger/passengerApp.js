@@ -183,13 +183,56 @@ export function renderPassengerApp(container) {
     consultarAccesoTransporteSeguro().then(autorizado => {
       const hueco = container.querySelector('#safe-transport-entry-slot');
       if (!autorizado || !hueco) return;
+      // Micro-historia de la tarjeta: traslado → entra al entorno protegido →
+      // protección confirmada. La moto es EL MISMO asset que ya carga esta
+      // pantalla (cero bytes nuevos); el portal es SVG inline. Toda la
+      // animación va por transform/opacity, la escena es decorativa
+      // (aria-hidden, sin eventos) y la tarjeta entera sigue siendo el botón.
       hueco.innerHTML = `
-        <button type="button" id="safe-transport-entry" class="st-entry-card">
-          <span>${icon('shield', 20)}</span>
-          <span><b>Transporte Seguro</b><small>Programa tus traslados de ida y vuelta</small></span>
-          <span class="st-entry-go">${icon('chevronRight', 16)}</span>
+        <button type="button" id="safe-transport-entry" class="st-entry-card st-entry-card--motion">
+          <span class="st-entry-copy">
+            <b>${icon('shield', 16)} Transporte Seguro</b>
+            <small>Programa tus traslados con mayor tranquilidad</small>
+          </span>
+          <span class="st-entry-scene" aria-hidden="true">
+            <i class="st-scene-road"></i>
+            <span class="st-moto-track">
+              <span class="st-moto-lean">
+                <span class="st-moto-vib">
+                  <i class="st-speed st-speed--1"></i>
+                  <i class="st-speed st-speed--2"></i>
+                  <img src="/vehicles/moto-real.png" alt="" draggable="false" decoding="async">
+                  <i class="st-moto-glow"></i>
+                </span>
+              </span>
+            </span>
+            <span class="st-portal">
+              <i class="st-portal-halo"></i>
+              <svg viewBox="0 0 44 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path class="st-portal-shackle" d="M13 19v-5a9 9 0 0 1 18 0v5" stroke-width="3.5" stroke-linecap="round"/>
+                <rect class="st-portal-body" x="6" y="19" width="32" height="26" rx="7"/>
+                <path class="st-portal-tunnel" d="M15 45v-8a7 7 0 0 1 14 0v8z"/>
+                <circle class="st-portal-check-bg" cx="36" cy="21" r="7"/>
+                <path class="st-portal-check" d="M32.8 21.2l2.2 2.2 4-4.4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </span>
         </button>`;
-      hueco.querySelector('#safe-transport-entry')?.addEventListener('click', () => handleNavigation('transporte-seguro'));
+      const tarjeta = hueco.querySelector('#safe-transport-entry');
+      tarjeta?.addEventListener('click', () => handleNavigation('transporte-seguro'));
+      // Rendimiento: el ciclo SOLO corre con la tarjeta a la vista y la
+      // pestaña activa; fuera de eso, pausado (animation-play-state).
+      const escena = hueco.querySelector('.st-entry-scene');
+      if (escena && 'IntersectionObserver' in window) {
+        let visible = false;
+        const aplicar = () => escena.classList.toggle('st-scene--pausada', !visible || document.hidden);
+        const observador = new IntersectionObserver(entradas => {
+          visible = entradas.some(e => e.isIntersecting);
+          aplicar();
+        }, { threshold: 0.15 });
+        observador.observe(tarjeta);
+        document.addEventListener('visibilitychange', aplicar);
+      }
     }).catch(() => {});
   }
   container.querySelector('#passenger-support-shortcut')?.addEventListener('click', () => document.body.appendChild(createAdminSupportChat(user)));

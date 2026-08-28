@@ -394,7 +394,13 @@
 @keyframes st-girar { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .st-loading span { animation: none; } }
 
-/* --- Punto de entrada del pasajero --------------------------------------- */
+/* --- Punto de entrada del pasajero ---------------------------------------
+   Micro-historia animada: traslado → entra al entorno protegido →
+   protección confirmada. TODO por transform/opacity (GPU); la escena es
+   decorativa y jamás intercepta el toque. Ciclo premium de ~8,6 s con
+   pausas; pausado fuera de vista (.st-scene--pausada) y estático bajo
+   prefers-reduced-motion. Cero assets nuevos: la moto es la misma imagen
+   que ya carga esta pantalla. */
 
 .st-entry-card {
   display: flex;
@@ -415,3 +421,247 @@
 .st-entry-card b { display: block; font-size: 0.9rem; }
 .st-entry-card small { color: var(--x58-text-secondary, var(--text-secondary)); font-size: 0.76rem; }
 .st-entry-card .st-entry-go { margin-left: auto; color: var(--x58-text-secondary, var(--text-secondary)); display: flex; }
+
+.st-entry-card--motion {
+  min-height: 68px;
+  padding: 10px 10px 10px 14px;
+  gap: 12px;
+  transition: border-color 0.25s var(--x58-ease-standard, ease),
+              box-shadow 0.25s var(--x58-ease-standard, ease);
+}
+/* Igual especificidad (0,2,1) que la regla base del primer span, y
+   posterior en el archivo: gana el apilado en columna. */
+.st-entry-card--motion > span.st-entry-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  color: inherit;
+}
+.st-entry-card--motion .st-entry-copy b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.92rem;
+}
+.st-entry-card--motion .st-entry-copy b svg { color: var(--x58-yellow-text); flex-shrink: 0; }
+.st-entry-card--motion .st-entry-copy small {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.25;
+  font-size: 0.72rem;
+}
+/* Al tocar/hover: la tarjeta «se enciende» apenas — sin mover el layout. */
+.st-entry-card--motion:hover,
+.st-entry-card--motion:active {
+  border-color: var(--x58-yellow);
+  box-shadow: 0 0 0 1px var(--x58-yellow-line, transparent), var(--x58-shadow-card);
+}
+.st-entry-card--motion:hover .st-entry-scene { transform: scale(1.02); }
+
+/* La escena: carretera, moto y portal-candado. Máscara dura en los bordes. */
+.st-entry-scene {
+  position: relative;
+  flex-shrink: 0;
+  width: 128px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    radial-gradient(90px 34px at 82% 68%, var(--x58-yellow-soft) 0%, transparent 70%),
+    var(--x58-surface-sunken, var(--x58-surface-2, transparent));
+  pointer-events: none;
+  transform: translateZ(0);
+  transition: transform 0.3s var(--x58-ease-standard, ease);
+}
+.st-scene-road {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 7px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--x58-border-strong, var(--border-color)) 18%, var(--x58-yellow-line, var(--x58-border-strong)) 82%, transparent);
+  opacity: 0.8;
+}
+
+/* --- La moto: pista (recorrido) → inclinación → suspensión ------------- */
+
+.st-moto-track {
+  position: absolute;
+  left: 14px;
+  bottom: 5px;
+  width: 46px;
+  height: 34px;
+  will-change: transform, opacity;
+  animation: st-ciclo-moto 8.6s infinite;
+}
+.st-moto-lean {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 88%;
+  animation: st-ciclo-lean 8.6s infinite;
+}
+.st-moto-vib {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  animation: st-vibracion 1.15s ease-in-out infinite;
+}
+.st-moto-vib img {
+  width: 46px;
+  height: auto;
+  display: block;
+  -webkit-user-drag: none;
+}
+/* Faro: un resplandor cálido que despierta cuando la moto rueda. */
+.st-moto-glow {
+  position: absolute;
+  right: -7px;
+  bottom: 8px;
+  width: 16px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--x58-yellow) 0%, transparent 75%);
+  opacity: 0.18;
+  animation: st-ciclo-faro 8.6s infinite;
+}
+/* Líneas de velocidad: dos trazos que solo existen en marcha. */
+.st-speed {
+  position: absolute;
+  left: -12px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--x58-yellow);
+  opacity: 0;
+}
+.st-speed--1 { top: 12px; width: 10px; animation: st-ciclo-speed 8.6s infinite; }
+.st-speed--2 { top: 20px; width: 7px; animation: st-ciclo-speed 8.6s infinite 0.12s; }
+
+/* --- El portal-candado: umbral, túnel iluminado y sello de protección --- */
+
+.st-portal {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 44px;
+  height: 48px;
+  z-index: 2; /* la moto pasa POR DETRÁS del cuerpo: entra de verdad */
+}
+.st-portal svg { width: 100%; height: 100%; display: block; }
+.st-portal-shackle { stroke: var(--x58-text-secondary, var(--text-secondary)); }
+.st-portal-body {
+  fill: var(--x58-surface-raised, var(--x58-surface-1));
+  stroke: var(--x58-yellow-line, var(--x58-border-strong));
+  stroke-width: 1.5;
+}
+.st-portal-tunnel {
+  fill: var(--x58-yellow-soft);
+  stroke: var(--x58-yellow);
+  stroke-width: 1;
+  opacity: 0.55;
+  animation: st-ciclo-tunel 8.6s infinite;
+}
+.st-portal-check-bg { fill: var(--x58-success, var(--success)); opacity: 0.92; }
+.st-portal-check { stroke: var(--x58-text-inverse, #fff); }
+.st-portal svg .st-portal-check-bg,
+.st-portal svg .st-portal-check {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: st-ciclo-sello 8.6s infinite;
+}
+/* El pulso del umbral: el sistema reconoce el traslado al cruzar. */
+.st-portal-halo {
+  position: absolute;
+  inset: -7px;
+  border-radius: 16px;
+  background: radial-gradient(closest-side, var(--x58-yellow) 0%, transparent 70%);
+  opacity: 0.1;
+  animation: st-ciclo-portal 8.6s infinite;
+}
+
+/* --- Coreografía (un solo reloj de 8,6 s para todas las capas) ----------
+   reposo → acelera → cruza el umbral → pulso de protección → desaparece →
+   reaparece por la izquierda → desacelera → reposo. */
+
+@keyframes st-ciclo-moto {
+  0%, 15%   { transform: translateX(0); opacity: 1; animation-timing-function: ease-in; }
+  32%       { transform: translateX(48px); opacity: 1; animation-timing-function: ease-in; }
+  37.5%     { transform: translateX(62px); opacity: 0; }
+  38%       { transform: translateX(-78px); opacity: 0; }
+  52%       { transform: translateX(-78px); opacity: 0; animation-timing-function: linear; }
+  55%       { transform: translateX(-60px); opacity: 1; animation-timing-function: cubic-bezier(0.3, 0.6, 0.3, 1); }
+  76%, 100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes st-ciclo-lean {
+  0%, 15%   { transform: rotate(0deg); }
+  22%       { transform: rotate(-5deg); }
+  32%       { transform: rotate(-3deg); }
+  37%       { transform: rotate(0deg); }
+  55%       { transform: rotate(-4deg); }
+  70%       { transform: rotate(-2deg); }
+  78%       { transform: rotate(1.6deg); }
+  85%, 100% { transform: rotate(0deg); }
+}
+@keyframes st-vibracion {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-0.6px); }
+}
+@keyframes st-ciclo-faro {
+  0%, 14%   { opacity: 0.18; }
+  22%, 36%  { opacity: 0.6; }
+  40%, 52%  { opacity: 0; }
+  58%, 72%  { opacity: 0.55; }
+  80%, 100% { opacity: 0.18; }
+}
+@keyframes st-ciclo-speed {
+  0%, 17%   { opacity: 0; transform: translateX(0); }
+  22%       { opacity: 0.7; }
+  30%       { opacity: 0.35; transform: translateX(-5px); }
+  36%, 53%  { opacity: 0; transform: translateX(0); }
+  58%       { opacity: 0.6; }
+  68%       { opacity: 0.25; transform: translateX(-5px); }
+  74%, 100% { opacity: 0; transform: translateX(0); }
+}
+@keyframes st-ciclo-portal {
+  0%, 31%   { opacity: 0.1; }
+  34%       { opacity: 0.55; }
+  37%       { opacity: 0.7; }
+  44%       { opacity: 0.15; }
+  50%, 100% { opacity: 0.1; }
+}
+@keyframes st-ciclo-tunel {
+  0%, 30%   { opacity: 0.55; }
+  34%, 40%  { opacity: 1; }
+  48%, 100% { opacity: 0.55; }
+}
+@keyframes st-ciclo-sello {
+  0%, 32%   { transform: scale(1); }
+  36%       { transform: scale(1.16); }
+  41%       { transform: scale(1); }
+  44%       { transform: scale(1.06); }
+  47%, 100% { transform: scale(1); }
+}
+
+/* En pantallas estrechas la escena cede espacio al titular: misma
+   coreografía (el recorrido vive en px dentro de la escena). */
+@media (max-width: 374px) {
+  .st-entry-scene { width: 112px; }
+  .st-moto-track { left: 9px; }
+  .st-portal { right: 2px; }
+}
+
+/* Rendimiento: fuera de vista o pestaña oculta, el reloj se detiene. */
+.st-scene--pausada,
+.st-scene--pausada * { animation-play-state: paused !important; }
+
+/* Reduced motion: composición ESTÁTICA con la misma información —
+   moto en reposo frente al portal con su sello visible. Nada se mueve. */
+@media (prefers-reduced-motion: reduce) {
+  .st-entry-scene *, .st-entry-scene { animation: none !important; }
+  .st-entry-card--motion:hover .st-entry-scene { transform: none; }
+  .st-portal-halo { opacity: 0.2; }
+  .st-portal-tunnel { opacity: 0.8; }
+  .st-moto-glow { opacity: 0.3; }
+}
