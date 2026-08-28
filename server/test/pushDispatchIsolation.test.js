@@ -148,12 +148,22 @@ test('el despacho sigue emitiendo la oferta por Socket.IO al conductor concreto'
 // Elegibilidad: intacta (PUSH-3b NO se implementa)
 // --------------------------------------------------------------------------
 
-test('las doce razones de rechazo siguen siendo exactamente las mismas', () => {
-  assert.deepEqual(Object.keys(DISPATCH_REJECTION).sort(), [
+test('las doce razones OPERATIVAS de rechazo siguen siendo exactamente las mismas', () => {
+  // Los doce filtros del despacho son intocables: esta guarda existe para
+  // que nadie los borre, renombre ni relaje por descuido.
+  const OPERATIVAS = [
     'ACTIVE_TRIP', 'BUSY', 'EXCLUDED', 'INVALID_STATUS', 'NOT_APPROVED',
     'NO_LOCATION', 'NO_SOCKET', 'OFFLINE', 'OUT_OF_RADIUS', 'ROLE_MISMATCH',
     'STALE_LOCATION', 'VEHICLE_MISMATCH'
-  ]);
+  ];
+  for (const razon of OPERATIVAS) {
+    assert.equal(DISPATCH_REJECTION[razon], razon, `sigue existiendo ${razon}`);
+  }
+  // DRIVER-FINANCE-1 anadio UNA frontera mas, autorizada por el dueno: la
+  // deuda del conductor. No sustituye a ninguna de las doce ni cambia su
+  // orden; solo se suma. Cualquier decimocuarta razon debe pasar por aqui.
+  assert.deepEqual(Object.keys(DISPATCH_REJECTION).sort(),
+    [...OPERATIVAS, 'FINANCIAL_BALANCE_BLOCK'].sort());
 });
 
 test('un conductor sin socket sigue sin ser candidato', () => {

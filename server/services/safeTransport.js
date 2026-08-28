@@ -16,6 +16,7 @@ import {
   selectBackupCandidates
 } from '../domain/scheduledCoverage.js';
 import { driverPublicProfile } from '../domain/userProjections.js';
+import { canTakeNewWork } from '../domain/driverFinance.js';
 
 /**
  * Traslado seguro — SAFE-TRANSPORT-1C: ciclo de vida de suscripciones y
@@ -839,6 +840,10 @@ export function createSafeTransportService({
     // acceptsScheduledRides=true o datos históricos. Esta frontera termina en
     // el traspaso a viaje normal: el despacho inmediato usa la flota común.
     if (!hasPilotAccess(driver)) return 'NOT_IN_PILOT';
+    // DRIVER-FINANCE-1: con la cuenta bloqueada por deuda no se reciben ni se
+    // aceptan traslados NUEVOS. El pasajero jamás sabe por qué: para él solo
+    // hay un conductor que no está disponible.
+    if (!canTakeNewWork(driver)) return 'FINANCIAL_BALANCE_BLOCK';
     return scheduledEligibilityDefect(driver, ride, {
       committedPickupsMs: driver?.id ? recogidasComprometidas(driver.id, ride.id) : [],
       window: ventanaCompromiso
@@ -913,6 +918,7 @@ export function createSafeTransportService({
     preferredOffers: 0,
     backupOffers: 0,
     expiredOffers: 0,
+    commitmentsReleased: 0,
     atRisk: 0,
     persistFailures: 0,
     errors: 0
@@ -924,7 +930,42 @@ export function createSafeTransportService({
    * sobre el mismo estado no ofrece dos veces ni notifica dos veces.
    */
   async function evaluarCoberturaDeRide(ride, resumen) {
-    if (ride.serviceStatus !== 'PLANNED' || ride.tripId || ride.assignedDriverId) return;
+    if (ride.serviceStatus !== 'PLANNED' || ride.tripId) return;
+    // DRIVER-FINANCE-1: un compromiso futuro cuyo conductor quedó bloqueado
+    // por deuda (o suspendido) se libera AHORA, no en el T-0: así queda
+    // tiempo real de buscar respaldo. Ojo: esto NO es el opt-out —apagar las
+    // ofertas nuevas sigue sin romper compromisos (política de 1D)—, son
+    // impedimentos duros que le impiden trabajar.
+    if (ride.assignedDriverId) {
+      const pickupMs = Date.parse(ride.scheduledPickupAt);
+      if (!Number.isFinite(pickupMs) || pickupMs <= now()) return;
+      const comprometido = conductorPorId(ride.assignedDriverId);
+      const impedido = !comprometido
+        || comprometido.accountStatus === 'DISABLED'
+        || comprometido.status === 'SUSPENDED'
+        || !canTakeNewWork(comprometido);
+      if (!impedido) return;
+      const liberado = ride.assignedDriverId;
+      const hecho = await transicionDeCobertura(ride, 'COMMITTED_DRIVER_UNAVAILABLE', r => {
+        r.declinedDriverIds = [...new Set([...(r.declinedDriverIds ?? []), liberado])];
+        r.releasedDriverId = liberado;
+        r.assignedDriverId = null;
+        r.assignmentStatus = 'BACKUP_REQUIRED';
+        r.currentOffer = null;
+      }, resumen);
+      if (!hecho) return;
+      resumen.commitmentsReleased += 1;
+      // Al conductor, el motivo real pero sin cifras; al pasajero, solo que
+      // se busca cobertura: su conductor no le debe explicaciones de dinero.
+      await notificar(liberado, 'scheduled_ride_cancelled',
+        'Traslado programado liberado',
+        `Ya no cubres el traslado del ${etiquetaDeRide(ride)} porque tu cuenta no puede tomar carreras ahora mismo.`);
+      await notificar(ride.passengerId, 'driver_changed',
+        'Cambio de conductor en tu traslado',
+        `El conductor de tu traslado del ${etiquetaDeRide(ride)} ya no está disponible. Buscaremos cobertura.`);
+      return;
+    }
+    if (ride.assignedDriverId) return;
     const ahora = now();
     const pickup = Date.parse(ride.scheduledPickupAt);
     if (!Number.isFinite(pickup) || pickup <= ahora) return;
@@ -999,7 +1040,9 @@ export function createSafeTransportService({
       // Frontera del piloto (1G): el fondo de candidatos de respaldo se
       // recorta ANTES de cualquier selección — un conductor fuera del piloto
       // ni siquiera entra a la criba.
-      const flota = users().filter(u => hasPilotAccess(u));
+      // Y la frontera financiera (DRIVER-FINANCE-1) recorta igual de pronto:
+      // quien no puede tomar trabajo nuevo no entra ni al fondo de candidatos.
+      const flota = users().filter(u => hasPilotAccess(u) && canTakeNewWork(u));
       const comprometidasPorConductor = new Map();
       for (const driver of flota) {
         if (driver.role === 'driver') {

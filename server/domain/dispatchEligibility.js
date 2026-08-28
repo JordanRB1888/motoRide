@@ -1,3 +1,5 @@
+import { canTakeNewWork, wouldBreachFloor } from './driverFinance.js';
+
 export const DISPATCH_REJECTION = Object.freeze({
   OFFLINE: 'OFFLINE',
   NO_SOCKET: 'NO_SOCKET',
@@ -10,7 +12,11 @@ export const DISPATCH_REJECTION = Object.freeze({
   STALE_LOCATION: 'STALE_LOCATION',
   ROLE_MISMATCH: 'ROLE_MISMATCH',
   VEHICLE_MISMATCH: 'VEHICLE_MISMATCH',
-  EXCLUDED: 'EXCLUDED'
+  EXCLUDED: 'EXCLUDED',
+  // DRIVER-FINANCE-1: frontera nueva y del SERVIDOR. No sustituye a ninguno
+  // de los doce filtros operativos: se suma como una condición más, y el
+  // pasajero jamás ve esta razón ni el saldo de nadie.
+  FINANCIAL_BALANCE_BLOCK: 'FINANCIAL_BALANCE_BLOCK'
 });
 
 const KNOWN_STATUSES = new Set(['AVAILABLE', 'BUSY', 'IN_TRIP', 'OFFLINE']);
@@ -24,11 +30,24 @@ export function evaluateDriverEligibility({
   calculateDistance,
   maxRadiusKm,
   maxLocationAgeMs,
+  // DRIVER-FINANCE-1: lo que ESTA carrera le costará en comisión si la cobra
+  // en efectivo. Opcional: sin dato, la puerta proyectada no opina.
+  projectedCommissionUSD = null,
   now = Date.now()
 }) {
   if (driver?.role !== 'driver') return { eligible: false, reason: DISPATCH_REJECTION.ROLE_MISMATCH };
   if (driver.isVerified !== true || driver.accountStatus === 'DISABLED' || driver.status === 'SUSPENDED') {
     return { eligible: false, reason: DISPATCH_REJECTION.NOT_APPROVED };
+  }
+  // Deuda: no puede TOMAR trabajo nuevo. Un viaje ya en curso no se toca —
+  // esta puerta solo se consulta al repartir carreras nuevas.
+  if (!canTakeNewWork(driver)) {
+    return { eligible: false, reason: DISPATCH_REJECTION.FINANCIAL_BALANCE_BLOCK };
+  }
+  // Y la comisión que ESTA carrera le costará no puede hundirlo bajo el
+  // suelo: el sistema no crea deuda que él no pudo prever.
+  if (Number.isFinite(Number(projectedCommissionUSD)) && wouldBreachFloor(driver, projectedCommissionUSD)) {
+    return { eligible: false, reason: DISPATCH_REJECTION.FINANCIAL_BALANCE_BLOCK };
   }
   if (!KNOWN_STATUSES.has(driver.status)) return { eligible: false, reason: DISPATCH_REJECTION.INVALID_STATUS };
   if (driver.status === 'OFFLINE') return { eligible: false, reason: DISPATCH_REJECTION.OFFLINE };
@@ -64,6 +83,7 @@ export function selectEligibleDrivers({
   calculateDistance,
   maxRadiusKm = 15,
   maxLocationAgeMs = 120_000,
+  projectedCommissionUSD = null,
   now = Date.now()
 }) {
   const candidates = [];
@@ -79,6 +99,7 @@ export function selectEligibleDrivers({
       calculateDistance,
       maxRadiusKm,
       maxLocationAgeMs,
+      projectedCommissionUSD,
       now
     });
     if (result.eligible) candidates.push({ driver, dist: result.distanceKm });

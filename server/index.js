@@ -50,6 +50,7 @@ import {
   sanitizeSafeTransportPricing
 } from './services/safeTransport.js';
 import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
+import { createDriverFinanceService } from './services/driverFinance.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
 
@@ -555,6 +556,17 @@ function settleDriverForCompletedTrip(trip) {
 function settleCompletedTrip(trip) {
   const passengerTransaction = debitPassengerWalletForCompletedTrip(trip);
   const driverTransaction = settleDriverForCompletedTrip(trip);
+  // DRIVER-FINANCE-1: ESTA es la única actividad que cuenta. Una carrera
+  // COMPLETADA y liquidada reinicia el reloj de inactividad del conductor —
+  // ni abrir la app, ni ponerse en línea, ni aceptar una oferta lo hacen. El
+  // reloj del mantenimiento mensual sigue corriendo aparte, sin tocarse.
+  if (driverTransaction) {
+    const driver = database.users.find(user => user.id === trip.driverId);
+    if (driver) {
+      driver.lastQualifyingTripAt = Date.now();
+      driver.inactivityWarnedThreshold = null;
+    }
+  }
   return { passengerTransaction, driverTransaction };
 }
 
@@ -905,6 +917,36 @@ app.use('/api', createTransportDriverRouter({
   requireApprovedDriver
 }));
 safeTransport.startMaterializer();
+
+/**
+ * DRIVER-FINANCE-1: economía de la CUENTA del conductor (mantenimiento
+ * mensual, límite de deuda e inactividad). Detrás de DRIVER_FINANCE_ENABLED
+ * (apagada por defecto): sin bandera no cobra, no suspende y no avisa. Los
+ * avisos salen por la misma frontera semántica del resto — documento durable
+ * y entrega en vivo — sin exponer cifras a nadie más que al propio conductor.
+ */
+const driverFinance = createDriverFinanceService({
+  database,
+  persistRecord,
+  notify: async (userId, event, title, message) => {
+    const doc = {
+      id: `notification_${crypto.randomUUID()}`,
+      userId, title, message,
+      category: 'FINANCE',
+      event,
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+    database.notifications.push(doc);
+    if (!await persistRecord('notifications', doc)) {
+      database.notifications.splice(database.notifications.indexOf(doc), 1);
+      return;
+    }
+    io.to(`user:${userId}`).emit('platform:notification', { ...doc });
+  },
+  logger: console
+});
+driverFinance.start();
 
 // Driver Dispatch Registry & Atomic Lock Map
 const driverRegistry = new Map();
@@ -2062,6 +2104,15 @@ function dispatchTripToDrivers(trip) {
   const pickupLat = pickup.lat;
   const pickupLng = pickup.lng;
 
+  // DRIVER-FINANCE-1: en efectivo, la comisión de ESTA carrera se le
+  // descontará al conductor al liquidarla. Se calcula antes de repartirla
+  // para no ofrecérsela a quien quedaría por debajo del suelo de deuda.
+  const comisionProyectada = isWalletPayment(trip.paymentMethod)
+    ? 0
+    : roundMoney(tripFareUSD(trip) * (Number.isFinite(Number(trip.commissionRate))
+      ? Number(trip.commissionRate)
+      : Number(pricingConfig.commissionRate || 0.15)));
+
   const { candidates: availableDrivers, rejectionCounts } = selectEligibleDrivers({
     drivers: database.users,
     trip,
@@ -2070,7 +2121,8 @@ function dispatchTripToDrivers(trip) {
     activeTripForDriver,
     calculateDistance,
     maxRadiusKm: Number(process.env.MAX_DISPATCH_RADIUS_KM || 15),
-    maxLocationAgeMs: Number(process.env.MAX_DRIVER_LOCATION_AGE_MS || 120_000)
+    maxLocationAgeMs: Number(process.env.MAX_DRIVER_LOCATION_AGE_MS || 120_000),
+    projectedCommissionUSD: comisionProyectada
   });
 
   console.log(`[+58express Dispatcher] ${JSON.stringify({
