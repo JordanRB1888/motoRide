@@ -232,6 +232,15 @@ export function renderDriverProfile(container, options = {}) {
         </div>
 
         <div class="driver-profile-actions">
+          ${options.onOpenScheduledTransport ? `
+          <button type="button" id="btn-open-scheduled-transport" class="driver-profile-row">
+            <span class="driver-profile-row-icon">${icon('calendar', 20)}</span>
+            <span class="driver-profile-row-text">
+              <strong>Traslados programados</strong>
+              <small>Ofertas y compromisos del Transporte Seguro</small>
+            </span>
+            <span class="driver-profile-row-go">${icon('chevronRight', 16)}</span>
+          </button>` : ''}
           <button type="button" id="btn-open-driver-documents" class="driver-profile-row">
             <span class="driver-profile-row-icon">${icon('shield', 20)}</span>
             <span class="driver-profile-row-text">
@@ -329,6 +338,7 @@ export function renderDriverProfile(container, options = {}) {
     });
 
     container.querySelector('#btn-open-driver-documents')?.addEventListener('click', () => options.onOpenDocuments?.());
+    container.querySelector('#btn-open-scheduled-transport')?.addEventListener('click', () => options.onOpenScheduledTransport?.());
 
     // Logout Event
     container.querySelector('#driver-logout-btn').addEventListener('click', () => {

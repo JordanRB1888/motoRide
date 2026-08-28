@@ -10,6 +10,8 @@ import { renderDocuments } from './documents.js';
 import { renderDriverTrips } from './driverTrips.js';
 import { renderDriverProfile } from './driverProfile.js';
 import { renderScheduledRides } from './scheduledRides.js';
+import { renderSafeTransportDriver } from './safeTransportDriver.js';
+import { isSafeTransportUiEnabled } from '../../utils/safeTransportFlag.js';
 import { createChatModal } from '../../components/chatModal.js';
 import { createSosModal } from '../../components/sosModal.js';
 import { createDriverRatingModal } from '../../components/driverRatingModal.js';
@@ -531,6 +533,9 @@ export function renderDriverApp(container) {
         overlay.innerHTML = '';
         renderDriverProfile(overlay, {
           onOpenDocuments: () => switchTab('documentos'),
+          onOpenScheduledTransport: isSafeTransportUiEnabled()
+            ? () => switchTab('traslados-seguros')
+            : null,
           // Reemplazar la foto invalida la copia de la cabecera.
           onPhotoChanged: photoUrl => {
             privatePhotos.release('propia');
@@ -576,6 +581,13 @@ export function renderDriverApp(container) {
             pageOverlay.style.display = 'block';
             pageOverlay.innerHTML = '';
             pageOverlay.appendChild(renderScheduledRides());
+        } else if (tabName === 'traslados-seguros') {
+            // SAFE-1F: participacion del conductor en el Transporte Seguro.
+            pageOverlay.classList.remove('hidden');
+            pageOverlay.classList.add('active');
+            pageOverlay.style.display = 'block';
+            pageOverlay.innerHTML = '';
+            pageOverlay.appendChild(renderSafeTransportDriver());
         } else if (tabName === 'ganancias') {
             pageOverlay.classList.remove('hidden');
             pageOverlay.classList.add('active');

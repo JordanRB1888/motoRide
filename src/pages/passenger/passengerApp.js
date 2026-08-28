@@ -36,6 +36,8 @@ import { createAdminSupportChat } from '../../components/adminSupportChat.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 import { safeCoordinate } from '../../utils/safeDom.js';
 import { isInsideMaracaiboServiceArea, MARACAIBO_SERVICE_CENTER } from '../../utils/operatingArea.js';
+import { isSafeTransportUiEnabled } from '../../utils/safeTransportFlag.js';
+import { renderSafeTransport } from './safeTransport.js';
 
 export function renderPassengerApp(container) {
   let currentState = 'IDLE';
@@ -103,6 +105,12 @@ export function renderPassengerApp(container) {
           <button type="button" class="vehicle-choice active" data-vehicle="MOTO"><span class="vehicle-art">${vehicleImage('MOTO', { decorative: true })}</span><span><b>Moto</b><small>1 pasajero</small><em>Desde $1.50</em></span></button>
           <button type="button" class="vehicle-choice" data-vehicle="CAR"><span class="vehicle-art">${vehicleImage('CAR', { decorative: true })}</span><span><b>Auto</b><small>1–4 pasajeros</small><em>Desde $2.50</em></span></button>
         </div>
+        ${isSafeTransportUiEnabled() ? `
+        <button type="button" id="safe-transport-entry" class="st-entry-card">
+          <span>${icon('shield', 20)}</span>
+          <span><b>Transporte Seguro</b><small>Programa tus traslados de ida y vuelta</small></span>
+          <span class="st-entry-go">${icon('chevronRight', 16)}</span>
+        </button>` : ''}
       </div>
 
       <!-- Floating Top Active Route Bar with Direct Cancel Button -->
@@ -171,6 +179,7 @@ export function renderPassengerApp(container) {
   }
   requestAnimationFrame(() => animatePassengerHomeBrand());
   container.querySelector('.passenger-profile-shortcut')?.addEventListener('click', () => handleNavigation('profile'));
+  container.querySelector('#safe-transport-entry')?.addEventListener('click', () => handleNavigation('transporte-seguro'));
   container.querySelector('#passenger-support-shortcut')?.addEventListener('click', () => document.body.appendChild(createAdminSupportChat(user)));
 
   // Top Schedule Ride Button Listener
@@ -485,6 +494,11 @@ export function renderPassengerApp(container) {
       if (tab === 'history') renderRideHistory(wrapper);
       else if (tab === 'wallet') renderWallet(wrapper);
       else if (tab === 'profile') renderProfile(wrapper);
+      else if (tab === 'transporte-seguro') {
+        // SAFE-1F: página del Transporte Seguro; su botón «volver» y el paso
+        // a un viaje activo regresan al Inicio (la pantalla de viaje normal).
+        renderSafeTransport(wrapper, { onClose: () => handleNavigation('home') });
+      }
     }
   }
 

@@ -11,6 +11,7 @@ import './styles/receipt.css';
 import './styles/local-avatar.css';
 import './styles/diorama.css';
 import './styles/modern-yellow-lab.css';
+import './styles/safe-transport.css';
 import { seedDatabase } from './services/clientCache.js';
 import { authService } from './services/authService.js';
 import { renderLanding } from './pages/landing.js';
