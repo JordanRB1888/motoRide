@@ -10,6 +10,16 @@ import { apiService } from './apiService.js';
  * localStorage ni en cachés: estado transitorio de pantalla, siempre.
  */
 
+/**
+ * Descubrimiento del piloto (1G): pregunta AL SERVIDOR si esta cuenta tiene
+ * acceso. La lista de cuentas autorizadas vive solo en el backend; aquí llega
+ * únicamente un sí ({available:true}) o el 404 invisible de siempre.
+ */
+export const consultarAcceso = async () => {
+  const respuesta = await apiService.get('/transport/access');
+  return Boolean(respuesta?.available);
+};
+
 // --- Pasajero -------------------------------------------------------------
 
 export const crearSuscripcion = body => apiService.post('/transport/subscriptions', body);

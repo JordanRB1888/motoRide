@@ -34,25 +34,40 @@ export function createTransportSubscriptionsRouter({
   const lecturas = createIdentityLimiter({ name: 'traslado-seguro', limit: 120, windowMs: CUARTO_DE_HORA });
   const escrituras = createIdentityLimiter({ name: 'traslado-seguro-escritura', limit: 30, windowMs: CUARTO_DE_HORA });
 
+  // Piloto controlado (1G): segunda llave, SIEMPRE del servidor. Fuera del
+  // piloto la función sencillamente no existe — el mismo 404 del modelo
+  // invisible, sin revelar que hay un piloto ni quién está dentro.
+  const soloPiloto = (req, res, next) => {
+    if (!safeTransport.hasPilotAccess(req.user)) return res.status(404).json({ error: 'NOT_FOUND' });
+    next();
+  };
+
+  // Descubrimiento AUTENTICADO de capacidad para el frontend: una cuenta
+  // autorizada recibe {available:true}; cualquier otra, el mismo 404. No
+  // revela ninguna otra identidad del piloto.
+  router.get('/transport/access', requireAuth, lecturas, soloPiloto, (_req, res) => {
+    res.json({ available: true });
+  });
+
   const responder = (res, resultado, status = 200) => resultado.ok
     ? res.status(status).json({ subscription: resultado.subscription })
     : res.status(resultado.status).json({ error: resultado.code });
 
-  router.post('/transport/subscriptions', requireAuth, requirePassenger, escrituras, async (req, res) => {
+  router.post('/transport/subscriptions', requireAuth, requirePassenger, soloPiloto, escrituras, async (req, res) => {
     responder(res, await safeTransport.createSubscription(req.user, req.body ?? {}), 201);
   });
 
-  router.get('/transport/subscriptions', requireAuth, requirePassenger, lecturas, (req, res) => {
+  router.get('/transport/subscriptions', requireAuth, requirePassenger, soloPiloto, lecturas, (req, res) => {
     res.json({ subscriptions: safeTransport.listSubscriptions(req.user) });
   });
 
-  router.get('/transport/subscriptions/:id', requireAuth, requirePassenger, lecturas, (req, res) => {
+  router.get('/transport/subscriptions/:id', requireAuth, requirePassenger, soloPiloto, lecturas, (req, res) => {
     const suscripcion = safeTransport.getSubscription(req.user, req.params.id);
     if (!suscripcion) return res.status(404).json({ error: 'SUBSCRIPTION_NOT_FOUND' });
     res.json({ subscription: suscripcion });
   });
 
-  router.patch('/transport/subscriptions/:id', requireAuth, requirePassenger, escrituras, async (req, res) => {
+  router.patch('/transport/subscriptions/:id', requireAuth, requirePassenger, soloPiloto, escrituras, async (req, res) => {
     responder(res, await safeTransport.updateSubscription(req.user, req.params.id, req.body ?? {}));
   });
 
@@ -62,11 +77,11 @@ export function createTransportSubscriptionsRouter({
   const transicion = destino => async (req, res) => {
     responder(res, await safeTransport.setSubscriptionStatus(req.user, req.params.id, destino));
   };
-  router.post('/transport/subscriptions/:id/pause', requireAuth, requirePassenger, escrituras, transicion('PAUSED'));
-  router.post('/transport/subscriptions/:id/resume', requireAuth, requirePassenger, escrituras, transicion('ACTIVE'));
-  router.post('/transport/subscriptions/:id/cancel', requireAuth, requirePassenger, escrituras, transicion('CANCELLED'));
+  router.post('/transport/subscriptions/:id/pause', requireAuth, requirePassenger, soloPiloto, escrituras, transicion('PAUSED'));
+  router.post('/transport/subscriptions/:id/resume', requireAuth, requirePassenger, soloPiloto, escrituras, transicion('ACTIVE'));
+  router.post('/transport/subscriptions/:id/cancel', requireAuth, requirePassenger, soloPiloto, escrituras, transicion('CANCELLED'));
 
-  router.get('/transport/scheduled-rides', requireAuth, requirePassenger, lecturas, (req, res) => {
+  router.get('/transport/scheduled-rides', requireAuth, requirePassenger, soloPiloto, lecturas, (req, res) => {
     let limite;
     try {
       limite = parseLimit(req.query.limit, { defaultLimit: 20, maxLimit: 50 });

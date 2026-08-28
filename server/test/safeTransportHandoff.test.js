@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { localTimeToUtc } from '../domain/scheduleCalendar.js';
-import { createSafeTransportService, resolveHandoffGraceMs, DEFAULT_HANDOFF_GRACE_MS } from '../services/safeTransport.js';
+import { resolvePilotUserIds, createSafeTransportService, resolveHandoffGraceMs, DEFAULT_HANDOFF_GRACE_MS } from '../services/safeTransport.js';
 
 /**
  * SAFE-TRANSPORT-1E — el handoff T-0, con el servicio REAL y un puente fiel
@@ -88,6 +88,7 @@ function crearEntorno({ nowMs = LUNES, drivers = [], persistImpl, opcionesPuente
     persistRecord: persistImpl ?? (async () => true),
     tripBridge: bridge,
     enabled: true,
+    pilotUserIds: resolvePilotUserIds('*'),
     now: () => reloj.ms,
     logger: silencioso
   });
@@ -317,6 +318,7 @@ test('REINICIO del proceso: el estado guardado converge sin duplicar', async () 
     persistRecord: async () => true,
     tripBridge: bridge,
     enabled: true,
+    pilotUserIds: resolvePilotUserIds('*'),
     now: () => RECOGIDA + 3 * MIN,
     logger: silencioso
   });

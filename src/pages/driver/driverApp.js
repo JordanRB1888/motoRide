@@ -12,6 +12,7 @@ import { renderDriverProfile } from './driverProfile.js';
 import { renderScheduledRides } from './scheduledRides.js';
 import { renderSafeTransportDriver } from './safeTransportDriver.js';
 import { isSafeTransportUiEnabled } from '../../utils/safeTransportFlag.js';
+import { consultarAcceso as consultarAccesoTransporteSeguro } from '../../services/safeTransportService.js';
 import { createChatModal } from '../../components/chatModal.js';
 import { createSosModal } from '../../components/sosModal.js';
 import { createDriverRatingModal } from '../../components/driverRatingModal.js';
@@ -151,6 +152,14 @@ export function renderDriverApp(container) {
     let isOnline = false;
     let currentTrip = null;
     let currentPassenger = null;
+    // Piloto controlado (1G): el acceso a los traslados programados lo decide
+    // el SERVIDOR; mientras no conteste que sí, la entrada no existe.
+    let accesoTrasladosProgramados = false;
+    if (isSafeTransportUiEnabled()) {
+      consultarAccesoTransporteSeguro()
+        .then(autorizado => { accesoTrasladosProgramados = Boolean(autorizado); })
+        .catch(() => {});
+    }
     let activeChat = null;
     let activeChatTripId = null;
     let unreadMessages = 0;
@@ -533,7 +542,10 @@ export function renderDriverApp(container) {
         overlay.innerHTML = '';
         renderDriverProfile(overlay, {
           onOpenDocuments: () => switchTab('documentos'),
-          onOpenScheduledTransport: isSafeTransportUiEnabled()
+          // Piloto (1G): la fila existe SOLO si el servidor ya confirmó el
+          // acceso de esta cuenta (sin parpadeo: consulta en vuelo o fallida
+          // = entrada ausente).
+          onOpenScheduledTransport: (isSafeTransportUiEnabled() && accesoTrasladosProgramados)
             ? () => switchTab('traslados-seguros')
             : null,
           // Reemplazar la foto invalida la copia de la cabecera.

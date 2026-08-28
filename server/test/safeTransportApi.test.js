@@ -108,7 +108,7 @@ test('APAGADA (por defecto): la API del traslado seguro NO existe, ni autenticad
 // --------------------------------------------------------------------------
 
 test('ENCENDIDA: contrato completo de propiedad y autoridad del servidor', async (t) => {
-  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' } });
+  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' } });
 
   // Sin token: 401 en todas.
   assert.equal((await crear(url, null)).status, 401);
@@ -179,7 +179,7 @@ test('ENCENDIDA: contrato completo de propiedad y autoridad del servidor', async
 });
 
 test('ENCENDIDA: entradas invalidas caen con 400 y su codigo', async (t) => {
-  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' } });
+  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' } });
   const cuenta = await nuevaCuenta(url);
   const conPatron = patron => ({ ...cuerpoValido(), pattern: { ...cuerpoValido().pattern, ...patron } });
 
@@ -203,7 +203,7 @@ test('ENCENDIDA: entradas invalidas caen con 400 y su codigo', async (t) => {
 });
 
 test('ENCENDIDA: paginacion acotada con cursor sobre las ocurrencias propias', async (t) => {
-  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' } });
+  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' } });
   const cuenta = await nuevaCuenta(url);
   assert.equal((await crear(url, cuenta.token)).status, 201);
 
@@ -220,7 +220,7 @@ test('ENCENDIDA: paginacion acotada con cursor sobre las ocurrencias propias', a
 });
 
 test('ENCENDIDA: un conductor NO tiene nada en la API del traslado seguro', async (t) => {
-  const primero = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' } });
+  const primero = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' } });
   const cuenta = await nuevaCuenta(primero.url);
   await primero.parar();
 
@@ -234,7 +234,7 @@ test('ENCENDIDA: un conductor NO tiene nada en la API del traslado seguro', asyn
   sqlite.close();
 
   const segundo = await startServer(t, {
-    env: { SAFE_TRANSPORT_ENABLED: 'true' }, dataFile: primero.dataFile
+    env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' }, dataFile: primero.dataFile
   });
   assert.equal((await crear(segundo.url, cuenta.token)).status, 403);
   assert.equal((await pedir(`${segundo.url}/api/transport/subscriptions`, cuenta.token)).status, 403);

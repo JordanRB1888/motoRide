@@ -36,21 +36,28 @@ export function createTransportDriverRouter({
   const lecturas = createIdentityLimiter({ name: 'traslado-seguro-conductor', limit: 120, windowMs: CUARTO_DE_HORA });
   const escrituras = createIdentityLimiter({ name: 'traslado-seguro-conductor-escritura', limit: 60, windowMs: CUARTO_DE_HORA });
 
-  router.get('/transport/driver/preferences', requireAuth, requireApprovedDriver, lecturas, (req, res) => {
+  // Piloto controlado (1G): segunda llave del servidor. Fuera del piloto, el
+  // mismo 404 invisible: sin pistas de que exista un piloto ni de sus cuentas.
+  const soloPiloto = (req, res, next) => {
+    if (!safeTransport.hasPilotAccess(req.user)) return res.status(404).json({ error: 'NOT_FOUND' });
+    next();
+  };
+
+  router.get('/transport/driver/preferences', requireAuth, requireApprovedDriver, soloPiloto, lecturas, (req, res) => {
     res.json({ preferences: safeTransport.getDriverPreferences(req.user) });
   });
 
-  router.patch('/transport/driver/preferences', requireAuth, requireApprovedDriver, escrituras, async (req, res) => {
+  router.patch('/transport/driver/preferences', requireAuth, requireApprovedDriver, soloPiloto, escrituras, async (req, res) => {
     const resultado = await safeTransport.setDriverPreferences(req.user, req.body ?? {});
     if (!resultado.ok) return res.status(resultado.status).json({ error: resultado.code });
     res.json({ preferences: resultado.preferences });
   });
 
-  router.get('/transport/driver/offers', requireAuth, requireApprovedDriver, lecturas, (req, res) => {
+  router.get('/transport/driver/offers', requireAuth, requireApprovedDriver, soloPiloto, lecturas, (req, res) => {
     res.json({ offers: safeTransport.listDriverOffers(req.user) });
   });
 
-  router.get('/transport/driver/commitments', requireAuth, requireApprovedDriver, lecturas, (req, res) => {
+  router.get('/transport/driver/commitments', requireAuth, requireApprovedDriver, soloPiloto, lecturas, (req, res) => {
     res.json({ commitments: safeTransport.listDriverCommitments(req.user) });
   });
 
@@ -59,9 +66,9 @@ export function createTransportDriverRouter({
     if (!resultado.ok) return res.status(resultado.status).json({ error: resultado.code });
     res.json(resultado.commitment ? { commitment: resultado.commitment } : { ok: true });
   };
-  router.post('/transport/scheduled-rides/:id/accept', requireAuth, requireApprovedDriver, escrituras, accion('acceptScheduledRide'));
-  router.post('/transport/scheduled-rides/:id/decline', requireAuth, requireApprovedDriver, escrituras, accion('declineScheduledRide'));
-  router.post('/transport/scheduled-rides/:id/withdraw', requireAuth, requireApprovedDriver, escrituras, accion('withdrawFromScheduledRide'));
+  router.post('/transport/scheduled-rides/:id/accept', requireAuth, requireApprovedDriver, soloPiloto, escrituras, accion('acceptScheduledRide'));
+  router.post('/transport/scheduled-rides/:id/decline', requireAuth, requireApprovedDriver, soloPiloto, escrituras, accion('declineScheduledRide'));
+  router.post('/transport/scheduled-rides/:id/withdraw', requireAuth, requireApprovedDriver, soloPiloto, escrituras, accion('withdrawFromScheduledRide'));
 
   return router;
 }

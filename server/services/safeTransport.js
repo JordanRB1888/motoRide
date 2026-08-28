@@ -51,6 +51,33 @@ export function isSafeTransportEnabled(value = process.env.SAFE_TRANSPORT_ENABLE
   return VALORES_VERDADEROS.has(String(value ?? '').trim().toLowerCase());
 }
 
+/**
+ * Piloto controlado — SAFE-TRANSPORT-1G. El acceso al Transporte Seguro exige
+ * DOS llaves del servidor: la bandera global (SAFE_TRANSPORT_ENABLED) Y la
+ * autorización de piloto. La lista vive SOLO en el entorno del backend
+ * (SAFE_TRANSPORT_PILOT_USER_IDS: ids internos separados por comas — jamás
+ * correos, teléfonos ni nombres; jamás en el código ni en el frontend).
+ *
+ * Semántica FAIL-CLOSED: sin lista (o vacía/malformada), NADIE está
+ * autorizado aunque la bandera global esté encendida. El valor literal `*`
+ * abre el acceso a todas las cuentas (el fin del piloto, decisión explícita).
+ */
+export const PILOT_OPEN_TOKEN = '*';
+
+export function resolvePilotUserIds(value = process.env.SAFE_TRANSPORT_PILOT_USER_IDS) {
+  const ids = new Set();
+  if (typeof value !== 'string') return ids;
+  for (const trozo of value.split(',')) {
+    const id = trozo.trim();
+    if (!id) continue;
+    if (id === PILOT_OPEN_TOKEN) { ids.add(PILOT_OPEN_TOKEN); continue; }
+    // Solo identificadores internos plausibles; lo malformado se descarta en
+    // silencio (fail-closed) sin registrar su contenido.
+    if (/^[A-Za-z0-9_-]{1,80}$/.test(id)) ids.add(id);
+  }
+  return ids;
+}
+
 /** Cadencia del materializador. El candado es la base de datos, no el reloj. */
 export const DEFAULT_MATERIALIZER_INTERVAL_MS = 5 * 60_000;
 const MIN_INTERVAL_MS = 30_000;
@@ -195,6 +222,7 @@ export function createSafeTransportService({
   database,
   persistRecord,
   tripBridge = null,
+  pilotUserIds = resolvePilotUserIds(),
   enabled = isSafeTransportEnabled(),
   horizonMs = DEFAULT_MATERIALIZATION_HORIZON_MS,
   intervalMs = resolveMaterializerIntervalMs(),
@@ -207,6 +235,11 @@ export function createSafeTransportService({
 
   const subs = () => database.transportSubscriptions;
   const rides = () => database.scheduledRides;
+
+  // --- Piloto controlado (1G): autorización adicional, SIEMPRE del servidor.
+  const pilotoAbierto = pilotUserIds.has(PILOT_OPEN_TOKEN);
+  const hasPilotAccess = user =>
+    Boolean(user?.id) && (pilotoAbierto || pilotUserIds.has(user.id));
 
   /**
    * TODA reconciliación pasa por UNA cola: dos invocaciones «paralelas» en el
@@ -675,6 +708,11 @@ export function createSafeTransportService({
   }
 
   function defectoDeElegibilidad(driver, ride) {
+    // Frontera del piloto (1G): durante el piloto, NINGÚN conductor fuera de
+    // la lista puede recibir ni aceptar traslados programados — aunque tenga
+    // acceptsScheduledRides=true o datos históricos. Esta frontera termina en
+    // el traspaso a viaje normal: el despacho inmediato usa la flota común.
+    if (!hasPilotAccess(driver)) return 'NOT_IN_PILOT';
     return scheduledEligibilityDefect(driver, ride, {
       committedPickupsMs: driver?.id ? recogidasComprometidas(driver.id, ride.id) : [],
       window: ventanaCompromiso
@@ -809,13 +847,17 @@ export function createSafeTransportService({
       }
       if ((ride.backupOffersSent ?? 0) >= politicaRespaldo.maxOffers) return;
       const excluidos = [...(ride.declinedDriverIds ?? [])];
+      // Frontera del piloto (1G): el fondo de candidatos de respaldo se
+      // recorta ANTES de cualquier selección — un conductor fuera del piloto
+      // ni siquiera entra a la criba.
+      const flota = users().filter(u => hasPilotAccess(u));
       const comprometidasPorConductor = new Map();
-      for (const driver of users()) {
+      for (const driver of flota) {
         if (driver.role === 'driver') {
           comprometidasPorConductor.set(driver.id, recogidasComprometidas(driver.id, ride.id));
         }
       }
-      const [candidato] = selectBackupCandidates(users(), ride, {
+      const [candidato] = selectBackupCandidates(flota, ride, {
         excludedIds: excluidos,
         committedPickupsByDriver: comprometidasPorConductor,
         window: ventanaCompromiso,
@@ -955,6 +997,9 @@ export function createSafeTransportService({
     // cuenta y que no esté YA en otro viaje activo. `acceptsScheduledRides`
     // NO se revalida a propósito: la política de 1D dice que el opt-out corta
     // ofertas NUEVAS y los compromisos vigentes se honran hasta el withdraw.
+    // La pertenencia al PILOTO (1G) tampoco se revalida aquí, por la misma
+    // política: salir del piloto corta ofertas nuevas; un compromiso ya
+    // aceptado se honra.
     // Tampoco se exige socket/GPS: el compromiso se aceptó con antelación, el
     // viaje nace DRIVER_ASSIGNED y la app actual se lo muestra al conductor
     // al reconectar (/api/trips/active/me, ventana de 12 h).
@@ -1246,7 +1291,11 @@ export function createSafeTransportService({
     if (timer) return true;
     timer = setInterval(() => { tick(); }, intervalMs);
     timer.unref?.();
-    logger.log(`[+58express SafeTransport] materializador armado cada ${Math.round(intervalMs / 1000)}s`);
+    // Telemetría segura del piloto: SOLO configuración y conteo. Jamás ids.
+    const piloto = pilotoAbierto
+      ? 'abierto'
+      : `configurado=${pilotUserIds.size > 0} cuentas=${pilotUserIds.size}`;
+    logger.log(`[+58express SafeTransport] materializador armado cada ${Math.round(intervalMs / 1000)}s · piloto: ${piloto}`);
     // Primera pasada sin esperar al intervalo, fuera del camino de arranque.
     setImmediate(() => { tick(); });
     return true;
@@ -1259,6 +1308,7 @@ export function createSafeTransportService({
 
   return {
     enabled,
+    hasPilotAccess,
     intervalMs,
     horizonMs,
     createSubscription,

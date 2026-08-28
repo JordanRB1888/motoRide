@@ -38,6 +38,7 @@ import { safeCoordinate } from '../../utils/safeDom.js';
 import { isInsideMaracaiboServiceArea, MARACAIBO_SERVICE_CENTER } from '../../utils/operatingArea.js';
 import { isSafeTransportUiEnabled } from '../../utils/safeTransportFlag.js';
 import { renderSafeTransport } from './safeTransport.js';
+import { consultarAcceso as consultarAccesoTransporteSeguro } from '../../services/safeTransportService.js';
 
 export function renderPassengerApp(container) {
   let currentState = 'IDLE';
@@ -105,12 +106,7 @@ export function renderPassengerApp(container) {
           <button type="button" class="vehicle-choice active" data-vehicle="MOTO"><span class="vehicle-art">${vehicleImage('MOTO', { decorative: true })}</span><span><b>Moto</b><small>1 pasajero</small><em>Desde $1.50</em></span></button>
           <button type="button" class="vehicle-choice" data-vehicle="CAR"><span class="vehicle-art">${vehicleImage('CAR', { decorative: true })}</span><span><b>Auto</b><small>1–4 pasajeros</small><em>Desde $2.50</em></span></button>
         </div>
-        ${isSafeTransportUiEnabled() ? `
-        <button type="button" id="safe-transport-entry" class="st-entry-card">
-          <span>${icon('shield', 20)}</span>
-          <span><b>Transporte Seguro</b><small>Programa tus traslados de ida y vuelta</small></span>
-          <span class="st-entry-go">${icon('chevronRight', 16)}</span>
-        </button>` : ''}
+        ${isSafeTransportUiEnabled() ? `<div id="safe-transport-entry-slot"></div>` : ''}
       </div>
 
       <!-- Floating Top Active Route Bar with Direct Cancel Button -->
@@ -179,7 +175,23 @@ export function renderPassengerApp(container) {
   }
   requestAnimationFrame(() => animatePassengerHomeBrand());
   container.querySelector('.passenger-profile-shortcut')?.addEventListener('click', () => handleNavigation('profile'));
-  container.querySelector('#safe-transport-entry')?.addEventListener('click', () => handleNavigation('transporte-seguro'));
+  // Piloto controlado (1G): la entrada NO existe hasta que el SERVIDOR
+  // confirme que esta cuenta está autorizada — nada se pinta mientras la
+  // consulta está en vuelo, y un fallo o un 404 la dejan ausente. La
+  // seguridad real vive en el backend; esto es solo visibilidad.
+  if (isSafeTransportUiEnabled()) {
+    consultarAccesoTransporteSeguro().then(autorizado => {
+      const hueco = container.querySelector('#safe-transport-entry-slot');
+      if (!autorizado || !hueco) return;
+      hueco.innerHTML = `
+        <button type="button" id="safe-transport-entry" class="st-entry-card">
+          <span>${icon('shield', 20)}</span>
+          <span><b>Transporte Seguro</b><small>Programa tus traslados de ida y vuelta</small></span>
+          <span class="st-entry-go">${icon('chevronRight', 16)}</span>
+        </button>`;
+      hueco.querySelector('#safe-transport-entry')?.addEventListener('click', () => handleNavigation('transporte-seguro'));
+    }).catch(() => {});
+  }
   container.querySelector('#passenger-support-shortcut')?.addEventListener('click', () => document.body.appendChild(createAdminSupportChat(user)));
 
   // Top Schedule Ride Button Listener

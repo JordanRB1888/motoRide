@@ -103,12 +103,12 @@ test('APAGADA: la API del conductor tampoco existe', async (t) => {
 });
 
 test('ENCENDIDA: preferencias del conductor — suyas, apagadas por defecto, solo booleanas', async (t) => {
-  const primero = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' } });
+  const primero = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' } });
   const conductor = await nuevaCuenta(primero.url);
   const pasajero = await nuevaCuenta(primero.url);
   await primero.parar();
   volverConductor(primero.dataFile, conductor.id);
-  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' }, dataFile: primero.dataFile });
+  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' }, dataFile: primero.dataFile });
 
   // Sin token y con rol equivocado: fuera.
   assert.equal((await pedir(`${url}/api/transport/driver/preferences`, null)).status, 401);
@@ -139,7 +139,7 @@ test('ENCENDIDA: preferencias del conductor — suyas, apagadas por defecto, sol
 });
 
 test('ENCENDIDA: oferta sin direccion → accept con consentimiento → identidad para el pasajero', async (t) => {
-  const primero = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' } });
+  const primero = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' } });
   const pasajero = await nuevaCuenta(primero.url);
   const conductorA = await nuevaCuenta(primero.url);
   const conductorB = await nuevaCuenta(primero.url);
@@ -171,7 +171,7 @@ test('ENCENDIDA: oferta sin direccion → accept con consentimiento → identida
     .run(JSON.stringify(objetivo.doc), objetivo.id);
   sqlite.close();
 
-  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' }, dataFile: primero.dataFile });
+  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' }, dataFile: primero.dataFile });
 
   // A ve SU oferta (el motor VIVO puede añadir otras de respaldo — correcto),
   // sin la puerta de la casa; para B esta oferta no existe.

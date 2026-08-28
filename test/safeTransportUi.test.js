@@ -39,17 +39,47 @@ test('la bandera VITE_SAFE_TRANSPORT_ENABLED es apagada por defecto y de lista e
 });
 
 test('APAGADA, los puntos de entrada NO EXISTEN (no se renderizan deshabilitados)', () => {
-  // Pasajero: la tarjeta de entrada esta dentro de un condicional de la bandera.
-  const entradaPasajero = appPasajero.indexOf('safe-transport-entry');
-  const guardaPasajero = appPasajero.lastIndexOf('isSafeTransportUiEnabled()', entradaPasajero);
-  assert.ok(entradaPasajero > 0 && guardaPasajero > 0, 'la entrada del pasajero existe y esta guardada');
-  assert.ok(entradaPasajero - guardaPasajero < 120, 'la guarda envuelve la tarjeta, no otra cosa');
-  assert.match(appPasajero, /isSafeTransportUiEnabled\(\)\s*\?\s*`/, 'render condicional: ausente, no disabled');
-
-  // Conductor: la fila del perfil solo existe si el callback existe, y el
-  // callback solo se pasa con la bandera encendida.
+  // Pasajero: con la bandera apagada ni siquiera existe el HUECO de la
+  // entrada; la tarjeta real solo se inyecta tras el visto bueno del piloto.
+  assert.match(appPasajero, /isSafeTransportUiEnabled\(\)\s*\?\s*`<div id="safe-transport-entry-slot">/,
+    'render condicional del hueco: ausente, no disabled');
+  // Conductor: la fila del perfil solo existe si el callback existe.
   assert.match(perfilConductor, /options\.onOpenScheduledTransport\s*\?\s*`/);
-  assert.match(appConductor, /onOpenScheduledTransport:\s*isSafeTransportUiEnabled\(\)/);
+  assert.match(appConductor, /isSafeTransportUiEnabled\(\) && accesoTrasladosProgramados/);
+});
+
+test('PILOTO (1G): la entrada aparece SOLO tras la autorizacion del SERVIDOR, sin parpadeo', () => {
+  // Pasajero: la tarjeta vive DENTRO del then() de la consulta autenticada —
+  // mientras la consulta vuela, falla o responde 404, la entrada no existe.
+  const bloque = appPasajero.slice(
+    appPasajero.indexOf('consultarAccesoTransporteSeguro().then'),
+    appPasajero.indexOf("handleNavigation('transporte-seguro'))")
+  );
+  assert.ok(bloque.includes('if (!autorizado || !hueco) return'), 'sin autorizacion, sin tarjeta');
+  assert.ok(bloque.includes('safe-transport-entry'), 'la tarjeta se inyecta tras el visto bueno');
+  assert.ok(!appPasajero.includes('id="safe-transport-entry" class') || bloque.includes('st-entry-card'),
+    'la tarjeta no existe en el render inicial');
+  // Conductor: el acceso arranca en false y solo el servidor lo enciende.
+  assert.match(appConductor, /let accesoTrasladosProgramados = false/);
+  assert.match(appConductor, /consultarAccesoTransporteSeguro\(\)\s*\n?\s*\.then/);
+  // El servicio consulta al backend; jamas decide en local.
+  assert.ok(servicio.includes("apiService.get('/transport/access')"));
+});
+
+test('PILOTO (1G): ninguna lista de cuentas puede acabar en el frontend', () => {
+  const fs2 = fs;
+  const recorrer = dir => {
+    for (const entrada of fs2.readdirSync(dir, { withFileTypes: true })) {
+      const ruta = path.join(dir, entrada.name);
+      if (entrada.isDirectory()) { recorrer(ruta); continue; }
+      if (!/\.(js|css|html)$/.test(entrada.name)) continue;
+      const codigo = fs2.readFileSync(ruta, 'utf8');
+      assert.ok(!codigo.includes('SAFE_TRANSPORT_PILOT_USER_IDS'),
+        `la variable del piloto es SOLO del backend: ${ruta}`);
+    }
+  };
+  recorrer(path.join(root, 'src'));
+  assert.ok(!flag.includes('PILOT'), 'la bandera de visibilidad no conoce el piloto');
 });
 
 // --------------------------------------------------------------------------

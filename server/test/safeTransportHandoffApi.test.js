@@ -88,7 +88,7 @@ async function esperarViajeActivo(url, token, { intentos = 30 } = {}) {
 
 test('handoff REAL: ocurrencia confirmada → viaje normal asignado, visible, transitable', async (t) => {
   // Fase 1: pasajero con suscripción real (materializa sus ocurrencias).
-  const primero = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' } });
+  const primero = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' } });
   const pasajero = await nuevaCuenta(primero.url);
   const conductor = await nuevaCuenta(primero.url);
   const alta = await pedir(`${primero.url}/api/transport/subscriptions`, pasajero.token, {
@@ -130,7 +130,7 @@ test('handoff REAL: ocurrencia confirmada → viaje normal asignado, visible, tr
 
   // Fase 3: reinicio (como Railway tras una caída en T-0): el tick inicial
   // debe entregar el viaje dentro de la gracia.
-  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true' }, dataFile: primero.dataFile });
+  const { url } = await startServer(t, { env: { SAFE_TRANSPORT_ENABLED: 'true', SAFE_TRANSPORT_PILOT_USER_IDS: '*' }, dataFile: primero.dataFile });
 
   // El conductor (que estaba SIN socket en T-0) lo ve por la vía de siempre.
   const visto = await esperarViajeActivo(url, conductor.token);

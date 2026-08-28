@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { localTimeToUtc } from '../domain/scheduleCalendar.js';
-import { createSafeTransportService } from '../services/safeTransport.js';
+import { resolvePilotUserIds, createSafeTransportService } from '../services/safeTransport.js';
 import {
   approximateZone,
   commitmentsConflict,
@@ -72,6 +72,7 @@ function crearEntorno({ nowMs = LUNES, drivers = [] } = {}) {
     database,
     persistRecord: async () => true,
     enabled: true,
+    pilotUserIds: resolvePilotUserIds('*'),
     now: () => reloj.ms,
     logger: silencioso
   });
