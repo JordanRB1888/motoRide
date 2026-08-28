@@ -176,12 +176,29 @@ const contarTramos = patron =>
 
 const err = (status, code) => ({ ok: false, status, code });
 
+/**
+ * Ventana de gracia del handoff T-0. El planificador pasa cada ~5 min, así
+ * que «a la hora exacta» no existe: una ocurrencia está VENCIDA cuando
+ * `scheduledPickupAt <= ahora`, y sigue siendo entregable mientras el retraso
+ * no supere esta gracia (un reinicio del backend en T-0 no pierde el
+ * traslado). Más allá, JAMÁS se despacha horas tarde: estado terminal.
+ */
+export const DEFAULT_HANDOFF_GRACE_MS = 15 * 60_000;
+
+export function resolveHandoffGraceMs(value = process.env.SAFE_TRANSPORT_HANDOFF_GRACE_MS) {
+  const ms = Number(String(value ?? '').trim());
+  if (!Number.isFinite(ms) || ms < 60_000) return DEFAULT_HANDOFF_GRACE_MS;
+  return Math.floor(ms);
+}
+
 export function createSafeTransportService({
   database,
   persistRecord,
+  tripBridge = null,
   enabled = isSafeTransportEnabled(),
   horizonMs = DEFAULT_MATERIALIZATION_HORIZON_MS,
   intervalMs = resolveMaterializerIntervalMs(),
+  handoffGraceMs = resolveHandoffGraceMs(),
   now = () => Date.now(),
   logger = console
 } = {}) {
@@ -843,6 +860,168 @@ export function createSafeTransportService({
   }
 
   // -------------------------------------------------------------------------
+  // Handoff T-0 (SAFE-1E): UN traslado programado → UN viaje normal
+  // -------------------------------------------------------------------------
+
+  const resumenHandoffVacio = () => ({
+    due: 0,
+    coveredHandoffs: 0,
+    fallbackHandoffs: 0,
+    reconciled: 0,
+    driverInvalidated: 0,
+    missed: 0,
+    completedSynced: 0,
+    cancelledSynced: 0,
+    persistFailures: 0,
+    errors: 0
+  });
+
+  /**
+   * Handoff de UNA ocurrencia. Exactamente-una-vez por construcción:
+   *
+   *  1. Todo corre en la cola serializada del servicio (sin carreras en
+   *     proceso).
+   *  2. El identificador del viaje es DETERMINISTA (lo fija el puente a
+   *     partir del id de la ocurrencia) y es clave primaria en la base: dos
+   *     procesos jamás materializan dos filas.
+   *  3. ORDEN de escritura: primero el viaje, después el enlace. Si el
+   *     proceso cae entre ambos, la siguiente pasada ENCUENTRA el viaje por
+   *     su id determinista / scheduledRideId y solo reconcilia el enlace —
+   *     sin segundo viaje, sin segundo despacho, sin segundo anuncio.
+   */
+  async function evaluarHandoffDeRide(ride, resumen) {
+    const ahora = now();
+    const pickup = Date.parse(ride.scheduledPickupAt);
+    if (!Number.isFinite(pickup)) return;
+
+    // Sincronía del ciclo de vida: el viaje normal es la autoridad. Cuando
+    // termina o se cancela, la ocurrencia lo refleja EXACTAMENTE una vez
+    // (la transición de estado es la guarda durable). Sin créditos: la
+    // liquidación del viaje queda tal cual y ridesUsed no se toca en 1E.
+    if (ride.serviceStatus === 'ACTIVE' && ride.tripId) {
+      const estado = tripBridge.tripStatusOf(ride.tripId);
+      if (estado === 'COMPLETED') {
+        if (await transicionDeCobertura(ride, 'TRIP_COMPLETED', r => {
+          r.serviceStatus = 'COMPLETED';
+        }, resumen)) resumen.completedSynced += 1;
+      } else if (estado === 'CANCELLED') {
+        if (await transicionDeCobertura(ride, 'TRIP_CANCELLED', r => {
+          r.serviceStatus = 'CANCELLED_TRIP_CANCELLED';
+        }, resumen)) resumen.cancelledSynced += 1;
+      }
+      return;
+    }
+
+    if (ride.serviceStatus !== 'PLANNED' || ride.tripId) return;
+    if (pickup > ahora) return; // aún no es T-0
+
+    // Reconciliación tras una caída: si EL viaje ya existe, solo se enlaza.
+    const existente = tripBridge.findTripForRide(ride);
+    if (existente) {
+      if (await transicionDeCobertura(ride, 'TRIP_HANDOFF_RECONCILED', r => {
+        r.tripId = existente.id;
+        r.serviceStatus = 'ACTIVE';
+        r.currentOffer = null;
+      }, resumen)) resumen.reconciled += 1;
+      // Sin re-anuncio y sin re-despacho: la recuperación de pantallas la da
+      // la app actual (/api/trips/active/me y el estado del socket), y un
+      // despacho interrumpido por reinicio sigue la semántica existente.
+      return;
+    }
+
+    // La suscripción debe seguir en servicio: una pausa o cancelación de
+    // última hora no genera viajes.
+    const sub = subs().find(s => s.id === ride.subscriptionId);
+    if (!sub || sub.status !== 'ACTIVE') {
+      if (await transicionDeCobertura(ride, 'CANCELLED_SUBSCRIPTION_INACTIVE', r => {
+        r.serviceStatus = 'CANCELLED_SUBSCRIPTION_INACTIVE';
+        r.currentOffer = null;
+      }, resumen)) resumen.missed += 1;
+      return;
+    }
+
+    // Fuera de gracia: terminal. JAMÁS un despacho horas tarde, jamás cobros.
+    if (ahora - pickup > handoffGraceMs) {
+      if (await transicionDeCobertura(ride, 'CANCELLED_MISSED_HANDOFF', r => {
+        r.serviceStatus = 'CANCELLED_MISSED_HANDOFF';
+        r.currentOffer = null;
+      }, resumen)) resumen.missed += 1;
+      return;
+    }
+
+    resumen.due += 1;
+
+    // Revalidación del conductor comprometido en T-0: existencia, aprobación,
+    // cuenta y que no esté YA en otro viaje activo. `acceptsScheduledRides`
+    // NO se revalida a propósito: la política de 1D dice que el opt-out corta
+    // ofertas NUEVAS y los compromisos vigentes se honran hasta el withdraw.
+    // Tampoco se exige socket/GPS: el compromiso se aceptó con antelación, el
+    // viaje nace DRIVER_ASSIGNED y la app actual se lo muestra al conductor
+    // al reconectar (/api/trips/active/me, ventana de 12 h).
+    let conductorConfirmado = null;
+    if (ride.assignedDriverId
+      && ['DRIVER_CONFIRMED', 'COVERAGE_CONFIRMED'].includes(ride.assignmentStatus)) {
+      const driver = tripBridge.driverById(ride.assignedDriverId);
+      const utilizable = driver && driver.isVerified && driver.status !== 'SUSPENDED'
+        && driver.accountStatus !== 'DISABLED' && !tripBridge.driverHasActiveTrip(driver.id);
+      if (utilizable) {
+        conductorConfirmado = driver;
+      } else {
+        // Estructuralmente inutilizable: al rescate de última hora, con la
+        // razón en la línea temporal y sin detalles sensibles.
+        if (!await transicionDeCobertura(ride, 'COMMITTED_DRIVER_UNAVAILABLE', r => {
+          r.declinedDriverIds = [...new Set([...(r.declinedDriverIds ?? []), r.assignedDriverId])];
+          r.assignedDriverId = null;
+          r.assignmentStatus = 'AT_RISK';
+        }, resumen)) return;
+        resumen.driverInvalidated += 1;
+      }
+    }
+
+    // EL viaje. Orden sagrado: crear (id determinista) → enlazar → efectos.
+    const creado = await tripBridge.createTripForRide({ ride, driver: conductorConfirmado });
+    if (!creado.ok) {
+      resumen.persistFailures += 1;
+      return; // la siguiente pasada reintenta; el id determinista impide duplicar
+    }
+    await transicionDeCobertura(ride, 'TRIP_HANDOFF', r => {
+      r.tripId = creado.trip.id;
+      r.serviceStatus = 'ACTIVE';
+      r.currentOffer = null;
+    }, resumen);
+    // Si el enlace no pudo persistirse, el viaje EXISTE y la siguiente pasada
+    // lo reconcilia por su id determinista: nunca un segundo viaje. Los
+    // efectos siguen: el traslado del pasajero es real desde ya.
+    if (conductorConfirmado) {
+      resumen.coveredHandoffs += 1;
+      // Con conductor comprometido JAMÁS se despacha: cero ofertas de 15 s.
+      await tripBridge.announceAssignedTrip(creado.trip);
+    } else {
+      resumen.fallbackHandoffs += 1;
+      // El rescate de última hora: EL MISMO despacho inmediato de siempre
+      // (12 filtros, 15 km, ranking por ETA, ofertas de 15 s), UNA sola vez.
+      tripBridge.dispatchTrip(creado.trip);
+    }
+  }
+
+  /** La pasada de handoff completa, en la MISMA cola serializada. */
+  function runSafeTransportHandoff() {
+    return enSerie(async () => {
+      const resumen = resumenHandoffVacio();
+      if (!tripBridge) return resumen; // sin puente (pruebas parciales): nada
+      for (const ride of [...rides()]) {
+        try {
+          await evaluarHandoffDeRide(ride, resumen);
+        } catch (error) {
+          resumen.errors += 1;
+          logger.error(`[+58express SafeTransport] fallo en handoff de ${ride?.id ?? 'sin-id'}: ${error.message}`);
+        }
+      }
+      return resumen;
+    });
+  }
+
+  // -------------------------------------------------------------------------
   // Acciones del conductor (consentimiento explícito, siempre por su token)
   // -------------------------------------------------------------------------
 
@@ -1035,19 +1214,22 @@ export function createSafeTransportService({
     }
     corriendo = true;
     try {
+      // El orden del ciclo: materializar → cobertura → handoffs vencidos.
       const resumen = await runSafeTransportMaterialization();
-      // La cobertura corre tras materializar, en la misma cadencia y cola.
       const cobertura = await runSafeTransportCoverage();
+      const handoff = await runSafeTransportHandoff();
       const huboCambios = resumen.created || resumen.rescheduled || resumen.revived
         || resumen.cancelledObsolete || resumen.invalidSubscriptions || resumen.errors
         || resumen.persistFailures
         || cobertura.preferredOffers || cobertura.backupOffers || cobertura.expiredOffers
-        || cobertura.atRisk || cobertura.persistFailures || cobertura.errors;
+        || cobertura.atRisk || cobertura.persistFailures || cobertura.errors
+        || handoff.due || handoff.reconciled || handoff.missed || handoff.completedSynced
+        || handoff.cancelledSynced || handoff.persistFailures || handoff.errors;
       if (huboCambios) {
         // Solo conteos e identificador de proceso: jamás rutas ni horarios.
-        logger.log(`[+58express SafeTransport] materializacion: ${JSON.stringify(resumen)} cobertura: ${JSON.stringify(cobertura)}`);
+        logger.log(`[+58express SafeTransport] materializacion: ${JSON.stringify(resumen)} cobertura: ${JSON.stringify(cobertura)} handoff: ${JSON.stringify(handoff)}`);
       }
-      return { ...resumen, coverage: cobertura };
+      return { ...resumen, coverage: cobertura, handoff };
     } catch (error) {
       logger.error(`[+58express SafeTransport] pasada fallida: ${error.message}`);
       return null;
@@ -1088,6 +1270,7 @@ export function createSafeTransportService({
     projectRideForPassenger,
     runSafeTransportMaterialization,
     runSafeTransportCoverage,
+    runSafeTransportHandoff,
     getDriverPreferences,
     setDriverPreferences,
     listDriverOffers,

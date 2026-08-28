@@ -285,7 +285,7 @@ test('roundtrip: guardar y recargar una suscripcion y una ocurrencia', async (t)
 // conductores, viajes ni creditos existe todavia en el traslado seguro.
 // --------------------------------------------------------------------------
 
-test('SAFE-1D: bandera apagada por defecto; sin despacho, sin handoff, sin creditos', () => {
+test('SAFE-1E: bandera apagada por defecto; el motor de viajes SOLO via el puente; sin creditos', () => {
   // La bandera solo enciende con la lista explicita de verdaderos.
   assert.equal(isSafeTransportEnabled(undefined), false, 'sin variable = apagado');
   assert.equal(isSafeTransportEnabled(''), false);
@@ -300,14 +300,15 @@ test('SAFE-1D: bandera apagada por defecto; sin despacho, sin handoff, sin credi
     + quitarComentarios(leer('server/routes/transportDriver.js'));
   const codigo = servicio + rutas;
 
-  // El traslado seguro JAMAS toca el despacho inmediato ni sus ofertas de 15s.
+  // Desde SAFE-1E el traslado seguro SI crea viajes — pero UNICAMENTE a
+  // traves del puente inyectado (index.js): el codigo del traslado seguro
+  // jamas toca el motor de viajes, el despacho ni sus estados directamente.
   for (const prohibido of ['dispatchTripToDrivers', 'offerNext', 'notifyRideOffer',
     'selectEligibleDrivers', 'io.to(', 'driverRegistry']) {
     assert.ok(!codigo.includes(prohibido), `el traslado seguro no debe tocar «${prohibido}»`);
   }
-  // Ningun traspaso a viajes reales ni estados del despacho inmediato.
-  for (const prohibido of ['database.trips', "'SEARCHING'", "'DRIVER_ASSIGNED'"]) {
-    assert.ok(!codigo.includes(prohibido), `sin handoff: «${prohibido}»`);
+  for (const prohibido of ['database.trips', "'SEARCHING'", "'DRIVER_ASSIGNED'", 'transitionTrip']) {
+    assert.ok(!codigo.includes(prohibido), `motor de viajes solo via el puente: «${prohibido}»`);
   }
   // El servicio no conoce middlewares HTTP: los roles se deciden en las rutas.
   assert.ok(!servicio.includes('requireApprovedDriver'));

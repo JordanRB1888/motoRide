@@ -719,6 +719,101 @@ app.use('/api', createDriverApplicationsRouter({
   privateStorage
 }));
 
+// SAFE-TRANSPORT-1E: el puente al MOTOR DE VIAJES existente. El traslado
+// programado se convierte, a su hora, en UN viaje normal — y desde ahí mandan
+// la maquinaria de siempre: tarjeta activa, chat, GPS, navegación MAPS-2C,
+// transiciones del conductor, OFFLINE-TRIP-1, tarifa y liquidación. El
+// candado de exactamente-una-vez es el identificador DETERMINISTA del viaje
+// (`trip_sched_<rideId>`, clave primaria en Postgres) más la referencia
+// `scheduledRideId`: tras cualquier caída, la reconciliación ENCUENTRA el
+// viaje existente en vez de crear otro.
+const safeTransportTripBridge = {
+  findTripForRide: ride => database.trips.find(t =>
+    t.id === `trip_sched_${ride.id}` || t.scheduledRideId === ride.id) ?? null,
+  driverById: id => database.users.find(u => u.id === id && u.role === 'driver') ?? null,
+  driverHasActiveTrip: driverId => Boolean(activeTripForDriver(driverId)),
+  tripStatusOf: tripId => {
+    const trip = database.trips.find(t => t.id === tripId);
+    return trip ? normalizeTripStatus(trip.status) : null;
+  },
+  async createTripForRide({ ride, driver = null }) {
+    const pickup = normalizeLocation(ride.pickup);
+    const destination = normalizeLocation(ride.destination);
+    if (!pickup || !destination) return { ok: false, code: 'INVALID_ROUTE' };
+    const passenger = database.users.find(u => u.id === ride.passengerId);
+    if (!passenger) return { ok: false, code: 'PASSENGER_NOT_FOUND' };
+
+    // Métricas estimadas por el servidor con el estimador urbano EXISTENTE
+    // (haversine × 1.35, el mismo del radio de despacho) y 25 km/h de
+    // velocidad urbana. Las REGLAS de tarifa son las de siempre
+    // (calculateFare + pricingConfig); solo cambia la fuente de las métricas,
+    // y queda marcada en el documento.
+    const distanceKm = Math.round(calculateDistance(pickup.lat, pickup.lng, destination.lat, destination.lng) * 100) / 100;
+    const durationMin = Math.max(1, Math.round((distanceKm / 25) * 60));
+    const instante = new Date().toISOString();
+    const trip = {
+      id: `trip_sched_${ride.id}`,   // determinista: EL candado de unicidad
+      scheduledRideId: ride.id,      // referencia de auditoría y reconciliación
+      pickup: tripLocation(pickup),
+      destination: tripLocation(destination),
+      rideType: ride.vehiclePreference === 'CAR' ? 'CAR' : 'MOTO',
+      paymentMethod: PAYMENT_METHODS.CASH, // MVP: efectivo; créditos, en su fase
+      exchangeRateType: 'BCV',
+      distanceKm,
+      durationMin,
+      passengerId: ride.passengerId,
+      passengerName: `${passenger.firstName || ''} ${passenger.lastName || ''}`.trim() || 'Pasajero',
+      passengerAvatar: null,
+      passengerRating: Number(passenger.rating || 0),
+      driverId: null,
+      status: TRIP_STATUS.SEARCHING,
+      createdAt: instante,
+      updatedAt: instante,
+      statusHistory: [{ status: TRIP_STATUS.SEARCHING, at: instante, actorId: 'system:safe-transport' }]
+    };
+    trip.pricing = calculateFare({
+      distanceKm, durationMin, exchangeRateType: 'BCV', rideType: trip.rideType
+    }, pricingConfig);
+    trip.fareUSD = trip.pricing.fareUSD;
+    trip.fareVES = trip.pricing.fareVES;
+    trip.fareSource = 'SERVER_CALCULATED';
+    trip.routeMetricsSource = 'HAVERSINE_URBAN_ESTIMATE';
+
+    if (driver) {
+      // La MISMA máquina de estados canónica del viaje: SEARCHING →
+      // DRIVER_ASSIGNED, con el conductor comprometido de SAFE-1D.
+      transitionTrip(trip, TRIP_STATUS.DRIVER_ASSIGNED, { actorId: driver.id, actorRole: 'driver' });
+      trip.driver = driverPublicSummary(driver);
+      trip.driverId = driver.id;
+    }
+
+    database.trips.push(trip);
+    if (!await persistRecord('trips', trip)) {
+      database.trips.splice(database.trips.indexOf(trip), 1);
+      return { ok: false, code: 'DATABASE_WRITE_FAILED' };
+    }
+    return { ok: true, trip };
+  },
+  async announceAssignedTrip(trip) {
+    // El mismo anuncio que la aceptación atómica del despacho: participantes
+    // y administración. Un conductor sin socket lo verá al reconectar por
+    // /api/trips/active/me (ventana de 12 h de la app actual).
+    const driver = database.users.find(u => u.id === trip.driverId);
+    if (driver) {
+      driver.status = DRIVER_STATUS.BUSY;
+      await persistRecord('users', driver);
+    }
+    io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
+      tripId: trip.id,
+      status: 'EN_ROUTE',
+      canonicalStatus: trip.status,
+      updatedAt: trip.updatedAt,
+      driver: trip.driver ?? null
+    });
+  },
+  dispatchTrip: trip => dispatchTripToDrivers(trip)
+};
+
 // SAFE-TRANSPORT-1C: suscripciones del traslado recurrente y materializador
 // idempotente. TODO detrás de SAFE_TRANSPORT_ENABLED (apagada por defecto):
 // sin bandera no hay API ni pasadas. Sin ofertas a conductores, sin traspaso
@@ -726,6 +821,7 @@ app.use('/api', createDriverApplicationsRouter({
 const safeTransport = createSafeTransportService({
   database,
   persistRecord,
+  tripBridge: safeTransportTripBridge,
   logger: console
 });
 app.use('/api', createTransportSubscriptionsRouter({
