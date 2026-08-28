@@ -43,6 +43,7 @@ import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 import { createPushRouter } from './routes/push.js';
 import { createTripOfflineEventsRouter } from './routes/tripOfflineEvents.js';
 import { createTransportSubscriptionsRouter } from './routes/transportSubscriptions.js';
+import { createTransportDriverRouter } from './routes/transportDriver.js';
 import { createSafeTransportService } from './services/safeTransport.js';
 import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
@@ -731,6 +732,13 @@ app.use('/api', createTransportSubscriptionsRouter({
   safeTransport,
   requireAuth,
   requirePassenger: requireRole('passenger')
+}));
+// SAFE-1D: participación y consentimiento del conductor (opt-in, ofertas,
+// accept/decline/withdraw). Misma bandera, mismo motor, cero handoff.
+app.use('/api', createTransportDriverRouter({
+  safeTransport,
+  requireAuth,
+  requireApprovedDriver
 }));
 safeTransport.startMaterializer();
 

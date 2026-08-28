@@ -98,7 +98,13 @@ export function createTransportSubscriptionsRouter({
       if (error instanceof PaginationError) return res.status(400).json({ error: error.code });
       throw error;
     }
-    res.json({ scheduledRides: pagina.items, nextCursor: pagina.nextCursor, total: pagina.total });
+    // SAFE-1D: el pasajero ve su agenda y la identidad SEGURA del conductor
+    // confirmado (lista blanca sin teléfono); la contabilidad de ofertas no.
+    res.json({
+      scheduledRides: pagina.items.map(ride => safeTransport.projectRideForPassenger(ride)),
+      nextCursor: pagina.nextCursor,
+      total: pagina.total
+    });
   });
 
   return router;

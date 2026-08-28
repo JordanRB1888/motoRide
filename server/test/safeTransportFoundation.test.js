@@ -285,7 +285,7 @@ test('roundtrip: guardar y recargar una suscripcion y una ocurrencia', async (t)
 // conductores, viajes ni creditos existe todavia en el traslado seguro.
 // --------------------------------------------------------------------------
 
-test('SAFE-1C: bandera apagada por defecto; sin ofertas, sin handoff, sin creditos', () => {
+test('SAFE-1D: bandera apagada por defecto; sin despacho, sin handoff, sin creditos', () => {
   // La bandera solo enciende con la lista explicita de verdaderos.
   assert.equal(isSafeTransportEnabled(undefined), false, 'sin variable = apagado');
   assert.equal(isSafeTransportEnabled(''), false);
@@ -294,19 +294,23 @@ test('SAFE-1C: bandera apagada por defecto; sin ofertas, sin handoff, sin credit
   assert.equal(isSafeTransportEnabled('1'), true);
 
   const quitarComentarios = texto => texto.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/[^\n]*$/gm, ' ');
-  const servicio = quitarComentarios(leer('server/services/safeTransport.js'));
-  const rutas = quitarComentarios(leer('server/routes/transportSubscriptions.js'));
+  const servicio = quitarComentarios(leer('server/services/safeTransport.js'))
+    + quitarComentarios(leer('server/domain/scheduledCoverage.js'));
+  const rutas = quitarComentarios(leer('server/routes/transportSubscriptions.js'))
+    + quitarComentarios(leer('server/routes/transportDriver.js'));
   const codigo = servicio + rutas;
 
-  // SAFE-1D todavia no existe: ninguna comunicacion con conductores.
+  // El traslado seguro JAMAS toca el despacho inmediato ni sus ofertas de 15s.
   for (const prohibido of ['dispatchTripToDrivers', 'offerNext', 'notifyRideOffer',
-    'selectEligibleDrivers', 'requireApprovedDriver', 'io.to(', 'driverRegistry']) {
+    'selectEligibleDrivers', 'io.to(', 'driverRegistry']) {
     assert.ok(!codigo.includes(prohibido), `el traslado seguro no debe tocar «${prohibido}»`);
   }
   // Ningun traspaso a viajes reales ni estados del despacho inmediato.
   for (const prohibido of ['database.trips', "'SEARCHING'", "'DRIVER_ASSIGNED'"]) {
     assert.ok(!codigo.includes(prohibido), `sin handoff: «${prohibido}»`);
   }
+  // El servicio no conoce middlewares HTTP: los roles se deciden en las rutas.
+  assert.ok(!servicio.includes('requireApprovedDriver'));
   // Ningun consumo de creditos: ridesUsed solo aparece inicializado a cero.
   assert.ok(!/ridesUsed\s*(\+=|=\s*[^0])/.test(servicio.replace(/plan\.ridesUsed/g, 'X')),
     'ridesUsed jamas se incrementa en 1C');

@@ -8,6 +8,14 @@ import {
   validateSubscriptionPayload,
   validateScheduledRidePayload
 } from '../domain/scheduleCalendar.js';
+import {
+  offerViewForDriver,
+  resolveBackupOfferPolicy,
+  resolveCommitmentWindow,
+  scheduledEligibilityDefect,
+  selectBackupCandidates
+} from '../domain/scheduledCoverage.js';
+import { driverPublicProfile } from '../domain/userProjections.js';
 
 /**
  * Traslado seguro — SAFE-TRANSPORT-1C: ciclo de vida de suscripciones y
@@ -448,17 +456,40 @@ export function createSafeTransportService({
     errors: 0
   });
 
+  /** Estados de cobertura SIN compromiso: ofertas y contabilidad, pero ningún
+   *  conductor ha consentido todavía. */
+  const SIN_COMPROMISO = new Set(['UNASSIGNED', 'OFFERED_PREFERRED', 'ASSIGNING', 'BACKUP_REQUIRED', 'AT_RISK']);
+
   /** ¿Esta ocurrencia puede tocarla la reconciliación? Solo si nadie se ha
-   *  comprometido con ella: sin viaje, sin conductor, planificada o cancelada
-   *  por la propia reconciliación. Lo demás es intocable. */
+   *  comprometido con ella: sin viaje, sin conductor CONFIRMADO, planificada o
+   *  cancelada por la propia reconciliación. Una oferta pendiente no es un
+   *  compromiso: la agenda del pasajero manda y la oferta se resetea. */
   const esLibre = ride => !ride.tripId
-    && ride.assignmentStatus === 'UNASSIGNED'
+    && !ride.assignedDriverId
+    && SIN_COMPROMISO.has(ride.assignmentStatus)
     && (ride.serviceStatus === 'PLANNED' || /^CANCELLED_[A-Z_]+$/.test(String(ride.serviceStatus)));
+
+  /** La agenda cambió bajo una ocurrencia sin compromiso: la cobertura vuelve
+   *  a cero (las condiciones que motivaron ofertas o rechazos ya no existen).
+   *  Un accept rezagado sobre la oferta vieja muere en la revalidación. */
+  function reiniciarCobertura(ride) {
+    ride.assignmentStatus = 'UNASSIGNED';
+    ride.currentOffer = null;
+    ride.declinedDriverIds = [];
+    ride.backupOffersSent = 0;
+  }
 
   const esFutura = (ride, ahora) => {
     const t = Date.parse(ride.scheduledPickupAt);
     return Number.isFinite(t) && t >= ahora;
   };
+
+  /** Deshace una mutación fallida SIN cambiar la identidad del objeto (las
+   *  referencias vivas — bucles, pruebas — deben seguir viendo el documento). */
+  function restaurar(doc, previa) {
+    for (const clave of Object.keys(doc)) delete doc[clave];
+    Object.assign(doc, previa);
+  }
 
   function anotar(ride, evento, instante) {
     if (!Array.isArray(ride.timeline)) ride.timeline = [];
@@ -506,15 +537,16 @@ export function createSafeTransportService({
       const reprogramar = existente.scheduledPickupAt !== objetivo
         || existente.localTime !== ocurrencia.localTime;
       if (!revivir && !reprogramar) continue;
-      const previa = { serviceStatus: existente.serviceStatus, scheduledPickupAt: existente.scheduledPickupAt, localTime: existente.localTime };
+      const previa = structuredClone(existente);
       existente.serviceStatus = 'PLANNED';
       existente.scheduledPickupAt = objetivo;
       existente.localTime = ocurrencia.localTime;
+      reiniciarCobertura(existente);
       anotar(existente, revivir ? 'REVIVED' : 'RESCHEDULED', ahora);
       if (await guardar('scheduledRides', existente)) {
         resumen[revivir ? 'revived' : 'rescheduled'] += 1;
       } else {
-        Object.assign(existente, previa);
+        restaurar(existente, previa);
         resumen.persistFailures += 1;
       }
     }
@@ -523,15 +555,16 @@ export function createSafeTransportService({
     for (const ride of propias) {
       if (esperadasPorClave.has(ride.occurrenceKey)) continue;
       if (!esFutura(ride, ahora) || !esLibre(ride) || ride.serviceStatus !== 'PLANNED') continue;
-      const previa = ride.serviceStatus;
+      const previa = structuredClone(ride);
       ride.serviceStatus = suscripcion.status === 'ACTIVE'
         ? 'CANCELLED_SCHEDULE_CHANGE'
         : (suscripcion.status === 'PAUSED' ? 'CANCELLED_SUBSCRIPTION_PAUSED' : 'CANCELLED_SUBSCRIPTION_INACTIVE');
+      reiniciarCobertura(ride);
       anotar(ride, ride.serviceStatus, ahora);
       if (await guardar('scheduledRides', ride)) {
         resumen.cancelledObsolete += 1;
       } else {
-        ride.serviceStatus = previa;
+        restaurar(ride, previa);
         resumen.persistFailures += 1;
       }
     }
@@ -549,9 +582,15 @@ export function createSafeTransportService({
       localDate: ocurrencia.localDate,
       localTime: ocurrencia.localTime,
       scheduledPickupAt: new Date(ocurrencia.scheduledPickupAtUtcMs).toISOString(),
-      assignmentStatus: 'UNASSIGNED', // SAFE-1D pondrá conductores; 1C jamás.
+      assignmentStatus: 'UNASSIGNED',
       serviceStatus: 'PLANNED',
       tripId: null,
+      // Cobertura (SAFE-1D): solo el consentimiento explícito de un conductor
+      // rellena assignedDriverId; el resto es contabilidad de ofertas.
+      assignedDriverId: null,
+      currentOffer: null,
+      declinedDriverIds: [],
+      backupOffersSent: 0,
       pickup: structuredClone(ida ? suscripcion.route.home : suscripcion.route.worksite),
       destination: structuredClone(ida ? suscripcion.route.worksite : suscripcion.route.home),
       vehiclePreference: suscripcion.vehiclePreference ?? null,
@@ -594,6 +633,392 @@ export function createSafeTransportService({
   }
 
   // -------------------------------------------------------------------------
+  // Cobertura de conductores (SAFE-1D): consentimiento explícito, SIEMPRE
+  // -------------------------------------------------------------------------
+
+  const ventanaCompromiso = resolveCommitmentWindow();
+  const politicaRespaldo = resolveBackupOfferPolicy();
+
+  const users = () => database.users ?? [];
+  const conductorPorId = id => users().find(u => u.id === id && u.role === 'driver') ?? null;
+
+  // Ventanas de SAFE-1A/1C: la preferida debe confirmar antes de T-45min; sin
+  // cobertura a T-20min la ocurrencia queda AT_RISK (aviso honesto, sin
+  // despacho y sin viaje: eso pertenece a fases posteriores).
+  const finDeOfertaPreferida = pickupMs => pickupMs - COVERAGE_WINDOWS.primaryConfirmationDeadlineMs;
+  const umbralDeRiesgo = pickupMs => pickupMs - COVERAGE_WINDOWS.backupThresholdMs;
+
+  /** Recogidas YA comprometidas del conductor (futuras, planificadas). */
+  function recogidasComprometidas(driverId, exceptoRideId = null) {
+    return rides()
+      .filter(r => r.assignedDriverId === driverId && r.serviceStatus === 'PLANNED'
+        && !r.tripId && r.id !== exceptoRideId)
+      .map(r => Date.parse(r.scheduledPickupAt))
+      .filter(Number.isFinite);
+  }
+
+  function defectoDeElegibilidad(driver, ride) {
+    return scheduledEligibilityDefect(driver, ride, {
+      committedPickupsMs: driver?.id ? recogidasComprometidas(driver.id, ride.id) : [],
+      window: ventanaCompromiso
+    });
+  }
+
+  /**
+   * Notificación SEMÁNTICA en la app (documento durable de `notifications`).
+   * El texto jamás lleva dirección, coordenadas ni teléfono. El transporte
+   * push llegará en fases posteriores por ESTA misma frontera — la lógica de
+   * cobertura no conoce Web Push.
+   */
+  async function notificar(userId, event, title, message) {
+    if (!userId || !Array.isArray(database.notifications)) return false;
+    const doc = {
+      id: `notification_${crypto.randomUUID()}`,
+      userId,
+      title,
+      message,
+      category: 'SAFE_TRANSPORT',
+      event,
+      read: false,
+      createdAt: new Date(now()).toISOString()
+    };
+    database.notifications.push(doc);
+    if (!await guardar('notifications', doc)) {
+      database.notifications.splice(database.notifications.indexOf(doc), 1);
+      return false;
+    }
+    return true;
+  }
+
+  const etiquetaDeRide = ride =>
+    `${ride.localDate} a las ${ride.localTime} (${ride.direction === 'OUTBOUND' ? 'ida' : 'vuelta'})`;
+
+  /** Transición persistida con vuelta atrás si la escritura falla. */
+  async function transicionDeCobertura(ride, evento, mutar, resumen) {
+    const previa = structuredClone(ride);
+    mutar(ride);
+    anotar(ride, evento, now());
+    if (await guardar('scheduledRides', ride)) return true;
+    restaurar(ride, previa);
+    if (resumen) resumen.persistFailures += 1;
+    return false;
+  }
+
+  const resumenCoberturaVacio = () => ({
+    ridesEvaluated: 0,
+    preferredOffers: 0,
+    backupOffers: 0,
+    expiredOffers: 0,
+    atRisk: 0,
+    persistFailures: 0,
+    errors: 0
+  });
+
+  /**
+   * Evaluación de UNA ocurrencia. IDEMPOTENTE: cada transición depende solo
+   * del estado persistido (status + currentOffer), así que repetir la pasada
+   * sobre el mismo estado no ofrece dos veces ni notifica dos veces.
+   */
+  async function evaluarCoberturaDeRide(ride, resumen) {
+    if (ride.serviceStatus !== 'PLANNED' || ride.tripId || ride.assignedDriverId) return;
+    const ahora = now();
+    const pickup = Date.parse(ride.scheduledPickupAt);
+    if (!Number.isFinite(pickup) || pickup <= ahora) return;
+    resumen.ridesEvaluated += 1;
+
+    // 0) Una oferta vencida se retira: el silencio cuenta como rechazo. Y una
+    // oferta cuyo destinatario dejó de ser elegible (opt-out, suspensión o un
+    // choque horario sobrevenido) también: mantenerla en pie sería ofrecer lo
+    // que ya no puede aceptarse.
+    if (ride.currentOffer) {
+      const vencida = ahora >= Date.parse(ride.currentOffer.expiresAt);
+      const destinatario = conductorPorId(ride.currentOffer.driverId);
+      const inelegible = !vencida && defectoDeElegibilidad(destinatario, ride) !== null;
+      if (vencida || inelegible) {
+        const retirado = ride.currentOffer.driverId;
+        const hecho = await transicionDeCobertura(ride, vencida ? 'OFFER_EXPIRED' : 'OFFER_RETIRED', r => {
+          r.declinedDriverIds = [...new Set([...(r.declinedDriverIds ?? []), retirado])];
+          r.currentOffer = null;
+          r.assignmentStatus = 'BACKUP_REQUIRED';
+        }, resumen);
+        if (!hecho) return;
+        resumen.expiredOffers += 1;
+      }
+    }
+
+    // 1) Sin historia todavía: ¿hay conductor preferido elegible que ofertar?
+    if (ride.assignmentStatus === 'UNASSIGNED') {
+      const sub = subs().find(s => s.id === ride.subscriptionId);
+      const preferidoId = sub?.preferredDriverId ?? null;
+      const preferido = preferidoId && !(ride.declinedDriverIds ?? []).includes(preferidoId)
+        ? conductorPorId(preferidoId)
+        : null;
+      const limite = finDeOfertaPreferida(pickup);
+      if (preferido && ahora < limite && defectoDeElegibilidad(preferido, ride) === null) {
+        const hecho = await transicionDeCobertura(ride, 'OFFERED_PREFERRED', r => {
+          r.assignmentStatus = 'OFFERED_PREFERRED';
+          r.currentOffer = {
+            driverId: preferido.id,
+            kind: 'PREFERRED',
+            offeredAt: new Date(ahora).toISOString(),
+            expiresAt: new Date(limite).toISOString()
+          };
+        }, resumen);
+        if (!hecho) return;
+        resumen.preferredOffers += 1;
+        await notificar(preferido.id, 'scheduled_driver_offer',
+          'Traslado programado disponible',
+          `Un pasajero solicita contar contigo el ${etiquetaDeRide(ride)}. Revisa tus ofertas programadas.`);
+        return;
+      }
+      // Sin preferido utilizable: al circuito de respaldo (sin notificación).
+      if (!await transicionDeCobertura(ride, 'BACKUP_REQUIRED', r => {
+        r.assignmentStatus = 'BACKUP_REQUIRED';
+      }, resumen)) return;
+    }
+
+    // 2) Respaldo: riesgo primero, luego a lo sumo UNA oferta viva a la vez.
+    if (ride.assignmentStatus === 'BACKUP_REQUIRED') {
+      if (ahora >= umbralDeRiesgo(pickup)) {
+        const hecho = await transicionDeCobertura(ride, 'AT_RISK', r => {
+          r.assignmentStatus = 'AT_RISK';
+        }, resumen);
+        if (!hecho) return;
+        resumen.atRisk += 1;
+        await notificar(ride.passengerId, 'scheduled_ride_at_risk',
+          'Tu traslado programado necesita atención',
+          `Aún no hay conductor confirmado para tu traslado del ${etiquetaDeRide(ride)}. Estamos al tanto.`);
+        return;
+      }
+      if ((ride.backupOffersSent ?? 0) >= politicaRespaldo.maxOffers) return;
+      const excluidos = [...(ride.declinedDriverIds ?? [])];
+      const comprometidasPorConductor = new Map();
+      for (const driver of users()) {
+        if (driver.role === 'driver') {
+          comprometidasPorConductor.set(driver.id, recogidasComprometidas(driver.id, ride.id));
+        }
+      }
+      const [candidato] = selectBackupCandidates(users(), ride, {
+        excludedIds: excluidos,
+        committedPickupsByDriver: comprometidasPorConductor,
+        window: ventanaCompromiso,
+        limit: 1
+      });
+      if (!candidato) return; // sin candidatos: AT_RISK llegará a su hora
+      const vence = Math.min(ahora + politicaRespaldo.offerTtlMs, umbralDeRiesgo(pickup));
+      const hecho = await transicionDeCobertura(ride, 'BACKUP_OFFERED', r => {
+        r.assignmentStatus = 'ASSIGNING';
+        r.currentOffer = {
+          driverId: candidato.id,
+          kind: 'BACKUP',
+          offeredAt: new Date(ahora).toISOString(),
+          expiresAt: new Date(vence).toISOString()
+        };
+        r.backupOffersSent = (r.backupOffersSent ?? 0) + 1;
+      }, resumen);
+      if (!hecho) return;
+      resumen.backupOffers += 1;
+      await notificar(candidato.id, 'scheduled_driver_offer',
+        'Traslado programado disponible',
+        `Hay un traslado programado el ${etiquetaDeRide(ride)} que necesita cobertura. Revisa tus ofertas.`);
+    }
+    // OFFERED_PREFERRED / ASSIGNING con oferta vigente y AT_RISK: nada que
+    // hacer — ESA es la idempotencia de ofertas y notificaciones.
+  }
+
+  /** La pasada de cobertura completa, en la MISMA cola que la materialización. */
+  function runSafeTransportCoverage() {
+    return enSerie(async () => {
+      const resumen = resumenCoberturaVacio();
+      for (const ride of [...rides()]) {
+        try {
+          await evaluarCoberturaDeRide(ride, resumen);
+        } catch (error) {
+          resumen.errors += 1;
+          logger.error(`[+58express SafeTransport] fallo evaluando cobertura de ${ride?.id ?? 'sin-id'}: ${error.message}`);
+        }
+      }
+      return resumen;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Acciones del conductor (consentimiento explícito, siempre por su token)
+  // -------------------------------------------------------------------------
+
+  function getDriverPreferences(user) {
+    return { acceptsScheduledRides: user.acceptsScheduledRides === true };
+  }
+
+  /**
+   * Opt-in/opt-out del conductor. Política documentada: apagarlo impide
+   * ofertas NUEVAS (la elegibilidad se reevalúa en cada oferta y en cada
+   * accept); los compromisos YA confirmados no se cancelan solos — retirarse
+   * de cada uno es una acción explícita (withdraw), para que una ocurrencia
+   * inminente jamás pierda su conductor en silencio.
+   */
+  async function setDriverPreferences(user, body = {}) {
+    for (const clave of Object.keys(body ?? {})) {
+      if (clave !== 'acceptsScheduledRides') return err(400, 'UNKNOWN_FIELD');
+    }
+    if (typeof body.acceptsScheduledRides !== 'boolean') return err(400, 'INVALID_PREFERENCE');
+    const previa = user.acceptsScheduledRides;
+    user.acceptsScheduledRides = body.acceptsScheduledRides;
+    if (!await guardar('users', user)) {
+      if (previa === undefined) delete user.acceptsScheduledRides;
+      else user.acceptsScheduledRides = previa;
+      return err(503, 'DATABASE_WRITE_FAILED');
+    }
+    return { ok: true, preferences: getDriverPreferences(user) };
+  }
+
+  /** Vista operativa de un compromiso YA aceptado: aquí sí viaja la ruta
+   *  exacta, por la vía autenticada del conductor asignado. */
+  function vistaDeCompromiso(ride) {
+    return {
+      rideId: ride.id,
+      direction: ride.direction,
+      localDate: ride.localDate,
+      localTime: ride.localTime,
+      scheduledPickupAt: ride.scheduledPickupAt,
+      assignmentStatus: ride.assignmentStatus,
+      vehiclePreference: ride.vehiclePreference ?? null,
+      pickup: ride.pickup,
+      destination: ride.destination
+    };
+  }
+
+  function listDriverOffers(user) {
+    const ahora = now();
+    return rides()
+      .filter(r => r.currentOffer?.driverId === user.id
+        && r.serviceStatus === 'PLANNED' && !r.assignedDriverId && !r.tripId)
+      .filter(r => Date.parse(r.currentOffer.expiresAt) > ahora)
+      .filter(r => {
+        const t = Date.parse(r.scheduledPickupAt);
+        return Number.isFinite(t) && t > ahora && t <= ahora + 7 * DIA_MS;
+      })
+      .sort((a, b) => Date.parse(a.scheduledPickupAt) - Date.parse(b.scheduledPickupAt))
+      .slice(0, 50)
+      .map(offerViewForDriver); // SIN dirección exacta antes del consentimiento
+  }
+
+  function listDriverCommitments(user) {
+    const ahora = now();
+    return rides()
+      .filter(r => r.assignedDriverId === user.id && r.serviceStatus === 'PLANNED' && !r.tripId)
+      .filter(r => {
+        const t = Date.parse(r.scheduledPickupAt);
+        return Number.isFinite(t) && t > ahora - DIA_MS && t <= ahora + 7 * DIA_MS;
+      })
+      .sort((a, b) => Date.parse(a.scheduledPickupAt) - Date.parse(b.scheduledPickupAt))
+      .slice(0, 50)
+      .map(vistaDeCompromiso);
+  }
+
+  /**
+   * Aceptar una oferta. TODO el camino corre en la cola del servicio: dos
+   * accepts «simultáneos» se revalidan en serie contra el estado ya mutado —
+   * exactamente UN conductor puede quedar comprometido.
+   */
+  function acceptScheduledRide(user, rideId) {
+    return enSerie(async () => {
+      const ride = rides().find(r => r.id === rideId);
+      if (!ride) return err(404, 'SCHEDULED_RIDE_NOT_FOUND');
+      if (ride.assignedDriverId === user.id) {
+        return { ok: true, commitment: vistaDeCompromiso(ride) }; // idempotente
+      }
+      if (ride.assignedDriverId) return err(409, 'RIDE_ALREADY_COVERED');
+      if (ride.serviceStatus !== 'PLANNED' || ride.tripId) return err(409, 'RIDE_NOT_AVAILABLE');
+      const oferta = ride.currentOffer;
+      if (!oferta || oferta.driverId !== user.id) return err(409, 'NO_ACTIVE_OFFER');
+      const ahora = now();
+      if (ahora >= Date.parse(oferta.expiresAt)) return err(409, 'OFFER_EXPIRED');
+      const defecto = defectoDeElegibilidad(user, ride);
+      if (defecto) {
+        // El destinatario ya no puede tomarla: la oferta se retira AHORA para
+        // que el circuito de respaldo no espere a que venza sola.
+        await transicionDeCobertura(ride, 'OFFER_RETIRED', r => {
+          r.declinedDriverIds = [...new Set([...(r.declinedDriverIds ?? []), user.id])];
+          r.currentOffer = null;
+          r.assignmentStatus = 'BACKUP_REQUIRED';
+        }, null);
+        return err(defecto === 'SCHEDULE_CONFLICT' ? 409 : 403, defecto);
+      }
+
+      const confirmada = oferta.kind === 'PREFERRED' ? 'DRIVER_CONFIRMED' : 'COVERAGE_CONFIRMED';
+      const hecho = await transicionDeCobertura(ride, confirmada, r => {
+        r.assignedDriverId = user.id; // DEL TOKEN. El cuerpo jamás opina.
+        r.assignmentStatus = confirmada;
+        r.currentOffer = null;
+      }, null);
+      if (!hecho) return err(503, 'DATABASE_WRITE_FAILED');
+      await notificar(ride.passengerId, 'scheduled_driver_confirmed',
+        'Conductor confirmado',
+        `Tu traslado del ${etiquetaDeRide(ride)} ya tiene conductor confirmado.`);
+      return { ok: true, commitment: vistaDeCompromiso(ride) };
+    });
+  }
+
+  /** Rechazar una oferta dirigida a mí. Sin castigo alguno: rechazar un
+   *  programado es un derecho, no una falta. */
+  function declineScheduledRide(user, rideId) {
+    return enSerie(async () => {
+      const ride = rides().find(r => r.id === rideId);
+      if (!ride) return err(404, 'SCHEDULED_RIDE_NOT_FOUND');
+      const oferta = ride.currentOffer;
+      if (!oferta || oferta.driverId !== user.id) return err(409, 'NO_ACTIVE_OFFER');
+      const hecho = await transicionDeCobertura(ride, 'OFFER_DECLINED', r => {
+        r.declinedDriverIds = [...new Set([...(r.declinedDriverIds ?? []), user.id])];
+        r.currentOffer = null;
+        r.assignmentStatus = 'BACKUP_REQUIRED';
+      }, null);
+      if (!hecho) return err(503, 'DATABASE_WRITE_FAILED');
+      return { ok: true };
+    });
+  }
+
+  /** Retirarse de un compromiso FUTURO. La cobertura vuelve al circuito de
+   *  respaldo y el pasajero se entera con honestidad. */
+  function withdrawFromScheduledRide(user, rideId) {
+    return enSerie(async () => {
+      const ride = rides().find(r => r.id === rideId);
+      if (!ride || ride.assignedDriverId !== user.id) return err(404, 'COMMITMENT_NOT_FOUND');
+      if (ride.serviceStatus !== 'PLANNED' || ride.tripId) return err(409, 'COMMITMENT_NOT_WITHDRAWABLE');
+      const ahora = now();
+      const pickup = Date.parse(ride.scheduledPickupAt);
+      if (!Number.isFinite(pickup) || pickup <= ahora) return err(409, 'COMMITMENT_ALREADY_DUE');
+      const hecho = await transicionDeCobertura(ride, 'DRIVER_WITHDREW', r => {
+        r.declinedDriverIds = [...new Set([...(r.declinedDriverIds ?? []), user.id])];
+        r.assignedDriverId = null;
+        r.currentOffer = null;
+        r.assignmentStatus = 'BACKUP_REQUIRED';
+      }, null);
+      if (!hecho) return err(503, 'DATABASE_WRITE_FAILED');
+      await notificar(ride.passengerId, 'driver_changed',
+        'Cambio de conductor en tu traslado',
+        `El conductor de tu traslado del ${etiquetaDeRide(ride)} ya no está disponible. Buscaremos cobertura.`);
+      return { ok: true };
+    });
+  }
+
+  /**
+   * Lo que el PASAJERO ve de su ocurrencia: su agenda más la identidad segura
+   * del conductor confirmado (proyección de lista blanca, sin teléfono). La
+   * contabilidad interna de ofertas no se expone.
+   */
+  function projectRideForPassenger(ride) {
+    const {
+      declinedDriverIds: _d, currentOffer: _o, backupOffersSent: _b,
+      assignedDriverId, ...visible
+    } = ride;
+    return {
+      ...visible,
+      driver: assignedDriverId ? driverPublicProfile(conductorPorId(assignedDriverId)) : null
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // El intervalo (NO es el candado; solo la cadencia)
   // -------------------------------------------------------------------------
 
@@ -611,14 +1036,18 @@ export function createSafeTransportService({
     corriendo = true;
     try {
       const resumen = await runSafeTransportMaterialization();
+      // La cobertura corre tras materializar, en la misma cadencia y cola.
+      const cobertura = await runSafeTransportCoverage();
       const huboCambios = resumen.created || resumen.rescheduled || resumen.revived
         || resumen.cancelledObsolete || resumen.invalidSubscriptions || resumen.errors
-        || resumen.persistFailures;
+        || resumen.persistFailures
+        || cobertura.preferredOffers || cobertura.backupOffers || cobertura.expiredOffers
+        || cobertura.atRisk || cobertura.persistFailures || cobertura.errors;
       if (huboCambios) {
         // Solo conteos e identificador de proceso: jamás rutas ni horarios.
-        logger.log(`[+58express SafeTransport] materializacion: ${JSON.stringify(resumen)}`);
+        logger.log(`[+58express SafeTransport] materializacion: ${JSON.stringify(resumen)} cobertura: ${JSON.stringify(cobertura)}`);
       }
-      return resumen;
+      return { ...resumen, coverage: cobertura };
     } catch (error) {
       logger.error(`[+58express SafeTransport] pasada fallida: ${error.message}`);
       return null;
@@ -656,7 +1085,16 @@ export function createSafeTransportService({
     updateSubscription,
     setSubscriptionStatus,
     listScheduledRides,
+    projectRideForPassenger,
     runSafeTransportMaterialization,
+    runSafeTransportCoverage,
+    getDriverPreferences,
+    setDriverPreferences,
+    listDriverOffers,
+    listDriverCommitments,
+    acceptScheduledRide,
+    declineScheduledRide,
+    withdrawFromScheduledRide,
     tick,
     startMaterializer,
     stopMaterializer,
