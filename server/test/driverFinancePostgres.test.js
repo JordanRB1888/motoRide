@@ -59,12 +59,16 @@ const leerSaldo = async (pool, id) => {
   return rows.length ? Number(rows[0].saldo) : null;
 };
 
+// Lo comprometido vive en su TABLA propia: fuera del documento del conductor,
+// que es justo lo que impide que una escritura obsoleta lo borre.
 const leerComprometido = async (pool, id) => {
-  const { rows } = await pool.query(`select coalesce((payload->>'committedCommission')::numeric, 0) as c from public.users where id = $1`, [id]);
-  return rows.length ? Number(rows[0].c) : null;
+  const { rows } = await pool.query(
+    `select committed_commission_usd as c from public.driver_finance_state where driver_id = $1`, [id]);
+  return rows.length ? Number(rows[0].c) : 0;
 };
 
 const limpiar = async (pool, ids) => {
+  await pool.query(`delete from public.driver_finance_state where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.transactions where payload->>'userId' = any($1::text[])`, [ids]);
   await pool.query(`delete from public.users where id = any($1::text[])`, [ids]);
 };

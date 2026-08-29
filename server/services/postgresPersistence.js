@@ -231,22 +231,44 @@ export async function createPostgresPersistence({ pool, database, logger = conso
    */
   function reserveDriverCommission(driverId, amount, floorUSD) {
     return enqueue(async () => {
+      // La reserva vive en SU PROPIA TABLA, no dentro del documento del
+      // conductor. Esa es la diferencia que importa: una prueba contra
+      // PostgreSQL real demostro que, guardandola en `users.payload`, la
+      // siguiente escritura del documento completo --hecha por otra replica
+      // con una copia vieja-- la borraba. En una fila aparte, ninguna
+      // escritura de `users` puede tocarla.
+      //
+      // La condicion y el apunte siguen ocurriendo en la MISMA sentencia, asi
+      // que dos aceptaciones simultaneas tampoco pueden gastar la misma
+      // capacidad: la capacidad se lee del saldo menos lo ya comprometido.
+      await pool.query(
+        `insert into public.driver_finance_state (driver_id) values ($1)
+         on conflict (driver_id) do nothing`,
+        [driverId]
+      );
       const result = await pool.query(
-        `update public.users
-            set payload = jsonb_set(
-              payload, '{committedCommission}',
-              to_jsonb(round((coalesce((payload->>'committedCommission')::numeric, 0) + $2::numeric)::numeric, 2)), true)
-          where id = $1
-            and coalesce((payload->>'walletBalance')::numeric, 0)
-                - coalesce((payload->>'committedCommission')::numeric, 0)
+        `update public.driver_finance_state f
+            set committed_commission_usd = round((f.committed_commission_usd + $2::numeric)::numeric, 2),
+                updated_at = now()
+           from public.users u
+          where f.driver_id = $1
+            and u.id = f.driver_id
+            and coalesce((u.payload->>'walletBalance')::numeric, 0)
+                - f.committed_commission_usd
                 - $2::numeric >= $3::numeric
-          returning payload`,
+          returning f.committed_commission_usd`,
         [driverId, amount, floorUSD]
       );
-      if (result.rowCount !== 1) return false;
-      shadow.get('users').set(driverId, JSON.stringify(result.rows[0].payload));
-      return true;
+      return result.rowCount === 1;
     });
+  }
+
+  /** Lo comprometido HOY, leido de su tabla autoritativa. */
+  function readCommittedCommission(driverId) {
+    return pool.query(
+      `select committed_commission_usd from public.driver_finance_state where driver_id = $1`,
+      [driverId]
+    ).then(r => (r.rowCount ? Number(r.rows[0].committed_commission_usd) : 0));
   }
 
   /** Devuelve lo reservado: la carrera se liquido, se cancelo o no llego a
@@ -254,17 +276,14 @@ export async function createPostgresPersistence({ pool, database, logger = conso
   function releaseDriverCommission(driverId, amount) {
     return enqueue(async () => {
       const result = await pool.query(
-        `update public.users
-            set payload = jsonb_set(
-              payload, '{committedCommission}',
-              to_jsonb(greatest(0, round((coalesce((payload->>'committedCommission')::numeric, 0) - $2::numeric)::numeric, 2))), true)
-          where id = $1
-          returning payload`,
+        `update public.driver_finance_state
+            set committed_commission_usd = greatest(0, round((committed_commission_usd - $2::numeric)::numeric, 2)),
+                updated_at = now()
+          where driver_id = $1
+          returning committed_commission_usd`,
         [driverId, amount]
       );
-      if (result.rowCount !== 1) return false;
-      shadow.get('users').set(driverId, JSON.stringify(result.rows[0].payload));
-      return true;
+      return result.rowCount === 1;
     });
   }
 
@@ -321,6 +340,7 @@ export async function createPostgresPersistence({ pool, database, logger = conso
     reserveTripAssignment,
     reserveDriverCommission,
     releaseDriverCommission,
+    readCommittedCommission,
     chargeDriverMaintenance,
     flush: () => writeQueue,
     shadowSize: table => shadow.get(table)?.size ?? 0,
