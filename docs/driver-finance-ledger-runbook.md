@@ -68,6 +68,31 @@ puestas en cada transacción de dinero: `lock_timeout`, `statement_timeout` e
 `idle_in_transaction_session_timeout`. Si algo no consigue su cerrojo, falla
 cerrado y se reintenta; nunca se queda esperando para siempre.
 
+## Cada movimiento de dinero tiene nombre
+
+Todo ingreso o salida de dinero de un conductor lleva una **identidad estable**
+que se guarda en `driver_money_operations` dentro de la misma transacción que
+mueve el saldo. Reintentar la misma operación no puede volver a moverlo: esa
+identidad es clave primaria.
+
+```
+topup:<idDeLaTransaccion>       recarga aprobada
+payout:<idDeLaTransaccion>      liquidación pagada
+withdrawal:<idDeLaSolicitud>    retiros (fase futura)
+admin-adjustment:<id>           ajuste administrativo
+```
+
+De ahí sale también la respuesta cuando un `COMMIT` se confirma y su respuesta
+se pierde: se le pregunta a la base si la operación está anotada. Si lo está,
+entró; si no, no entró.
+
+**Una consecuencia operativa importante:** cuando la administración aprueba una
+recarga o una liquidación y el desenlace del dinero queda incierto, la ruta
+responde `503` con `retryable: true` y **la solicitud se queda PENDIENTE**. No
+es un error que haya que corregir a mano: hay que **reintentar la misma
+aprobación**, que usará la misma identidad y descubrirá si aquel movimiento
+llegó a entrar. Aprobar de nuevo nunca duplica el dinero.
+
 ## Orden de cerrojos
 
 Todas las operaciones de dinero toman los cerrojos en **el mismo orden**. Es la
@@ -182,6 +207,10 @@ select count(*) from public.driver_maintenance_obligations where status = 'DUE';
 
 -- Conductores bloqueados por deuda.
 select count(*) from public.driver_finance_state where block_active;
+
+-- Identidades de operación: una fila por recarga, retiro o ajuste. Sirve para
+-- auditar que un reintento no movió dinero dos veces.
+select kind, count(*) from public.driver_money_operations group by kind;
 
 -- LO MÁS IMPORTANTE de todo: carreras HECHAS cuyo dinero no llegó a cobrarse.
 -- Deben ser cero de forma sostenida. Si alguna se queda aquí, el rescate

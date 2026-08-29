@@ -799,11 +799,26 @@ async function liberarReservaDeViaje(tripId) {
   }
 }
 
-async function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
+/**
+ * DRIVER-FINANCE-1 v6 — LA puerta del dinero que entra a un conductor, ahora
+ * con IDENTIDAD.
+ *
+ * `operationId` es una cadena estable que identifica la operación de origen:
+ * `topup:<idDeLaTransacción>` hoy, `withdrawal:<id>` o `admin-adjustment:<id>`
+ * mañana. Reintentar la misma operación no puede acreditar dos veces, porque
+ * esa identidad es clave primaria en la base.
+ *
+ * Devuelve un DESENLACE, no un número. La quinta auditoría encontró que
+ * convertir un `AMBIGUOUS` en «el saldo de antes» dejaba a la ruta creyendo
+ * que todo había ido bien: una recarga podía quedar aprobada sin dinero, o
+ * acreditarse dos veces al reintentar. Quien llama tiene que poder distinguir
+ * «entró», «ya había entrado» y «no se sabe».
+ */
+async function aplicarCreditoAlConductor(owner, amount, { operationId, sourceId = null } = {}) {
   const credito = roundMoney(Number(amount) || 0);
   if (owner?.role !== 'driver') {
     owner.walletBalance = roundMoney(Number(owner.walletBalance || 0) + credito);
-    return owner.walletBalance;
+    return { outcome: 'CREDITED', balance: owner.walletBalance };
   }
 
   const instante = new Date().toISOString();
@@ -815,6 +830,7 @@ async function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
     const r = await persistence.creditDriverWallet({
       driverId: owner.id,
       creditUSD: credito,
+      operationId,
       sourceId,
       at: instante,
       policyEnabled: DRIVER_FINANCE_ON,
@@ -823,23 +839,25 @@ async function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
         deferred: ({ paid, balanceAfter }) => construirApunteDeuda(owner, paid, balanceAfter, sourceId, instante)
       }
     });
-    if (r.outcome === 'CREDITED') {
-      for (const apunte of r.transactions) {
+    if (r.outcome === 'CREDITED' || r.outcome === 'ALREADY_APPLIED') {
+      for (const apunte of r.transactions ?? []) {
         if (!database.transactions.some(t => t.id === apunte.id)) database.transactions.push(apunte);
       }
       driverFinance.applySnapshot(owner, await persistence.readDriverFinance(owner.id));
-      return owner.walletBalance;
+      return { outcome: r.outcome, balance: roundMoney(Number(owner.walletBalance || 0)) };
     }
     if (r.outcome !== 'NO_FINANCE_STATE') {
+      // AMBIGUOUS, FAILED u OPERATION_ID_REQUIRED: NO se inventa un saldo. La
+      // ruta tiene que decidir con la verdad, y la verdad es que no se sabe.
       console.error(`[+58express DriverFinance] crédito no resuelto (${r.outcome})`);
-      return roundMoney(Number(owner.walletBalance || 0));
+      return { outcome: r.outcome, balance: roundMoney(Number(owner.walletBalance || 0)) };
     }
     // NO_FINANCE_STATE: fuera del libro. Camino de siempre.
   }
 
   if (!DRIVER_FINANCE_ON) {
     owner.walletBalance = roundMoney(Number(owner.walletBalance || 0) + credito);
-    return owner.walletBalance;
+    return { outcome: 'CREDITED', balance: owner.walletBalance };
   }
 
   // Proceso único: el mismo reparto, decidido por la función pura.
@@ -860,7 +878,7 @@ async function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
   if (owner.financialBlock?.active === true && canTakeNewWork(owner, finanzasConductor)) {
     owner.financialBlock = { active: false, clearedAt: instante };
   }
-  return owner.walletBalance;
+  return { outcome: 'CREDITED', balance: owner.walletBalance };
 }
 
 /**
@@ -2103,18 +2121,26 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
   }
   const owner = database.users.find(item => item.id === transaction.userId);
   if (status === 'APPROVED' && transaction.type === 'PAYOUT' && Number(owner?.walletBalance || 0) < transaction.amount) return res.status(409).json({ error:'INSUFFICIENT_BALANCE' });
-  transaction.status = status;
-  transaction.reviewedBy = req.user.id;
-  transaction.reviewedAt = new Date().toISOString();
-  transaction.reviewNote = sanitizeText(req.body.reviewNote, 500) || null;
+  // DRIVER-FINANCE-1 v6 · EL ORDEN IMPORTA. Antes se marcaba APROBADA y
+  // luego se movía el dinero: una recarga podía quedar aprobada sin fondos si
+  // el crédito fallaba, y un desenlace incierto se convertía en «todo bien».
+  // Ahora la solicitud NO se termina hasta saber, de forma durable, qué pasó
+  // con el dinero. Mientras no se sepa, se queda PENDIENTE y se puede
+  // reintentar — con la MISMA identidad de operación, que es lo que impide
+  // que un reintento mueva el dinero dos veces.
   if (status === 'APPROVED' && owner && transaction.type === 'TOP_UP') {
-    // DRIVER-FINANCE-1 v3: el dinero que entra paga primero lo que se debe.
-    // Antes se acreditaba entero y las comisiones diferidas quedaban como
-    // deuda incobrable: escritas en el documento y sin ningun camino que las
-    // recaudara jamas. El orden lo fija el dueno: saldo negativo, luego
-    // comisiones diferidas, luego mantenimientos vencidos y al final lo
-    // libre. Nada se perdona en silencio.
-    owner.walletBalance = await aplicarCreditoAlConductor(owner, transaction.amount, transaction.id);
+    // El dinero que entra paga primero lo que se debe: saldo negativo,
+    // comisiones diferidas, mantenimientos vencidos y al final lo libre.
+    const r = await aplicarCreditoAlConductor(owner, transaction.amount, {
+      operationId: `topup:${transaction.id}`,
+      sourceId: transaction.id
+    });
+    if (r.outcome !== 'CREDITED' && r.outcome !== 'ALREADY_APPLIED') {
+      // Ni aprobada ni rechazada: recuperable. El siguiente intento usará la
+      // misma identidad y descubrirá si aquel crédito llegó a entrar.
+      return res.status(503).json({ error: 'TOPUP_OUTCOME_UNKNOWN', retryable: true });
+    }
+    owner.walletBalance = r.balance;
   }
   if (status === 'APPROVED' && owner && transaction.type === 'PAYOUT') {
     // El retiro sale del saldo AUTORITATIVO. Restarlo en el documento dejaría
@@ -2122,19 +2148,33 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
     let debitadoEnElLibro = false;
     if (owner.role === 'driver' && persistence.financeReady === true) {
       if (DRIVER_FINANCE_ON) await driverFinance.ensureState(owner);
-      const r = await persistence.debitDriverWallet({ driverId: owner.id, amountUSD: transaction.amount });
-      if (r.outcome === 'DEBITED') {
+      const r = await persistence.debitDriverWallet({
+        driverId: owner.id,
+        amountUSD: transaction.amount,
+        // La identidad es genérica a propósito: el sistema de retiros que
+        // viene podrá usar `withdrawal:<id>` sin rediseñar nada de esto.
+        operationId: `payout:${transaction.id}`
+      });
+      if (r.outcome === 'DEBITED' || r.outcome === 'ALREADY_APPLIED') {
         driverFinance.applySnapshot(owner, await persistence.readDriverFinance(owner.id));
         debitadoEnElLibro = true;
+      } else if (r.outcome === 'INSUFFICIENT_BALANCE') {
+        return res.status(409).json({ error: 'INSUFFICIENT_BALANCE' });
       } else if (r.outcome !== 'NO_FINANCE_STATE') {
-        transaction.status = 'PENDING';
-        return res.status(409).json({ error: r.outcome === 'INSUFFICIENT_BALANCE' ? 'INSUFFICIENT_BALANCE' : 'PAYOUT_NOT_DURABLE' });
+        // Incierto: la solicitud sigue PENDIENTE y el reintento, con la misma
+        // identidad, descubrirá si aquel débito entró.
+        return res.status(503).json({ error: 'PAYOUT_OUTCOME_UNKNOWN', retryable: true });
       }
     }
     if (!debitadoEnElLibro) {
       owner.walletBalance = Math.round((Number(owner.walletBalance || 0) - transaction.amount) * 100) / 100;
     }
   }
+  // Y SOLO ahora la solicitud se termina.
+  transaction.status = status;
+  transaction.reviewedBy = req.user.id;
+  transaction.reviewedAt = new Date().toISOString();
+  transaction.reviewNote = sanitizeText(req.body.reviewNote, 500) || null;
   const isPayout = transaction.type === 'PAYOUT';
   database.adminActions.push({ id:`admin_action_${crypto.randomUUID()}`, adminId:req.user.id, targetUserId:transaction.userId, action:`${isPayout?'payout':'topup'}_${status.toLowerCase()}`, transactionId:transaction.id, createdAt:new Date().toISOString() });
   database.notifications.push({ id:`notification_${crypto.randomUUID()}`, userId:transaction.userId, title:isPayout?(status==='APPROVED'?'Liquidación pagada':'Liquidación rechazada'):(status==='APPROVED'?'Recarga acreditada':'Recarga rechazada'), message:isPayout?(status==='APPROVED'?`Administración aprobó tu liquidación de $${transaction.amount.toFixed(2)}.`:'Administración rechazó la solicitud de liquidación.'):(status==='APPROVED'?`Se acreditaron $${transaction.amount.toFixed(2)} a tu billetera.`:'Administración no pudo validar la referencia enviada.'), category:'FINANCE', read:false, createdAt:new Date().toISOString() });

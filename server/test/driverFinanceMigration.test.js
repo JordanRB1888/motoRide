@@ -50,6 +50,15 @@ test('la migración crea las cuatro tablas del libro y el disparador de proyecci
     'sin el disparador, `users.payload` seguiría siendo autoridad financiera');
 });
 
+test('la migración declara la identidad de cada operación de dinero', () => {
+  const minusculas = sql.toLowerCase();
+  assert.ok(minusculas.includes('create table if not exists public.driver_money_operations'),
+    'sin identidad durable, un reintento vuelve a mover el dinero');
+  assert.ok(minusculas.includes('operation_id text primary key'),
+    'y la clave primaria es la que lo impide');
+  assert.ok(minusculas.includes("check (kind in ('credit', 'debit'))"));
+});
+
 test('la migración declara el suelo de deuda y el estado que salva una carrera hecha', () => {
   const minusculas = sql.toLowerCase();
   assert.ok(minusculas.includes('driver_finance_state_suelo'),
@@ -189,4 +198,198 @@ test('sobre un esquema INCOMPATIBLE falla claro, no sigue en silencio', saltar, 
     await cliente.query('rollback').catch(() => {});
     await cliente.end();
   }
+});
+
+// ---------------------------------------------------------------------------
+// v6 · los CAMINOS de actualización, contra PostgreSQL real
+// ---------------------------------------------------------------------------
+//
+// La quinta auditoría encontró que la comprobación previa exigía columnas que
+// la propia migración iba a crear unas líneas después: actualizar desde el
+// esquema anterior era imposible. La prueba oficial arrancaba desde un esquema
+// ya actualizado y por eso no lo veía.
+//
+// Todo lo que sigue ocurre dentro de una transacción que se deshace: la base
+// de pruebas queda exactamente como estaba.
+
+const TABLAS_DEL_LIBRO = [
+  'driver_money_operations',
+  'driver_inactivity_warnings',
+  'driver_maintenance_obligations',
+  'driver_commission_reservations',
+  'driver_finance_state'
+];
+
+/** El esquema ANTERIOR, tal y como quedó en la ronda pasada: sin
+ *  `floor_exempt`, sin `SETTLEMENT_PENDING` y sin la tabla de operaciones. */
+const ESQUEMA_ANTERIOR = `
+  create table public.driver_commission_reservations (
+    trip_id text primary key,
+    driver_id text not null,
+    reserved_usd numeric(10, 2) not null check (reserved_usd >= 0),
+    applied_usd numeric(10, 2) not null default 0 check (applied_usd >= 0),
+    deferred_usd numeric(10, 2) not null default 0 check (deferred_usd >= 0),
+    deferred_paid_usd numeric(10, 2) not null default 0 check (deferred_paid_usd >= 0),
+    status text not null default 'RESERVED'
+      check (status in ('RESERVED', 'SETTLED', 'RELEASED')),
+    created_at timestamptz not null default now(),
+    resolved_at timestamptz,
+    constraint driver_commission_reservations_driver_fk
+      foreign key (driver_id) references public.users(id)
+      on delete no action deferrable initially deferred
+  );
+  create table public.driver_maintenance_obligations (
+    id text primary key,
+    driver_id text not null,
+    period integer not null check (period >= 1),
+    amount_usd numeric(10, 2) not null check (amount_usd > 0),
+    status text not null default 'DUE' check (status in ('DUE', 'PAID')),
+    transaction_id text,
+    created_at timestamptz not null default now(),
+    paid_at timestamptz,
+    constraint driver_maintenance_obligations_unico unique (driver_id, period),
+    constraint driver_maintenance_obligations_driver_fk
+      foreign key (driver_id) references public.users(id)
+      on delete no action deferrable initially deferred
+  );
+  create table public.driver_finance_state (
+    driver_id text primary key,
+    wallet_balance_usd numeric(12, 2) not null default 0,
+    deferred_commission_usd numeric(12, 2) not null default 0,
+    maintenance_anchor_at bigint,
+    last_charged_period integer not null default 0,
+    activity_anchor_at bigint,
+    last_qualifying_trip_at bigint,
+    inactivity_warned_threshold integer,
+    block_active boolean not null default false,
+    block_reason text,
+    block_since timestamptz,
+    block_cleared_at timestamptz,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint driver_finance_state_driver_fk
+      foreign key (driver_id) references public.users(id)
+      on delete no action deferrable initially deferred
+  );
+  create table public.driver_inactivity_warnings (
+    driver_id text not null,
+    anchor_at bigint not null,
+    threshold_days integer not null check (threshold_days > 0),
+    claimed_at timestamptz not null default now(),
+    delivered_at timestamptz,
+    constraint driver_inactivity_warnings_pk primary key (driver_id, anchor_at, threshold_days),
+    constraint driver_inactivity_warnings_driver_fk
+      foreign key (driver_id) references public.users(id) on delete cascade
+  );
+`;
+
+const columnaExiste = async (cliente, tabla, columna) => {
+  const { rows } = await cliente.query(
+    `select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = $1 and column_name = $2`, [tabla, columna]);
+  return rows.length === 1;
+};
+
+const tablaExiste = async (cliente, tabla) => {
+  const { rows } = await cliente.query(`select to_regclass('public.' || $1) as t`, [tabla]);
+  return rows[0].t !== null;
+};
+
+async function enTransaccionDeshecha(cuerpo) {
+  const cliente = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  await cliente.connect();
+  try {
+    await cliente.query('begin');
+    await cuerpo(cliente);
+  } finally {
+    await cliente.query('rollback').catch(() => {});
+    await cliente.end();
+  }
+}
+
+test('v6 · desde el esquema ANTERIOR, la migración actualiza sin quejarse', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    for (const tabla of TABLAS_DEL_LIBRO) {
+      await cliente.query(`drop table if exists public.${tabla} cascade`);
+    }
+    await cliente.query(ESQUEMA_ANTERIOR);
+
+    // Y con datos dentro, incluido un conductor que YA venía por debajo del
+    // suelo. Rechazar su actualización por una deuda que la plataforma ya le
+    // había permitido sería absurdo.
+    const { rows: [alguien] } = await cliente.query(`select id from public.users limit 1`);
+    if (alguien) {
+      await cliente.query(
+        `insert into public.driver_finance_state (driver_id, wallet_balance_usd) values ($1, -8.00)`,
+        [alguien.id]);
+      // Dentro de UNA transaccion, una clave foranea diferida deja eventos de
+      // disparador pendientes y PostgreSQL no deja alterar la tabla. Se
+      // resuelven aqui: es un detalle de esta prueba, no del despliegue real,
+      // donde la migracion corre sola.
+      await cliente.query('set constraints all immediate');
+    }
+
+    await cliente.query(sql);   // ← lo que antes fallaba en la comprobación previa
+
+    assert.ok(await columnaExiste(cliente, 'driver_finance_state', 'floor_exempt'),
+      'la columna nueva se añade, no se exige de antemano');
+    assert.ok(await tablaExiste(cliente, 'driver_money_operations'),
+      'y la tabla de identidades de operación aparece');
+
+    if (alguien) {
+      const { rows } = await cliente.query(
+        `select wallet_balance_usd, floor_exempt from public.driver_finance_state where driver_id = $1`,
+        [alguien.id]);
+      assert.equal(Number(rows[0].wallet_balance_usd), -8, 'SIN tocarle el saldo');
+      assert.equal(rows[0].floor_exempt, true, 'y reconociéndolo como exento del suelo');
+    }
+
+    // El estado que salva una carrera hecha ya se admite.
+    await cliente.query(
+      `insert into public.driver_commission_reservations (trip_id, driver_id, reserved_usd, status)
+       select 'zz_prueba_v6', id, 0.10, 'SETTLEMENT_PENDING' from public.users limit 1`);
+  });
+});
+
+test('v6 · desde un esquema PARCIAL (le falta solo lo último) también converge', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    // El esquema de la ronda pasada, completo salvo la tabla más nueva.
+    await cliente.query('drop table if exists public.driver_money_operations cascade');
+    assert.equal(await tablaExiste(cliente, 'driver_money_operations'), false);
+
+    await cliente.query(sql);
+
+    assert.ok(await tablaExiste(cliente, 'driver_money_operations'), 'se crea lo que faltaba');
+    assert.ok(await columnaExiste(cliente, 'driver_finance_state', 'floor_exempt'),
+      'y lo que ya estaba sigue estando');
+  });
+});
+
+test('v6 · sobre un esquema VACÍO instala el libro entero', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    for (const tabla of TABLAS_DEL_LIBRO) {
+      await cliente.query(`drop table if exists public.${tabla} cascade`);
+    }
+    await cliente.query('drop trigger if exists driver_finance_project_trg on public.users');
+    await cliente.query('drop function if exists public.driver_finance_project()');
+
+    await cliente.query(sql);
+
+    for (const tabla of FINANCE_TABLES) {
+      assert.ok(await tablaExiste(cliente, tabla), `falta ${tabla}`);
+      const { rows } = await cliente.query(
+        `select relrowsecurity from pg_class where oid = to_regclass('public.' || $1)`, [tabla]);
+      assert.equal(rows[0].relrowsecurity, true, `sin RLS: ${tabla}`);
+    }
+    const { rows: disparador } = await cliente.query(
+      `select count(*)::int as n from pg_trigger where tgname = 'driver_finance_project_trg'`);
+    assert.equal(disparador[0].n, 1, 'con su disparador de proyección');
+
+    // Y ni un céntimo movido: las tablas nacen vacías.
+    const { rows: vacias } = await cliente.query(
+      `select (select count(*) from public.driver_finance_state)::int a,
+              (select count(*) from public.driver_money_operations)::int b`);
+    assert.equal(vacias[0].a, 0);
+    assert.equal(vacias[0].b, 0);
+  });
 });

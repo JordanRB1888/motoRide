@@ -109,6 +109,7 @@ const crearViaje = (pool, tripId, pasajero, extra = {}) => pool.query(
 const limpiar = async (pool, ids, viajes = []) => {
   // El orden lo dictan las claves foráneas: primero lo que apunta al
   // conductor, después el conductor.
+  await pool.query(`delete from public.driver_money_operations where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.driver_inactivity_warnings where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.driver_maintenance_obligations where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.driver_commission_reservations where driver_id = any($1::text[])`, [ids]);
@@ -557,7 +558,8 @@ test('N · una recarga salda todo y desbloquea sin esperar al paso diario', salt
 
     // El ejemplo exacto del dueño: −5.00 + 0.80 + 1.00 → $6.81 lo deja al día
     // con un céntimo de margen.
-    const r = await a.creditDriverWallet({ driverId: id, creditUSD: 6.81, builders: CONSTRUCTORES(id) });
+    const r = await a.creditDriverWallet({
+      driverId: id, creditUSD: 6.81, operationId: `v4-recarga:${id}`, builders: CONSTRUCTORES(id) });
     assert.equal(r.outcome, 'CREDITED');
     assert.equal(r.balanceAfter, 0.01, 'exactamente un céntimo en positivo');
     assert.equal(r.deferredPaid, 0.8);
@@ -632,8 +634,8 @@ test('P · dos creditos simultaneos reparten sin cobrar nada dos veces', saltar,
     }
 
     const [uno, dos] = await Promise.all([
-      a.creditDriverWallet({ driverId: id, creditUSD: 1, sourceId: 'A', builders: CONSTRUCTORES(id) }),
-      b.creditDriverWallet({ driverId: id, creditUSD: 1, sourceId: 'B', builders: CONSTRUCTORES(id) })
+      a.creditDriverWallet({ driverId: id, creditUSD: 1, operationId: `v4-credito-a:${id}`, sourceId: 'A', builders: CONSTRUCTORES(id) }),
+      b.creditDriverWallet({ driverId: id, creditUSD: 1, operationId: `v4-credito-b:${id}`, sourceId: 'B', builders: CONSTRUCTORES(id) })
     ]);
     assert.equal(uno.outcome, 'CREDITED');
     assert.equal(dos.outcome, 'CREDITED');

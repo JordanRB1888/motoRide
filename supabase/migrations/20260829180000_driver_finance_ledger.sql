@@ -39,6 +39,18 @@
 -- Ahora se comprueban nombre, TIPO, precision y escala del dinero, y las
 -- claves que garantizan la unicidad. Sobre una base limpia no hace nada: solo
 -- mira tablas que YA existen.
+--
+-- Y distingue DOS cosas que antes confundia, que es lo que impedia actualizar
+-- desde un esquema anterior:
+--
+--   columnas DE SIEMPRE  -> tienen que existir Y ser compatibles;
+--   columnas NUEVAS      -> pueden faltar (mas abajo se anaden). Solo se
+--                           validan si ya estan, por si alguien las creo a
+--                           mano con otra forma.
+--
+-- Sin esa distincion, la comprobacion exigia columnas que ella misma iba a
+-- crear tres parrafos despues, y actualizar una base con el esquema anterior
+-- era imposible.
 do $compatibilidad$
 declare
   problemas text;
@@ -59,40 +71,57 @@ begin
              || ', se espera ' || requerida.tipo
              || coalesce('(' || requerida.precision || ',' || requerida.escala || ')', '') || ')' as detalle
       from (values
-        ('driver_finance_state',           'driver_id',                   'text',                        null::int, null::int),
-        ('driver_finance_state',           'wallet_balance_usd',          'numeric',                     12,        2),
-        ('driver_finance_state',           'deferred_commission_usd',     'numeric',                     12,        2),
-        ('driver_finance_state',           'maintenance_anchor_at',       'bigint',                      null,      null),
-        ('driver_finance_state',           'last_charged_period',         'integer',                     null,      null),
-        ('driver_finance_state',           'activity_anchor_at',          'bigint',                      null,      null),
-        ('driver_finance_state',           'last_qualifying_trip_at',     'bigint',                      null,      null),
-        ('driver_finance_state',           'inactivity_warned_threshold', 'integer',                     null,      null),
-        ('driver_finance_state',           'block_active',                'boolean',                     null,      null),
-        ('driver_finance_state',           'block_reason',                'text',                        null,      null),
-        ('driver_finance_state',           'block_since',                 'timestamp with time zone',    null,      null),
-        ('driver_finance_state',           'block_cleared_at',            'timestamp with time zone',    null,      null),
-        ('driver_finance_state',           'floor_exempt',                'boolean',                     null,      null),
-        ('driver_commission_reservations', 'trip_id',                     'text',                        null,      null),
-        ('driver_commission_reservations', 'driver_id',                   'text',                        null,      null),
-        ('driver_commission_reservations', 'reserved_usd',                'numeric',                     10,        2),
-        ('driver_commission_reservations', 'applied_usd',                 'numeric',                     10,        2),
-        ('driver_commission_reservations', 'deferred_usd',                'numeric',                     10,        2),
-        ('driver_commission_reservations', 'deferred_paid_usd',           'numeric',                     10,        2),
-        ('driver_commission_reservations', 'status',                      'text',                        null,      null),
-        ('driver_commission_reservations', 'resolved_at',                 'timestamp with time zone',    null,      null),
-        ('driver_maintenance_obligations', 'id',                          'text',                        null,      null),
-        ('driver_maintenance_obligations', 'driver_id',                   'text',                        null,      null),
-        ('driver_maintenance_obligations', 'period',                      'integer',                     null,      null),
-        ('driver_maintenance_obligations', 'amount_usd',                  'numeric',                     10,        2),
-        ('driver_maintenance_obligations', 'status',                      'text',                        null,      null),
-        ('driver_maintenance_obligations', 'transaction_id',              'text',                        null,      null),
-        ('driver_maintenance_obligations', 'paid_at',                     'timestamp with time zone',    null,      null),
-        ('driver_inactivity_warnings',     'driver_id',                   'text',                        null,      null),
-        ('driver_inactivity_warnings',     'anchor_at',                   'bigint',                      null,      null),
-        ('driver_inactivity_warnings',     'threshold_days',              'integer',                     null,      null),
-        ('driver_inactivity_warnings',     'delivered_at',                'timestamp with time zone',    null,      null)
-      ) as requerida(tabla, columna, tipo, precision, escala)
+        -- tabla                           columna                        tipo                       prec  esc   nueva
+        ('driver_finance_state',           'driver_id',                   'text',                    null::int, null::int, false),
+        ('driver_finance_state',           'wallet_balance_usd',          'numeric',                 12,   2,    false),
+        ('driver_finance_state',           'deferred_commission_usd',     'numeric',                 12,   2,    false),
+        ('driver_finance_state',           'maintenance_anchor_at',       'bigint',                  null, null, false),
+        ('driver_finance_state',           'last_charged_period',         'integer',                 null, null, false),
+        ('driver_finance_state',           'activity_anchor_at',          'bigint',                  null, null, false),
+        ('driver_finance_state',           'last_qualifying_trip_at',     'bigint',                  null, null, false),
+        ('driver_finance_state',           'inactivity_warned_threshold', 'integer',                 null, null, false),
+        ('driver_finance_state',           'block_active',                'boolean',                 null, null, false),
+        ('driver_finance_state',           'block_reason',                'text',                    null, null, false),
+        ('driver_finance_state',           'block_since',                 'timestamp with time zone',null, null, false),
+        ('driver_finance_state',           'block_cleared_at',            'timestamp with time zone',null, null, false),
+        -- NUEVA: puede faltar; se anade mas abajo.
+        ('driver_finance_state',           'floor_exempt',                'boolean',                 null, null, true),
+        ('driver_commission_reservations', 'trip_id',                     'text',                    null, null, false),
+        ('driver_commission_reservations', 'driver_id',                   'text',                    null, null, false),
+        ('driver_commission_reservations', 'reserved_usd',                'numeric',                 10,   2,    false),
+        ('driver_commission_reservations', 'applied_usd',                 'numeric',                 10,   2,    false),
+        ('driver_commission_reservations', 'deferred_usd',                'numeric',                 10,   2,    false),
+        -- NUEVA: puede faltar; se anade mas abajo.
+        ('driver_commission_reservations', 'deferred_paid_usd',           'numeric',                 10,   2,    true),
+        ('driver_commission_reservations', 'status',                      'text',                    null, null, false),
+        ('driver_commission_reservations', 'resolved_at',                 'timestamp with time zone',null, null, false),
+        ('driver_maintenance_obligations', 'id',                          'text',                    null, null, false),
+        ('driver_maintenance_obligations', 'driver_id',                   'text',                    null, null, false),
+        ('driver_maintenance_obligations', 'period',                      'integer',                 null, null, false),
+        ('driver_maintenance_obligations', 'amount_usd',                  'numeric',                 10,   2,    false),
+        ('driver_maintenance_obligations', 'status',                      'text',                    null, null, false),
+        ('driver_maintenance_obligations', 'transaction_id',              'text',                    null, null, false),
+        ('driver_maintenance_obligations', 'paid_at',                     'timestamp with time zone',null, null, false),
+        ('driver_inactivity_warnings',     'driver_id',                   'text',                    null, null, false),
+        ('driver_inactivity_warnings',     'anchor_at',                   'bigint',                  null, null, false),
+        ('driver_inactivity_warnings',     'threshold_days',              'integer',                 null, null, false),
+        ('driver_inactivity_warnings',     'delivered_at',                'timestamp with time zone',null, null, false),
+        -- Tabla entera nueva: si no existe, la comprobacion ni la mira; si
+        -- existe, tiene que tener exactamente esta forma.
+        ('driver_money_operations',        'operation_id',                'text',                    null, null, false),
+        ('driver_money_operations',        'driver_id',                   'text',                    null, null, false),
+        ('driver_money_operations',        'kind',                        'text',                    null, null, false),
+        ('driver_money_operations',        'amount_usd',                  'numeric',                 12,   2,    false),
+        ('driver_money_operations',        'balance_after_usd',           'numeric',                 12,   2,    false)
+      ) as requerida(tabla, columna, tipo, precision, escala, es_nueva)
      where to_regclass('public.' || requerida.tabla) is not null
+       -- Una columna NUEVA que todavia no existe no es un problema: se anade
+       -- mas abajo. Lo que si es un problema es que exista con otra forma.
+       and (not requerida.es_nueva or exists (
+             select 1 from information_schema.columns c
+              where c.table_schema = 'public'
+                and c.table_name = requerida.tabla
+                and c.column_name = requerida.columna))
        and not exists (
          select 1 from information_schema.columns c
           where c.table_schema = 'public'
@@ -117,7 +146,8 @@ begin
         ('driver_commission_reservations', 'driver_commission_reservations_pkey',      'p'),
         ('driver_maintenance_obligations', 'driver_maintenance_obligations_pkey',      'p'),
         ('driver_maintenance_obligations', 'driver_maintenance_obligations_unico',     'u'),
-        ('driver_inactivity_warnings',     'driver_inactivity_warnings_pk',            'p')
+        ('driver_inactivity_warnings',     'driver_inactivity_warnings_pk',            'p'),
+        ('driver_money_operations',        'driver_money_operations_pkey',             'p')
       ) as clave(tabla, nombre, tipo)
      where to_regclass('public.' || clave.tabla) is not null
        and not exists (
@@ -235,6 +265,42 @@ create table if not exists public.driver_inactivity_warnings (
 );
 
 -- ---------------------------------------------------------------------
+-- E. La operacion de dinero, con IDENTIDAD durable.
+-- ---------------------------------------------------------------------
+-- Esta tabla existe por un fallo concreto: un credito o un debito cuyo COMMIT
+-- entro pero cuya confirmacion se perdio se reintentaba y movia el dinero DOS
+-- veces. La reserva de comision ya tenia su testigo -el viaje-, y el
+-- mantenimiento el suyo -el periodo-, pero una recarga o un retiro no tenian
+-- ninguno: eran anonimos.
+--
+-- Ahora cada operacion externa trae su identidad estable, y esta clave
+-- primaria es la que decide. Reintentar la MISMA operacion no puede mover
+-- dinero otra vez: el segundo intento no inserta nada y se retira leyendo lo
+-- que ya paso.
+--
+-- La identidad es una cadena con prefijo, a proposito generica:
+--   topup:<idDeLaTransaccion>       recarga aprobada
+--   payout:<idDeLaTransaccion>      liquidacion pagada
+--   withdrawal:<idDeLaSolicitud>    retiros (fase futura)
+--   admin-adjustment:<id>           ajuste administrativo
+-- Nada aqui sabe de metodos de pago ni de tasas de cambio: es infraestructura
+-- de libro contable y tiene que seguir siendolo.
+create table if not exists public.driver_money_operations (
+  operation_id text primary key,
+  driver_id text not null,
+  kind text not null check (kind in ('CREDIT', 'DEBIT')),
+  amount_usd numeric(12, 2) not null check (amount_usd >= 0),
+  balance_after_usd numeric(12, 2) not null,
+  applied_at timestamptz not null default now(),
+  constraint driver_money_operations_driver_fk
+    foreign key (driver_id) references public.users(id)
+    on delete no action deferrable initially deferred
+);
+
+create index if not exists driver_money_operations_driver_idx
+  on public.driver_money_operations (driver_id, applied_at);
+
+-- ---------------------------------------------------------------------
 -- Columnas anadidas despues de la primera version del esquema.
 -- ---------------------------------------------------------------------
 alter table public.driver_commission_reservations
@@ -307,6 +373,16 @@ begin
   -- EL SUELO DE DEUDA, declarado por la base y no solo por el codigo. Es
   -- defensa en profundidad: aunque un camino nuevo se olvidara de aplicarlo,
   -- la escritura seria rechazada en vez de hundir a alguien.
+  --
+  -- Antes de declararlo hay que reconocer a quien YA venia por debajo: en una
+  -- base que se actualiza desde el esquema anterior puede haber conductores
+  -- con mas deuda de la que el suelo permite. Marcarlos exentos no les cambia
+  -- ni un centimo -no se toca ningun saldo- y evita que la actualizacion
+  -- fracase por una deuda que la plataforma ya les habia permitido.
+  update public.driver_finance_state
+     set floor_exempt = true
+   where floor_exempt = false and wallet_balance_usd < -5.00;
+
   alter table public.driver_finance_state
     drop constraint if exists driver_finance_state_suelo;
   alter table public.driver_finance_state
@@ -427,8 +503,10 @@ alter table public.driver_commission_reservations enable row level security;
 alter table public.driver_maintenance_obligations enable row level security;
 alter table public.driver_finance_state enable row level security;
 alter table public.driver_inactivity_warnings enable row level security;
+alter table public.driver_money_operations enable row level security;
 
 revoke all on public.driver_commission_reservations from anon, authenticated;
 revoke all on public.driver_maintenance_obligations from anon, authenticated;
 revoke all on public.driver_finance_state from anon, authenticated;
 revoke all on public.driver_inactivity_warnings from anon, authenticated;
+revoke all on public.driver_money_operations from anon, authenticated;

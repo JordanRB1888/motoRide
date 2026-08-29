@@ -129,6 +129,7 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
       await pool.query(`delete from public.trips where id = any($1::text[])`, [viajes]);
     }
     if (ids.length) {
+      await pool.query(`delete from public.driver_money_operations where driver_id = any($1::text[])`, [ids]);
       await pool.query(`delete from public.driver_inactivity_warnings where driver_id = any($1::text[])`, [ids]);
       await pool.query(`delete from public.driver_maintenance_obligations where driver_id = any($1::text[])`, [ids]);
       await pool.query(`delete from public.driver_commission_reservations where driver_id = any($1::text[])`, [ids]);
@@ -346,4 +347,69 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
   assert.equal(cartera.body.driverFinance.blocked, false);
   assert.equal(cartera.body.driverFinance.committedCommissionUSD, 0.75,
     'y NO subestima lo comprometido: la reserva viva se ve');
+
+  // ---- §8 · una recarga cuya confirmación se perdió no se acredita dos veces
+  //
+  // Se reproduce el estado durable EXACTO de un crédito que entró y cuya
+  // respuesta se perdió: el saldo ya subió y la operación ya está anotada.
+  // Lo que se prueba es lo que hace la ruta cuando la administración reintenta.
+  const saldoPrevio = Number((await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`,
+    [driverId])).rows[0].wallet_balance_usd);
+
+  const recargaDudosa = await json(await post('/api/wallet/topups',
+    { amount: 4, reference: String(Date.now()).slice(-10) }, driverToken));
+  assert.equal(recargaDudosa.status, 201);
+  const idRecarga = recargaDudosa.body.id;
+  const saldoTrasCredito = Math.round((saldoPrevio + 4) * 100) / 100;
+  await pool.query(
+    `update public.driver_finance_state set wallet_balance_usd = $2 where driver_id = $1`,
+    [driverId, saldoTrasCredito]);
+  await pool.query(
+    `insert into public.driver_money_operations
+       (operation_id, driver_id, kind, amount_usd, balance_after_usd)
+     values ($1, $2, 'CREDIT', 4, $3)`,
+    [`topup:${idRecarga}`, driverId, saldoTrasCredito]);
+
+  const reintentoRecarga = await json(await patch(`/api/admin/transactions/${idRecarga}`,
+    { status: 'APPROVED', referenceConfirmed: true }, adminToken));
+  assert.equal(reintentoRecarga.status, 200, 'el reintento converge, no se queda atascado');
+  assert.equal(reintentoRecarga.body.transaction.status, 'APPROVED', 'y la solicitud SÍ se aprueba');
+
+  const trasReintento = await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`, [driverId]);
+  assert.equal(Number(trasReintento.rows[0].wallet_balance_usd), saldoTrasCredito,
+    'el dinero entró UNA vez: reintentar la aprobación no lo acredita otra vez');
+  const testigosRecarga = await pool.query(
+    `select count(*)::int as n from public.driver_money_operations where operation_id = $1`,
+    [`topup:${idRecarga}`]);
+  assert.equal(testigosRecarga.rows[0].n, 1, 'un solo testigo');
+
+  // ---- §10 · lo mismo con una liquidación al conductor ---------------------
+  const liquidacionSolicitada = await json(await post('/api/wallet/payouts', { amount: 1 }, driverToken));
+  assert.equal(liquidacionSolicitada.status, 201);
+  const idLiquidacion = liquidacionSolicitada.body.id;
+  const saldoTrasDebito = Math.round((saldoTrasCredito - 1) * 100) / 100;
+  await pool.query(
+    `update public.driver_finance_state set wallet_balance_usd = $2 where driver_id = $1`,
+    [driverId, saldoTrasDebito]);
+  await pool.query(
+    `insert into public.driver_money_operations
+       (operation_id, driver_id, kind, amount_usd, balance_after_usd)
+     values ($1, $2, 'DEBIT', 1, $3)`,
+    [`payout:${idLiquidacion}`, driverId, saldoTrasDebito]);
+
+  const reintentoLiquidacion = await json(await patch(`/api/admin/transactions/${idLiquidacion}`,
+    { status: 'APPROVED' }, adminToken));
+  assert.equal(reintentoLiquidacion.status, 200);
+  assert.equal(reintentoLiquidacion.body.transaction.status, 'APPROVED');
+
+  const trasLiquidacion = await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`, [driverId]);
+  assert.equal(Number(trasLiquidacion.rows[0].wallet_balance_usd), saldoTrasDebito,
+    'el retiro salió UNA vez: reintentar no vuelve a descontarlo');
+  const testigosLiquidacion = await pool.query(
+    `select count(*)::int as n from public.driver_money_operations where operation_id = $1`,
+    [`payout:${idLiquidacion}`]);
+  assert.equal(testigosLiquidacion.rows[0].n, 1);
 });

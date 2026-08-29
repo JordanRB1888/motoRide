@@ -56,7 +56,8 @@ export const FINANCE_TABLES = Object.freeze([
   'driver_finance_state',
   'driver_commission_reservations',
   'driver_maintenance_obligations',
-  'driver_inactivity_warnings'
+  'driver_inactivity_warnings',
+  'driver_money_operations'
 ]);
 
 export async function financeSchemaReady(pool) {
@@ -489,6 +490,41 @@ export function createDriverFinanceStore({
   }
 
   /**
+   * Anota la operacion de dinero con su IDENTIDAD durable, dentro de la misma
+   * transaccion que mueve el saldo.
+   *
+   * Es lo que faltaba y lo que costo el hallazgo critico de la quinta
+   * auditoria: la reserva de comision tenia su testigo -el viaje- y el
+   * mantenimiento el suyo -el periodo-, pero una recarga o un retiro eran
+   * anonimos. Si el COMMIT entraba y su confirmacion se perdia, el reintento
+   * movia el dinero otra vez.
+   *
+   * Devuelve `false` cuando la operacion YA estaba anotada: entonces no hay
+   * nada que hacer, porque ese dinero ya se movio exactamente una vez.
+   */
+  async function anotarOperacion(client, { operationId, driverId, kind, amountUSD, balanceAfter }) {
+    const r = await client.query(
+      `insert into public.driver_money_operations
+         (operation_id, driver_id, kind, amount_usd, balance_after_usd)
+       values ($1, $2, $3, $4, $5)
+       on conflict (operation_id) do nothing`,
+      [operationId, driverId, kind, roundMoney(Math.max(0, Number(amountUSD) || 0)), balanceAfter]
+    );
+    return r.rowCount === 1;
+  }
+
+  /** Lo que la BASE recuerda de una operacion: la unica verdad cuando el
+   *  desenlace del COMMIT se pierde por el camino. */
+  async function leerOperacion(operationId) {
+    const { rows } = await pool.query(
+      `select operation_id, driver_id, kind, amount_usd, balance_after_usd
+         from public.driver_money_operations where operation_id = $1`,
+      [operationId]
+    );
+    return rows[0] ?? null;
+  }
+
+  /**
    * Escribe el saldo autoritativo. La exencion del suelo se retira sola en
    * cuanto el conductor vuelve a estar por encima de el: a partir de ahi la
    * base misma le impide volver a hundirse.
@@ -707,16 +743,46 @@ export function createDriverFinanceStore({
    * ni bloquea; el dinero sigue entrando donde debe.
    */
   function creditDriverWallet({
-    driverId, creditUSD, sourceId = null, at = new Date().toISOString(),
-    policyEnabled = true, builders = {}
+    driverId, creditUSD, operationId = null, sourceId = null,
+    at = new Date().toISOString(), policyEnabled = true, builders = {}
   }) {
+    const importe = Math.max(0, CENT(creditUSD));
+    // Un ingreso SIN identidad no se acepta. Es una regla dura a proposito:
+    // sin ella, un reintento vuelve a acreditar. La unica excepcion es el
+    // credito de CERO, que no mueve dinero — solo recorre las obligaciones
+    // vivas para cobrarlas, y cada una lleva su propio testigo.
+    if (importe > 0 && !operationId) {
+      logger.error('[+58express DriverFinance] credito sin identidad de operacion: rechazado');
+      return Promise.resolve({ outcome: 'OPERATION_ID_REQUIRED' });
+    }
+
     return enTransaccion('credito con cobranza', async client => {
       const bloqueado = await bloquearEstado(client, driverId);
       if (!bloqueado) return { outcome: 'NO_FINANCE_STATE' };
 
-      const disponibleInicial = CENT(bloqueado.snapshot.walletBalance) + Math.max(0, CENT(creditUSD));
+      const disponibleInicial = CENT(bloqueado.snapshot.walletBalance) + importe;
       const cobranza = await cobrarObligaciones(client, driverId, disponibleInicial, builders, sourceId, policyEnabled);
       const saldoNuevo = roundMoney(USD(cobranza.disponible));
+
+      // La identidad se anota ANTES de escribir el saldo. Si ya estaba, este
+      // dinero ya entro: se deshace todo y se devuelve lo que la base
+      // recuerda, sin mover un centimo.
+      if (operationId) {
+        const nueva = await anotarOperacion(client, {
+          operationId, driverId, kind: 'CREDIT', amountUSD: USD(importe), balanceAfter: saldoNuevo
+        });
+        if (!nueva) {
+          const previa = await client.query(
+            `select balance_after_usd from public.driver_money_operations where operation_id = $1`,
+            [operationId]
+          );
+          return {
+            outcome: 'ALREADY_APPLIED',
+            balanceAfter: Number(previa.rows[0]?.balance_after_usd ?? bloqueado.snapshot.walletBalance),
+            transactions: []
+          };
+        }
+      }
 
       const restante = await obligacionesRestantes(client, driverId);
       // El bloqueo se levanta en el MISMO acto que lo hace posible: saldo
@@ -738,26 +804,85 @@ export function createDriverFinanceStore({
         transactions: cobranza.apuntes,
         at
       };
-    }, { outcome: 'FAILED' });
+    }, { outcome: 'FAILED' }, {
+      // Si el COMMIT quedo en el aire, la verdad la dice el testigo: o la
+      // operacion esta anotada -y entonces entro- o no lo esta.
+      resolverCommit: operationId
+        ? async () => (await leerOperacion(operationId)) ? 'COMMITTED' : 'NOT_COMMITTED'
+        : null
+    });
   }
 
-  /** Retiro aprobado: sale dinero de verdad, y jamas por debajo de lo que hay. */
-  function debitDriverWallet({ driverId, amountUSD }) {
+  /**
+   * Retiro aprobado: sale dinero de verdad, y jamas por debajo de lo que hay.
+   *
+   * Lleva la misma identidad durable que el credito, y por la misma razon: un
+   * COMMIT confirmado cuya respuesta se pierde no puede volver a descontarle
+   * el dinero a nadie. La identidad es una cadena generica —hoy
+   * `payout:<id>`, mañana `withdrawal:<id>`— y esta capa no necesita saber de
+   * cual se trata.
+   */
+  function debitDriverWallet({ driverId, amountUSD, operationId = null }) {
+    if (!operationId) {
+      logger.error('[+58express DriverFinance] debito sin identidad de operacion: rechazado');
+      return Promise.resolve({ outcome: 'OPERATION_ID_REQUIRED' });
+    }
+
     return enTransaccion('debito de liquidacion', async client => {
       const bloqueado = await bloquearEstado(client, driverId);
       if (!bloqueado) return { outcome: 'NO_FINANCE_STATE' };
+
+      // Antes de mirar el saldo: ¿esta operacion ya ocurrio? Si el intento
+      // anterior entro y solo se perdio su confirmacion, aqui se descubre.
+      const previa = await client.query(
+        `select balance_after_usd from public.driver_money_operations where operation_id = $1`,
+        [operationId]
+      );
+      if (previa.rowCount === 1) {
+        return { outcome: 'ALREADY_APPLIED', balanceAfter: Number(previa.rows[0].balance_after_usd) };
+      }
+
       const importe = roundMoney(Math.max(0, Number(amountUSD) || 0));
       if (roundMoney(bloqueado.snapshot.walletBalance - importe) < 0) {
         return { outcome: 'INSUFFICIENT_BALANCE', balanceAfter: bloqueado.snapshot.walletBalance };
       }
       const saldoNuevo = roundMoney(bloqueado.snapshot.walletBalance - importe);
+
+      const nueva = await anotarOperacion(client, {
+        operationId, driverId, kind: 'DEBIT', amountUSD: importe, balanceAfter: saldoNuevo
+      });
+      if (!nueva) {
+        // Carrera entre dos intentos del mismo retiro: gana el primero.
+        const otra = await client.query(
+          `select balance_after_usd from public.driver_money_operations where operation_id = $1`,
+          [operationId]
+        );
+        return { outcome: 'ALREADY_APPLIED', balanceAfter: Number(otra.rows[0]?.balance_after_usd ?? saldoNuevo) };
+      }
+
       await client.query(
-        `update public.driver_finance_state set wallet_balance_usd = $2, updated_at = now() where driver_id = $1`,
+        `update public.driver_finance_state
+            set wallet_balance_usd = $2,
+                floor_exempt = case when $2::numeric >= ${FLOOR_USD} then false else floor_exempt end,
+                updated_at = now()
+          where driver_id = $1`,
         [driverId, saldoNuevo]
       );
       await proyectar(client, driverId);
       return { outcome: 'DEBITED', balanceAfter: saldoNuevo };
-    }, { outcome: 'FAILED' });
+    }, { outcome: 'FAILED' }, {
+      resolverCommit: async () => (await leerOperacion(operationId)) ? 'COMMITTED' : 'NOT_COMMITTED'
+    });
+  }
+
+  /** Lo que la base recuerda de una operacion de dinero. Sirve a quien tiene
+   *  que decidir si puede dar por buena una aprobacion. */
+  async function readMoneyOperation(operationId) {
+    try { return await leerOperacion(operationId); }
+    catch (error) {
+      logger.error(`[+58express DriverFinance] lectura de operacion fallida: ${error.message}`);
+      return undefined;   // distinto de `null`: no se pudo saber
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -999,10 +1124,13 @@ export function createDriverFinanceStore({
    * Reconciliador ACOTADO: repara lo que dejo un proceso muerto.
    *
    * Los candidatos se buscan SIN cerrojos y cada uno se resuelve en su propia
-   * transaccion, que toma los cerrojos en el orden global —primero la fila del
-   * conductor, despues la reserva—. La version anterior bloqueaba reservas
-   * antes que el estado, al reves que todos los demas caminos: ese era el
-   * orden invertido que podia trabar una liquidacion en curso.
+   * transaccion, que toma los cerrojos en el orden global: conductor, reserva
+   * y VIAJE. Los tres, y en ese orden.
+   *
+   * La busqueda de candidatos es solo un FILTRO DE RENDIMIENTO. Nunca decide:
+   * entre esa lectura y la transaccion, un traslado programado y vencido pudo
+   * haber arrancado de verdad, y decidir con la foto vieja le quitaba la
+   * reserva a una carrera en curso. Lo que manda es la relectura bloqueada.
    *
    * Cada desenlace es el suyo:
    *   · viaje CANCELLED  -> se libera, exactamente una vez.
@@ -1018,14 +1146,13 @@ export function createDriverFinanceStore({
    *     sin conclusiones de dinero.
    */
   async function reconcileStaleReservations({ limit = 25, staleScheduledHours = 24 } = {}) {
-    const resumen = { seen: 0, released: 0, settled: 0, pendingSettlements: 0, orphans: 0, staleScheduled: 0 };
+    const resumen = { seen: 0, released: 0, settled: 0, pendingSettlements: 0, orphans: 0, staleScheduled: 0, stillActive: 0 };
     let candidatos;
     try {
       const { rows } = await pool.query(
-        `select r.trip_id, r.driver_id, t.status as trip_status,
-                (t.status = 'SCHEDULED'
-                 and (t.payload->>'scheduledAt') is not null
-                 and (t.payload->>'scheduledAt')::timestamptz < now() - ($2 || ' hours')::interval) as programado_vencido
+        // Solo identidades: el estado del viaje que se vea aqui NO decide
+        // nada, y por eso ni siquiera se trae.
+        `select r.trip_id, r.driver_id
            from public.driver_commission_reservations r
            left join public.trips t on t.id = r.trip_id
           where r.status = 'RESERVED'
@@ -1046,9 +1173,16 @@ export function createDriverFinanceStore({
     resumen.seen = candidatos.length;
 
     for (const fila of candidatos) {
-      if (fila.trip_status === null) { resumen.orphans += 1; continue; }
       const desenlace = await enTransaccion('reconciliacion de una reserva', async client => {
-        // ORDEN GLOBAL DE CERROJOS: el conductor primero, siempre.
+        // ORDEN GLOBAL DE CERROJOS, y aqui esta el arreglo de la quinta
+        // auditoria: conductor -> reserva -> VIAJE. La version anterior
+        // decidia con el estado del viaje leido en la busqueda de
+        // candidatos, SIN cerrojo. Entre esa lectura y esta transaccion, un
+        // traslado programado y vencido podia haber arrancado de verdad — y
+        // el reconciliador le quitaba la reserva a una carrera EN CURSO.
+        //
+        // La busqueda de candidatos sigue existiendo, pero solo como filtro
+        // de rendimiento. La autoridad es esta relectura bloqueada.
         await client.query(
           `select 1 from public.driver_finance_state where driver_id = $1 for update`, [fila.driver_id]);
         const viva = await client.query(
@@ -1056,13 +1190,29 @@ export function createDriverFinanceStore({
             where trip_id = $1 and status = 'RESERVED' for update`, [fila.trip_id]);
         if (viva.rowCount !== 1) return 'YA_RESUELTA';
 
-        if (fila.trip_status === 'CANCELLED' || fila.programado_vencido) {
+        const viaje = await client.query(
+          `select status,
+                  (status = 'SCHEDULED'
+                   and (payload->>'scheduledAt') is not null
+                   and (payload->>'scheduledAt')::timestamptz < now() - ($2 || ' hours')::interval) as programado_vencido
+             from public.trips where id = $1 for update`,
+          [fila.trip_id, String(staleScheduledHours)]);
+        // Sin viaje no se decide nada: no se inventa un desenlace de dinero.
+        if (viaje.rowCount !== 1) return 'HUERFANA';
+        const estado = viaje.rows[0].status;
+        const programadoVencido = viaje.rows[0].programado_vencido === true;
+
+        // Y si el viaje ya no es candidato -arranco, se reasigno, dejo de
+        // estar vencido-, la reserva se queda EXACTAMENTE como esta.
+        if (!programadoVencido && !['CANCELLED', 'COMPLETED'].includes(estado)) return 'SIGUE_VIVA';
+
+        if (estado === 'CANCELLED' || programadoVencido) {
           await client.query(
             `update public.driver_commission_reservations
                 set status = 'RELEASED', resolved_at = now()
               where trip_id = $1 and status = 'RESERVED'`,
             [fila.trip_id]);
-          return fila.programado_vencido ? 'PROGRAMADO_VENCIDO' : 'LIBERADA';
+          return programadoVencido ? 'PROGRAMADO_VENCIDO' : 'LIBERADA';
         }
 
         // COMPLETED: la verdad la dice el libro.
@@ -1098,10 +1248,15 @@ export function createDriverFinanceStore({
       else if (desenlace === 'PROGRAMADO_VENCIDO') { resumen.released += 1; resumen.staleScheduled += 1; }
       else if (desenlace === 'LIQUIDADA') resumen.settled += 1;
       else if (desenlace === 'PENDIENTE_DE_LIQUIDAR') resumen.pendingSettlements += 1;
+      else if (desenlace === 'HUERFANA') resumen.orphans += 1;
+      else if (desenlace === 'SIGUE_VIVA') resumen.stillActive += 1;
     }
 
     if (resumen.orphans) {
       logger.warn(`[+58express DriverFinance] reservas sin viaje: ${resumen.orphans}`);
+    }
+    if (resumen.stillActive) {
+      logger.log(`[+58express DriverFinance] candidatas que al releer seguian vivas: ${resumen.stillActive}`);
     }
     if (resumen.pendingSettlements) {
       logger.warn(`[+58express DriverFinance] carreras hechas pendientes de liquidar: ${resumen.pendingSettlements}`);
@@ -1120,6 +1275,7 @@ export function createDriverFinanceStore({
     settleTripForDriver,
     creditDriverWallet,
     debitDriverWallet,
+    readMoneyOperation,
     chargeMaintenanceObligation,
     setFinancialBlock,
     setActivityAnchor,

@@ -31,8 +31,16 @@ const fuente = fs.readFileSync(path.join(raiz, 'index.js'), 'utf8');
 function cuerpoDe(nombre) {
   const inicio = fuente.indexOf(`function ${nombre}(`);
   assert.notEqual(inicio, -1, `no se encontró la función ${nombre}`);
+  // El cuerpo empieza tras la lista de parámetros, no en la primera llave:
+  // una firma con desestructuración —`({ a, b })`— traía una llave antes.
+  let parentesis = 0;
+  let j = fuente.indexOf('(', inicio);
+  for (; j < fuente.length; j += 1) {
+    if (fuente[j] === '(') parentesis += 1;
+    else if (fuente[j] === ')') { parentesis -= 1; if (parentesis === 0) break; }
+  }
   let profundidad = 0;
-  let i = fuente.indexOf('{', inicio);
+  let i = fuente.indexOf('{', j);
   const desde = i;
   for (; i < fuente.length; i += 1) {
     if (fuente[i] === '{') profundidad += 1;

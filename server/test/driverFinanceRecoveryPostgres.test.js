@@ -99,6 +99,7 @@ const crearViaje = (pool, tripId, pasajero, extra = {}) => pool.query(
 );
 
 const limpiar = async (pool, ids, viajes = []) => {
+  await pool.query(`delete from public.driver_money_operations where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.driver_inactivity_warnings where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.driver_maintenance_obligations where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.driver_commission_reservations where driver_id = any($1::text[])`, [ids]);
@@ -229,7 +230,8 @@ test('§21 · con la política APAGADA el conductor sigue cobrando lo suyo', sal
     // conductor ya tiene fila. Antes, el crédito volvía al documento y el
     // disparador lo reestampaba: el conductor cobraba cero.
     const r = await a.creditDriverWallet({
-      driverId: id, creditUSD: 2, policyEnabled: false, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 2, operationId: `v5-flagoff:${id}`,
+      policyEnabled: false, builders: CONSTRUCTORES(id)
     });
     assert.equal(r.outcome, 'CREDITED');
     assert.equal(r.balanceAfter, 3, '1.00 + 2.00');
@@ -257,7 +259,8 @@ test('§21b · apagada, no se cobran obligaciones; el dinero entra entero y espe
        values ($1, $2, 1, 1, 'DUE')`, [`driver-maintenance:${id}:1`, id]);
 
     const r = await a.creditDriverWallet({
-      driverId: id, creditUSD: 5, policyEnabled: false, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 5, operationId: `v5-flagoff-obligaciones:${id}`,
+      policyEnabled: false, builders: CONSTRUCTORES(id)
     });
     assert.equal(r.balanceAfter, 5, 'entra entero: apagada, no se cobra nada');
     assert.equal(r.deferredPaid, 0);
@@ -314,11 +317,13 @@ test('§22 · un commit que falla NO deja al proceso creyendo lo que no se guard
     });
 
     const r = await almacen.creditDriverWallet({
-      driverId: id, creditUSD: 5, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 5, operationId: `v5-commit-perdido:${id}`, builders: CONSTRUCTORES(id)
     });
 
-    assert.equal(r.outcome, 'AMBIGUOUS',
-      'un commit perdido no es un fallo ni un éxito: es una incógnita, y se dice');
+    // v6: ahora el crédito lleva identidad, así que la incógnita se RESUELVE
+    // preguntándole a la base — la operación no está anotada, luego no entró.
+    // Es una respuesta más fuerte que el «no se sabe» de la ronda anterior.
+    assert.equal(r.outcome, 'FAILED', 'la base dice que no entró, y eso es lo que vale');
     assert.deepEqual(anotaciones, [],
       'LA MEMORIA NO SE MOVIÓ: antes ya afirmaba filas que la base nunca guardó');
     assert.equal(await leerSaldo(pool, id), 10, 'y el saldo durable sigue intacto');
@@ -505,7 +510,8 @@ test('§17b · quien YA venía más abajo del suelo se siembra exento, y deja de
     assert.equal(rows[0].floor_exempt, true, 'y queda marcado como exento');
 
     // Recarga hasta positivo: la exención se retira sola.
-    await a.creditDriverWallet({ driverId: id, creditUSD: 10, builders: CONSTRUCTORES(id) });
+    await a.creditDriverWallet({
+      driverId: id, creditUSD: 10, operationId: `v5-suelo:${id}`, builders: CONSTRUCTORES(id) });
     const tras = await pool.query(
       `select wallet_balance_usd, floor_exempt from public.driver_finance_state where driver_id = $1`, [id]);
     assert.equal(Number(tras.rows[0].wallet_balance_usd), 2);
@@ -535,7 +541,7 @@ test('§19 · un cerrojo ajeno no cuelga la operación: expira y no escribe nada
 
     const inicio = Date.now();
     const r = await almacenImpaciente.creditDriverWallet({
-      driverId: id, creditUSD: 3, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 3, operationId: `v5-cerrojo:${id}`, builders: CONSTRUCTORES(id)
     });
     const tardanza = Date.now() - inicio;
 
@@ -546,6 +552,53 @@ test('§19 · un cerrojo ajeno no cuelga la operación: expira y no escribe nada
   } finally {
     try { await cliente.query('rollback'); } catch {}
     cliente.release();
+    await limpiar(pool, [id].filter(Boolean));
+    await pool.end();
+  }
+});
+
+test('§22c · si NI SIQUIERA se puede preguntar, el desenlace es AMBIGUO y nadie toca la memoria', saltar, async () => {
+  // El caso más incómodo de los tres: el commit se pierde Y la base tampoco
+  // contesta cuando se le pregunta si la operación entró. No se puede saber, y
+  // lo correcto es decirlo — no suponer que falló ni suponer que entró.
+  const pool = createPostgresPool({ connectionString });
+  const dbA = baseVacia();
+  const a = await createPostgresPersistence({ pool, database: dbA, logger: silencioso });
+  let id = null;
+  try {
+    ({ id } = await altaConductor(a, dbA, { walletBalance: 10 }));
+
+    const poolCiego = {
+      connect: async () => {
+        const client = await pool.connect();
+        const original = client.query.bind(client);
+        client.query = (texto, valores) => {
+          if (typeof texto === 'string' && texto.trim().toLowerCase() === 'commit') {
+            return Promise.reject(new Error('conexión perdida al confirmar'));
+          }
+          return original(texto, valores);
+        };
+        const soltar = client.release.bind(client);
+        client.release = (...args) => { delete client.query; return soltar(...args); };
+        return client;
+      },
+      // Y la consulta que resolvería la duda tampoco funciona.
+      query: async () => { throw new Error('base inaccesible'); }
+    };
+
+    const anotaciones = [];
+    const almacen = createDriverFinanceStore({
+      pool: poolCiego, logger: silencioso,
+      syncShadow: (tabla, idFila, payload) => anotaciones.push([tabla, idFila, payload])
+    });
+    const r = await almacen.creditDriverWallet({
+      driverId: id, creditUSD: 5, operationId: `v6-ciego:${id}`, builders: CONSTRUCTORES(id)
+    });
+
+    assert.equal(r.outcome, 'AMBIGUOUS', 'no se sabe, y se dice');
+    assert.deepEqual(anotaciones, [], 'y con la duda, la memoria no se mueve');
+    assert.equal(await leerSaldo(pool, id), 10, 'el saldo durable sigue intacto');
+  } finally {
     await limpiar(pool, [id].filter(Boolean));
     await pool.end();
   }
