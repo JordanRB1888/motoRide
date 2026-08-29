@@ -19,31 +19,73 @@ Antes, una réplica con una copia vieja del documento podía deshacer un cobro
 correcto. Después, esa misma escritura entra con datos viejos y sale con los
 autoritativos.
 
-## Estado del interruptor
+## Qué apaga el interruptor, y qué NO
 
-`DRIVER_FINANCE_ENABLED` está **apagada**. Con ella apagada:
+`DRIVER_FINANCE_ENABLED` está **apagada**. Es importante entender exactamente
+qué controla, porque confundirlo costó dinero en la revisión anterior.
 
-- no se crea ninguna fila en `driver_finance_state`,
-- el disparador queda inerte (solo actúa sobre conductores que tienen fila),
-- el despacho, la liquidación y el Transporte Seguro se comportan exactamente
-  como antes.
+**Apaga la POLÍTICA:**
 
-## Requisito operativo: el pooler debe estar en modo SESIÓN
+- el cobro del mantenimiento mensual,
+- la suspensión por inactividad y sus avisos,
+- el bloqueo por deuda y el filtro de reparto de trabajo,
+- la cobranza de obligaciones cuando entra dinero,
+- la creación de filas nuevas en `driver_finance_state`.
 
-`DATABASE_URL` de producción apunta hoy al pooler de Supabase por el **puerto
-5432**, que es **modo sesión**: cada conexión del backend se queda con su
-conexión de servidor durante toda su vida. Eso es lo que necesitan las
-transacciones de dinero, que encadenan una docena de sentencias con cerrojos
-en medio.
+**No apaga la AUTORIDAD del saldo.** En cuanto un conductor tiene fila en el
+libro, su dinero vive ahí para siempre: sus ganancias, recargas y retiros
+siguen escribiéndose en la fila autoritativa aunque la política esté apagada.
 
-**No cambiar ese puerto a 6543 (modo transacción).** Se comprobó durante esta
-fase: contra el pooler en modo transacción, una liquidación solapada con la
-escritura del documento se queda esperando indefinidamente —la base aparece
-como `idle in transaction` esperando al cliente— y la carrera no se liquida.
-Los tres tiempos límite que lleva cada transacción (`lock_timeout`,
-`statement_timeout`, `idle_in_transaction_session_timeout`) hacen que eso
-termine fallando cerrado y reintentándose en vez de colgarse para siempre,
-pero la configuración correcta es el modo sesión.
+Esto no es un detalle de implementación, es la corrección de un fallo real: la
+versión anterior devolvía las escrituras al documento al apagar la bandera,
+mientras el disparador seguía reestampando el saldo desde la fila. El conductor
+completaba una carrera y **cobraba cero**, sin un solo error en el registro.
+
+Con la política apagada, quien **no** está en el libro se comporta
+exactamente como antes de esta fase: sin fila, el disparador es inerte.
+
+## El pooler: lo que sí sabemos y lo que no
+
+`DATABASE_URL` de producción apunta al pooler de Supabase por el **puerto 5432**
+(modo sesión). Esa configuración está certificada y **no se cambia**.
+
+Lo que la revisión anterior afirmó —que el modo sesión es un requisito
+arquitectónico— **era incorrecto, y se corrige aquí**. Lo que las transacciones
+de dinero necesitan es una *conexión reservada durante la transacción*, no
+afinidad de sesión entre transacciones; y un pooler en modo transacción fija el
+backend justo para eso. De hecho, las 24 pruebas financieras contra PostgreSQL
+real —incluidas las de concurrencia— se ejecutan a través del **puerto 6543**,
+que es modo transacción, y pasan.
+
+Lo que sí ocurrió y sigue anotado como cosa a vigilar: en una prueba de
+integración con transiciones solapadas, una liquidación se quedó esperando
+indefinidamente contra el 6543. Eso apunta a **orden de cerrojos o ciclo de
+vida del cliente** —ver la sección siguiente—, no a una incompatibilidad del
+pooler.
+
+Las tres defensas que hacen que ese escenario no pueda colgar a nadie ya están
+puestas en cada transacción de dinero: `lock_timeout`, `statement_timeout` e
+`idle_in_transaction_session_timeout`. Si algo no consigue su cerrojo, falla
+cerrado y se reintenta; nunca se queda esperando para siempre.
+
+## Orden de cerrojos
+
+Todas las operaciones de dinero toman los cerrojos en **el mismo orden**. Es la
+única forma de que dos caminos concurrentes no se traben mutuamente:
+
+```
+1. driver_finance_state          ← SIEMPRE el primero: es el cerrojo del conductor
+2. driver_commission_reservations
+3. driver_maintenance_obligations
+4. trips
+5. transactions
+6. users                          ← SIEMPRE el último: la proyección del documento
+```
+
+El reconciliador era la excepción y se corrigió: bloqueaba reservas antes que
+el estado del conductor, al revés que todos los demás. Ahora busca candidatos
+**sin cerrojos** y resuelve cada uno en su propia transacción, tomando primero
+la fila del conductor.
 
 ## Orden de despliegue
 
@@ -65,7 +107,7 @@ a existir filas de dinero.
 
 ## Vuelta atrás
 
-### Antes de encender (pasos 1–3)
+### Antes de la primera activación
 
 Seguro y completo. Las tablas están vacías.
 
@@ -81,30 +123,45 @@ delete from public.schema_migrations where id = '20260829180000_driver_finance_l
 
 Y desplegar el commit anterior. Ningún saldo cambia.
 
-### Después de encender (paso 4)
+### Después de la primera activación
 
-**No se pueden borrar las tablas.** Contienen dinero.
+**Las tablas ya no se pueden borrar: contienen dinero.**
 
-La vuelta atrás correcta tiene dos escalones, y ninguno destruye datos:
+El paso correcto es **apagar la política**:
 
-1. **Apagar la política** — `DRIVER_FINANCE_ENABLED=0` y desplegar. Deja de
-   cobrarse el mantenimiento, deja de bloquearse a nadie por deuda y deja de
-   reservarse comisión. El saldo del conductor sigue siendo el que dice
-   `driver_finance_state`, porque el disparador sigue proyectándolo. **Esto es
-   lo correcto**: es el saldo real, con los cobros ya hechos.
+```
+DRIVER_FINANCE_ENABLED=0   + desplegar
+```
 
-2. **Volver a la autoridad del documento** (solo si hay que revertir la
-   arquitectura entera, no solo la política) — retirar el disparador y dejar
-   las tablas en su sitio como registro histórico:
+Y es seguro, que es justo lo que antes no era. Con la política apagada:
 
-   ```sql
-   drop trigger if exists driver_finance_project_trg on public.users;
-   ```
+- deja de cobrarse el mantenimiento, de suspenderse por inactividad y de
+  bloquearse a nadie por deuda;
+- deja de cobrarse ninguna obligación con el dinero que entra: las deudas
+  esperan, no se perdonan ni se cobran;
+- **el dinero del conductor sigue entrando y saliendo del libro**, que es donde
+  vive su saldo. Ganancias, recargas y retiros siguen siendo correctos.
 
-   A partir de ese momento `users.payload` vuelve a mandar, con los valores que
-   el disparador dejó proyectados —es decir, los correctos— y las tablas quedan
-   como constancia auditable de cómo se llegó ahí. Reponer el disparador es una
-   sola sentencia.
+Lo único que se conserva del modelo nuevo, además del almacén, es el **suelo de
+−$5**: es una propiedad de la fila (y una restricción de la base), no de la
+política, y su efecto es siempre proteger al conductor de hundirse más.
+
+### Revertir la arquitectura entera
+
+Solo si hiciera falta deshacer el modelo, no solo pausar la política. Y **no se
+borra nada**:
+
+```sql
+drop trigger if exists driver_finance_project_trg on public.users;
+```
+
+A partir de ahí `users.payload` vuelve a mandar, con los valores que el
+disparador dejó proyectados —es decir, los correctos— y las tablas quedan como
+registro histórico auditable. Reponer el disparador es una sola sentencia.
+
+**Importante:** este paso y el despliegue del código que vuelve a escribir en
+el documento tienen que ir juntos. Retirar el disparador dejando el código
+nuevo, o al revés, deja dos autoridades discrepando.
 
 No existe ninguna vuelta atrás automática ni destructiva, y no debe escribirse
 ninguna: el paso que borra dinero es el que nunca se puede deshacer.
@@ -125,13 +182,21 @@ select count(*) from public.driver_maintenance_obligations where status = 'DUE';
 
 -- Conductores bloqueados por deuda.
 select count(*) from public.driver_finance_state where block_active;
+
+-- LO MÁS IMPORTANTE de todo: carreras HECHAS cuyo dinero no llegó a cobrarse.
+-- Deben ser cero de forma sostenida. Si alguna se queda aquí, el rescate
+-- automático no está funcionando y alguien trabajó sin cobrar.
+select count(*) from public.driver_commission_reservations where status = 'SETTLEMENT_PENDING';
 ```
 
 En el registro del servidor, tres avisos importan y ninguno lleva datos
 personales:
 
 - `reservas sin viaje` — una reserva perdió su carrera. Revisar a mano.
-- `carreras completadas sin liquidar` — completó sin apunte de dinero.
+- `carreras hechas pendientes de liquidar` — se completaron y su dinero no se
+  cobró. El rescate automático las liquida en la siguiente pasada; si el
+  mensaje se repite, hay que mirarlo.
+- `carreras rescatadas y liquidadas` — el rescate funcionando.
 - `traslados programados vencidos sin ocurrir` — capacidad devuelta a un
   conductor por un traslado que no llegó a pasar.
 

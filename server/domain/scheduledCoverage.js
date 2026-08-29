@@ -36,7 +36,12 @@ export function resolveCommitmentWindow(env = process.env) {
 export function resolveBackupOfferPolicy(env = process.env) {
   return Object.freeze({
     offerTtlMs: VALORES_ENTEROS(env.SAFE_TRANSPORT_BACKUP_OFFER_TTL_MS, 10 * 60_000, 60_000),
-    maxOffers: VALORES_ENTEROS(env.SAFE_TRANSPORT_MAX_BACKUP_OFFERS, 5, 1)
+    maxOffers: VALORES_ENTEROS(env.SAFE_TRANSPORT_MAX_BACKUP_OFFERS, 5, 1),
+    // DRIVER-FINANCE-1 v5: cuantos candidatos EN ORDEN se piden para poder
+    // confirmar con la base cual puede de verdad. No cambia el ranking: solo
+    // permite saltar a quien la autoridad rechaza, en vez de dejar que una
+    // copia vieja del documento excluya a alguien valido para siempre.
+    authoritativeCandidatePool: VALORES_ENTEROS(env.SAFE_TRANSPORT_BACKUP_CANDIDATE_POOL, 5, 1)
   });
 }
 

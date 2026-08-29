@@ -50,6 +50,18 @@ test('la migración crea las cuatro tablas del libro y el disparador de proyecci
     'sin el disparador, `users.payload` seguiría siendo autoridad financiera');
 });
 
+test('la migración declara el suelo de deuda y el estado que salva una carrera hecha', () => {
+  const minusculas = sql.toLowerCase();
+  assert.ok(minusculas.includes('driver_finance_state_suelo'),
+    'el suelo de −$5 tiene que estar también en la base: defensa en profundidad');
+  assert.ok(minusculas.includes("check (floor_exempt or wallet_balance_usd >= -5.00)"),
+    'con la exención para quien ya venía por debajo antes de la política');
+  assert.ok(minusculas.includes("'settlement_pending'"),
+    'una carrera completada sin cobrar necesita un estado propio: liberarla borraría el dinero de alguien');
+  assert.ok(minusculas.includes('driver_maintenance_obligations_transaction_fk'),
+    'una obligación pagada tiene que apuntar a un apunte que EXISTE');
+});
+
 test('la migración NO mueve dinero: solo crea estructura', () => {
   const cuerpo = sql.toLowerCase()
     // Los comentarios explican el problema y citan importes; no son ejecución.
@@ -84,6 +96,65 @@ test('aplicarla sobre una base YA migrada vuelve a salir bien', saltar, async ()
       `select count(*)::int as n from pg_trigger where tgname = 'driver_finance_project_trg'`);
     assert.equal(disparador.rows?.[0]?.n ?? disparador[0].n, 1, 'y un solo disparador');
   } finally {
+    await cliente.end();
+  }
+});
+
+test('un TIPO incompatible se rechaza ANTES de tocar nada', saltar, async () => {
+  // El hallazgo de la cuarta auditoría: la comprobación miraba solo los
+  // NOMBRES de las columnas. Codex recreó `threshold_days` como `text`
+  // conservándolos todos, y la migración lo aceptó — el código habría
+  // escrito dinero contra un esquema que no es el que espera.
+  const cliente = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  await cliente.connect();
+  try {
+    await cliente.query('begin');
+    await cliente.query('drop table public.driver_inactivity_warnings cascade');
+    await cliente.query(`create table public.driver_inactivity_warnings (
+      driver_id text not null,
+      anchor_at bigint not null,
+      threshold_days text not null,
+      claimed_at timestamptz not null default now(),
+      delivered_at timestamptz,
+      constraint driver_inactivity_warnings_pk primary key (driver_id, anchor_at, threshold_days),
+      constraint driver_inactivity_warnings_driver_fk
+        foreign key (driver_id) references public.users(id) on delete cascade)`);
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SCHEMA_INCOMPATIBLE/,
+          'todas las columnas están: lo que falla es el TIPO, y hay que decirlo');
+        assert.match(error.message, /threshold_days/);
+        assert.match(error.message, /es text, se espera integer/);
+        return true;
+      }
+    );
+  } finally {
+    await cliente.query('rollback').catch(() => {});
+    await cliente.end();
+  }
+});
+
+test('una precisión de dinero equivocada también se rechaza', saltar, async () => {
+  // `numeric(10,0)` guardaría el saldo SIN céntimos: cada cobro se redondearía
+  // a dólares enteros. Es exactamente la clase de deriva silenciosa que no
+  // puede pasar desapercibida.
+  const cliente = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  await cliente.connect();
+  try {
+    await cliente.query('begin');
+    await cliente.query('alter table public.driver_finance_state alter column wallet_balance_usd type numeric(10,0)');
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SCHEMA_INCOMPATIBLE/);
+        assert.match(error.message, /wallet_balance_usd/);
+        return true;
+      }
+    );
+  } finally {
+    await cliente.query('rollback').catch(() => {});
     await cliente.end();
   }
 });

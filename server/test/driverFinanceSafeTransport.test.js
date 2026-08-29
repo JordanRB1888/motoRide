@@ -31,7 +31,7 @@ const cuerpoDeUna = (extra = {}) => ({
   ...extra
 });
 
-function crearEntorno({ drivers = [], nowMs = LUNES } = {}) {
+function crearEntorno({ drivers = [], nowMs = LUNES, financeAuthority = null } = {}) {
   const database = {
     users: [{ id: 'p1', role: 'passenger', firstName: 'Ana' }, ...drivers],
     transportSubscriptions: [], scheduledRides: [], notifications: [], trips: []
@@ -41,9 +41,27 @@ function crearEntorno({ drivers = [], nowMs = LUNES } = {}) {
     database, persistRecord: async () => true, enabled: true,
     // La frontera financiera solo existe con DRIVER-FINANCE-1 encendida.
     driverFinanceEnabled: true,
+    financeAuthority,
     pilotUserIds: resolvePilotUserIds('*'), now: () => reloj.ms, logger: silencioso
   });
   return { database, servicio, reloj };
+}
+
+/**
+ * Una autoridad financiera de mentira con la MISMA forma que la real: dice
+ * `true`/`false` cuando sabe, `null` para «este conductor no está en el
+ * libro», y lanza cuando no se pudo leer.
+ */
+function autoridad({ bloqueados = [], ilegibles = [] } = {}) {
+  return {
+    llamadas: [],
+    async canTakeNewWork(driver) {
+      this.llamadas.push(driver.id);
+      if (ilegibles.includes(driver.id)) throw new Error('FINANCE_AUTHORITY_UNAVAILABLE');
+      if (bloqueados.includes(driver.id)) return false;
+      return true;
+    }
+  };
 }
 
 test('§17 · un conductor con deuda no recibe ofertas programadas', async () => {
@@ -134,4 +152,111 @@ test('un conductor al dia sigue trabajando igual: nada cambia para el', async ()
   assert.equal((await entorno.servicio.acceptScheduledRide(entorno.database.users[1], ride.id)).ok, true);
   await entorno.servicio.runSafeTransportCoverage();
   assert.equal(ride.assignmentStatus, 'DRIVER_CONFIRMED', 'y su compromiso no se toca');
+});
+
+
+// --------------------------------------------------------------------------
+// v5 · la decisión de reparto sale de la BASE, no de la copia en memoria
+// --------------------------------------------------------------------------
+
+test('v5 · un conductor bloqueado EN LA BASE no puede aceptar, aunque el documento diga que sí', async () => {
+  // Exactamente el hallazgo de la cuarta auditoría: este proceso tiene una
+  // copia limpia del conductor —saldo sano, sin bloqueo— mientras otra réplica
+  // ya lo bloqueó por deuda. Antes se le confirmaba el compromiso igual.
+  const mando = autoridad({ bloqueados: ['drv_a'] });
+  const entorno = crearEntorno({ drivers: [conductor('drv_a')], financeAuthority: mando });
+  await entorno.servicio.createSubscription(PASAJERO, { ...cuerpoDeUna(), preferredDriverId: 'drv_a' });
+  // Sin oferta previa no hay nada que aceptar: se prepara con la autoridad
+  // diciendo que sí, y se bloquea justo antes del accept.
+  mando.canTakeNewWork = async () => true;
+  await entorno.servicio.runSafeTransportCoverage();
+  const ride = entorno.database.scheduledRides[0];
+  const driver = entorno.database.users[1];
+  assert.equal(ride.currentOffer?.driverId, 'drv_a', 'la oferta existía');
+  assert.equal(driver.walletBalance, 10, 'y el documento en memoria sigue impecable');
+
+  mando.canTakeNewWork = async () => false;         // la base lo bloquea
+  const intento = await entorno.servicio.acceptScheduledRide(driver, ride.id);
+  assert.equal(intento.ok, false);
+  assert.equal(intento.code, 'FINANCIAL_BALANCE_BLOCK');
+  assert.equal(ride.assignedDriverId, null, 'ningún compromiso nace contra la autoridad');
+});
+
+test('v5 · la oferta al preferido también consulta a la autoridad', async () => {
+  const mando = autoridad({ bloqueados: ['drv_a'] });
+  const entorno = crearEntorno({ drivers: [conductor('drv_a')], financeAuthority: mando });
+  await entorno.servicio.createSubscription(PASAJERO, { ...cuerpoDeUna(), preferredDriverId: 'drv_a' });
+  await entorno.servicio.runSafeTransportCoverage();
+
+  const ride = entorno.database.scheduledRides[0];
+  assert.equal(ride.currentOffer, null, 'no se le ofrece a quien la base rechaza');
+  assert.ok(mando.llamadas.includes('drv_a'), 'y se preguntó de verdad');
+});
+
+test('v5 · el fondo de respaldo salta a quien la base SÍ acepta, en el mismo orden', async () => {
+  // La caché ya no recorta el fondo: si el primero no puede, se pasa al
+  // siguiente. Antes, un documento obsoleto dejaba fuera para siempre a
+  // alguien perfectamente válido.
+  const mando = autoridad({ bloqueados: ['drv_a'] });
+  const entorno = crearEntorno({
+    drivers: [conductor('drv_a'), conductor('drv_b')], financeAuthority: mando
+  });
+  await entorno.servicio.createSubscription(PASAJERO, cuerpoDeUna());
+  await entorno.servicio.runSafeTransportCoverage();
+
+  const ride = entorno.database.scheduledRides[0];
+  assert.ok(ride.currentOffer, 'hubo oferta de respaldo');
+  assert.notEqual(ride.currentOffer.driverId, 'drv_a', 'no al que la base rechaza');
+  assert.equal(ride.currentOffer.driverId, 'drv_b', 'sí al siguiente del ranking');
+});
+
+test('v5 · si la autoridad no se puede leer, NO se le quita el compromiso a nadie', async () => {
+  // Al retirar trabajo ya comprometido, la duda juega a favor del conductor:
+  // castigarlo por un fallo de lectura de la plataforma sería injusto.
+  const mando = autoridad();
+  const entorno = crearEntorno({ drivers: [conductor('drv_a'), conductor('drv_b')], financeAuthority: mando });
+  await entorno.servicio.createSubscription(PASAJERO, { ...cuerpoDeUna(), preferredDriverId: 'drv_a' });
+  await entorno.servicio.runSafeTransportCoverage();
+  const ride = entorno.database.scheduledRides[0];
+  const driver = entorno.database.users[1];
+  await entorno.servicio.acceptScheduledRide(driver, ride.id);
+  assert.equal(ride.assignedDriverId, 'drv_a', 'el compromiso es suyo');
+
+  mando.canTakeNewWork = async () => { throw new Error('FINANCE_AUTHORITY_UNAVAILABLE'); };
+  await entorno.servicio.runSafeTransportCoverage();
+  assert.equal(ride.assignedDriverId, 'drv_a', 'sigue siendo suyo: la duda no le quita el trabajo');
+});
+
+test('v5 · pero un bloqueo REAL en la base sí le libera el compromiso futuro', async () => {
+  const mando = autoridad();
+  const entorno = crearEntorno({ drivers: [conductor('drv_a'), conductor('drv_b')], financeAuthority: mando });
+  await entorno.servicio.createSubscription(PASAJERO, { ...cuerpoDeUna(), preferredDriverId: 'drv_a' });
+  await entorno.servicio.runSafeTransportCoverage();
+  const ride = entorno.database.scheduledRides[0];
+  await entorno.servicio.acceptScheduledRide(entorno.database.users[1], ride.id);
+  assert.equal(ride.assignedDriverId, 'drv_a');
+
+  mando.canTakeNewWork = async d => d.id !== 'drv_a';
+  await entorno.servicio.runSafeTransportCoverage();
+  assert.equal(ride.assignedDriverId, null, 'se libera para buscar cobertura');
+  assert.equal(ride.releasedDriverId, 'drv_a');
+  // Y la pasajera nunca se entera de por qué.
+  const aviso = entorno.database.notifications.find(n => n.userId === 'p1' && n.event === 'driver_changed');
+  assert.ok(aviso, 'a la pasajera se le avisa del cambio');
+  assert.ok(!/deuda|saldo|dólar|\$/i.test(aviso.message), 'sin una palabra sobre el dinero de nadie');
+});
+
+test('v5 · sin libro contable para ese conductor, manda el documento (como antes)', async () => {
+  // `null` significa «no está en el libro»: la política todavía no le alcanza
+  // y se decide con lo de siempre. Nada cambia para quien no ha entrado.
+  const mando = { llamadas: [], async canTakeNewWork(d) { this.llamadas.push(d.id); return null; } };
+  const entorno = crearEntorno({
+    drivers: [conductor('drv_a', { walletBalance: -5 })], financeAuthority: mando
+  });
+  await entorno.servicio.createSubscription(PASAJERO, { ...cuerpoDeUna(), preferredDriverId: 'drv_a' });
+  await entorno.servicio.runSafeTransportCoverage();
+
+  const ride = entorno.database.scheduledRides[0];
+  assert.equal(ride.currentOffer, null, 'el documento dice −$5: sigue bloqueado');
+  assert.ok(mando.llamadas.includes('drv_a'), 'se consultó a la autoridad primero');
 });

@@ -79,6 +79,10 @@ export function createDriverFinanceService({
   // pero la unicidad se apoya solo en que haya un único proceso.
   persistence = null,
   notify = null,
+  // Quien sabe convertir un viaje completado en dinero: vive en la capa de
+  // aplicacion, que conoce tarifa y comision. Aqui solo se sabe CUALES estan
+  // pendientes, nunca cuanto valen.
+  resolvePendingSettlement = null,
   enabled = isDriverFinanceEnabled(),
   intervalMs = resolveDriverFinanceIntervalMs(),
   reconcileIntervalMs = resolveReconcileIntervalMs(),
@@ -571,13 +575,50 @@ export function createDriverFinanceService({
    * de fabricar un desenlace.
    */
   async function runReservationReconciler() {
-    if (!enabled || !libro) return null;
+    // Ojo: NO depende de la bandera. Con la politica apagada el dinero sigue
+    // entrando y saliendo del libro para quien ya esta en el, asi que sus
+    // reservas pueden quedar sin resolver igual. Dejar de repararlas seria
+    // dejar carreras hechas sin cobrar.
+    if (!libro) return null;
     try {
-      return await libro.reconcileStaleReservations({ limit: reconcileBatch });
+      const resumen = await libro.reconcileStaleReservations({ limit: reconcileBatch });
+      resumen.settlementRetries = await reintentarLiquidacionesPendientes();
+      return resumen;
     } catch (error) {
       logger.error(`[+58express DriverFinance] reconciliación fallida: ${error.message}`);
       return null;
     }
+  }
+
+  /**
+   * Rescata las carreras HECHAS cuyo dinero nunca llegó a cobrarse.
+   *
+   * Es la otra mitad de `SETTLEMENT_PENDING`. El reconciliador las marca —no
+   * puede liquidarlas: no conoce la tarifa— y esta pasada las liquida por el
+   * camino normal, el mismo que usa una carrera que termina bien. El testigo
+   * de la reserva garantiza que ocurra exactamente una vez.
+   *
+   * Antes, una carrera completada sin apunte se LIBERABA, y con ella
+   * desaparecían para siempre la comisión de la plataforma y la ganancia del
+   * conductor. Se trabajó y no se cobró: eso es lo que ya no puede pasar.
+   */
+  async function reintentarLiquidacionesPendientes() {
+    if (!libro || typeof resolvePendingSettlement !== 'function') return 0;
+    let rescatadas = 0;
+    try {
+      const pendientes = await libro.listPendingSettlements({ limit: reconcileBatch });
+      for (const pendiente of pendientes) {
+        try {
+          if (await resolvePendingSettlement(pendiente)) rescatadas += 1;
+        } catch (error) {
+          logger.error(`[+58express DriverFinance] reintento de liquidación fallido: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      logger.error(`[+58express DriverFinance] no se pudieron listar las liquidaciones pendientes: ${error.message}`);
+    }
+    if (rescatadas) logger.log(`[+58express DriverFinance] carreras rescatadas y liquidadas: ${rescatadas}`);
+    return rescatadas;
   }
 
   // -------------------------------------------------------------------------
@@ -599,6 +640,8 @@ export function createDriverFinanceService({
     malformedState: 0,
     persistFailures: 0,
     reservationsReconciled: 0,
+    settlementsPending: 0,
+    settlementsRecovered: 0,
     errors: 0
   });
 
@@ -610,7 +653,11 @@ export function createDriverFinanceService({
     const ahora = now();
 
     const reparacion = await runReservationReconciler();
-    if (reparacion) resumen.reservationsReconciled = reparacion.released + reparacion.settled;
+    if (reparacion) {
+      resumen.reservationsReconciled = reparacion.released + reparacion.settled;
+      resumen.settlementsPending = reparacion.pendingSettlements ?? 0;
+      resumen.settlementsRecovered = reparacion.settlementRetries ?? 0;
+    }
 
     for (const driver of [...conductores()]) {
       resumen.driversSeen += 1;
@@ -700,6 +747,16 @@ export function createDriverFinanceService({
   }
 
   function start() {
+    // La reparacion de reservas y el rescate de liquidaciones pendientes se
+    // arman SIEMPRE que haya libro contable, encendida o no la politica: son
+    // integridad del dinero, no politica.
+    if (libro && !temporizadorReconciliacion) {
+      runReservationReconciler().catch(() => {});
+      temporizadorReconciliacion = setInterval(() => {
+        runReservationReconciler().catch(() => {});
+      }, reconcileIntervalMs);
+      if (typeof temporizadorReconciliacion.unref === 'function') temporizadorReconciliacion.unref();
+    }
     if (!enabled || timer) return false;
     timer = setInterval(() => {
       if (corriendo) { pasadasSaltadas += 1; return; }
@@ -709,17 +766,6 @@ export function createDriverFinanceService({
         .finally(() => { corriendo = false; });
     }, intervalMs);
     if (typeof timer.unref === 'function') timer.unref();
-
-    // La reparación de reservas corre por su cuenta y mucho más a menudo: una
-    // reserva huérfana le quita capacidad REAL al conductor, y esperar al paso
-    // mensual sería castigarlo por un fallo de la plataforma.
-    if (libro && !temporizadorReconciliacion) {
-      runReservationReconciler().catch(() => {});
-      temporizadorReconciliacion = setInterval(() => {
-        runReservationReconciler().catch(() => {});
-      }, reconcileIntervalMs);
-      if (typeof temporizadorReconciliacion.unref === 'function') temporizadorReconciliacion.unref();
-    }
 
     logger.log(`[+58express DriverFinance] evaluación armada cada ${Math.round(intervalMs / 1000)}s`);
     return true;
@@ -739,6 +785,7 @@ export function createDriverFinanceService({
     ledgerReady: Boolean(libro),
     runDriverFinancePass,
     runReservationReconciler,
+    retryPendingSettlements: reintentarLiquidacionesPendientes,
     registerQualifyingTrip,
     grantInactivityGrace,
     ensureState: asegurarEstado,

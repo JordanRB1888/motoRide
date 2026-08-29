@@ -583,17 +583,30 @@ async function settleDriverForCompletedTrip(trip) {
 
   let transaction = null;
   let comisionDiferida = 0;
+  let liquidadoEnElLibro = false;
 
-  const libro = DRIVER_FINANCE_ON && persistence.financeReady === true;
+  // DRIVER-FINANCE-1 v5: quien manda sobre el saldo NO lo decide la bandera,
+  // lo decide si este conductor YA está en el libro contable.
+  //
+  // La cuarta auditoría encontró aquí una forma de perder dinero de verdad:
+  // apagar la política devolvía las ganancias al documento, pero el disparador
+  // seguía reestampando el saldo desde la fila autoritativa — el conductor
+  // completaba la carrera y cobraba cero, sin un solo error en el registro.
+  // Una vez que alguien entra al libro, su dinero vive ahí para siempre.
+  const libro = persistence.financeReady === true;
   if (libro) {
-    // El conductor necesita su fila antes de mover dinero: sembrarla es
-    // idempotente y no cambia ni un céntimo.
-    await driverFinance.ensureState(driver);
+    // La fila solo se SIEMBRA con la política encendida. Apagada, quien no
+    // esté en el libro sigue exactamente como antes de esta fase.
+    if (DRIVER_FINANCE_ON) await driverFinance.ensureState(driver);
     const resultado = await persistence.settleTripForDriver({
       tripId: trip.id,
       driverId: driver.id,
       commissionUSD: platformCollectedPayment ? 0 : commission,
       creditUSD: platformCollectedPayment ? net : 0,
+      // Apagada, la política no cobra obligaciones ni levanta bloqueos. El
+      // suelo de deuda sí sigue en pie: es una propiedad del almacén, no de
+      // la política, y protege al conductor en cualquier caso.
+      policyEnabled: DRIVER_FINANCE_ON,
       builders: {
         settlement: construirApunte,
         maintenance: ({ period, balanceAfter }) => construirApunteMantenimiento(driver, period, balanceAfter, instante),
@@ -606,17 +619,25 @@ async function settleDriverForCompletedTrip(trip) {
       console.log(`[+58express DriverFinance] liquidacion ya hecha por otro: ${trip.id}`);
       return null;
     }
-    if (resultado.outcome !== 'SETTLED') {
-      console.error(`[+58express DriverFinance] liquidación no durable para un viaje (${resultado.outcome})`);
+    if (resultado.outcome === 'SETTLED') {
+      liquidadoEnElLibro = true;
+      comisionDiferida = resultado.deferred;
+      transaction = resultado.transaction;
+      for (const apunte of resultado.transactions) {
+        if (!database.transactions.some(t => t.id === apunte.id)) database.transactions.push(apunte);
+      }
+      driverFinance.applySnapshot(driver, await persistence.readDriverFinance(driver.id));
+    } else if (resultado.outcome !== 'NO_FINANCE_STATE') {
+      // AMBIGUOUS o FAILED: la memoria NO se mueve. Si entró, la reserva lo
+      // dirá y el reintento la verá liquidada; si no entró, sigue viva y el
+      // reconciliador la rescata. Lo que no se hace es inventar un desenlace.
+      console.error(`[+58express DriverFinance] liquidación no resuelta para un viaje (${resultado.outcome})`);
       return null;
     }
-    comisionDiferida = resultado.deferred;
-    transaction = resultado.transaction;
-    for (const apunte of resultado.transactions) {
-      if (!database.transactions.some(t => t.id === apunte.id)) database.transactions.push(apunte);
-    }
-    driverFinance.applySnapshot(driver, await persistence.readDriverFinance(driver.id));
-  } else {
+    // NO_FINANCE_STATE: este conductor no está en el libro (política apagada
+    // y nunca sembrado). Cae al camino de siempre, más abajo.
+  }
+  if (!liquidadoEnElLibro) {
     // Proceso único: el documento es la autoridad, como siempre.
     let amount;
     if (platformCollectedPayment) {
@@ -780,19 +801,23 @@ async function liberarReservaDeViaje(tripId) {
 
 async function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
   const credito = roundMoney(Number(amount) || 0);
-  if (!DRIVER_FINANCE_ON || owner?.role !== 'driver') {
+  if (owner?.role !== 'driver') {
     owner.walletBalance = roundMoney(Number(owner.walletBalance || 0) + credito);
     return owner.walletBalance;
   }
 
   const instante = new Date().toISOString();
+  // La autoridad la fija el libro, no la bandera: si este conductor tiene
+  // fila, su dinero entra ahí aunque la política esté apagada. Devolverlo al
+  // documento sería tirarlo — el disparador lo reestampa un instante después.
   if (persistence.financeReady === true) {
-    await driverFinance.ensureState(owner);
+    if (DRIVER_FINANCE_ON) await driverFinance.ensureState(owner);
     const r = await persistence.creditDriverWallet({
       driverId: owner.id,
       creditUSD: credito,
       sourceId,
       at: instante,
+      policyEnabled: DRIVER_FINANCE_ON,
       builders: {
         maintenance: ({ period, balanceAfter }) => construirApunteMantenimiento(owner, period, balanceAfter, instante),
         deferred: ({ paid, balanceAfter }) => construirApunteDeuda(owner, paid, balanceAfter, sourceId, instante)
@@ -805,8 +830,16 @@ async function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
       driverFinance.applySnapshot(owner, await persistence.readDriverFinance(owner.id));
       return owner.walletBalance;
     }
-    console.error(`[+58express DriverFinance] crédito no durable (${r.outcome})`);
-    return roundMoney(Number(owner.walletBalance || 0));
+    if (r.outcome !== 'NO_FINANCE_STATE') {
+      console.error(`[+58express DriverFinance] crédito no resuelto (${r.outcome})`);
+      return roundMoney(Number(owner.walletBalance || 0));
+    }
+    // NO_FINANCE_STATE: fuera del libro. Camino de siempre.
+  }
+
+  if (!DRIVER_FINANCE_ON) {
+    owner.walletBalance = roundMoney(Number(owner.walletBalance || 0) + credito);
+    return owner.walletBalance;
   }
 
   // Proceso único: el mismo reparto, decidido por la función pura.
@@ -830,8 +863,27 @@ async function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
   return owner.walletBalance;
 }
 
-async function settleCompletedTrip(trip) {
-  const passengerTransaction = debitPassengerWalletForCompletedTrip(trip);
+/**
+ * DRIVER-FINANCE-1 v5 — el ORDEN de la completación.
+ *
+ * La cuarta auditoría encontró que el dinero del conductor se confirmaba
+ * ANTES de que el viaje completado y el cobro a la pasajera fueran durables.
+ * Un fallo posterior al persistir dejaba una liquidación real colgando de un
+ * viaje que, para la base, todavía no había terminado.
+ *
+ * Ahora son dos actos, en este orden:
+ *
+ *   1. `debitPassengerWalletForCompletedTrip` — el cobro a la pasajera es un
+ *      documento, y viaja junto al viaje en la MISMA persistencia.
+ *   2. `liquidarConductorTrasPersistir` — el dinero del conductor se escribe
+ *      DESPUÉS, cuando el viaje ya está completado de forma durable.
+ *
+ * Si el paso 2 falla o queda en el aire, la reserva sigue viva y el
+ * reconciliador la marca como pendiente de liquidar: la carrera está hecha,
+ * el dinero se debe, y el sistema lo sabe. Nunca al revés.
+ */
+async function liquidarConductorTrasPersistir(trip, settlement) {
+  if (!settlement?.driverPending) return settlement;
   const driverTransaction = await settleDriverForCompletedTrip(trip);
   // DRIVER-FINANCE-1: ESTA es la única actividad que cuenta. Una carrera
   // COMPLETADA y liquidada reinicia el reloj de inactividad del conductor —
@@ -839,16 +891,13 @@ async function settleCompletedTrip(trip) {
   // reloj del mantenimiento mensual sigue corriendo aparte, sin tocarse.
   if (driverTransaction) {
     const driver = database.users.find(user => user.id === trip.driverId);
-    // El reloj vive donde vive el resto del estado financiero: con libro
-    // contable, en su fila; sin él, en el documento. Con la política apagada
-    // se conserva el gesto de siempre y no se escribe ni un campo de más.
     if (driver && DRIVER_FINANCE_ON) await driverFinance.registerQualifyingTrip(driver, Date.now());
     else if (driver) {
       driver.lastQualifyingTripAt = Date.now();
       driver.inactivityWarnedThreshold = null;
     }
   }
-  return { passengerTransaction, driverTransaction };
+  return { ...settlement, driverPending: false, driverTransaction };
 }
 
 function emitCompletedTripWalletUpdates(trip, settlement) {
@@ -900,8 +949,12 @@ async function aplicarTransicionDelConductor(trip, status, driverId) {
   // el dinero comprometido le mermaba la capacidad hasta que pasara el
   // reconciliador.
   if (trip.status === TRIP_STATUS.CANCELLED) await liberarReservaDeViaje(trip.id);
-  const settlement = trip.status === TRIP_STATUS.COMPLETED ? await settleCompletedTrip(trip) : null;
-  return { ok: true, settlement };
+  // El cobro a la pasajera es un documento y se persiste CON el viaje. El
+  // dinero del conductor queda marcado como pendiente: se escribe después,
+  // cuando lo canónico ya sea durable.
+  if (trip.status !== TRIP_STATUS.COMPLETED) return { ok: true, settlement: null };
+  const passengerTransaction = debitPassengerWalletForCompletedTrip(trip);
+  return { ok: true, settlement: { passengerTransaction, driverTransaction: null, driverPending: true } };
 }
 
 /**
@@ -1019,9 +1072,13 @@ app.use('/api', createTripOfflineEventsRouter({
   requireAuth,
   requireApprovedDriver,
   applyTransition: (trip, status, driverId) => aplicarTransicionDelConductor(trip, status, driverId),
-  // OFFLINE-TRIP-1A: la transición es asíncrona desde v4 (el dinero se
-  // escribe en la base). El router la espera igual que el camino en línea.
-  announceTransition: (trip, settlement) => anunciarTransicionDelConductor(trip, settlement),
+  // OFFLINE-TRIP-1A: la transición es asíncrona (el dinero se escribe en la
+  // base) y el anuncio liquida primero. El router espera las dos, igual que
+  // el camino en línea: un solo juego de reglas y un solo orden.
+  announceTransition: async (trip, settlement) => {
+    const liquidado = await liquidarConductorTrasPersistir(trip, settlement);
+    anunciarTransicionDelConductor(trip, liquidado);
+  },
   persistDatabase
 }));
 
@@ -1187,6 +1244,21 @@ const safeTransport = createSafeTransportService({
   tripBridge: safeTransportTripBridge,
   notifier: safeTransportNotifier,
   driverFinanceEnabled: DRIVER_FINANCE_ON,
+  // DRIVER-FINANCE-1 v5: el Transporte Seguro reparte trabajo, y repartir
+  // trabajo a quien no puede tomarlo es una decisión financiera. Hasta ahora
+  // la tomaba con el documento que este proceso tuviera en memoria; ahora la
+  // toma con la fila autoritativa, bloqueada para leerla.
+  financeAuthority: {
+    canTakeNewWork: async driver => {
+      if (persistence.financeReady !== true) return null;   // sin libro: manda el documento
+      const lectura = await persistence.readEligibilityLocked(driver.id);
+      // No se pudo leer: se lanza, y quien pregunta decide qué hacer con la
+      // duda según lo que esté en juego. Nunca se inventa un sí ni un no.
+      if (!lectura.ok) throw new Error('FINANCE_AUTHORITY_UNAVAILABLE');
+      if (!lectura.found) return null;                      // fuera del libro
+      return canTakeNewWork(lectura.snapshot, finanzasConductor);
+    }
+  },
   // SAFE-2A: las tarifas del plan llegan por función para que la edición del
   // admin rija EN CALIENTE, sin reiniciar.
   getPricing: () => safeTransportPricing,
@@ -1217,6 +1289,15 @@ const driverFinance = createDriverFinanceService({
   database,
   persistRecord,
   persistence,
+  // El rescate de una carrera hecha cuyo dinero no llego a cobrarse. El
+  // reconciliador la deja marcada; quien sabe la tarifa y la comision es esta
+  // capa, y es la que la liquida — exactamente una vez, porque el testigo de
+  // la reserva sigue siendo el arbitro.
+  resolvePendingSettlement: async ({ tripId }) => {
+    const trip = database.trips.find(item => item.id === tripId);
+    if (!trip || trip.status !== TRIP_STATUS.COMPLETED) return false;
+    return Boolean(await settleDriverForCompletedTrip(trip));
+  },
   notify: async (userId, event, title, message) => {
     const doc = {
       id: `notification_${crypto.randomUUID()}`,
@@ -2038,15 +2119,19 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
   if (status === 'APPROVED' && owner && transaction.type === 'PAYOUT') {
     // El retiro sale del saldo AUTORITATIVO. Restarlo en el documento dejaría
     // el débito a merced de la siguiente escritura obsoleta.
-    if (DRIVER_FINANCE_ON && owner.role === 'driver' && persistence.financeReady === true) {
-      await driverFinance.ensureState(owner);
+    let debitadoEnElLibro = false;
+    if (owner.role === 'driver' && persistence.financeReady === true) {
+      if (DRIVER_FINANCE_ON) await driverFinance.ensureState(owner);
       const r = await persistence.debitDriverWallet({ driverId: owner.id, amountUSD: transaction.amount });
-      if (r.outcome !== 'DEBITED') {
+      if (r.outcome === 'DEBITED') {
+        driverFinance.applySnapshot(owner, await persistence.readDriverFinance(owner.id));
+        debitadoEnElLibro = true;
+      } else if (r.outcome !== 'NO_FINANCE_STATE') {
         transaction.status = 'PENDING';
         return res.status(409).json({ error: r.outcome === 'INSUFFICIENT_BALANCE' ? 'INSUFFICIENT_BALANCE' : 'PAYOUT_NOT_DURABLE' });
       }
-      driverFinance.applySnapshot(owner, await persistence.readDriverFinance(owner.id));
-    } else {
+    }
+    if (!debitadoEnElLibro) {
       owner.walletBalance = Math.round((Number(owner.walletBalance || 0) - transaction.amount) * 100) / 100;
     }
   }
@@ -2144,9 +2229,14 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores
   tripLocks.delete(trip.id);
   const driver = database.users.find(user => user.id === trip.driverId);
   if (driver) driver.status = 'AVAILABLE';
-  const settlement = trip.status === TRIP_STATUS.COMPLETED ? await settleCompletedTrip(trip) : null;
+  // Mismo orden que el camino del conductor: la pasajera y el viaje entran
+  // juntos y de forma durable; el dinero del conductor, después.
+  const settlement = trip.status === TRIP_STATUS.COMPLETED
+    ? { passengerTransaction: debitPassengerWalletForCompletedTrip(trip), driverTransaction: null, driverPending: true }
+    : null;
   if (!await persistHttp(res)) return;
-  emitCompletedTripWalletUpdates(trip, settlement);
+  const liquidado = await liquidarConductorTrasPersistir(trip, settlement);
+  emitCompletedTripWalletUpdates(trip, liquidado);
   io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
     tripId: trip.id,
     status: trip.status
@@ -2901,7 +2991,10 @@ io.on('connection', (socket) => {
       socket.emit('tripStatusRejected', { tripId, status, error: 'DATABASE_WRITE_FAILED' });
       return;
     }
-    anunciarTransicionDelConductor(trip, resultado.settlement);
+    // El viaje y el cobro a la pasajera YA son durables: solo ahora se toca
+    // el dinero del conductor.
+    const liquidado = await liquidarConductorTrasPersistir(trip, resultado.settlement);
+    anunciarTransicionDelConductor(trip, liquidado);
   });
 
   // Passenger Ride Cancelled Event

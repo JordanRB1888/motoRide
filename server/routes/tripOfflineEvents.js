@@ -206,7 +206,9 @@ export function createTripOfflineEventsRouter({
       // Anunciar SOLO tras persistir, y una sola vez con el estado final:
       // pasajero y admin ven el estado real del servidor, no los intermedios.
       if (anuncios.length && typeof announceTransition === 'function') {
-        announceTransition(trip, anuncios.at(-1).settlement ?? null);
+        // El anuncio liquida el dinero del conductor ANTES de emitir, y eso
+        // ocurre solo despues de que la persistencia haya salido bien.
+        await announceTransition(trip, anuncios.at(-1).settlement ?? null);
       }
     }
 

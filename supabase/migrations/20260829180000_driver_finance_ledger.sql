@@ -1,4 +1,4 @@
--- +58Express DRIVER-FINANCE-1 v4 · libro contable del conductor
+-- +58Express DRIVER-FINANCE-1 · libro contable del conductor
 -- =====================================================================
 -- EL PROBLEMA QUE RESUELVE
 -- ------------------------
@@ -20,8 +20,7 @@
 --
 -- APLICAR ESTA MIGRACION NO MUEVE NI UN CENTIMO. Solo crea tablas vacias y un
 -- disparador que permanece INERTE mientras no exista una fila en
--- `driver_finance_state`, y esas filas solo las crea el codigo con
--- DRIVER_FINANCE_ENABLED encendida. Es seguro aplicarla ANTES del codigo.
+-- `driver_finance_state`. Es seguro aplicarla ANTES del codigo.
 --
 -- PRIVACIDAD: aqui hay deuda de personas concretas. Ninguna columna generada
 -- ni ningun indice expone importes; se indexa por identidad y estado. El
@@ -29,55 +28,108 @@
 -- esquema, y se revoca a los roles anonimos igual que en las demas tablas.
 
 -- ---------------------------------------------------------------------
--- Verificacion de compatibilidad: fallar CLARO, y ANTES de tocar nada.
+-- Comprobacion previa: fallar CLARO, y ANTES de tocar nada.
 -- ---------------------------------------------------------------------
 -- `create table if not exists` acepta sin rechistar una tabla vieja con otra
 -- forma, y a partir de ahi el codigo escribiria dinero contra un esquema que
--- no es el que espera. Esta comprobacion va la PRIMERA a proposito: si alguna
--- de las tablas ya existe con una forma incompatible, la migracion se detiene
--- con un mensaje entendible sin haber creado ni modificado nada.
+-- no es el que espera. La cuarta auditoria demostro que mirar solo los
+-- NOMBRES de las columnas no basta: recreo `threshold_days` como `text`
+-- conservando todos los nombres, y la migracion lo acepto.
 --
--- Sobre una base limpia no hace nada: solo mira tablas que YA existen.
+-- Ahora se comprueban nombre, TIPO, precision y escala del dinero, y las
+-- claves que garantizan la unicidad. Sobre una base limpia no hace nada: solo
+-- mira tablas que YA existen.
 do $compatibilidad$
 declare
-  faltantes text;
+  problemas text;
 begin
-  select string_agg(requerida.tabla || '.' || requerida.columna, ', '
-                    order by requerida.tabla || '.' || requerida.columna)
-    into faltantes
-    from (values
-      ('driver_finance_state',              'wallet_balance_usd'),
-      ('driver_finance_state',              'deferred_commission_usd'),
-      ('driver_finance_state',              'maintenance_anchor_at'),
-      ('driver_finance_state',              'last_charged_period'),
-      ('driver_finance_state',              'activity_anchor_at'),
-      ('driver_finance_state',              'last_qualifying_trip_at'),
-      ('driver_finance_state',              'inactivity_warned_threshold'),
-      ('driver_finance_state',              'block_active'),
-      ('driver_commission_reservations',    'trip_id'),
-      ('driver_commission_reservations',    'reserved_usd'),
-      ('driver_commission_reservations',    'applied_usd'),
-      ('driver_commission_reservations',    'deferred_usd'),
-      ('driver_commission_reservations',    'deferred_paid_usd'),
-      ('driver_commission_reservations',    'status'),
-      ('driver_maintenance_obligations',    'period'),
-      ('driver_maintenance_obligations',    'status'),
-      ('driver_maintenance_obligations',    'transaction_id'),
-      ('driver_maintenance_obligations',    'paid_at'),
-      ('driver_inactivity_warnings',        'anchor_at'),
-      ('driver_inactivity_warnings',        'threshold_days'),
-      ('driver_inactivity_warnings',        'delivered_at')
-    ) as requerida(tabla, columna)
-   where to_regclass('public.' || requerida.tabla) is not null
-     and not exists (
-       select 1 from information_schema.columns c
-        where c.table_schema = 'public'
-          and c.table_name = requerida.tabla
-          and c.column_name = requerida.columna
-     );
+  select string_agg(detalle, '; ' order by detalle) into problemas from (
+    -- 1) Columnas ausentes o con el tipo equivocado.
+    select requerida.tabla || '.' || requerida.columna || ' ('
+             || coalesce(
+                  (select 'es ' || c.data_type
+                         || case when requerida.tipo = 'numeric'
+                                 then coalesce('(' || c.numeric_precision || ',' || c.numeric_scale || ')', '')
+                                 else '' end
+                     from information_schema.columns c
+                    where c.table_schema = 'public'
+                      and c.table_name = requerida.tabla
+                      and c.column_name = requerida.columna),
+                  'ausente')
+             || ', se espera ' || requerida.tipo
+             || coalesce('(' || requerida.precision || ',' || requerida.escala || ')', '') || ')' as detalle
+      from (values
+        ('driver_finance_state',           'driver_id',                   'text',                        null::int, null::int),
+        ('driver_finance_state',           'wallet_balance_usd',          'numeric',                     12,        2),
+        ('driver_finance_state',           'deferred_commission_usd',     'numeric',                     12,        2),
+        ('driver_finance_state',           'maintenance_anchor_at',       'bigint',                      null,      null),
+        ('driver_finance_state',           'last_charged_period',         'integer',                     null,      null),
+        ('driver_finance_state',           'activity_anchor_at',          'bigint',                      null,      null),
+        ('driver_finance_state',           'last_qualifying_trip_at',     'bigint',                      null,      null),
+        ('driver_finance_state',           'inactivity_warned_threshold', 'integer',                     null,      null),
+        ('driver_finance_state',           'block_active',                'boolean',                     null,      null),
+        ('driver_finance_state',           'block_reason',                'text',                        null,      null),
+        ('driver_finance_state',           'block_since',                 'timestamp with time zone',    null,      null),
+        ('driver_finance_state',           'block_cleared_at',            'timestamp with time zone',    null,      null),
+        ('driver_finance_state',           'floor_exempt',                'boolean',                     null,      null),
+        ('driver_commission_reservations', 'trip_id',                     'text',                        null,      null),
+        ('driver_commission_reservations', 'driver_id',                   'text',                        null,      null),
+        ('driver_commission_reservations', 'reserved_usd',                'numeric',                     10,        2),
+        ('driver_commission_reservations', 'applied_usd',                 'numeric',                     10,        2),
+        ('driver_commission_reservations', 'deferred_usd',                'numeric',                     10,        2),
+        ('driver_commission_reservations', 'deferred_paid_usd',           'numeric',                     10,        2),
+        ('driver_commission_reservations', 'status',                      'text',                        null,      null),
+        ('driver_commission_reservations', 'resolved_at',                 'timestamp with time zone',    null,      null),
+        ('driver_maintenance_obligations', 'id',                          'text',                        null,      null),
+        ('driver_maintenance_obligations', 'driver_id',                   'text',                        null,      null),
+        ('driver_maintenance_obligations', 'period',                      'integer',                     null,      null),
+        ('driver_maintenance_obligations', 'amount_usd',                  'numeric',                     10,        2),
+        ('driver_maintenance_obligations', 'status',                      'text',                        null,      null),
+        ('driver_maintenance_obligations', 'transaction_id',              'text',                        null,      null),
+        ('driver_maintenance_obligations', 'paid_at',                     'timestamp with time zone',    null,      null),
+        ('driver_inactivity_warnings',     'driver_id',                   'text',                        null,      null),
+        ('driver_inactivity_warnings',     'anchor_at',                   'bigint',                      null,      null),
+        ('driver_inactivity_warnings',     'threshold_days',              'integer',                     null,      null),
+        ('driver_inactivity_warnings',     'delivered_at',                'timestamp with time zone',    null,      null)
+      ) as requerida(tabla, columna, tipo, precision, escala)
+     where to_regclass('public.' || requerida.tabla) is not null
+       and not exists (
+         select 1 from information_schema.columns c
+          where c.table_schema = 'public'
+            and c.table_name = requerida.tabla
+            and c.column_name = requerida.columna
+            and c.data_type = requerida.tipo
+            -- La precision y la escala solo se exigen al DINERO. `bigint` e
+            -- `integer` declaran las suyas (64,0 y 32,0) y compararlas con
+            -- nulo rechazaria un esquema perfectamente correcto.
+            and (requerida.tipo <> 'numeric'
+                 or (c.numeric_precision is not distinct from requerida.precision
+                     and c.numeric_scale is not distinct from requerida.escala))
+       )
 
-  if faltantes is not null then
-    raise exception 'DRIVER_FINANCE_SCHEMA_INCOMPATIBLE: faltan columnas requeridas (%)', faltantes;
+    union all
+
+    -- 2) Las claves que sostienen la unicidad del dinero. Sin ellas, dos
+    --    procesos podrian cobrar el mismo mes o reservar el mismo viaje.
+    select 'falta la clave ' || clave.nombre || ' en ' || clave.tabla as detalle
+      from (values
+        ('driver_finance_state',           'driver_finance_state_pkey',                'p'),
+        ('driver_commission_reservations', 'driver_commission_reservations_pkey',      'p'),
+        ('driver_maintenance_obligations', 'driver_maintenance_obligations_pkey',      'p'),
+        ('driver_maintenance_obligations', 'driver_maintenance_obligations_unico',     'u'),
+        ('driver_inactivity_warnings',     'driver_inactivity_warnings_pk',            'p')
+      ) as clave(tabla, nombre, tipo)
+     where to_regclass('public.' || clave.tabla) is not null
+       and not exists (
+         select 1 from pg_constraint k
+          where k.conname = clave.nombre
+            and k.contype = clave.tipo
+            and k.conrelid = to_regclass('public.' || clave.tabla)
+       )
+  ) as hallazgos;
+
+  if problemas is not null then
+    raise exception 'DRIVER_FINANCE_SCHEMA_INCOMPATIBLE: %', problemas;
   end if;
 end
 $compatibilidad$;
@@ -98,8 +150,7 @@ create table if not exists public.driver_commission_reservations (
   -- recauda FILA A FILA, de la mas vieja a la mas nueva, no desde un total
   -- acumulado que nadie sabe de donde viene.
   deferred_paid_usd numeric(10, 2) not null default 0 check (deferred_paid_usd >= 0),
-  status text not null default 'RESERVED'
-    check (status in ('RESERVED', 'SETTLED', 'RELEASED')),
+  status text not null default 'RESERVED',
   created_at timestamptz not null default now(),
   resolved_at timestamptz,
   constraint driver_commission_reservations_driver_fk
@@ -133,7 +184,8 @@ create table if not exists public.driver_maintenance_obligations (
 -- ---------------------------------------------------------------------
 -- Cada operacion de dinero empieza bloqueando esta fila (`for update`), asi
 -- que dos replicas nunca reparten el mismo saldo. El bloqueo es POR
--- CONDUCTOR: no hay contencion global.
+-- CONDUCTOR: no hay contencion global. Y es SIEMPRE el primer cerrojo que se
+-- toma, lo que fija un orden global y evita interbloqueos.
 --
 -- Las anclas se guardan en milisegundos desde epoch, la misma representacion
 -- que usa el documento, para que la proyeccion sea literal y no haya dos
@@ -151,6 +203,10 @@ create table if not exists public.driver_finance_state (
   block_reason text,
   block_since timestamptz,
   block_cleared_at timestamptz,
+  -- Un conductor que YA venia por debajo del suelo cuando se sembro su fila
+  -- queda exento hasta que vuelva a subir: el suelo protege de hundirse mas,
+  -- no sirve para rechazar una deuda que la plataforma ya habia permitido.
+  floor_exempt boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint driver_finance_state_block_reason
@@ -179,52 +235,90 @@ create table if not exists public.driver_inactivity_warnings (
 );
 
 -- ---------------------------------------------------------------------
--- Invariantes de estado. Se anaden por separado y de forma idempotente para
--- no romper una base donde las tablas ya existan sin ellas.
+-- Columnas anadidas despues de la primera version del esquema.
+-- ---------------------------------------------------------------------
+alter table public.driver_commission_reservations
+  add column if not exists deferred_paid_usd numeric(10, 2) not null default 0;
+alter table public.driver_finance_state
+  add column if not exists floor_exempt boolean not null default false;
+
+-- ---------------------------------------------------------------------
+-- Invariantes de estado. Se declaran de forma idempotente: se retira la
+-- version anterior y se pone la vigente, para que reaplicar la migracion
+-- sobre una base ya migrada converja siempre al mismo esquema.
 -- ---------------------------------------------------------------------
 do $invariantes$
 begin
+  -- El ciclo de vida de una reserva. `SETTLEMENT_PENDING` es el estado que
+  -- faltaba: una carrera COMPLETADA cuya liquidacion no llego a ocurrir NO
+  -- puede terminalizarse como liberada, porque entonces la comision y la
+  -- ganancia del conductor quedan irrecuperables para siempre. Se queda aqui,
+  -- visible y reintentable, hasta que se liquide de verdad.
+  alter table public.driver_commission_reservations
+    drop constraint if exists driver_commission_reservations_status_check;
+  alter table public.driver_commission_reservations
+    add constraint driver_commission_reservations_status_check
+    check (status in ('RESERVED', 'SETTLEMENT_PENDING', 'SETTLED', 'RELEASED'));
+
   -- Una reserva liquidada reparte EXACTAMENTE lo que reservo.
-  if not exists (select 1 from pg_constraint where conname = 'driver_commission_reservations_settled_cuadra') then
-    alter table public.driver_commission_reservations
-      add constraint driver_commission_reservations_settled_cuadra
-      check (status <> 'SETTLED' or round(applied_usd + deferred_usd, 2) = round(reserved_usd, 2));
-  end if;
+  alter table public.driver_commission_reservations
+    drop constraint if exists driver_commission_reservations_settled_cuadra;
+  alter table public.driver_commission_reservations
+    add constraint driver_commission_reservations_settled_cuadra
+    check (status <> 'SETTLED' or round(applied_usd + deferred_usd, 2) = round(reserved_usd, 2));
 
   -- Una liberada no reparte nada: la carrera no llego a existir.
-  if not exists (select 1 from pg_constraint where conname = 'driver_commission_reservations_released_en_cero') then
-    alter table public.driver_commission_reservations
-      add constraint driver_commission_reservations_released_en_cero
-      check (status <> 'RELEASED' or (applied_usd = 0 and deferred_usd = 0 and deferred_paid_usd = 0));
-  end if;
+  alter table public.driver_commission_reservations
+    drop constraint if exists driver_commission_reservations_released_en_cero;
+  alter table public.driver_commission_reservations
+    add constraint driver_commission_reservations_released_en_cero
+    check (status <> 'RELEASED' or (applied_usd = 0 and deferred_usd = 0 and deferred_paid_usd = 0));
 
-  -- Viva si y solo si sin resolver: el estado y la fecha no pueden mentirse.
-  if not exists (select 1 from pg_constraint where conname = 'driver_commission_reservations_resuelta_coherente') then
-    alter table public.driver_commission_reservations
-      add constraint driver_commission_reservations_resuelta_coherente
-      check ((status = 'RESERVED') = (resolved_at is null));
-  end if;
+  -- Sin resolver si y solo si sigue viva o pendiente de liquidar: el estado y
+  -- la fecha no pueden mentirse.
+  alter table public.driver_commission_reservations
+    drop constraint if exists driver_commission_reservations_resuelta_coherente;
+  alter table public.driver_commission_reservations
+    add constraint driver_commission_reservations_resuelta_coherente
+    check ((status in ('RESERVED', 'SETTLEMENT_PENDING')) = (resolved_at is null));
 
   -- No se puede cobrar mas deuda de la que se difirio.
-  if not exists (select 1 from pg_constraint where conname = 'driver_commission_reservations_cobrado_acotado') then
-    alter table public.driver_commission_reservations
-      add constraint driver_commission_reservations_cobrado_acotado
-      check (deferred_paid_usd <= deferred_usd);
-  end if;
+  alter table public.driver_commission_reservations
+    drop constraint if exists driver_commission_reservations_cobrado_acotado;
+  alter table public.driver_commission_reservations
+    add constraint driver_commission_reservations_cobrado_acotado
+    check (deferred_paid_usd <= deferred_usd);
 
   -- Pagada exige constancia: cuando, y con que apunte del libro.
-  if not exists (select 1 from pg_constraint where conname = 'driver_maintenance_obligations_pagada_con_prueba') then
+  alter table public.driver_maintenance_obligations
+    drop constraint if exists driver_maintenance_obligations_pagada_con_prueba;
+  alter table public.driver_maintenance_obligations
+    add constraint driver_maintenance_obligations_pagada_con_prueba
+    check ((status = 'PAID') = (paid_at is not null and transaction_id is not null));
+
+  -- Y ese apunte tiene que EXISTIR de verdad en el libro.
+  if not exists (select 1 from pg_constraint where conname = 'driver_maintenance_obligations_transaction_fk') then
     alter table public.driver_maintenance_obligations
-      add constraint driver_maintenance_obligations_pagada_con_prueba
-      check ((status = 'PAID') = (paid_at is not null and transaction_id is not null));
+      add constraint driver_maintenance_obligations_transaction_fk
+      foreign key (transaction_id) references public.transactions(id)
+      on delete no action deferrable initially deferred;
   end if;
 
+  -- EL SUELO DE DEUDA, declarado por la base y no solo por el codigo. Es
+  -- defensa en profundidad: aunque un camino nuevo se olvidara de aplicarlo,
+  -- la escritura seria rechazada en vez de hundir a alguien.
+  alter table public.driver_finance_state
+    drop constraint if exists driver_finance_state_suelo;
+  alter table public.driver_finance_state
+    add constraint driver_finance_state_suelo
+    check (floor_exempt or wallet_balance_usd >= -5.00);
+
   -- Un aviso entregado no puede serlo antes de reclamarse.
-  if not exists (select 1 from pg_constraint where conname = 'driver_inactivity_warnings_entrega_posterior') then
-    alter table public.driver_inactivity_warnings
-      add constraint driver_inactivity_warnings_entrega_posterior
-      check (delivered_at is null or delivered_at >= claimed_at);
-  end if;
+  alter table public.driver_inactivity_warnings
+    drop constraint if exists driver_inactivity_warnings_entrega_posterior;
+  alter table public.driver_inactivity_warnings
+    add constraint driver_inactivity_warnings_entrega_posterior
+    check (delivered_at is null or delivered_at >= claimed_at);
 end
 $invariantes$;
 
@@ -235,9 +329,10 @@ create index if not exists driver_commission_reservations_driver_idx
   on public.driver_commission_reservations (driver_id, status);
 
 -- La consulta del reconciliador: solo lo que sigue sin resolver.
-create index if not exists driver_commission_reservations_vivas_idx
+drop index if exists driver_commission_reservations_vivas_idx;
+create index if not exists driver_commission_reservations_sin_resolver_idx
   on public.driver_commission_reservations (created_at)
-  where status = 'RESERVED';
+  where status in ('RESERVED', 'SETTLEMENT_PENDING');
 
 -- La cobranza de deuda diferida, de la mas vieja a la mas nueva.
 create index if not exists driver_commission_reservations_deuda_idx
@@ -253,15 +348,14 @@ create index if not exists driver_inactivity_warnings_driver_idx
 -- ---------------------------------------------------------------------
 -- EL DISPARADOR: `users.payload` deja de ser autoridad financiera.
 -- ---------------------------------------------------------------------
--- Este es el corazon de v4. Cualquier escritura del documento de un conductor
--- --venga de donde venga, incluida una replica con una copia de hace diez
--- minutos-- sale de aqui con los campos de dinero reestampados desde las
--- tablas autoritativas. El documento conserva los campos por compatibilidad
--- con toda la aplicacion (pantallas, informes, sockets), pero como CACHE.
+-- Cualquier escritura del documento de un conductor --venga de donde venga,
+-- incluida una replica con una copia de hace diez minutos-- sale de aqui con
+-- los campos de dinero reestampados desde las tablas autoritativas. El
+-- documento conserva los campos por compatibilidad con toda la aplicacion
+-- (pantallas, informes, sockets), pero como CACHE.
 --
--- Permanece inerte para quien no tiene fila en `driver_finance_state`: con la
--- funcionalidad apagada no existe ninguna, y el comportamiento historico no
--- cambia en absoluto.
+-- Permanece inerte para quien no tiene fila en `driver_finance_state`: sin
+-- ella, el comportamiento historico no cambia en absoluto.
 create or replace function public.driver_finance_project()
 returns trigger
 language plpgsql
@@ -298,23 +392,24 @@ begin
     'inactivityWarnedThreshold', estado.inactivity_warned_threshold
   );
 
+  -- El bloqueo se escribe SIEMPRE, en los dos sentidos. Antes solo se escribia
+  -- cuando la fila decia «bloqueado» o «desbloqueado alguna vez»; una fila que
+  -- nunca estuvo bloqueada dejaba pasar intacto un `financialBlock.active=true`
+  -- inyectado por un documento obsoleto, y la cache mentia contra la autoridad.
   if estado.block_active then
     bloqueo = jsonb_build_object(
       'active', true,
       'reason', estado.block_reason,
       'since', to_char(estado.block_since at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
     );
-  elsif estado.block_cleared_at is not null then
-    bloqueo = jsonb_build_object(
-      'active', false,
-      'clearedAt', to_char(estado.block_cleared_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
-    );
   else
-    bloqueo = null;
+    bloqueo = jsonb_build_object('active', false);
+    if estado.block_cleared_at is not null then
+      bloqueo = bloqueo || jsonb_build_object(
+        'clearedAt', to_char(estado.block_cleared_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
+    end if;
   end if;
-  if bloqueo is not null then
-    new.payload = jsonb_set(new.payload, '{financialBlock}', bloqueo, true);
-  end if;
+  new.payload = jsonb_set(new.payload, '{financialBlock}', bloqueo, true);
 
   return new;
 end

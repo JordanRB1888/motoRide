@@ -266,6 +266,18 @@ export function createSafeTransportService({
   // DRIVER-FINANCE-1: apagada, esta frontera no existe aqui tampoco. El
   // Transporte Seguro se comporta exactamente como antes de esa fase.
   driverFinanceEnabled = isDriverFinanceEnabled(),
+  // DRIVER-FINANCE-1 v5: de dónde sale la verdad sobre si un conductor puede
+  // tomar trabajo nuevo. La cuarta auditoría encontró que este servicio la
+  // deducía del documento del conductor que tuviera este proceso en memoria:
+  // una réplica con la foto vieja podía confirmarle un compromiso a alguien a
+  // quien otra ya había bloqueado por deuda. Con esto, la decisión la toma la
+  // fila autoritativa, bloqueada para leerla.
+  //
+  //   `canTakeNewWork(driver)` → true | false | null
+  //     null significa «este conductor no está en el libro»: no es un fallo,
+  //     es que la política todavía no le alcanza, y se decide con el documento.
+  //   Una excepción significa «no se pudo saber», y ahí manda `siNoSeSabe`.
+  financeAuthority = null,
   pilotUserIds = resolvePilotUserIds(),
   billingEnabled = isSafeTransportBillingEnabled(),
   getPricing = () => DEFAULT_SAFE_TRANSPORT_PRICING,
@@ -837,7 +849,37 @@ export function createSafeTransportService({
       .filter(Number.isFinite);
   }
 
-  function defectoDeElegibilidad(driver, ride) {
+  /**
+   * ¿Puede este conductor tomar trabajo NUEVO? La respuesta sale de la fila
+   * autoritativa siempre que exista; el documento es solo el respaldo para
+   * quien todavía no está en el libro.
+   *
+   * `siNoSeSabe` es la respuesta cuando la base no contesta, y NO es la misma
+   * en todas partes a propósito:
+   *   · al ofrecer o confirmar trabajo nuevo se responde `false` — posponer un
+   *     traslado futuro no le cuesta nada a nadie, y confirmárselo a quien
+   *     quizá esté bloqueado sí;
+   *   · al decidir si se le RETIRA un compromiso ya suyo se responde `true` —
+   *     quitarle trabajo por un fallo de lectura sería castigarlo por algo que
+   *     no hizo.
+   */
+  async function puedeTomarTrabajoNuevo(driver, { siNoSeSabe = false } = {}) {
+    if (!driverFinanceEnabled) return true;
+    if (!driver) return false;
+    if (financeAuthority?.canTakeNewWork) {
+      try {
+        const veredicto = await financeAuthority.canTakeNewWork(driver);
+        if (veredicto === true || veredicto === false) return veredicto;
+      } catch (error) {
+        logger.warn(`[+58express SafeTransport] elegibilidad financiera ilegible: ${error?.message ?? '?'}`);
+        return siNoSeSabe;
+      }
+    }
+    // Sin libro contable para este conductor: el documento ES la autoridad.
+    return canTakeNewWork(driver, { enabled: driverFinanceEnabled });
+  }
+
+  async function defectoDeElegibilidad(driver, ride, opciones = {}) {
     // Frontera del piloto (1G): durante el piloto, NINGÚN conductor fuera de
     // la lista puede recibir ni aceptar traslados programados — aunque tenga
     // acceptsScheduledRides=true o datos históricos. Esta frontera termina en
@@ -846,7 +888,7 @@ export function createSafeTransportService({
     // DRIVER-FINANCE-1: con la cuenta bloqueada por deuda no se reciben ni se
     // aceptan traslados NUEVOS. El pasajero jamás sabe por qué: para él solo
     // hay un conductor que no está disponible.
-    if (!canTakeNewWork(driver, { enabled: driverFinanceEnabled })) return 'FINANCIAL_BALANCE_BLOCK';
+    if (!await puedeTomarTrabajoNuevo(driver, opciones)) return 'FINANCIAL_BALANCE_BLOCK';
     return scheduledEligibilityDefect(driver, ride, {
       committedPickupsMs: driver?.id ? recogidasComprometidas(driver.id, ride.id) : [],
       window: ventanaCompromiso
@@ -943,10 +985,13 @@ export function createSafeTransportService({
       const pickupMs = Date.parse(ride.scheduledPickupAt);
       if (!Number.isFinite(pickupMs) || pickupMs <= now()) return;
       const comprometido = conductorPorId(ride.assignedDriverId);
+      // Al RETIRAR un compromiso, un fallo de lectura no lo retira: se
+      // responde `true` y el traslado sigue siendo suyo hasta que la base
+      // diga otra cosa con claridad.
       const impedido = !comprometido
         || comprometido.accountStatus === 'DISABLED'
         || comprometido.status === 'SUSPENDED'
-        || !canTakeNewWork(comprometido, { enabled: driverFinanceEnabled });
+        || !await puedeTomarTrabajoNuevo(comprometido, { siNoSeSabe: true });
       if (!impedido) return;
       const liberado = ride.assignedDriverId;
       const hecho = await transicionDeCobertura(ride, 'COMMITTED_DRIVER_UNAVAILABLE', r => {
@@ -981,7 +1026,7 @@ export function createSafeTransportService({
     if (ride.currentOffer) {
       const vencida = ahora >= Date.parse(ride.currentOffer.expiresAt);
       const destinatario = conductorPorId(ride.currentOffer.driverId);
-      const inelegible = !vencida && defectoDeElegibilidad(destinatario, ride) !== null;
+      const inelegible = !vencida && await defectoDeElegibilidad(destinatario, ride, { siNoSeSabe: true }) !== null;
       if (vencida || inelegible) {
         const retirado = ride.currentOffer.driverId;
         const hecho = await transicionDeCobertura(ride, vencida ? 'OFFER_EXPIRED' : 'OFFER_RETIRED', r => {
@@ -1002,7 +1047,7 @@ export function createSafeTransportService({
         ? conductorPorId(preferidoId)
         : null;
       const limite = finDeOfertaPreferida(pickup);
-      if (preferido && ahora < limite && defectoDeElegibilidad(preferido, ride) === null) {
+      if (preferido && ahora < limite && await defectoDeElegibilidad(preferido, ride) === null) {
         const hecho = await transicionDeCobertura(ride, 'OFFERED_PREFERRED', r => {
           r.assignmentStatus = 'OFFERED_PREFERRED';
           r.currentOffer = {
@@ -1045,20 +1090,29 @@ export function createSafeTransportService({
       // ni siquiera entra a la criba.
       // Y la frontera financiera (DRIVER-FINANCE-1) recorta igual de pronto:
       // quien no puede tomar trabajo nuevo no entra ni al fondo de candidatos.
-      const flota = users().filter(u => hasPilotAccess(u)
-        && canTakeNewWork(u, { enabled: driverFinanceEnabled }));
+      const flota = users().filter(u => hasPilotAccess(u));
       const comprometidasPorConductor = new Map();
       for (const driver of flota) {
         if (driver.role === 'driver') {
           comprometidasPorConductor.set(driver.id, recogidasComprometidas(driver.id, ride.id));
         }
       }
-      const [candidato] = selectBackupCandidates(flota, ride, {
+      // El fondo YA NO se recorta por dinero con el documento en memoria. Una
+      // copia vieja podía dejar fuera para siempre a alguien que sí puede
+      // trabajar, y la criba financiera pertenece a la autoridad, no a la
+      // caché. Se piden varios candidatos EN ORDEN y se confirma con la base
+      // el primero que de verdad puede: el ranking no cambia, solo se salta a
+      // quien la base rechaza.
+      const candidatos = selectBackupCandidates(flota, ride, {
         excludedIds: excluidos,
         committedPickupsByDriver: comprometidasPorConductor,
         window: ventanaCompromiso,
-        limit: 1
+        limit: politicaRespaldo.authoritativeCandidatePool
       });
+      let candidato = null;
+      for (const posible of candidatos) {
+        if (await puedeTomarTrabajoNuevo(posible)) { candidato = posible; break; }
+      }
       if (!candidato) return; // sin candidatos: AT_RISK llegará a su hora
       const vence = Math.min(ahora + politicaRespaldo.offerTtlMs, umbralDeRiesgo(pickup));
       const hecho = await transicionDeCobertura(ride, 'BACKUP_OFFERED', r => {
@@ -1429,7 +1483,10 @@ export function createSafeTransportService({
       if (!oferta || oferta.driverId !== user.id) return err(409, 'NO_ACTIVE_OFFER');
       const ahora = now();
       if (ahora >= Date.parse(oferta.expiresAt)) return err(409, 'OFFER_EXPIRED');
-      const defecto = defectoDeElegibilidad(user, ride);
+      // La puerta financiera se consulta AQUÍ, pegada a la escritura durable
+      // del compromiso y contra la fila bloqueada del conductor. Antes se
+      // decidía con el documento que este proceso tuviera en memoria.
+      const defecto = await defectoDeElegibilidad(user, ride);
       if (defecto) {
         // El destinatario ya no puede tomarla: la oferta se retira AHORA para
         // que el circuito de respaldo no espere a que venza sola.
