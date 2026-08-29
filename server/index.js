@@ -814,7 +814,7 @@ async function liberarReservaDeViaje(tripId) {
  * acreditarse dos veces al reintentar. Quien llama tiene que poder distinguir
  * «entró», «ya había entrado» y «no se sabe».
  */
-async function aplicarCreditoAlConductor(owner, amount, { operationId, sourceId = null } = {}) {
+async function aplicarCreditoAlConductor(owner, amount, { operationId, sourceType, sourceId } = {}) {
   const credito = roundMoney(Number(amount) || 0);
   if (owner?.role !== 'driver') {
     owner.walletBalance = roundMoney(Number(owner.walletBalance || 0) + credito);
@@ -831,7 +831,12 @@ async function aplicarCreditoAlConductor(owner, amount, { operationId, sourceId 
       driverId: owner.id,
       creditUSD: credito,
       operationId,
+      // El ORIGEN, inmutable: no basta con el prefijo del identificador. Es lo
+      // que permite distinguir una repetición legítima de la misma identidad
+      // reutilizada con otro conductor, otro importe u otra dirección.
+      sourceType,
       sourceId,
+      sourceRef: sourceId,
       at: instante,
       policyEnabled: DRIVER_FINANCE_ON,
       builders: {
@@ -2133,8 +2138,14 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
     // comisiones diferidas, mantenimientos vencidos y al final lo libre.
     const r = await aplicarCreditoAlConductor(owner, transaction.amount, {
       operationId: `topup:${transaction.id}`,
+      sourceType: 'TOPUP',
       sourceId: transaction.id
     });
+    if (r.outcome === 'OPERATION_ID_CONFLICT') {
+      // Esa identidad existe en el libro pero describe OTRA operación. No se
+      // aprueba nada apoyándose en un testigo que no es el de esta solicitud.
+      return res.status(409).json({ error: 'MONEY_OPERATION_CONFLICT' });
+    }
     if (r.outcome !== 'CREDITED' && r.outcome !== 'ALREADY_APPLIED') {
       // Ni aprobada ni rechazada: recuperable. El siguiente intento usará la
       // misma identidad y descubrirá si aquel crédito llegó a entrar.
@@ -2151,15 +2162,20 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
       const r = await persistence.debitDriverWallet({
         driverId: owner.id,
         amountUSD: transaction.amount,
-        // La identidad es genérica a propósito: el sistema de retiros que
-        // viene podrá usar `withdrawal:<id>` sin rediseñar nada de esto.
-        operationId: `payout:${transaction.id}`
+        // La identidad y el origen son genéricos a propósito: el sistema de
+        // retiros que viene podrá usar `withdrawal:<id>` con origen
+        // `WITHDRAWAL` sin rediseñar nada de esto.
+        operationId: `payout:${transaction.id}`,
+        sourceType: 'PAYOUT',
+        sourceId: transaction.id
       });
       if (r.outcome === 'DEBITED' || r.outcome === 'ALREADY_APPLIED') {
         driverFinance.applySnapshot(owner, await persistence.readDriverFinance(owner.id));
         debitadoEnElLibro = true;
       } else if (r.outcome === 'INSUFFICIENT_BALANCE') {
         return res.status(409).json({ error: 'INSUFFICIENT_BALANCE' });
+      } else if (r.outcome === 'OPERATION_ID_CONFLICT') {
+        return res.status(409).json({ error: 'MONEY_OPERATION_CONFLICT' });
       } else if (r.outcome !== 'NO_FINANCE_STATE') {
         // Incierto: la solicitud sigue PENDIENTE y el reintento, con la misma
         // identidad, descubrirá si aquel débito entró.
@@ -2170,15 +2186,36 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
       owner.walletBalance = Math.round((Number(owner.walletBalance || 0) - transaction.amount) * 100) / 100;
     }
   }
-  // Y SOLO ahora la solicitud se termina.
+  // Y SOLO ahora la solicitud se termina... en memoria. Si la escritura falla,
+  // se DESHACE: la sexta auditoría encontró que el objeto quedaba en APPROVED
+  // aunque la persistencia hubiera fallado, y el propio proceso rechazaba el
+  // reintento legítimo con un 409 hasta que alguien lo reiniciara.
+  const estadoPrevio = {
+    status: transaction.status,
+    reviewedBy: transaction.reviewedBy,
+    reviewedAt: transaction.reviewedAt,
+    reviewNote: transaction.reviewNote
+  };
   transaction.status = status;
   transaction.reviewedBy = req.user.id;
   transaction.reviewedAt = new Date().toISOString();
   transaction.reviewNote = sanitizeText(req.body.reviewNote, 500) || null;
   const isPayout = transaction.type === 'PAYOUT';
-  database.adminActions.push({ id:`admin_action_${crypto.randomUUID()}`, adminId:req.user.id, targetUserId:transaction.userId, action:`${isPayout?'payout':'topup'}_${status.toLowerCase()}`, transactionId:transaction.id, createdAt:new Date().toISOString() });
-  database.notifications.push({ id:`notification_${crypto.randomUUID()}`, userId:transaction.userId, title:isPayout?(status==='APPROVED'?'Liquidación pagada':'Liquidación rechazada'):(status==='APPROVED'?'Recarga acreditada':'Recarga rechazada'), message:isPayout?(status==='APPROVED'?`Administración aprobó tu liquidación de $${transaction.amount.toFixed(2)}.`:'Administración rechazó la solicitud de liquidación.'):(status==='APPROVED'?`Se acreditaron $${transaction.amount.toFixed(2)} a tu billetera.`:'Administración no pudo validar la referencia enviada.'), category:'FINANCE', read:false, createdAt:new Date().toISOString() });
-  if (!await persistHttp(res)) return;
+  const accionAdministrativa = { id:`admin_action_${crypto.randomUUID()}`, adminId:req.user.id, targetUserId:transaction.userId, action:`${isPayout?'payout':'topup'}_${status.toLowerCase()}`, transactionId:transaction.id, createdAt:new Date().toISOString() };
+  const avisoAlDueno = { id:`notification_${crypto.randomUUID()}`, userId:transaction.userId, title:isPayout?(status==='APPROVED'?'Liquidación pagada':'Liquidación rechazada'):(status==='APPROVED'?'Recarga acreditada':'Recarga rechazada'), message:isPayout?(status==='APPROVED'?`Administración aprobó tu liquidación de $${transaction.amount.toFixed(2)}.`:'Administración rechazó la solicitud de liquidación.'):(status==='APPROVED'?`Se acreditaron $${transaction.amount.toFixed(2)} a tu billetera.`:'Administración no pudo validar la referencia enviada.'), category:'FINANCE', read:false, createdAt:new Date().toISOString() };
+  database.adminActions.push(accionAdministrativa);
+  database.notifications.push(avisoAlDueno);
+  if (!await persistHttp(res)) {
+    // La escritura falló: la memoria del proceso vuelve EXACTAMENTE a donde
+    // estaba. Si no, este mismo proceso vería la solicitud como terminada y
+    // rechazaría el reintento legítimo con un 409 hasta que alguien lo
+    // reiniciara. El dinero ya movido no se toca: su testigo lo protege, y el
+    // reintento lo reconocerá.
+    Object.assign(transaction, estadoPrevio);
+    database.adminActions.splice(database.adminActions.indexOf(accionAdministrativa), 1);
+    database.notifications.splice(database.notifications.indexOf(avisoAlDueno), 1);
+    return;
+  }
   io.to(`user:${transaction.userId}`).emit('finance:topup_updated', transaction);
   if (owner) {
     io.to(`user:${transaction.userId}`).emit('wallet:updated', {

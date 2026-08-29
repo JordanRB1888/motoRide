@@ -112,7 +112,10 @@ begin
         ('driver_money_operations',        'driver_id',                   'text',                    null, null, false),
         ('driver_money_operations',        'kind',                        'text',                    null, null, false),
         ('driver_money_operations',        'amount_usd',                  'numeric',                 12,   2,    false),
-        ('driver_money_operations',        'balance_after_usd',           'numeric',                 12,   2,    false)
+        ('driver_money_operations',        'balance_after_usd',           'numeric',                 12,   2,    false),
+        -- NUEVAS en esta ronda: pueden faltar y se anaden mas abajo.
+        ('driver_money_operations',        'source_type',                 'text',                    null, null, true),
+        ('driver_money_operations',        'source_id',                   'text',                    null, null, true)
       ) as requerida(tabla, columna, tipo, precision, escala, es_nueva)
      where to_regclass('public.' || requerida.tabla) is not null
        -- Una columna NUEVA que todavia no existe no es un problema: se anade
@@ -138,23 +141,67 @@ begin
 
     union all
 
-    -- 2) Las claves que sostienen la unicidad del dinero. Sin ellas, dos
-    --    procesos podrian cobrar el mismo mes o reservar el mismo viaje.
-    select 'falta la clave ' || clave.nombre || ' en ' || clave.tabla as detalle
+    -- 2) Las claves que sostienen la unicidad del dinero, validadas por sus
+    --    COLUMNAS y no por su nombre.
+    --
+    --    La sexta auditoria demostro por que importa: creo una tabla de
+    --    operaciones con una clave primaria llamada
+    --    `driver_money_operations_pkey` —el nombre exacto que se esperaba—
+    --    pero declarada sobre `driver_id`. Con esa forma, dos recargas
+    --    distintas del mismo conductor chocarian entre si y una identidad
+    --    repetida pasaria desapercibida. La comprobacion la acepto porque
+    --    solo miraba el nombre.
+    --
+    --    Aqui el nombre da igual: lo que se exige es que exista una clave del
+    --    tipo pedido sobre EXACTAMENTE esas columnas y en ese orden.
+    select 'la clave ' || clave.tipo_legible || ' de ' || clave.tabla
+             || ' deberia estar sobre (' || clave.columnas || ') y '
+             || coalesce(
+                  (select 'esta sobre (' || string_agg(a.attname, ',' order by u.ord) || ')'
+                     from pg_constraint k
+                     cross join lateral unnest(k.conkey) with ordinality as u(attnum, ord)
+                     join pg_attribute a on a.attrelid = k.conrelid and a.attnum = u.attnum
+                    where k.conrelid = to_regclass('public.' || clave.tabla)
+                      and k.contype = clave.tipo
+                    group by k.oid
+                    limit 1),
+                  'no existe') as detalle
       from (values
-        ('driver_finance_state',           'driver_finance_state_pkey',                'p'),
-        ('driver_commission_reservations', 'driver_commission_reservations_pkey',      'p'),
-        ('driver_maintenance_obligations', 'driver_maintenance_obligations_pkey',      'p'),
-        ('driver_maintenance_obligations', 'driver_maintenance_obligations_unico',     'u'),
-        ('driver_inactivity_warnings',     'driver_inactivity_warnings_pk',            'p'),
-        ('driver_money_operations',        'driver_money_operations_pkey',             'p')
-      ) as clave(tabla, nombre, tipo)
+        ('driver_finance_state',           'p', 'primaria', 'driver_id'),
+        ('driver_commission_reservations', 'p', 'primaria', 'trip_id'),
+        ('driver_maintenance_obligations', 'p', 'primaria', 'id'),
+        ('driver_maintenance_obligations', 'u', 'unica',    'driver_id,period'),
+        ('driver_inactivity_warnings',     'p', 'primaria', 'driver_id,anchor_at,threshold_days'),
+        ('driver_money_operations',        'p', 'primaria', 'operation_id')
+      ) as clave(tabla, tipo, tipo_legible, columnas)
      where to_regclass('public.' || clave.tabla) is not null
        and not exists (
          select 1 from pg_constraint k
-          where k.conname = clave.nombre
+          where k.conrelid = to_regclass('public.' || clave.tabla)
             and k.contype = clave.tipo
-            and k.conrelid = to_regclass('public.' || clave.tabla)
+            and (select string_agg(a.attname, ',' order by u.ord)
+                   from unnest(k.conkey) with ordinality as u(attnum, ord)
+                   join pg_attribute a on a.attrelid = k.conrelid and a.attnum = u.attnum)
+                = clave.columnas
+       )
+
+    union all
+
+    -- 3) Las restricciones que dan sentido al dinero: la direccion de la
+    --    operacion, que el importe no sea negativo y que el conductor exista
+    --    de verdad. Se validan por su DEFINICION, no por su nombre.
+    select 'a ' || regla.tabla || ' le falta ' || regla.descripcion as detalle
+      from (values
+        ('driver_money_operations', 'la comprobacion de direccion (CREDIT/DEBIT)', 'c', '%kind%CREDIT%'),
+        ('driver_money_operations', 'la comprobacion de importe no negativo',      'c', '%amount_usd%>=%'),
+        ('driver_money_operations', 'la clave foranea al conductor',               'f', '%REFERENCES users%')
+      ) as regla(tabla, descripcion, tipo, patron)
+     where to_regclass('public.' || regla.tabla) is not null
+       and not exists (
+         select 1 from pg_constraint k
+          where k.conrelid = to_regclass('public.' || regla.tabla)
+            and k.contype = regla.tipo
+            and pg_get_constraintdef(k.oid) like regla.patron
        )
   ) as hallazgos;
 
@@ -291,6 +338,12 @@ create table if not exists public.driver_money_operations (
   kind text not null check (kind in ('CREDIT', 'DEBIT')),
   amount_usd numeric(12, 2) not null check (amount_usd >= 0),
   balance_after_usd numeric(12, 2) not null,
+  -- DE DONDE viene la operacion, de forma inmutable. No basta con el prefijo
+  -- del identificador: la sexta auditoria demostro que reconocer un duplicado
+  -- solo por su identidad permitia reutilizar la misma cadena con otro
+  -- conductor, otro importe u otra direccion y recibir un «ya aplicado».
+  source_type text not null,
+  source_id text not null,
   applied_at timestamptz not null default now(),
   constraint driver_money_operations_driver_fk
     foreign key (driver_id) references public.users(id)
@@ -307,6 +360,24 @@ alter table public.driver_commission_reservations
   add column if not exists deferred_paid_usd numeric(10, 2) not null default 0;
 alter table public.driver_finance_state
   add column if not exists floor_exempt boolean not null default false;
+
+-- El origen de las operaciones que ya existan. NO se inventa: lo que no se
+-- sabe se marca como tal, y el codigo trata un testigo asi como IMPOSIBLE DE
+-- VERIFICAR — ante un duplicado con ese origen falla cerrado en vez de dar por
+-- buena una identidad que no puede comprobar. En produccion esto no ocurre:
+-- la funcionalidad nunca se activo y la tabla nace vacia.
+alter table public.driver_money_operations
+  add column if not exists source_type text;
+alter table public.driver_money_operations
+  add column if not exists source_id text;
+update public.driver_money_operations
+   set source_type = coalesce(source_type, 'LEGACY_UNKNOWN'),
+       source_id = coalesce(source_id, operation_id)
+ where source_type is null or source_id is null;
+alter table public.driver_money_operations
+  alter column source_type set not null;
+alter table public.driver_money_operations
+  alter column source_id set not null;
 
 -- ---------------------------------------------------------------------
 -- Invariantes de estado. Se declaran de forma idempotente: se retira la
@@ -388,6 +459,15 @@ begin
   alter table public.driver_finance_state
     add constraint driver_finance_state_suelo
     check (floor_exempt or wallet_balance_usd >= -5.00);
+
+  -- El origen de una operacion es de un juego cerrado. `LEGACY_UNKNOWN` esta
+  -- ahi para lo que ya existiera antes de esta ronda, y el codigo lo trata
+  -- como no verificable: nunca autoriza un duplicado.
+  alter table public.driver_money_operations
+    drop constraint if exists driver_money_operations_origen;
+  alter table public.driver_money_operations
+    add constraint driver_money_operations_origen
+    check (source_type in ('TOPUP', 'PAYOUT', 'WITHDRAWAL', 'ADMIN_ADJUSTMENT', 'LEGACY_UNKNOWN'));
 
   -- Un aviso entregado no puede serlo antes de reclamarse.
   alter table public.driver_inactivity_warnings

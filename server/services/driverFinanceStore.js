@@ -234,6 +234,9 @@ export function createDriverFinanceStore({
         }
         if (veredicto === 'COMMITTED') { volcar(); return resultado; }
         if (veredicto === 'NOT_COMMITTED') return alFallar;
+        // La base tiene esa identidad, pero con OTRA semantica: no es una
+        // repeticion, es una colision. Jamas se da por buena.
+        if (veredicto === 'CONFLICT') return { outcome: 'OPERATION_ID_CONFLICT' };
         return { ...(alFallar ?? {}), outcome: 'AMBIGUOUS' };
       }
 
@@ -502,29 +505,80 @@ export function createDriverFinanceStore({
    * Devuelve `false` cuando la operacion YA estaba anotada: entonces no hay
    * nada que hacer, porque ese dinero ya se movio exactamente una vez.
    */
-  async function anotarOperacion(client, { operationId, driverId, kind, amountUSD, balanceAfter }) {
+  async function anotarOperacion(client, { operationId, driverId, kind, amountUSD, balanceAfter, sourceType, sourceId }) {
     const r = await client.query(
       `insert into public.driver_money_operations
-         (operation_id, driver_id, kind, amount_usd, balance_after_usd)
-       values ($1, $2, $3, $4, $5)
+         (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+       values ($1, $2, $3, $4, $5, $6, $7)
        on conflict (operation_id) do nothing`,
-      [operationId, driverId, kind, roundMoney(Math.max(0, Number(amountUSD) || 0)), balanceAfter]
+      [operationId, driverId, kind, roundMoney(Math.max(0, Number(amountUSD) || 0)), balanceAfter, sourceType, sourceId]
     );
     return r.rowCount === 1;
   }
+
+  const CAMPOS_OPERACION =
+    'operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id';
 
   /** Lo que la BASE recuerda de una operacion: la unica verdad cuando el
    *  desenlace del COMMIT se pierde por el camino. */
   async function leerOperacion(operationId) {
     const { rows } = await pool.query(
-      `select operation_id, driver_id, kind, amount_usd, balance_after_usd
-         from public.driver_money_operations where operation_id = $1`,
+      `select ${CAMPOS_OPERACION} from public.driver_money_operations where operation_id = $1`,
       [operationId]
     );
     return rows[0] ?? null;
   }
 
   /**
+   * ¿La operacion guardada es LA MISMA que se esta pidiendo?
+   *
+   * La sexta auditoria encontro que reconocer un duplicado solo por su
+   * identidad permitia reutilizar la misma cadena con otro conductor, otro
+   * importe o la direccion contraria y recibir un «ya aplicado». Aqui se
+   * comparan las cinco cosas que definen la operacion, y todas tienen que
+   * coincidir.
+   *
+   * `LEGACY_UNKNOWN` nunca coincide: es el origen de lo que existia antes de
+   * que estos campos existieran, y de eso NO se puede probar nada. Ante la
+   * duda, conflicto — que es la respuesta segura cuando hay dinero de por
+   * medio.
+   */
+  function mismaOperacion(fila, esperado) {
+    if (!fila) return false;
+    if (fila.source_type === 'LEGACY_UNKNOWN') return false;
+    return fila.driver_id === esperado.driverId
+      && fila.kind === esperado.kind
+      && Number(fila.amount_usd) === roundMoney(Math.max(0, Number(esperado.amountUSD) || 0))
+      && fila.source_type === esperado.sourceType
+      && fila.source_id === esperado.sourceId;
+  }
+
+  /** El desenlace de un duplicado, leido de la base y comparado. */
+  async function resolverDuplicado(esperado) {
+    const fila = await leerOperacion(esperado.operationId);
+    if (!fila) return { outcome: 'FAILED' };
+    if (!mismaOperacion(fila, esperado)) {
+      logger.error('[+58express DriverFinance] identidad de operacion reutilizada con otra semantica: rechazada');
+      return { outcome: 'OPERATION_ID_CONFLICT' };
+    }
+    return { outcome: 'ALREADY_APPLIED', balanceAfter: Number(fila.balance_after_usd), transactions: [] };
+  }
+
+  /**
+   * El resolutor del COMMIT incierto. No pregunta «¿existe esta identidad?»
+   * —eso bastaba para colar una operacion ajena— sino «¿existe ESTA operacion,
+   * con este conductor, este importe, esta direccion y este origen?».
+   */
+  function resolverCommitDeOperacion(esperado) {
+    return async () => {
+      const fila = await leerOperacion(esperado.operationId);
+      if (!fila) return 'NOT_COMMITTED';
+      return mismaOperacion(fila, esperado) ? 'COMMITTED' : 'CONFLICT';
+    };
+  }
+
+  /**
+   * Escribe el saldo autoritativo. La exencion del suelo se retira sola en  /**
    * Escribe el saldo autoritativo. La exencion del suelo se retira sola en
    * cuanto el conductor vuelve a estar por encima de el: a partir de ahi la
    * base misma le impide volver a hundirse.
@@ -646,6 +700,33 @@ export function createDriverFinanceStore({
       const bloqueado = await bloquearEstado(client, driverId);
       if (!bloqueado) return { outcome: 'NO_FINANCE_STATE' };
 
+      // DE QUIEN ES ESTA CARRERA. La sexta auditoria liquido una reserva de un
+      // conductor cobrandosela a otro: bastaba con que quien llamara dijera
+      // «este es el conductor». La reserva se actualizaba por viaje, sin
+      // comprobar de quien era.
+      //
+      // Ahora manda la base. Se leen bloqueadas —en el orden global: conductor,
+      // reserva, viaje— y las dos tienen que apuntar al mismo conductor que se
+      // va a cobrar. Si no, no se mueve un centimo.
+      const reserva = await client.query(
+        `select driver_id, status from public.driver_commission_reservations
+          where trip_id = $1 for update`,
+        [tripId]
+      );
+      const viaje = await client.query(
+        `select payload->>'driverId' as driver_id from public.trips where id = $1 for update`,
+        [tripId]
+      );
+      if (reserva.rowCount === 1 && reserva.rows[0].driver_id !== driverId) {
+        logger.error('[+58express DriverFinance] liquidacion pedida para un conductor que no es el dueno de la reserva');
+        return { outcome: 'OWNERSHIP_MISMATCH' };
+      }
+      if (viaje.rowCount !== 1) return { outcome: 'TRIP_NOT_FOUND' };
+      if (viaje.rows[0].driver_id !== driverId) {
+        logger.error('[+58express DriverFinance] liquidacion pedida para un conductor que no es el del viaje');
+        return { outcome: 'OWNERSHIP_MISMATCH' };
+      }
+
       const saldo = bloqueado.snapshot.walletBalance;
       const comision = roundMoney(Math.max(0, Number(commissionUSD) || 0));
       // El suelo de deuda es DURO, y lo es SIEMPRE: es una propiedad del
@@ -742,46 +823,63 @@ export function createDriverFinanceStore({
    * conductor cobraba cero y nadie se enteraba. Apagada, la politica no cobra
    * ni bloquea; el dinero sigue entrando donde debe.
    */
-  function creditDriverWallet({
-    driverId, creditUSD, operationId = null, sourceId = null,
-    at = new Date().toISOString(), policyEnabled = true, builders = {}
+  async function creditDriverWallet({
+    driverId, creditUSD, operationId = null, sourceType = null, sourceId = null,
+    sourceRef = null, at = new Date().toISOString(), policyEnabled = true, builders = {}
   }) {
     const importe = Math.max(0, CENT(creditUSD));
-    // Un ingreso SIN identidad no se acepta. Es una regla dura a proposito:
-    // sin ella, un reintento vuelve a acreditar. La unica excepcion es el
-    // credito de CERO, que no mueve dinero — solo recorre las obligaciones
-    // vivas para cobrarlas, y cada una lleva su propio testigo.
-    if (importe > 0 && !operationId) {
-      logger.error('[+58express DriverFinance] credito sin identidad de operacion: rechazado');
-      return Promise.resolve({ outcome: 'OPERATION_ID_REQUIRED' });
+    // Un ingreso SIN identidad completa no se acepta. Es una regla dura a
+    // proposito: sin ella, un reintento vuelve a acreditar, y sin origen no se
+    // puede distinguir una repeticion legitima de una identidad reutilizada.
+    // La unica excepcion es el credito de CERO, que no mueve dinero — solo
+    // recorre las obligaciones vivas, y cada una lleva su propio testigo.
+    if (importe > 0 && (!operationId || !sourceType || !sourceId)) {
+      logger.error('[+58express DriverFinance] credito sin identidad completa de operacion: rechazado');
+      return { outcome: 'OPERATION_ID_REQUIRED' };
     }
+    const esperado = {
+      operationId, driverId, kind: 'CREDIT', amountUSD: USD(importe), sourceType, sourceId
+    };
 
-    return enTransaccion('credito con cobranza', async client => {
+    const resultado = await enTransaccion('credito con cobranza', async (client, abortar) => {
       const bloqueado = await bloquearEstado(client, driverId);
       if (!bloqueado) return { outcome: 'NO_FINANCE_STATE' };
 
+      // PRIMERO el testigo, y nada mas. La sexta auditoria demostro por que:
+      // cobrar las obligaciones antes de mirar si la operacion ya estaba
+      // hacia que un reintento marcase PAGADO un mantenimiento nuevo sin
+      // descontarle nada al conductor. Una repeticion valida tiene que salir
+      // de aqui SIN haber tocado absolutamente nada.
+      if (operationId) {
+        const previa = await client.query(
+          `select ${CAMPOS_OPERACION} from public.driver_money_operations
+            where operation_id = $1 for update`,
+          [operationId]
+        );
+        if (previa.rowCount === 1) {
+          abortar(mismaOperacion(previa.rows[0], esperado)
+            ? {
+              outcome: 'ALREADY_APPLIED',
+              balanceAfter: Number(previa.rows[0].balance_after_usd),
+              transactions: []
+            }
+            : { outcome: 'OPERATION_ID_CONFLICT' });
+        }
+      }
+
+      // Y SOLO AHORA los efectos.
       const disponibleInicial = CENT(bloqueado.snapshot.walletBalance) + importe;
-      const cobranza = await cobrarObligaciones(client, driverId, disponibleInicial, builders, sourceId, policyEnabled);
+      const cobranza = await cobrarObligaciones(client, driverId, disponibleInicial, builders, sourceRef ?? sourceId, policyEnabled);
       const saldoNuevo = roundMoney(USD(cobranza.disponible));
 
-      // La identidad se anota ANTES de escribir el saldo. Si ya estaba, este
-      // dinero ya entro: se deshace todo y se devuelve lo que la base
-      // recuerda, sin mover un centimo.
       if (operationId) {
         const nueva = await anotarOperacion(client, {
-          operationId, driverId, kind: 'CREDIT', amountUSD: USD(importe), balanceAfter: saldoNuevo
+          operationId, driverId, kind: 'CREDIT', amountUSD: USD(importe),
+          balanceAfter: saldoNuevo, sourceType, sourceId
         });
-        if (!nueva) {
-          const previa = await client.query(
-            `select balance_after_usd from public.driver_money_operations where operation_id = $1`,
-            [operationId]
-          );
-          return {
-            outcome: 'ALREADY_APPLIED',
-            balanceAfter: Number(previa.rows[0]?.balance_after_usd ?? bloqueado.snapshot.walletBalance),
-            transactions: []
-          };
-        }
+        // Otra transaccion se adelanto entre la lectura y la escritura. Se
+        // deshace TODO y se resuelve leyendo la base con calma.
+        if (!nueva) abortar({ outcome: 'RECHECK' });
       }
 
       const restante = await obligacionesRestantes(client, driverId);
@@ -805,60 +903,56 @@ export function createDriverFinanceStore({
         at
       };
     }, { outcome: 'FAILED' }, {
-      // Si el COMMIT quedo en el aire, la verdad la dice el testigo: o la
-      // operacion esta anotada -y entonces entro- o no lo esta.
-      resolverCommit: operationId
-        ? async () => (await leerOperacion(operationId)) ? 'COMMITTED' : 'NOT_COMMITTED'
-        : null
+      resolverCommit: operationId ? resolverCommitDeOperacion(esperado) : null
     });
+
+    if (resultado.outcome === 'RECHECK') return resolverDuplicado(esperado);
+    return resultado;
   }
 
   /**
    * Retiro aprobado: sale dinero de verdad, y jamas por debajo de lo que hay.
    *
-   * Lleva la misma identidad durable que el credito, y por la misma razon: un
+   * Lleva la misma identidad inmutable que el credito, y por la misma razon: un
    * COMMIT confirmado cuya respuesta se pierde no puede volver a descontarle
-   * el dinero a nadie. La identidad es una cadena generica —hoy
-   * `payout:<id>`, mañana `withdrawal:<id>`— y esta capa no necesita saber de
-   * cual se trata.
+   * el dinero a nadie, y una identidad reutilizada con otra semantica no puede
+   * hacerse pasar por una repeticion. El origen es una pareja generica —hoy
+   * `PAYOUT`, mañana `WITHDRAWAL`— y esta capa no necesita saber mas.
    */
-  function debitDriverWallet({ driverId, amountUSD, operationId = null }) {
-    if (!operationId) {
-      logger.error('[+58express DriverFinance] debito sin identidad de operacion: rechazado');
-      return Promise.resolve({ outcome: 'OPERATION_ID_REQUIRED' });
+  async function debitDriverWallet({ driverId, amountUSD, operationId = null, sourceType = null, sourceId = null }) {
+    if (!operationId || !sourceType || !sourceId) {
+      logger.error('[+58express DriverFinance] debito sin identidad completa de operacion: rechazado');
+      return { outcome: 'OPERATION_ID_REQUIRED' };
     }
+    const importe = roundMoney(Math.max(0, Number(amountUSD) || 0));
+    const esperado = { operationId, driverId, kind: 'DEBIT', amountUSD: importe, sourceType, sourceId };
 
-    return enTransaccion('debito de liquidacion', async client => {
+    const resultado = await enTransaccion('debito de liquidacion', async (client, abortar) => {
       const bloqueado = await bloquearEstado(client, driverId);
       if (!bloqueado) return { outcome: 'NO_FINANCE_STATE' };
 
-      // Antes de mirar el saldo: ¿esta operacion ya ocurrio? Si el intento
-      // anterior entro y solo se perdio su confirmacion, aqui se descubre.
+      // Antes de mirar el saldo: ¿esta operacion ya ocurrio, y es LA MISMA?
       const previa = await client.query(
-        `select balance_after_usd from public.driver_money_operations where operation_id = $1`,
+        `select ${CAMPOS_OPERACION} from public.driver_money_operations
+          where operation_id = $1 for update`,
         [operationId]
       );
       if (previa.rowCount === 1) {
-        return { outcome: 'ALREADY_APPLIED', balanceAfter: Number(previa.rows[0].balance_after_usd) };
+        abortar(mismaOperacion(previa.rows[0], esperado)
+          ? { outcome: 'ALREADY_APPLIED', balanceAfter: Number(previa.rows[0].balance_after_usd) }
+          : { outcome: 'OPERATION_ID_CONFLICT' });
       }
 
-      const importe = roundMoney(Math.max(0, Number(amountUSD) || 0));
       if (roundMoney(bloqueado.snapshot.walletBalance - importe) < 0) {
         return { outcome: 'INSUFFICIENT_BALANCE', balanceAfter: bloqueado.snapshot.walletBalance };
       }
       const saldoNuevo = roundMoney(bloqueado.snapshot.walletBalance - importe);
 
       const nueva = await anotarOperacion(client, {
-        operationId, driverId, kind: 'DEBIT', amountUSD: importe, balanceAfter: saldoNuevo
+        operationId, driverId, kind: 'DEBIT', amountUSD: importe,
+        balanceAfter: saldoNuevo, sourceType, sourceId
       });
-      if (!nueva) {
-        // Carrera entre dos intentos del mismo retiro: gana el primero.
-        const otra = await client.query(
-          `select balance_after_usd from public.driver_money_operations where operation_id = $1`,
-          [operationId]
-        );
-        return { outcome: 'ALREADY_APPLIED', balanceAfter: Number(otra.rows[0]?.balance_after_usd ?? saldoNuevo) };
-      }
+      if (!nueva) abortar({ outcome: 'RECHECK' });
 
       await client.query(
         `update public.driver_finance_state
@@ -870,9 +964,10 @@ export function createDriverFinanceStore({
       );
       await proyectar(client, driverId);
       return { outcome: 'DEBITED', balanceAfter: saldoNuevo };
-    }, { outcome: 'FAILED' }, {
-      resolverCommit: async () => (await leerOperacion(operationId)) ? 'COMMITTED' : 'NOT_COMMITTED'
-    });
+    }, { outcome: 'FAILED' }, { resolverCommit: resolverCommitDeOperacion(esperado) });
+
+    if (resultado.outcome === 'RECHECK') return resolverDuplicado(esperado);
+    return resultado;
   }
 
   /** Lo que la base recuerda de una operacion de dinero. Sirve a quien tiene

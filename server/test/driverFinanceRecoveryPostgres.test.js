@@ -231,6 +231,7 @@ test('§21 · con la política APAGADA el conductor sigue cobrando lo suyo', sal
     // disparador lo reestampaba: el conductor cobraba cero.
     const r = await a.creditDriverWallet({
       driverId: id, creditUSD: 2, operationId: `v5-flagoff:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v5-flagoff:${id}`,
       policyEnabled: false, builders: CONSTRUCTORES(id)
     });
     assert.equal(r.outcome, 'CREDITED');
@@ -260,6 +261,7 @@ test('§21b · apagada, no se cobran obligaciones; el dinero entra entero y espe
 
     const r = await a.creditDriverWallet({
       driverId: id, creditUSD: 5, operationId: `v5-flagoff-obligaciones:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v5-flagoff-obligaciones:${id}`,
       policyEnabled: false, builders: CONSTRUCTORES(id)
     });
     assert.equal(r.balanceAfter, 5, 'entra entero: apagada, no se cobra nada');
@@ -317,7 +319,8 @@ test('§22 · un commit que falla NO deja al proceso creyendo lo que no se guard
     });
 
     const r = await almacen.creditDriverWallet({
-      driverId: id, creditUSD: 5, operationId: `v5-commit-perdido:${id}`, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 5, operationId: `v5-commit-perdido:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v5-commit-perdido:${id}`, builders: CONSTRUCTORES(id)
     });
 
     // v6: ahora el crédito lleva identidad, así que la incógnita se RESUELVE
@@ -511,7 +514,8 @@ test('§17b · quien YA venía más abajo del suelo se siembra exento, y deja de
 
     // Recarga hasta positivo: la exención se retira sola.
     await a.creditDriverWallet({
-      driverId: id, creditUSD: 10, operationId: `v5-suelo:${id}`, builders: CONSTRUCTORES(id) });
+      driverId: id, creditUSD: 10, operationId: `v5-suelo:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v5-suelo:${id}`, builders: CONSTRUCTORES(id) });
     const tras = await pool.query(
       `select wallet_balance_usd, floor_exempt from public.driver_finance_state where driver_id = $1`, [id]);
     assert.equal(Number(tras.rows[0].wallet_balance_usd), 2);
@@ -541,7 +545,8 @@ test('§19 · un cerrojo ajeno no cuelga la operación: expira y no escribe nada
 
     const inicio = Date.now();
     const r = await almacenImpaciente.creditDriverWallet({
-      driverId: id, creditUSD: 3, operationId: `v5-cerrojo:${id}`, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 3, operationId: `v5-cerrojo:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v5-cerrojo:${id}`, builders: CONSTRUCTORES(id)
     });
     const tardanza = Date.now() - inicio;
 
@@ -592,7 +597,8 @@ test('§22c · si NI SIQUIERA se puede preguntar, el desenlace es AMBIGUO y nadi
       syncShadow: (tabla, idFila, payload) => anotaciones.push([tabla, idFila, payload])
     });
     const r = await almacen.creditDriverWallet({
-      driverId: id, creditUSD: 5, operationId: `v6-ciego:${id}`, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 5, operationId: `v6-ciego:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v6-ciego:${id}`, builders: CONSTRUCTORES(id)
     });
 
     assert.equal(r.outcome, 'AMBIGUOUS', 'no se sabe, y se dice');

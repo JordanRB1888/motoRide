@@ -471,7 +471,9 @@ test('L · una ganancia de billetera paga la deuda antes que el saldo libre', sa
     ({ id } = await altaConductor(pool, a, dbA, { walletBalance: 0 }));
     pasajero = await crearPasajero(pool, a, dbA);
     await crearViaje(pool, viejo, pasajero, { status: 'COMPLETED' });
-    await crearViaje(pool, nuevo, pasajero, { status: 'COMPLETED' });
+    // Una carrera completada SIEMPRE tiene conductor: la propiedad de la
+    // liquidacion se prueba contra la base, no contra quien la pide.
+    await crearViaje(pool, nuevo, pasajero, { status: 'COMPLETED', driverId: id });
 
     // Una carrera vieja dejó $0.80 a deber y hay un mes sin pagar.
     await pool.query(
@@ -515,7 +517,7 @@ test('M · el pago del Transporte Seguro tambien pasa por la cobranza', saltar, 
     ({ id } = await altaConductor(pool, a, dbA, { walletBalance: 0 }));
     pasajero = await crearPasajero(pool, a, dbA);
     await crearViaje(pool, viejo, pasajero, { status: 'COMPLETED' });
-    await crearViaje(pool, traslado, pasajero, { status: 'COMPLETED', commissionRate: 0.2, fareUSD: 1.5 });
+    await crearViaje(pool, traslado, pasajero, { status: 'COMPLETED', commissionRate: 0.2, fareUSD: 1.5, driverId: id });
     await pool.query(
       `insert into public.driver_commission_reservations
          (trip_id, driver_id, reserved_usd, applied_usd, deferred_usd, status, resolved_at)
@@ -559,7 +561,8 @@ test('N · una recarga salda todo y desbloquea sin esperar al paso diario', salt
     // El ejemplo exacto del dueño: −5.00 + 0.80 + 1.00 → $6.81 lo deja al día
     // con un céntimo de margen.
     const r = await a.creditDriverWallet({
-      driverId: id, creditUSD: 6.81, operationId: `v4-recarga:${id}`, builders: CONSTRUCTORES(id) });
+      driverId: id, creditUSD: 6.81, operationId: `v4-recarga:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v4-recarga:${id}`, builders: CONSTRUCTORES(id) });
     assert.equal(r.outcome, 'CREDITED');
     assert.equal(r.balanceAfter, 0.01, 'exactamente un céntimo en positivo');
     assert.equal(r.deferredPaid, 0.8);
@@ -634,8 +637,10 @@ test('P · dos creditos simultaneos reparten sin cobrar nada dos veces', saltar,
     }
 
     const [uno, dos] = await Promise.all([
-      a.creditDriverWallet({ driverId: id, creditUSD: 1, operationId: `v4-credito-a:${id}`, sourceId: 'A', builders: CONSTRUCTORES(id) }),
-      b.creditDriverWallet({ driverId: id, creditUSD: 1, operationId: `v4-credito-b:${id}`, sourceId: 'B', builders: CONSTRUCTORES(id) })
+      a.creditDriverWallet({ driverId: id, creditUSD: 1, operationId: `v4-credito-a:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v4-credito-a:${id}`, sourceId: 'A', builders: CONSTRUCTORES(id) }),
+      b.creditDriverWallet({ driverId: id, creditUSD: 1, operationId: `v4-credito-b:${id}`,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v4-credito-b:${id}`, sourceId: 'B', builders: CONSTRUCTORES(id) })
     ]);
     assert.equal(uno.outcome, 'CREDITED');
     assert.equal(dos.outcome, 'CREDITED');
@@ -744,7 +749,7 @@ test('T · una escritura obsoleta no revierte ninguno de los ocho estados', salt
     id = alta.id;
     pasajero = await crearPasajero(pool, a, dbA);
     await crearViaje(pool, viaje, pasajero);
-    await crearViaje(pool, completada, pasajero, { status: 'COMPLETED' });
+    await crearViaje(pool, completada, pasajero, { status: 'COMPLETED', driverId: id });
 
     // LA FOTO VIEJA que va a intentar deshacerlo todo: saldo 4, sin deuda,
     // sin mantenimientos, sin bloqueo, sin avisos.

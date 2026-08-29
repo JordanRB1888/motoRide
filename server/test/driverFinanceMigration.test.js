@@ -57,6 +57,12 @@ test('la migración declara la identidad de cada operación de dinero', () => {
   assert.ok(minusculas.includes('operation_id text primary key'),
     'y la clave primaria es la que lo impide');
   assert.ok(minusculas.includes("check (kind in ('credit', 'debit'))"));
+  // Y el ORIGEN, que es lo que permite distinguir una repetición legítima de
+  // la misma identidad reutilizada con otra semántica.
+  assert.ok(minusculas.includes('source_type text not null'));
+  assert.ok(minusculas.includes('source_id text not null'));
+  assert.ok(minusculas.includes('legacy_unknown'),
+    'lo que existiera antes se marca como no verificable, no se le inventa un origen');
 });
 
 test('la migración declara el suelo de deuda y el estado que salva una carrera hecha', () => {
@@ -391,5 +397,130 @@ test('v6 · sobre un esquema VACÍO instala el libro entero', saltar, async () =
               (select count(*) from public.driver_money_operations)::int b`);
     assert.equal(vacias[0].a, 0);
     assert.equal(vacias[0].b, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v7 · las DEFINICIONES, no los nombres
+// ---------------------------------------------------------------------------
+//
+// La sexta auditoría construyó una tabla de operaciones con los nombres
+// exactos que la comprobación esperaba —incluido `driver_money_operations_pkey`—
+// pero con la clave primaria sobre `driver_id`, sin comprobación de dirección
+// y sin clave foránea al conductor. La migración la aceptó.
+//
+// Con esa forma, dos recargas del mismo conductor chocarían entre sí y una
+// identidad repetida pasaría desapercibida: exactamente lo que el libro existe
+// para impedir.
+
+test('v7 · una clave primaria con el nombre correcto sobre la COLUMNA equivocada se rechaza', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    await cliente.query('drop table if exists public.driver_money_operations cascade');
+    await cliente.query(`create table public.driver_money_operations (
+      operation_id text not null,
+      driver_id text not null,
+      kind text not null,
+      amount_usd numeric(12, 2) not null,
+      balance_after_usd numeric(12, 2) not null,
+      source_type text not null,
+      source_id text not null,
+      applied_at timestamptz not null default now(),
+      constraint driver_money_operations_pkey primary key (driver_id))`);
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SCHEMA_INCOMPATIBLE/,
+          'el nombre coincide; lo que no coincide es la columna, y eso es lo que importa');
+        assert.match(error.message, /primaria de driver_money_operations/);
+        assert.match(error.message, /operation_id/);
+        return true;
+      }
+    );
+  });
+});
+
+test('v7 · sin la comprobación de dirección ni la clave foránea, también se rechaza', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    await cliente.query('drop table if exists public.driver_money_operations cascade');
+    // Clave primaria correcta esta vez, pero sin las dos restricciones que dan
+    // sentido al dinero.
+    await cliente.query(`create table public.driver_money_operations (
+      operation_id text primary key,
+      driver_id text not null,
+      kind text not null,
+      amount_usd numeric(12, 2) not null,
+      balance_after_usd numeric(12, 2) not null,
+      source_type text not null,
+      source_id text not null,
+      applied_at timestamptz not null default now())`);
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SCHEMA_INCOMPATIBLE/);
+        assert.match(error.message, /direccion|clave foranea/);
+        return true;
+      }
+    );
+  });
+});
+
+test('v7 · una clave ÚNICA con el nombre esperado sobre otras columnas se rechaza', saltar, async () => {
+  // El mismo engaño en la tabla de mantenimientos: si la unicidad no es
+  // (conductor, periodo), dos procesos podrían cobrar el mismo mes.
+  await enTransaccionDeshecha(async cliente => {
+    await cliente.query('alter table public.driver_maintenance_obligations drop constraint driver_maintenance_obligations_unico');
+    await cliente.query(`alter table public.driver_maintenance_obligations
+      add constraint driver_maintenance_obligations_unico unique (id)`);
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SCHEMA_INCOMPATIBLE/);
+        assert.match(error.message, /driver_id,period/);
+        return true;
+      }
+    );
+  });
+});
+
+test('v7 · desde la forma ANTERIOR de la tabla de operaciones, se actualiza sin perder testigos', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    await cliente.query('drop table if exists public.driver_money_operations cascade');
+    // La forma de la ronda pasada: sin `source_type` ni `source_id`.
+    await cliente.query(`create table public.driver_money_operations (
+      operation_id text primary key,
+      driver_id text not null,
+      kind text not null check (kind in ('CREDIT', 'DEBIT')),
+      amount_usd numeric(12, 2) not null check (amount_usd >= 0),
+      balance_after_usd numeric(12, 2) not null,
+      applied_at timestamptz not null default now(),
+      constraint driver_money_operations_driver_fk
+        foreign key (driver_id) references public.users(id)
+        on delete no action deferrable initially deferred)`);
+    const { rows: [alguien] } = await cliente.query(`select id from public.users limit 1`);
+    if (alguien) {
+      await cliente.query(
+        `insert into public.driver_money_operations
+           (operation_id, driver_id, kind, amount_usd, balance_after_usd)
+         values ('zz_legado_v7', $1, 'CREDIT', 2, 5)`, [alguien.id]);
+      await cliente.query('set constraints all immediate');
+    }
+
+    await cliente.query(sql);
+
+    assert.ok(await columnaExiste(cliente, 'driver_money_operations', 'source_type'));
+    assert.ok(await columnaExiste(cliente, 'driver_money_operations', 'source_id'));
+    if (alguien) {
+      const { rows } = await cliente.query(
+        `select source_type, source_id, amount_usd from public.driver_money_operations
+          where operation_id = 'zz_legado_v7'`);
+      assert.equal(rows.length, 1, 'el testigo que ya existía NO se pierde');
+      assert.equal(rows[0].source_type, 'LEGACY_UNKNOWN',
+        'y su origen se marca como desconocido en vez de inventarle uno');
+      assert.equal(rows[0].source_id, 'zz_legado_v7');
+      assert.equal(Number(rows[0].amount_usd), 2, 'sin tocarle el importe');
+    }
   });
 });

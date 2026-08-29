@@ -367,9 +367,9 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
     [driverId, saldoTrasCredito]);
   await pool.query(
     `insert into public.driver_money_operations
-       (operation_id, driver_id, kind, amount_usd, balance_after_usd)
-     values ($1, $2, 'CREDIT', 4, $3)`,
-    [`topup:${idRecarga}`, driverId, saldoTrasCredito]);
+       (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+     values ($1, $2, 'CREDIT', 4, $3, 'TOPUP', $4)`,
+    [`topup:${idRecarga}`, driverId, saldoTrasCredito, idRecarga]);
 
   const reintentoRecarga = await json(await patch(`/api/admin/transactions/${idRecarga}`,
     { status: 'APPROVED', referenceConfirmed: true }, adminToken));
@@ -395,9 +395,9 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
     [driverId, saldoTrasDebito]);
   await pool.query(
     `insert into public.driver_money_operations
-       (operation_id, driver_id, kind, amount_usd, balance_after_usd)
-     values ($1, $2, 'DEBIT', 1, $3)`,
-    [`payout:${idLiquidacion}`, driverId, saldoTrasDebito]);
+       (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+     values ($1, $2, 'DEBIT', 1, $3, 'PAYOUT', $4)`,
+    [`payout:${idLiquidacion}`, driverId, saldoTrasDebito, idLiquidacion]);
 
   const reintentoLiquidacion = await json(await patch(`/api/admin/transactions/${idLiquidacion}`,
     { status: 'APPROVED' }, adminToken));
@@ -412,4 +412,85 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
     `select count(*)::int as n from public.driver_money_operations where operation_id = $1`,
     [`payout:${idLiquidacion}`]);
   assert.equal(testigosLiquidacion.rows[0].n, 1);
+
+  // ---- §10/§11 · un testigo que NO es el de esta solicitud no aprueba nada
+  //
+  // La sexta auditoría: bastaba con que la identidad existiera para dar la
+  // aprobación por buena. Aquí el testigo lleva la misma identidad pero otro
+  // importe — y eso no es una repetición, es una colisión.
+  const saldoAntesDeLaColision = Number((await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`,
+    [driverId])).rows[0].wallet_balance_usd);
+
+  const recargaColision = await json(await post('/api/wallet/topups',
+    { amount: 3, reference: String(Date.now() + 1).slice(-10) }, driverToken));
+  assert.equal(recargaColision.status, 201);
+  const idColision = recargaColision.body.id;
+  await pool.query(
+    `insert into public.driver_money_operations
+       (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+     values ($1, $2, 'CREDIT', 99, 999, 'TOPUP', 'otra-solicitud')`,
+    [`topup:${idColision}`, driverId]);
+
+  const aprobacionColision = await json(await patch(`/api/admin/transactions/${idColision}`,
+    { status: 'APPROVED', referenceConfirmed: true }, adminToken));
+  assert.equal(aprobacionColision.status, 409, 'no se aprueba apoyándose en un testigo ajeno');
+  assert.equal(aprobacionColision.body.error, 'MONEY_OPERATION_CONFLICT');
+  const trasColision = await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`, [driverId]);
+  assert.equal(Number(trasColision.rows[0].wallet_balance_usd), saldoAntesDeLaColision,
+    'y no se movió un céntimo');
+  const estadoColision = await json(await fetch(`${url}/api/admin/transactions?status=PENDING`,
+    { headers: { authorization: `Bearer ${adminToken}` } }));
+  if (estadoColision.status === 200 && Array.isArray(estadoColision.body?.transactions)) {
+    assert.ok(estadoColision.body.transactions.some(t => t.id === idColision),
+      'la solicitud sigue pendiente, ni aprobada ni rechazada');
+  }
+  await pool.query(`delete from public.driver_money_operations where operation_id = $1`, [`topup:${idColision}`]);
+
+  // ---- §13 · si la escritura del estado falla, el MISMO proceso reintenta
+  //
+  // Se fuerza el fallo con una restricción `not valid` que solo rechaza la
+  // acción administrativa de esta solicitud: el dinero se mueve, la escritura
+  // del documento no. Antes, el objeto quedaba en APPROVED en memoria y este
+  // mismo proceso rechazaba el reintento legítimo con un 409 hasta reiniciar.
+  const saldoAntesDelFallo = Number((await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`,
+    [driverId])).rows[0].wallet_balance_usd);
+  const recargaFragil = await json(await post('/api/wallet/topups',
+    { amount: 2, reference: String(Date.now() + 2).slice(-10) }, driverToken));
+  assert.equal(recargaFragil.status, 201);
+  const idFragil = recargaFragil.body.id;
+
+  await pool.query(
+    `alter table public.admin_actions add constraint zz_prueba_fallo
+       check (payload->>'transactionId' is distinct from '${idFragil}') not valid`);
+  const primerIntento = await json(await patch(`/api/admin/transactions/${idFragil}`,
+    { status: 'APPROVED', referenceConfirmed: true }, adminToken));
+  await pool.query(`alter table public.admin_actions drop constraint zz_prueba_fallo`);
+
+  assert.ok(primerIntento.status >= 500, `la escritura falló y se dice (fue ${primerIntento.status})`);
+  const trasElFallo = await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`, [driverId]);
+  assert.equal(Number(trasElFallo.rows[0].wallet_balance_usd), saldoAntesDelFallo + 2,
+    'el dinero SÍ se movió: su testigo lo protege');
+  const testigosFragil = await pool.query(
+    `select count(*)::int as n from public.driver_money_operations where operation_id = $1`,
+    [`topup:${idFragil}`]);
+  assert.equal(testigosFragil.rows[0].n, 1, 'un solo testigo');
+
+  // Y AHORA el reintento, en este MISMO proceso y sin reiniciar nada.
+  const segundoIntento = await json(await patch(`/api/admin/transactions/${idFragil}`,
+    { status: 'APPROVED', referenceConfirmed: true }, adminToken));
+  assert.equal(segundoIntento.status, 200,
+    'antes daba 409: la memoria se había quedado en APPROVED sobre una escritura fallida');
+  assert.equal(segundoIntento.body.transaction.status, 'APPROVED');
+  const trasElReintento = await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`, [driverId]);
+  assert.equal(Number(trasElReintento.rows[0].wallet_balance_usd), saldoAntesDelFallo + 2,
+    'y el dinero no se movió una segunda vez');
+  const testigosFinal = await pool.query(
+    `select count(*)::int as n from public.driver_money_operations where operation_id = $1`,
+    [`topup:${idFragil}`]);
+  assert.equal(testigosFinal.rows[0].n, 1);
 });

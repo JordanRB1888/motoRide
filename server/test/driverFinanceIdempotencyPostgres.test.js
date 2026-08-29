@@ -181,7 +181,8 @@ test('§4 · un crédito confirmado y no acusado NO se aplica dos veces al reint
       pool: poolConCommitSaboteado(pool, 'CONFIRMA_Y_PIERDE'), logger: silencioso
     });
     const primero = await saboteado.creditDriverWallet({
-      driverId: id, creditUSD: 2, operationId: operacion, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 2, operationId: operacion,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion, builders: CONSTRUCTORES(id)
     });
     // La implementación resuelve la duda leyendo el testigo: entró.
     assert.ok(['CREDITED', 'AMBIGUOUS'].includes(primero.outcome), `desenlace inesperado: ${primero.outcome}`);
@@ -189,7 +190,8 @@ test('§4 · un crédito confirmado y no acusado NO se aplica dos veces al reint
 
     // Y ahora el reintento, con la MISMA identidad.
     const reintento = await a.creditDriverWallet({
-      driverId: id, creditUSD: 2, operationId: operacion, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 2, operationId: operacion,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion, builders: CONSTRUCTORES(id)
     });
     assert.equal(reintento.outcome, 'ALREADY_APPLIED', 'la base recuerda que esta operación ya ocurrió');
     assert.equal(await leerEstado(pool, id), 3, 'SIGUE EN 3.00 — antes se iba a 5.00');
@@ -215,11 +217,11 @@ test('§5 · un débito confirmado y no acusado NO se descuenta dos veces', salt
     const saboteado = createDriverFinanceStore({
       pool: poolConCommitSaboteado(pool, 'CONFIRMA_Y_PIERDE'), logger: silencioso
     });
-    const primero = await saboteado.debitDriverWallet({ driverId: id, amountUSD: 2, operationId: operacion });
+    const primero = await saboteado.debitDriverWallet({ driverId: id, amountUSD: 2, operationId: operacion, sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion });
     assert.ok(['DEBITED', 'AMBIGUOUS'].includes(primero.outcome), `desenlace inesperado: ${primero.outcome}`);
     assert.equal(await leerEstado(pool, id), 8, 'el retiro SÍ salió');
 
-    const reintento = await a.debitDriverWallet({ driverId: id, amountUSD: 2, operationId: operacion });
+    const reintento = await a.debitDriverWallet({ driverId: id, amountUSD: 2, operationId: operacion, sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion });
     assert.equal(reintento.outcome, 'ALREADY_APPLIED');
     assert.equal(await leerEstado(pool, id), 8, 'SIGUE EN 8.00 — antes se iba a 6.00');
     assert.equal(await contarOperaciones(pool, operacion), 1, 'un solo testigo');
@@ -244,14 +246,16 @@ test('§6 · un crédito deshecho antes de confirmar se aplica UNA vez al reinte
       pool: poolConCommitSaboteado(pool, 'RECHAZA'), logger: silencioso
     });
     const primero = await saboteado.creditDriverWallet({
-      driverId: id, creditUSD: 2, operationId: operacion, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 2, operationId: operacion,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion, builders: CONSTRUCTORES(id)
     });
     assert.notEqual(primero.outcome, 'CREDITED', 'no entró');
     assert.equal(await leerEstado(pool, id), 1, 'el saldo no se movió');
     assert.equal(await contarOperaciones(pool, operacion), 0, 'y no hay testigo de algo que no pasó');
 
     const reintento = await a.creditDriverWallet({
-      driverId: id, creditUSD: 2, operationId: operacion, builders: CONSTRUCTORES(id)
+      driverId: id, creditUSD: 2, operationId: operacion,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion, builders: CONSTRUCTORES(id)
     });
     assert.equal(reintento.outcome, 'CREDITED');
     assert.equal(await leerEstado(pool, id), 3, 'ahora sí, exactamente una vez');
@@ -271,12 +275,12 @@ test('§6b · un débito deshecho antes de confirmar se aplica UNA vez al reinte
     const saboteado = createDriverFinanceStore({
       pool: poolConCommitSaboteado(pool, 'RECHAZA'), logger: silencioso
     });
-    const primero = await saboteado.debitDriverWallet({ driverId: id, amountUSD: 2, operationId: operacion });
+    const primero = await saboteado.debitDriverWallet({ driverId: id, amountUSD: 2, operationId: operacion, sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion });
     assert.notEqual(primero.outcome, 'DEBITED');
     assert.equal(await leerEstado(pool, id), 10);
     assert.equal(await contarOperaciones(pool, operacion), 0);
 
-    assert.equal((await a.debitDriverWallet({ driverId: id, amountUSD: 2, operationId: operacion })).outcome, 'DEBITED');
+    assert.equal((await a.debitDriverWallet({ driverId: id, amountUSD: 2, operationId: operacion, sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion })).outcome, 'DEBITED');
     assert.equal(await leerEstado(pool, id), 8);
     assert.equal(await contarOperaciones(pool, operacion), 1);
   } finally {
@@ -322,8 +326,10 @@ test('dos intentos SIMULTÁNEOS de la misma operación mueven el dinero una vez'
   try {
     ({ id } = await altaConductor(a, dbA, { walletBalance: 1 }));
     const [uno, dos] = await Promise.all([
-      a.creditDriverWallet({ driverId: id, creditUSD: 2, operationId: operacion, builders: CONSTRUCTORES(id) }),
-      b.creditDriverWallet({ driverId: id, creditUSD: 2, operationId: operacion, builders: CONSTRUCTORES(id) })
+      a.creditDriverWallet({ driverId: id, creditUSD: 2, operationId: operacion,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion, builders: CONSTRUCTORES(id) }),
+      b.creditDriverWallet({ driverId: id, creditUSD: 2, operationId: operacion,
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: operacion, builders: CONSTRUCTORES(id) })
     ]);
     const desenlaces = [uno.outcome, dos.outcome].sort();
     assert.deepEqual(desenlaces, ['ALREADY_APPLIED', 'CREDITED'], 'uno acredita, el otro reconoce');
