@@ -30,6 +30,9 @@ import { DISPATCH_REJECTION, evaluateDriverEligibility } from '../domain/dispatc
 const silencioso = { log: () => {}, warn: () => {}, error: () => {} };
 const DIA = 24 * 60 * 60 * 1000;
 const HOY = Date.parse('2026-08-28T12:00:00.000Z');
+// La politica solo aplica con la funcionalidad encendida: desde la ronda 2
+// los predicados lo exigen explicitamente, y apagada son inertes.
+const ACTIVO = { enabled: true };
 
 const conductor = (extra = {}) => ({
   id: 'drv_1', role: 'driver', isVerified: true, status: 'AVAILABLE',
@@ -64,17 +67,17 @@ test('el limite de deuda es EXACTAMENTE -$5.00 y bloquea por igualdad', () => {
     [-5, true], [-5.01, true], [-12, true]
   ];
   for (const [saldo, bloqueado] of casos) {
-    assert.equal(isDebtBlocked(conductor({ walletBalance: saldo })), bloqueado, `saldo ${saldo}`);
-    assert.equal(canTakeNewWork(conductor({ walletBalance: saldo })), !bloqueado, `trabajo con ${saldo}`);
+    assert.equal(isDebtBlocked(conductor({ walletBalance: saldo }), ACTIVO), bloqueado, `saldo ${saldo}`);
+    assert.equal(canTakeNewWork(conductor({ walletBalance: saldo }), ACTIVO), !bloqueado, `trabajo con ${saldo}`);
   }
 });
 
 test('§37 · para volver a rodar hay que quedar en POSITIVO: $0.00 no basta', () => {
   // Quien fue bloqueado arrastra la marca hasta quedar por encima de cero.
   const bloqueado = saldo => conductor({ walletBalance: saldo, financialBlock: { active: true } });
-  assert.equal(canTakeNewWork(bloqueado(-0.01)), false, '-5.00 + 4.99 sigue bloqueado');
-  assert.equal(canTakeNewWork(bloqueado(0)), false, '-5.00 + 5.00 = 0.00 SIGUE bloqueado');
-  assert.equal(canTakeNewWork(bloqueado(0.01)), true, '-5.00 + 5.01 vuelve a rodar');
+  assert.equal(canTakeNewWork(bloqueado(-0.01), ACTIVO), false, '-5.00 + 4.99 sigue bloqueado');
+  assert.equal(canTakeNewWork(bloqueado(0), ACTIVO), false, '-5.00 + 5.00 = 0.00 SIGUE bloqueado');
+  assert.equal(canTakeNewWork(bloqueado(0.01), ACTIVO), true, '-5.00 + 5.01 vuelve a rodar');
   assert.equal(meetsReactivationBalance(conductor({ walletBalance: 0 })), false);
   assert.equal(meetsReactivationBalance(conductor({ walletBalance: 0.01 })), true);
   // Y se le puede decir el número exacto que le falta.
@@ -84,19 +87,19 @@ test('§37 · para volver a rodar hay que quedar en POSITIVO: $0.00 no basta', (
 });
 
 test('un conductor NUEVO con saldo 0.00 puede trabajar: nunca estuvo bloqueado', () => {
-  assert.equal(canTakeNewWork(conductor({ walletBalance: 0 })), true);
+  assert.equal(canTakeNewWork(conductor({ walletBalance: 0 }), ACTIVO), true);
 });
 
 test('§10 · la comision PROYECTADA impide empezar lo que hundiria bajo el suelo', () => {
   const casi = conductor({ walletBalance: -4.6 });
-  assert.equal(wouldBreachFloor(casi, 0.7), true, '-4.60 - 0.70 = -5.30 → no');
-  assert.equal(wouldBreachFloor(casi, 0.4), false, '-4.60 - 0.40 = -5.00 → cabe justo');
-  assert.equal(wouldBreachFloor(conductor({ walletBalance: 20 }), 3), false);
+  assert.equal(wouldBreachFloor(casi, 0.7, ACTIVO), true, '-4.60 - 0.70 = -5.30 → no');
+  assert.equal(wouldBreachFloor(casi, 0.4, ACTIVO), false, '-4.60 - 0.40 = -5.00 → cabe justo');
+  assert.equal(wouldBreachFloor(conductor({ walletBalance: 20 }), 3, ACTIVO), false);
   // Y llega hasta el despacho real, como una frontera más.
   const evaluar = (driver, comision) => evaluateDriverEligibility({
     driver, trip: { rideType: 'MOTO' }, pickup: { lat: 10.6, lng: -71.6 },
     hasSocket: true, calculateDistance: () => 1, maxRadiusKm: 15, maxLocationAgeMs: 120_000,
-    projectedCommissionUSD: comision, now: HOY
+    projectedCommissionUSD: comision, driverFinanceEnabled: true, now: HOY
   });
   const conGps = extra => conductor({ location: { lat: 10.6, lng: -71.6, updatedAt: HOY }, ...extra });
   assert.equal(evaluar(conGps({ walletBalance: 5 }), 0.7).eligible, true);
@@ -202,11 +205,12 @@ test('§29 · estrenar la politica NO cobra meses viejos', async () => {
 // --------------------------------------------------------------------------
 
 test('§42 · a los 30 dias sin carreras, suspension; a los 29, no', async () => {
-  const casi = crearEntorno({ drivers: [conductor({ lastQualifyingTripAt: HOY - 29 * DIA })] });
+  // Anclado desde antes: la gracia de estreno ya se consumio.
+  const casi = crearEntorno({ drivers: [conductor({ lastQualifyingTripAt: HOY - 29 * DIA, activityAnchorAt: HOY - 60 * DIA })] });
   await casi.servicio.runDriverFinancePass();
   assert.notEqual(casi.database.users[0].status, 'SUSPENDED', 'a los 29 días sigue trabajando');
 
-  const vencido = crearEntorno({ drivers: [conductor({ lastQualifyingTripAt: HOY - 30 * DIA })] });
+  const vencido = crearEntorno({ drivers: [conductor({ lastQualifyingTripAt: HOY - 30 * DIA, activityAnchorAt: HOY - 60 * DIA })] });
   const resumen = await vencido.servicio.runDriverFinancePass();
   assert.equal(resumen.inactivitySuspensions, 1);
   assert.equal(vencido.database.users[0].status, 'SUSPENDED');
@@ -220,7 +224,7 @@ test('§42 · a los 30 dias sin carreras, suspension; a los 29, no', async () =>
 });
 
 test('§21 CRÍTICO · pagar el mantenimiento NO salva de la suspension por inactividad', async () => {
-  const entorno = crearEntorno({ drivers: [conductor({ walletBalance: 10, lastQualifyingTripAt: HOY })] });
+  const entorno = crearEntorno({ drivers: [conductor({ walletBalance: 10, lastQualifyingTripAt: HOY, activityAnchorAt: HOY })] });
   await entorno.servicio.runDriverFinancePass();
   // Pasan 30 días: se le cobra el dólar Y se le suspende por no haber rodado.
   entorno.reloj.ms = HOY + 30 * DIA;
@@ -232,7 +236,7 @@ test('§21 CRÍTICO · pagar el mantenimiento NO salva de la suspension por inac
 });
 
 test('§43 · completar una carrera reinicia la inactividad y NO mueve el mantenimiento', async () => {
-  const entorno = crearEntorno({ drivers: [conductor({ walletBalance: 10, lastQualifyingTripAt: HOY - 29 * DIA })] });
+  const entorno = crearEntorno({ drivers: [conductor({ walletBalance: 10, lastQualifyingTripAt: HOY - 29 * DIA, activityAnchorAt: HOY - 60 * DIA })] });
   await entorno.servicio.runDriverFinancePass();
   const antes = { ...entorno.database.users[0].maintenance };
 
@@ -248,7 +252,7 @@ test('§43 · completar una carrera reinicia la inactividad y NO mueve el manten
 });
 
 test('§44 · la actividad FALSA no reinicia nada', async () => {
-  const entorno = crearEntorno({ drivers: [conductor({ lastQualifyingTripAt: HOY - 29 * DIA })] });
+  const entorno = crearEntorno({ drivers: [conductor({ lastQualifyingTripAt: HOY - 29 * DIA, activityAnchorAt: HOY - 60 * DIA })] });
   await entorno.servicio.runDriverFinancePass();
   const driver = entorno.database.users[0];
   // Todo esto NO es actividad: abrir la app, ponerse disponible, GPS, aceptar
@@ -263,7 +267,7 @@ test('§44 · la actividad FALSA no reinicia nada', async () => {
 });
 
 test('los avisos previos llegan una vez cada uno, sin spam diario', async () => {
-  const entorno = crearEntorno({ drivers: [conductor({ lastQualifyingTripAt: HOY - 23 * DIA })] });
+  const entorno = crearEntorno({ drivers: [conductor({ lastQualifyingTripAt: HOY - 23 * DIA, activityAnchorAt: HOY - 60 * DIA })] });
   await entorno.servicio.runDriverFinancePass();          // faltan 7 días → avisa
   await entorno.servicio.runDriverFinancePass();          // mismo día → calla
   assert.equal(avisosDe(entorno.avisos, 'driver_inactivity_warning').length, 1);
@@ -291,7 +295,7 @@ test('§14 · el bloqueo por deuda NO es una suspension de cuenta', async () => 
   assert.equal(driver.accountStatus, 'ACTIVE');
   assert.equal(driver.isVerified, true);
   // Lo único que no puede es tomar trabajo nuevo.
-  assert.equal(canTakeNewWork(driver), false);
+  assert.equal(canTakeNewWork(driver, ACTIVO), false);
 
   // Recarga hasta 0.00: sigue bloqueado. Un céntimo más: libre.
   driver.walletBalance = 0;

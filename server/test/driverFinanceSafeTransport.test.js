@@ -39,6 +39,8 @@ function crearEntorno({ drivers = [], nowMs = LUNES } = {}) {
   const reloj = { ms: nowMs };
   const servicio = createSafeTransportService({
     database, persistRecord: async () => true, enabled: true,
+    // La frontera financiera solo existe con DRIVER-FINANCE-1 encendida.
+    driverFinanceEnabled: true,
     pilotUserIds: resolvePilotUserIds('*'), now: () => reloj.ms, logger: silencioso
   });
   return { database, servicio, reloj };

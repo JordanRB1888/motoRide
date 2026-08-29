@@ -33,6 +33,9 @@ export function evaluateDriverEligibility({
   // DRIVER-FINANCE-1: lo que ESTA carrera le costará en comisión si la cobra
   // en efectivo. Opcional: sin dato, la puerta proyectada no opina.
   projectedCommissionUSD = null,
+  // Con DRIVER-FINANCE-1 apagada esta frontera no existe: el despacho se
+  // comporta exactamente como antes de la funcionalidad.
+  driverFinanceEnabled = false,
   now = Date.now()
 }) {
   if (driver?.role !== 'driver') return { eligible: false, reason: DISPATCH_REJECTION.ROLE_MISMATCH };
@@ -41,12 +44,13 @@ export function evaluateDriverEligibility({
   }
   // Deuda: no puede TOMAR trabajo nuevo. Un viaje ya en curso no se toca —
   // esta puerta solo se consulta al repartir carreras nuevas.
-  if (!canTakeNewWork(driver)) {
+  if (driverFinanceEnabled && !canTakeNewWork(driver, { enabled: true })) {
     return { eligible: false, reason: DISPATCH_REJECTION.FINANCIAL_BALANCE_BLOCK };
   }
   // Y la comisión que ESTA carrera le costará no puede hundirlo bajo el
   // suelo: el sistema no crea deuda que él no pudo prever.
-  if (Number.isFinite(Number(projectedCommissionUSD)) && wouldBreachFloor(driver, projectedCommissionUSD)) {
+  if (driverFinanceEnabled && Number.isFinite(Number(projectedCommissionUSD))
+    && wouldBreachFloor(driver, projectedCommissionUSD, { enabled: true })) {
     return { eligible: false, reason: DISPATCH_REJECTION.FINANCIAL_BALANCE_BLOCK };
   }
   if (!KNOWN_STATUSES.has(driver.status)) return { eligible: false, reason: DISPATCH_REJECTION.INVALID_STATUS };
@@ -84,6 +88,7 @@ export function selectEligibleDrivers({
   maxRadiusKm = 15,
   maxLocationAgeMs = 120_000,
   projectedCommissionUSD = null,
+  driverFinanceEnabled = false,
   now = Date.now()
 }) {
   const candidates = [];
@@ -100,6 +105,7 @@ export function selectEligibleDrivers({
       maxRadiusKm,
       maxLocationAgeMs,
       projectedCommissionUSD,
+      driverFinanceEnabled,
       now
     });
     if (result.eligible) candidates.push({ driver, dist: result.distanceKm });

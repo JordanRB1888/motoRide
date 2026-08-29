@@ -217,11 +217,111 @@ export async function createPostgresPersistence({ pool, database, logger = conso
     });
   }
 
+
+  /**
+   * DRIVER-FINANCE-1 - reserva ATOMICA de la comision que una carrera nueva
+   * le costara al conductor.
+   *
+   * El suelo de deuda no puede depender de una lectura previa: entre mirar el
+   * saldo y aceptar la carrera cabe otra aceptacion. Aqui la condicion y el
+   * apunte ocurren en la MISMA sentencia, asi que dos aceptaciones simultaneas
+   * no pueden apoyarse las dos en el mismo saldo viejo. Lo comprometido se
+   * resta junto al saldo para decidir: es dinero ya prometido a la plataforma
+   * aunque todavia no se haya cobrado.
+   */
+  function reserveDriverCommission(driverId, amount, floorUSD) {
+    return enqueue(async () => {
+      const result = await pool.query(
+        `update public.users
+            set payload = jsonb_set(
+              payload, '{committedCommission}',
+              to_jsonb(round((coalesce((payload->>'committedCommission')::numeric, 0) + $2::numeric)::numeric, 2)), true)
+          where id = $1
+            and coalesce((payload->>'walletBalance')::numeric, 0)
+                - coalesce((payload->>'committedCommission')::numeric, 0)
+                - $2::numeric >= $3::numeric
+          returning payload`,
+        [driverId, amount, floorUSD]
+      );
+      if (result.rowCount !== 1) return false;
+      shadow.get('users').set(driverId, JSON.stringify(result.rows[0].payload));
+      return true;
+    });
+  }
+
+  /** Devuelve lo reservado: la carrera se liquido, se cancelo o no llego a
+   *  nacer. Nunca baja de cero. */
+  function releaseDriverCommission(driverId, amount) {
+    return enqueue(async () => {
+      const result = await pool.query(
+        `update public.users
+            set payload = jsonb_set(
+              payload, '{committedCommission}',
+              to_jsonb(greatest(0, round((coalesce((payload->>'committedCommission')::numeric, 0) - $2::numeric)::numeric, 2))), true)
+          where id = $1
+          returning payload`,
+        [driverId, amount]
+      );
+      if (result.rowCount !== 1) return false;
+      shadow.get('users').set(driverId, JSON.stringify(result.rows[0].payload));
+      return true;
+    });
+  }
+
+  /**
+   * DRIVER-FINANCE-1 - el cobro mensual, exactamente una vez, garantizado por
+   * la BASE y no por una lectura previa.
+   *
+   * La transaccion lleva un identificador DETERMINISTA por conductor y
+   * periodo, y la clave primaria de la tabla es la que decide: el segundo
+   * proceso que intente el mismo cobro inserta cero filas y se retira. El
+   * apunte y el debito del saldo viajan en la MISMA transaccion de base de
+   * datos, asi que no existe el estado intermedio de <<transaccion escrita,
+   * saldo sin tocar>> que dejaria el cobro perdido tras un reinicio.
+   */
+  function chargeDriverMaintenance({ transaction, driver }) {
+    return enqueue(async () => {
+      const client = await pool.connect();
+      try {
+        const payloadTransaccion = serializeRecord('transactions', transaction);
+        const payloadConductor = serializeRecord('users', driver);
+        await client.query('begin');
+        const insert = await client.query(
+          `insert into public.transactions (id, payload) values ($1, $2::jsonb)
+           on conflict (id) do nothing`,
+          [transaction.id, payloadTransaccion]
+        );
+        if (insert.rowCount !== 1) {
+          await client.query('rollback');
+          return 'ALREADY_CHARGED';
+        }
+        await client.query(
+          `insert into public.users (id, payload) values ($1, $2::jsonb)
+           on conflict (id) do update set payload = excluded.payload`,
+          [driver.id, payloadConductor]
+        );
+        await client.query('commit');
+        shadow.get('transactions').set(transaction.id, payloadTransaccion);
+        shadow.get('users').set(driver.id, payloadConductor);
+        return 'CHARGED';
+      } catch (error) {
+        try { await client.query('rollback'); } catch {}
+        logger.error('[+58express Database] cobro de mantenimiento fallido:', error.message);
+        return 'FAILED';
+      } finally {
+        client.release();
+      }
+    });
+  }
+
   return {
     kind: 'postgres',
     persist,
     persistRecord,
     reserveTripAssignment,
+    reserveDriverCommission,
+    releaseDriverCommission,
+    chargeDriverMaintenance,
     flush: () => writeQueue,
     shadowSize: table => shadow.get(table)?.size ?? 0,
     close: () => pool.end(),

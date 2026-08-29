@@ -77,7 +77,27 @@ export async function openDatabaseBackend({
   return {
     kind: 'sqlite',
     database,
-    persistence: { ...persistence, kind: 'sqlite', reserveTripAssignment: async () => true, flush: async () => true },
+    persistence: {
+      ...persistence,
+      kind: 'sqlite',
+      reserveTripAssignment: async () => true,
+      // DRIVER-FINANCE-1: en SQLite (desarrollo y pruebas) no hay concurrencia
+      // entre replicas, asi que la reserva se concede y el cobro se escribe
+      // por la via normal. La garantia ATOMICA real vive en PostgreSQL, que
+      // es lo que corre en produccion; aqui basta con no mentir sobre el
+      // resultado. Mismo criterio que `reserveTripAssignment`.
+      reserveDriverCommission: async () => true,
+      releaseDriverCommission: async () => true,
+      chargeDriverMaintenance: async ({ transaction, driver }) => {
+        // La clave primaria de `transactions` sigue siendo la que decide.
+        const yaExiste = sqlite.prepare('SELECT 1 FROM transactions WHERE id = ?').get(transaction.id);
+        if (yaExiste) return 'ALREADY_CHARGED';
+        const escrito = await persistence.persistRecord('transactions', transaction)
+          && await persistence.persistRecord('users', driver);
+        return escrito ? 'CHARGED' : 'FAILED';
+      },
+      flush: async () => true
+    },
     close: async () => sqlite.close()
   };
 }

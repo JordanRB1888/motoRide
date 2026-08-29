@@ -73,9 +73,15 @@ export function renderEarnings() {
     const movements = (wallet.transactions || []).filter(item => ['DRIVER_EARNING','PLATFORM_COMMISSION','TOP_UP','PAYOUT','DRIVER_ACCOUNT_MAINTENANCE'].includes(item.type)).slice(0,8);
     // DRIVER-FINANCE-1: la deuda se cuenta con números exactos, no con un
     // «recarga» a secas — quien está bloqueado necesita saber CUÁNTO.
-    const LIMITE_DEUDA = 5;
-    const bloqueado = balance <= -LIMITE_DEUDA;
-    const paraSalir = balance > 0 ? 0 : Math.round((-balance + 0.01) * 100) / 100;
+    // El estado lo decide el SERVIDOR y llega ya resuelto: deducirlo del saldo
+    // mentia justo en el caso que importa — quien estuvo bloqueado y recargo
+    // hasta $0.00 sigue sin poder trabajar, y la pantalla decia que si.
+    const finanzas = wallet.driverFinance || {};
+    const LIMITE_DEUDA = Math.abs(Number(finanzas.debtLimitUSD ?? -5));
+    const bloqueado = finanzas.enabled ? finanzas.blocked === true : balance <= -LIMITE_DEUDA;
+    const paraSalir = Number.isFinite(Number(finanzas.amountToRegainEligibility))
+      ? Number(finanzas.amountToRegainEligibility)
+      : (balance > 0 ? 0 : Math.round((-balance + 0.01) * 100) / 100);
     const avisoDeuda = bloqueado
       ? `<section class="earnings-debt-block"><strong>${icon('alertTriangle',20)} Saldo pendiente</strong>
           <p>Debes pagar tu deuda y dejar tu saldo en positivo para volver a realizar carreras.</p>

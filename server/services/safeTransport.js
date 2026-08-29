@@ -16,7 +16,7 @@ import {
   selectBackupCandidates
 } from '../domain/scheduledCoverage.js';
 import { driverPublicProfile } from '../domain/userProjections.js';
-import { canTakeNewWork } from '../domain/driverFinance.js';
+import { canTakeNewWork, isDriverFinanceEnabled } from '../domain/driverFinance.js';
 
 /**
  * Traslado seguro — SAFE-TRANSPORT-1C: ciclo de vida de suscripciones y
@@ -263,6 +263,9 @@ export function createSafeTransportService({
   // el motor sigue funcionando y los avisos quedan en el centro de
   // notificaciones, como hasta ahora.
   notifier = null,
+  // DRIVER-FINANCE-1: apagada, esta frontera no existe aqui tampoco. El
+  // Transporte Seguro se comporta exactamente como antes de esa fase.
+  driverFinanceEnabled = isDriverFinanceEnabled(),
   pilotUserIds = resolvePilotUserIds(),
   billingEnabled = isSafeTransportBillingEnabled(),
   getPricing = () => DEFAULT_SAFE_TRANSPORT_PRICING,
@@ -843,7 +846,7 @@ export function createSafeTransportService({
     // DRIVER-FINANCE-1: con la cuenta bloqueada por deuda no se reciben ni se
     // aceptan traslados NUEVOS. El pasajero jamás sabe por qué: para él solo
     // hay un conductor que no está disponible.
-    if (!canTakeNewWork(driver)) return 'FINANCIAL_BALANCE_BLOCK';
+    if (!canTakeNewWork(driver, { enabled: driverFinanceEnabled })) return 'FINANCIAL_BALANCE_BLOCK';
     return scheduledEligibilityDefect(driver, ride, {
       committedPickupsMs: driver?.id ? recogidasComprometidas(driver.id, ride.id) : [],
       window: ventanaCompromiso
@@ -943,7 +946,7 @@ export function createSafeTransportService({
       const impedido = !comprometido
         || comprometido.accountStatus === 'DISABLED'
         || comprometido.status === 'SUSPENDED'
-        || !canTakeNewWork(comprometido);
+        || !canTakeNewWork(comprometido, { enabled: driverFinanceEnabled });
       if (!impedido) return;
       const liberado = ride.assignedDriverId;
       const hecho = await transicionDeCobertura(ride, 'COMMITTED_DRIVER_UNAVAILABLE', r => {
@@ -1042,7 +1045,8 @@ export function createSafeTransportService({
       // ni siquiera entra a la criba.
       // Y la frontera financiera (DRIVER-FINANCE-1) recorta igual de pronto:
       // quien no puede tomar trabajo nuevo no entra ni al fondo de candidatos.
-      const flota = users().filter(u => hasPilotAccess(u) && canTakeNewWork(u));
+      const flota = users().filter(u => hasPilotAccess(u)
+        && canTakeNewWork(u, { enabled: driverFinanceEnabled }));
       const comprometidasPorConductor = new Map();
       for (const driver of flota) {
         if (driver.role === 'driver') {

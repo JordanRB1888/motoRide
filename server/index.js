@@ -51,6 +51,20 @@ import {
 } from './services/safeTransport.js';
 import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
 import { createDriverFinanceService } from './services/driverFinance.js';
+import {
+  DRIVER_DEBT_LIMIT_USD,
+  amountToRegainEligibility,
+  canTakeNewWork,
+  commissionWithinFloor,
+  committedCommissionOf,
+  isDriverFinanceEnabled,
+  wouldBreachFloor
+} from './domain/driverFinance.js';
+
+// DRIVER-FINANCE-1: una sola lectura de la bandera para todo el proceso, y
+// se pasa explicitamente a cada predicado. Apagada, la politica es inerte.
+const DRIVER_FINANCE_ON = isDriverFinanceEnabled();
+const finanzasConductor = { enabled: DRIVER_FINANCE_ON };
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
 
@@ -518,8 +532,31 @@ function settleDriverForCompletedTrip(trip) {
   const commission = roundMoney(gross * tasaComision);
   const net = Math.max(0, roundMoney(gross - commission));
   const platformCollectedPayment = isWalletPayment(trip.paymentMethod);
-  const amount = platformCollectedPayment ? net : -commission;
+  // DRIVER-FINANCE-1: el suelo de deuda es DURO tambien aqui. En efectivo el
+  // conductor cobro en mano y la plataforma le descuenta su comision del
+  // saldo operativo; ese descuento no puede empujarlo por debajo de -$5. Si
+  // no cabe entero se aplica hasta el suelo y el resto queda anotado como
+  // obligacion suya con la plataforma: ni se le perdona ni se le hunde.
+  let comisionDiferida = 0;
+  let amount;
+  if (platformCollectedPayment) {
+    amount = net;
+  } else if (DRIVER_FINANCE_ON) {
+    const { applied, deferred } = commissionWithinFloor(driver, commission);
+    amount = -applied;
+    comisionDiferida = deferred;
+  } else {
+    amount = -commission;
+  }
   driver.walletBalance = roundMoney(Number(driver.walletBalance || 0) + amount);
+  if (comisionDiferida > 0) {
+    driver.deferredCommissionUSD = roundMoney(Number(driver.deferredCommissionUSD || 0) + comisionDiferida);
+    trip.deferredCommissionUSD = comisionDiferida;
+  }
+  // La comision de esta carrera deja de estar «comprometida»: ya se liquido.
+  if (DRIVER_FINANCE_ON && Number(driver.committedCommission || 0) > 0) {
+    driver.committedCommission = roundMoney(Math.max(0, committedCommissionOf(driver) - commission));
+  }
   trip.driverEarningUSD = net;
   trip.platformCommissionUSD = commission;
   trip.driverSettlementType = platformCollectedPayment ? 'WALLET_CREDIT' : 'COMMISSION_DEBIT';
@@ -531,6 +568,8 @@ function settleDriverForCompletedTrip(trip) {
     amount,
     gross,
     commission,
+    commissionApplied: platformCollectedPayment ? commission : roundMoney(-amount),
+    commissionDeferred: comisionDiferida,
     net,
     paymentMethod: trip.paymentMethod || 'efectivo',
     currency: 'USD',
@@ -899,6 +938,7 @@ const safeTransport = createSafeTransportService({
   persistRecord,
   tripBridge: safeTransportTripBridge,
   notifier: safeTransportNotifier,
+  driverFinanceEnabled: DRIVER_FINANCE_ON,
   // SAFE-2A: las tarifas del plan llegan por función para que la edición del
   // admin rija EN CALIENTE, sin reiniciar.
   getPricing: () => safeTransportPricing,
@@ -928,6 +968,7 @@ safeTransport.startMaterializer();
 const driverFinance = createDriverFinanceService({
   database,
   persistRecord,
+  persistence,
   notify: async (userId, event, title, message) => {
     const doc = {
       id: `notification_${crypto.randomUUID()}`,
@@ -1651,9 +1692,27 @@ app.patch('/api/notifications/me/read-all', requireAuth, limitadores.notificacio
 });
 
 app.get('/api/wallet/me', requireAuth, (req, res) => {
+  // DRIVER-FINANCE-1: la elegibilidad la decide el SERVIDOR y viaja ya
+  // resuelta. La pantalla no puede deducirla del saldo: un conductor que
+  // estuvo bloqueado y recargo hasta 0.00 sigue bloqueado, y con solo el
+  // numero delante la interfaz diria lo contrario.
+  const finanzas = req.user?.role === 'driver' && DRIVER_FINANCE_ON
+    ? {
+      enabled: true,
+      blocked: !canTakeNewWork(req.user, finanzasConductor),
+      blockReason: req.user.financialBlock?.active === true
+        ? req.user.financialBlock.reason ?? 'FINANCIAL_BALANCE_BLOCK'
+        : null,
+      debtLimitUSD: -DRIVER_DEBT_LIMIT_USD,
+      amountToRegainEligibility: amountToRegainEligibility(req.user),
+      committedCommissionUSD: committedCommissionOf(req.user),
+      deferredCommissionUSD: Number(req.user.deferredCommissionUSD || 0)
+    }
+    : { enabled: false };
   res.json({
     balance: Number(req.user.walletBalance || 0),
     currency: 'USD',
+    driverFinance: finanzas,
     transactions: database.transactions.filter(item => item.userId === req.user.id).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 150)
   });
 });
@@ -1741,6 +1800,11 @@ app.patch('/api/admin/drivers/:id', requireAuth, requireRole('admin'), limitador
   if (action === 'approve') {
     driver.isVerified = true;
     driver.status = 'OFFLINE';
+    // DRIVER-FINANCE-1: reactivar a quien se suspendio por inactividad le da
+    // una ventana NUEVA de 30 dias. Sin esto el paso siguiente lo volvia a
+    // suspender contra el mismo plazo vencido y no habia forma de sacarlo.
+    // No toca el calendario del mantenimiento ni levanta el bloqueo por deuda.
+    if (DRIVER_FINANCE_ON) await driverFinance.grantInactivityGrace(driver);
     driver.documents = Object.fromEntries(
       ['cedula', 'licencia', 'rcv', 'certificadoMedico', 'carnetCirculacion'].map(key => [key, 'approved'])
     );
@@ -2107,7 +2171,7 @@ function dispatchTripToDrivers(trip) {
   // DRIVER-FINANCE-1: en efectivo, la comisión de ESTA carrera se le
   // descontará al conductor al liquidarla. Se calcula antes de repartirla
   // para no ofrecérsela a quien quedaría por debajo del suelo de deuda.
-  const comisionProyectada = isWalletPayment(trip.paymentMethod)
+  const comisionProyectada = !DRIVER_FINANCE_ON || isWalletPayment(trip.paymentMethod)
     ? 0
     : roundMoney(tripFareUSD(trip) * (Number.isFinite(Number(trip.commissionRate))
       ? Number(trip.commissionRate)
@@ -2122,7 +2186,8 @@ function dispatchTripToDrivers(trip) {
     calculateDistance,
     maxRadiusKm: Number(process.env.MAX_DISPATCH_RADIUS_KM || 15),
     maxLocationAgeMs: Number(process.env.MAX_DRIVER_LOCATION_AGE_MS || 120_000),
-    projectedCommissionUSD: comisionProyectada
+    projectedCommissionUSD: comisionProyectada,
+    driverFinanceEnabled: DRIVER_FINANCE_ON
   });
 
   console.log(`[+58express Dispatcher] ${JSON.stringify({
@@ -2419,8 +2484,44 @@ io.on('connection', (socket) => {
     // PostgreSQL es el árbitro final entre procesos/instancias. El UPDATE
     // condicional solo reserva el viaje si todavía sigue SEARCHING y sin
     // conductor; el cerrojo en memoria por sí solo no cubre otra instancia.
+    // DRIVER-FINANCE-1: la puerta financiera se REVISA aqui otra vez. Entre
+    // la oferta y este momento el saldo pudo cambiar, o el conductor pudo
+    // aceptar otra carrera: decidir con la foto vieja permitiria empezar un
+    // viaje cuya comision lo hundiria bajo el suelo.
+    let comisionReservada = 0;
+    if (DRIVER_FINANCE_ON) {
+      if (!canTakeNewWork(authenticatedDriver, finanzasConductor)) return reject('FINANCIAL_BALANCE_BLOCK');
+      const comision = isWalletPayment(trip.paymentMethod)
+        ? 0
+        : roundMoney(tripFareUSD(trip) * (Number.isFinite(Number(trip.commissionRate))
+          ? Number(trip.commissionRate)
+          : Number(pricingConfig.commissionRate || 0.15)));
+      if (comision > 0) {
+        if (wouldBreachFloor(authenticatedDriver, comision, finanzasConductor)) {
+          return reject('FINANCIAL_BALANCE_BLOCK');
+        }
+        // Reserva ATOMICA: la condicion y el apunte ocurren en la base, en la
+        // misma sentencia, asi que dos aceptaciones simultaneas no pueden
+        // apoyarse las dos en el mismo saldo.
+        const reservada = typeof persistence.reserveDriverCommission === 'function'
+          ? await persistence.reserveDriverCommission(driverId, comision, -DRIVER_DEBT_LIMIT_USD)
+          : true;
+        if (!reservada) return reject('FINANCIAL_BALANCE_BLOCK');
+        authenticatedDriver.committedCommission = roundMoney(committedCommissionOf(authenticatedDriver) + comision);
+        comisionReservada = comision;
+      }
+    }
+
     const reserved = await persistence.reserveTripAssignment(tripId, driverId, new Date().toISOString());
-    if (!reserved) return reject('ALREADY_ACCEPTED');
+    if (!reserved) {
+      if (comisionReservada > 0) {
+        authenticatedDriver.committedCommission = roundMoney(Math.max(0, committedCommissionOf(authenticatedDriver) - comisionReservada));
+        if (typeof persistence.releaseDriverCommission === 'function') {
+          await persistence.releaseDriverCommission(driverId, comisionReservada);
+        }
+      }
+      return reject('ALREADY_ACCEPTED');
+    }
 
     // A partir de aquí se muta estado. La transición va protegida para que un
     // evento malicioso no pueda derribar el proceso, y el cerrojo se revierte

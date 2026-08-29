@@ -11,6 +11,17 @@
  * propia idea de cuánto se cobra ni de cuándo se bloquea a alguien.
  */
 
+/**
+ * La bandera de la funcionalidad vive en el modulo PURO, no solo en el
+ * planificador. Antes solo apagaba el paso periodico: los filtros del
+ * despacho y del Transporte Seguro seguian aplicando la politica con la
+ * bandera en falso, asi que un dato viejo de saldo podia rechazar carreras
+ * de un sistema que se creia intacto. Con esto, apagada = inerte de verdad.
+ */
+export function isDriverFinanceEnabled(value = process.env.DRIVER_FINANCE_ENABLED) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase());
+}
+
 export const DRIVER_DEBT_LIMIT_USD = 5;
 export const DRIVER_MAINTENANCE_FEE_USD = 1;
 export const DRIVER_MAINTENANCE_INTERVAL_DAYS = 30;
@@ -42,7 +53,8 @@ export const balanceOf = driver => roundMoney(Number(driver?.walletBalance ?? 0)
  * ¿Está bloqueado por deuda? El límite es DURO y por igualdad: exactamente
  * −$5.00 ya bloquea (el encargo lo fija así: «at balance <= -5.00»).
  */
-export function isDebtBlocked(driver) {
+export function isDebtBlocked(driver, { enabled = isDriverFinanceEnabled() } = {}) {
+  if (!enabled) return false;
   return balanceOf(driver) <= -DRIVER_DEBT_LIMIT_USD;
 }
 
@@ -63,9 +75,12 @@ export function meetsReactivationBalance(driver) {
  * recién aprobado empieza justo ahí) y sigue siendo bloqueo para quien
  * arrastra la marca.
  */
-export function canTakeNewWork(driver) {
+export function canTakeNewWork(driver, { enabled = isDriverFinanceEnabled() } = {}) {
+  // Con la funcionalidad apagada nadie queda fuera por dinero: el sistema se
+  // comporta exactamente como antes de DRIVER-FINANCE-1.
+  if (!enabled) return true;
   if (driver?.financialBlock?.active === true) return meetsReactivationBalance(driver);
-  return !isDebtBlocked(driver);
+  return !isDebtBlocked(driver, { enabled });
 }
 
 /** Lo que le falta para volver a ser elegible: el primer céntimo por encima
@@ -82,10 +97,35 @@ export function amountToRegainEligibility(driver) {
  * la comisión de esa carrera. Si el resultado cruza el suelo, no empieza.
  * Así el sistema no fabrica deuda que él no podría haber previsto.
  */
-export function wouldBreachFloor(driver, projectedCommissionUSD) {
+export function wouldBreachFloor(driver, projectedCommissionUSD, { enabled = isDriverFinanceEnabled() } = {}) {
+  if (!enabled) return false;
   const comision = roundMoney(Math.max(0, Number(projectedCommissionUSD) || 0));
   if (comision === 0) return false;
-  return roundMoney(balanceOf(driver) - comision) < -DRIVER_DEBT_LIMIT_USD;
+  // Lo ya COMPROMETIDO cuenta: son comisiones de carreras aceptadas que aun
+  // no se han liquidado, y el suelo debe mirarlas o dos carreras simultaneas
+  // se apoyarian las dos en el mismo saldo.
+  return roundMoney(availableBalance(driver) - comision) < -DRIVER_DEBT_LIMIT_USD;
+}
+
+/** Comision de carreras ya aceptadas y todavia sin liquidar. */
+export const committedCommissionOf = driver =>
+  roundMoney(Math.max(0, Number(driver?.committedCommission ?? 0)));
+
+/** El saldo del que se puede disponer de verdad. */
+export const availableBalance = driver =>
+  roundMoney(balanceOf(driver) - committedCommissionOf(driver));
+
+/**
+ * Cuanto se puede debitar sin cruzar el suelo, y cuanto queda a deber.
+ * La liquidacion NUNCA escribe por debajo de -5: si la comision no cabe
+ * entera, se aplica hasta el suelo y el resto queda como obligacion
+ * auditable de la plataforma sobre ese conductor.
+ */
+export function commissionWithinFloor(driver, commissionUSD) {
+  const comision = roundMoney(Math.max(0, Number(commissionUSD) || 0));
+  const margen = roundMoney(balanceOf(driver) + DRIVER_DEBT_LIMIT_USD);
+  const aplicable = roundMoney(Math.max(0, Math.min(comision, margen)));
+  return { applied: aplicable, deferred: roundMoney(comision - aplicable) };
 }
 
 // ---------------------------------------------------------------------------
@@ -114,13 +154,32 @@ export const maintenanceIdempotencyKey = (driverId, period) =>
  * mismo día en que se pone en marcha la política.
  */
 export function maintenanceDue(driver, nowMs) {
+  const [primero] = maintenanceDuePeriods(driver, nowMs);
+  return primero ?? null;
+}
+
+/**
+ * TODOS los periodos vencidos y sin cobrar, del mas viejo al mas nuevo.
+ *
+ * Antes se devolvia solo el periodo actual y el contador saltaba hasta el:
+ * si el servicio pasaba 95 dias sin evaluar, dos meses de mantenimiento se
+ * perdian en silencio. Una obligacion no se olvida porque el planificador
+ * estuviera dormido.
+ */
+export function maintenanceDuePeriods(driver, nowMs) {
   const anchor = Number(driver?.maintenance?.anchorAt);
-  if (!Number.isFinite(anchor)) return null;
-  const periodo = maintenancePeriodAt(anchor, nowMs);
-  if (periodo === null || periodo < 1) return null;
+  if (!Number.isFinite(anchor)) return [];
+  const actual = maintenancePeriodAt(anchor, nowMs);
+  if (actual === null || actual < 1) return [];
   const ultimo = Number(driver?.maintenance?.lastChargedPeriod ?? 0);
-  if (Number.isFinite(ultimo) && ultimo >= periodo) return null;
-  return periodo;
+  const desde = Number.isFinite(ultimo) ? Math.max(0, ultimo) : 0;
+  if (desde >= actual) return [];
+  const pendientes = new Set((driver?.maintenance?.pendingPeriods ?? []).map(Number));
+  const periodos = [];
+  for (let periodo = desde + 1; periodo <= actual; periodo += 1) {
+    if (!pendientes.has(periodo)) periodos.push(periodo);
+  }
+  return periodos;
 }
 
 /**
@@ -159,9 +218,14 @@ export function nextMaintenanceAt(driver) {
  */
 export function inactivityAnchorOf(driver) {
   const ultimo = Number(driver?.lastQualifyingTripAt);
-  if (Number.isFinite(ultimo)) return ultimo;
   const alta = Number(driver?.activityAnchorAt);
-  return Number.isFinite(alta) ? alta : null;
+  const candidatos = [ultimo, alta].filter(Number.isFinite);
+  if (!candidatos.length) return null;
+  // El MAS RECIENTE de los dos, no el ultimo viaje a secas. Asi la gracia de
+  // estreno (y la que concede una reactivacion administrativa) manda sobre un
+  // historial viejo: nadie se suspende el dia que la politica entra en vigor
+  // por carreras que dejo de hacer cuando esta regla ni existia.
+  return Math.max(...candidatos);
 }
 
 export function inactivityDeadline(driver) {
@@ -180,7 +244,8 @@ export function daysUntilInactivitySuspension(driver, nowMs) {
  * ¿Debe suspenderse ya? A los 30 días CUMPLIDOS sin carrera completada. Una
  * cuenta ya suspendida o deshabilitada no se vuelve a suspender.
  */
-export function shouldSuspendForInactivity(driver, nowMs) {
+export function shouldSuspendForInactivity(driver, nowMs, { enabled = isDriverFinanceEnabled() } = {}) {
+  if (!enabled) return false;
   if (driver?.role !== 'driver') return false;
   if (driver.accountStatus === 'DISABLED' || driver.status === 'SUSPENDED') return false;
   const limite = inactivityDeadline(driver);
@@ -192,6 +257,24 @@ export function shouldSuspendForInactivity(driver, nowMs) {
  * ya avisado queda anotado, así que el paso diario no repite el mismo aviso
  * ni convierte la advertencia en spam.
  */
+/**
+ * Concede una ventana NUEVA de inactividad. La usan las dos rutas por las que
+ * una administracion puede reactivar a un conductor: sin esto, el paso
+ * siguiente lo volveria a suspender contra el mismo plazo ya vencido.
+ *
+ * No toca el calendario del mantenimiento (relojes independientes) ni levanta
+ * el bloqueo por deuda: quien debe sigue sin trabajar hasta quedar positivo.
+ */
+export function applyInactivityGrace(driver, atMs) {
+  if (!driver || driver.role !== 'driver' || !Number.isFinite(Number(atMs))) return false;
+  driver.activityAnchorAt = Number(atMs);
+  driver.inactivityWarnedThreshold = null;
+  if (driver.suspensionReason === DRIVER_FINANCE_REASON.DRIVER_INACTIVITY_30_DAYS) {
+    driver.suspensionReason = null;
+  }
+  return true;
+}
+
 export const INACTIVITY_WARNING_DAYS = Object.freeze([7, 3, 1]);
 
 export function pendingInactivityWarning(driver, nowMs) {
