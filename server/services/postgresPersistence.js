@@ -333,6 +333,171 @@ export async function createPostgresPersistence({ pool, database, logger = conso
     });
   }
 
+
+  // =======================================================================
+  // DRIVER-FINANCE-1 v3 · reservas de comisión CON DUEÑO: el viaje
+  // =======================================================================
+  //
+  // Una reserva sin dueño no se puede reparar. Si el proceso muere entre
+  // reservar el dinero y asignar la carrera, nadie sabe a qué viaje
+  // pertenecía ese importe comprometido y merma la capacidad del conductor
+  // para siempre. Con `trip_id` como clave primaria, cada reserva tiene
+  // nombre, ciclo de vida y quien la reconcilie.
+
+  /**
+   * Aceptación ATÓMICA: capacidad, reserva y asignación del viaje ocurren
+   * dentro de UNA transacción sobre la MISMA conexión. O se cumplen las tres
+   * condiciones o no cambia nada — no existe el estado intermedio de «dinero
+   * comprometido para una carrera que nunca se asignó».
+   */
+  function acceptTripWithReservation({ tripId, driverId, commissionUSD, floorUSD, updatedAt }) {
+    return enqueue(async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+
+        // 1) La capacidad se calcula con lo YA comprometido en reservas
+        //    vivas: dos aceptaciones simultáneas no pueden apoyarse las dos
+        //    en el mismo saldo.
+        const capacidad = await client.query(
+          `select coalesce((u.payload->>'walletBalance')::numeric, 0)
+                  - coalesce((select sum(r.reserved_usd) from public.driver_commission_reservations r
+                               where r.driver_id = u.id and r.status = 'RESERVED'), 0) as disponible
+             from public.users u where u.id = $1 for update`,
+          [driverId]
+        );
+        if (capacidad.rowCount !== 1) { await client.query('rollback'); return 'DRIVER_NOT_FOUND'; }
+        const disponible = Number(capacidad.rows[0].disponible);
+        const comision = Number(commissionUSD) || 0;
+        if (comision > 0 && Math.round((disponible - comision) * 100) / 100 < Number(floorUSD)) {
+          await client.query('rollback');
+          return 'NO_CAPACITY';
+        }
+
+        // 2) La reserva, con el viaje como dueño. La clave primaria impide
+        //    que dos intentos creen dos reservas para la misma carrera.
+        if (comision > 0) {
+          const reserva = await client.query(
+            `insert into public.driver_commission_reservations
+               (trip_id, driver_id, reserved_usd, status)
+             values ($1, $2, $3, 'RESERVED')
+             on conflict (trip_id) do nothing`,
+            [tripId, driverId, comision]
+          );
+          if (reserva.rowCount !== 1) { await client.query('rollback'); return 'ALREADY_RESERVED'; }
+        }
+
+        // 3) Y la asignación del viaje, con la MISMA condición de siempre.
+        const asignado = await client.query(
+          `update public.trips
+             set payload = jsonb_set(
+               jsonb_set(
+                 jsonb_set(payload, '{driverId}', to_jsonb($2::text), true),
+                 '{status}', to_jsonb('DRIVER_ASSIGNED'::text), true
+               ),
+               '{updatedAt}', to_jsonb($3::text), true
+             )
+           where id = $1 and status = 'SEARCHING' and driver_id is null
+           returning payload`,
+          [tripId, driverId, updatedAt]
+        );
+        if (asignado.rowCount !== 1) { await client.query('rollback'); return 'TRIP_TAKEN'; }
+
+        await client.query('commit');
+        shadow.get('trips').set(tripId, JSON.stringify(asignado.rows[0].payload));
+        return 'OK';
+      } catch (error) {
+        try { await client.query('rollback'); } catch {}
+        logger.error('[+58express Database] aceptacion atomica fallida:', error.message);
+        return 'FAILED';
+      } finally {
+        client.release();
+      }
+    });
+  }
+
+  /** La carrera se completó: la reserva pasa a liquidada, con lo aplicado y
+   *  lo que quedó a deber. Exactamente una vez (solo desde RESERVED). */
+  function settleTripReservation({ tripId, appliedUSD, deferredUSD }) {
+    return enqueue(async () => {
+      const result = await pool.query(
+        `update public.driver_commission_reservations
+            set status = 'SETTLED', applied_usd = $2, deferred_usd = $3, resolved_at = now()
+          where trip_id = $1 and status = 'RESERVED'
+          returning driver_id`,
+        [tripId, appliedUSD, deferredUSD]
+      );
+      return result.rowCount === 1;
+    });
+  }
+
+  /** La carrera murió sin completarse: el dinero vuelve a estar disponible.
+   *  Solo desde RESERVED, así que repetirlo no libera dos veces. */
+  function releaseTripReservation(tripId) {
+    return enqueue(async () => {
+      const result = await pool.query(
+        `update public.driver_commission_reservations
+            set status = 'RELEASED', resolved_at = now()
+          where trip_id = $1 and status = 'RESERVED'
+          returning driver_id`,
+        [tripId]
+      );
+      return result.rowCount === 1;
+    });
+  }
+
+  /**
+   * Reconciliador ACOTADO: repara las reservas que quedaron vivas mientras su
+   * viaje ya terminó — el caso del proceso que muere a mitad. No es un
+   * barrido de toda la tabla: solo mira reservas RESERVED cuyo viaje ya está
+   * en estado terminal, y de una en una con su propio desenlace.
+   */
+  function reconcileStaleReservations(limit = 50) {
+    return enqueue(async () => {
+      const { rows } = await pool.query(
+        `select r.trip_id, t.status as trip_status
+           from public.driver_commission_reservations r
+           left join public.trips t on t.id = r.trip_id
+          where r.status = 'RESERVED'
+            and (t.id is null or t.status in ('CANCELLED', 'COMPLETED'))
+          order by r.created_at
+          limit $1`,
+        [limit]
+      );
+      let liberadas = 0;
+      let huerfanas = 0;
+      for (const fila of rows) {
+        if (fila.trip_status === 'CANCELLED') {
+          const r = await pool.query(
+            `update public.driver_commission_reservations
+                set status = 'RELEASED', resolved_at = now()
+              where trip_id = $1 and status = 'RESERVED'`,
+            [fila.trip_id]
+          );
+          liberadas += r.rowCount;
+        } else if (fila.trip_status === null) {
+          // Viaje inexistente: no se inventa un desenlace de dinero. Se
+          // cuenta y se registra sin datos sensibles, para que alguien mire.
+          huerfanas += 1;
+        }
+        // COMPLETED sin liquidar lo resuelve la liquidación, que sabe los
+        // importes; aquí no se toca para no inventar cifras.
+      }
+      if (huerfanas) logger.warn(`[+58express Database] reservas sin viaje: ${huerfanas}`);
+      return { released: liberadas, orphans: huerfanas, seen: rows.length };
+    });
+  }
+
+  /** Lo comprometido HOY por reservas vivas, la fuente autoritativa. */
+  function readReservedCommission(driverId) {
+    return pool.query(
+      `select coalesce(sum(reserved_usd), 0) as total
+         from public.driver_commission_reservations
+        where driver_id = $1 and status = 'RESERVED'`,
+      [driverId]
+    ).then(r => Number(r.rows[0].total));
+  }
+
   return {
     kind: 'postgres',
     persist,
@@ -341,6 +506,11 @@ export async function createPostgresPersistence({ pool, database, logger = conso
     reserveDriverCommission,
     releaseDriverCommission,
     readCommittedCommission,
+    acceptTripWithReservation,
+    settleTripReservation,
+    releaseTripReservation,
+    reconcileStaleReservations,
+    readReservedCommission,
     chargeDriverMaintenance,
     flush: () => writeQueue,
     shadowSize: table => shadow.get(table)?.size ?? 0,

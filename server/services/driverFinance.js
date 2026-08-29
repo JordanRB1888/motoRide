@@ -5,6 +5,7 @@ import {
   DRIVER_MAINTENANCE_TRANSACTION_TYPE,
   INACTIVITY_LIMIT_MS,
   balanceOf,
+  financeStateDefect,
   isDebtBlocked,
   isDriverFinanceEnabled,
   maintenanceCharge,
@@ -383,6 +384,7 @@ export function createDriverFinanceService({
     inactivitySuspensions: 0,
     blocksApplied: 0,
     blocksCleared: 0,
+    malformedState: 0,
     persistFailures: 0,
     errors: 0
   });
@@ -399,6 +401,16 @@ export function createDriverFinanceService({
         // Una cuenta cerrada de verdad deja de devengar: la política es para
         // cuentas vivas, aunque estén temporalmente suspendidas.
         if (driver.accountStatus === 'DISABLED') continue;
+        // Metadatos financieros corruptos: NO se inventa una cronología nueva.
+        // Se registra el defecto (sin datos personales) y se deja a este
+        // conductor en paz: ni se le cobra, ni se le suspende, ni se le
+        // reescribe el reloj. Un dato ilegible no puede costarle dinero.
+        const defecto = financeStateDefect(driver);
+        if (defecto) {
+          resumen.malformedState += 1;
+          logger.warn(`[+58express DriverFinance] estado financiero ilegible (${defecto}): conductor omitido`);
+          continue;
+        }
         const anclado = await asegurarAnclas(driver, ahora);
         if (!anclado) { resumen.persistFailures += 1; continue; }
         if (!Number.isFinite(Number(driver.maintenance?.anchorAt))) continue;

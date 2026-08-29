@@ -13,12 +13,13 @@ import { createPostgresPersistence, createPostgresPool } from '../services/postg
  * que importan. Estas pruebas solo dicen la verdad contra un PostgreSQL de
  * verdad.
  *
- * ⚠ ESTADO: sin ejecutar todavía. Requieren `TEST_DATABASE_URL` apuntando a
- * una base NO productiva (la convención que ya usa
- * `postgresFinalValidation.test.js`). En el entorno donde se escribieron no
- * había ninguna disponible —ni servidor local, ni Docker, ni base de CI— y
- * NUNCA se usa producción para escribir. Sin esa variable se saltan, y
- * mientras se salten no puede afirmarse que las garantías estén probadas.
+ * ESTADO: se ejecutan contra la base de PRUEBAS indicada en
+ * `TEST_DATABASE_URL` (nunca producción: el destino se verifica antes). Sin
+ * esa variable se saltan, y mientras se salten no puede afirmarse que las
+ * garantías estén probadas.
+ *
+ * Nota de red: en el equipo donde se escribieron, el puerto 5432 del pooler
+ * está bloqueado y solo responde el 6543.
  */
 
 const connectionString = process.env.TEST_DATABASE_URL;
@@ -67,7 +68,22 @@ const leerComprometido = async (pool, id) => {
   return rows.length ? Number(rows[0].c) : 0;
 };
 
+
+/** Los viajes referencian a un pasajero de verdad: la base lo exige. */
+async function crearPasajero(pool, a, dbA) {
+  const id = `psg_pg_${sufijo()}`;
+  dbA.users.push({
+    id, role: 'passenger', email: `${id}@prueba.test`, phone: `+58 401${id.slice(-7)}`,
+    firstName: 'Pasajera', lastName: 'Prueba', walletBalance: 0, createdAt: new Date().toISOString()
+  });
+  await a.persistRecord('users', dbA.users.at(-1));
+  return id;
+}
+
 const limpiar = async (pool, ids) => {
+  // Las reservas referencian al conductor: se retiran primero o la clave
+  // foranea impide borrar al usuario de prueba.
+  await pool.query(`delete from public.driver_commission_reservations where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.driver_finance_state where driver_id = any($1::text[])`, [ids]);
   await pool.query(`delete from public.transactions where payload->>'userId' = any($1::text[])`, [ids]);
   await pool.query(`delete from public.users where id = any($1::text[])`, [ids]);
@@ -80,6 +96,7 @@ const limpiar = async (pool, ids) => {
 test('A · dos reservas concurrentes no gastan dos veces la misma capacidad', saltar, async () => {
   const { pool, dbA, a, b } = await dosReplicas();
   const id = `drv_pg_${sufijo()}`;
+  let pasajero = null;
   try {
     dbA.users.push(conductor(id, { walletBalance: -4.5 }));
     assert.equal(await a.persistRecord('users', dbA.users[0]), true);
@@ -92,7 +109,7 @@ test('A · dos reservas concurrentes no gastan dos veces la misma capacidad', sa
     assert.equal([uno, dos].filter(Boolean).length, 1, 'solo UNA reserva puede caber');
     assert.equal(await leerComprometido(pool, id), 0.4, 'y la base solo apuntó una');
   } finally {
-    await limpiar(pool, [id]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
     await pool.end();
   }
 });
@@ -104,6 +121,7 @@ test('A · dos reservas concurrentes no gastan dos veces la misma capacidad', sa
 test('B · el mismo periodo mensual se cobra UNA vez con dos evaluadores', saltar, async () => {
   const { pool, dbA, dbB, a, b } = await dosReplicas();
   const id = `drv_pg_${sufijo()}`;
+  let pasajero = null;
   try {
     const base = conductor(id, { walletBalance: 10, maintenance: { anchorAt: Date.now() - 31 * DIA_MS, lastChargedPeriod: 0, pendingPeriods: [] } });
     dbA.users.push(base);
@@ -126,7 +144,7 @@ test('B · el mismo periodo mensual se cobra UNA vez con dos evaluadores', salta
     const { rows } = await pool.query(`select count(*)::int as n from public.transactions where id = $1`, [`transaction_maint_${id}_1`]);
     assert.equal(rows[0].n, 1, 'un solo apunte en el libro');
   } finally {
-    await limpiar(pool, [id]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
     await pool.end();
   }
 });
@@ -138,6 +156,7 @@ test('B · el mismo periodo mensual se cobra UNA vez con dos evaluadores', salta
 test('C · un fallo dentro de la transaccion no deja ni apunte ni debito', saltar, async () => {
   const { pool, dbA, a } = await dosReplicas();
   const id = `drv_pg_${sufijo()}`;
+  let pasajero = null;
   try {
     dbA.users.push(conductor(id, { walletBalance: 10 }));
     await a.persistRecord('users', dbA.users[0]);
@@ -159,7 +178,7 @@ test('C · un fallo dentro de la transaccion no deja ni apunte ni debito', salta
     const { rows } = await pool.query(`select count(*)::int as n from public.transactions where id = $1`, [`transaction_maint_${id}_1`]);
     assert.equal(rows[0].n, 0, 'y no quedó apunte huérfano');
   } finally {
-    await limpiar(pool, [id]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
     await pool.end();
   }
 });
@@ -171,6 +190,7 @@ test('C · un fallo dentro de la transaccion no deja ni apunte ni debito', salta
 test('D · lo reservado se libera y la capacidad vuelve', saltar, async () => {
   const { pool, dbA, a } = await dosReplicas();
   const id = `drv_pg_${sufijo()}`;
+  let pasajero = null;
   try {
     dbA.users.push(conductor(id, { walletBalance: 0 }));
     await a.persistRecord('users', dbA.users[0]);
@@ -183,7 +203,7 @@ test('D · lo reservado se libera y la capacidad vuelve', saltar, async () => {
     await a.releaseDriverCommission(id, 5);
     assert.equal(await leerComprometido(pool, id), 0);
   } finally {
-    await limpiar(pool, [id]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
     await pool.end();
   }
 });
@@ -195,6 +215,7 @@ test('D · lo reservado se libera y la capacidad vuelve', saltar, async () => {
 test('H · dos replicas convergen en UN solo ancla de estreno', saltar, async () => {
   const { pool, dbA, dbB, a, b } = await dosReplicas();
   const id = `drv_pg_${sufijo()}`;
+  let pasajero = null;
   try {
     const base = conductor(id, { walletBalance: 5 });
     dbA.users.push(base);
@@ -213,7 +234,7 @@ test('H · dos replicas convergen en UN solo ancla de estreno', saltar, async ()
     assert.ok([String(ahoraA), String(ahoraB)].includes(rows[0].ancla),
       'el ancla durable es UNA de las dos, nunca una mezcla');
   } finally {
-    await limpiar(pool, [id]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
     await pool.end();
   }
 });
@@ -224,23 +245,17 @@ test('H · dos replicas convergen en UN solo ancla de estreno', saltar, async ()
 // --------------------------------------------------------------------------
 
 /**
- * ⚠ ESTA PRUEBA ESTA ESCRITA PARA FALLAR CON EL CODIGO ACTUAL.
+ * La regresion del hallazgo critico de la segunda auditoria.
  *
- * Es la demostracion ejecutable del hallazgo critico de la segunda
- * auditoria: `persistRecord` hace un UPSERT del documento COMPLETO, asi que
- * una replica con una copia vieja del conductor borra la reserva que otra
- * acababa de apuntar en la base. Arreglarlo exige mover el estado financiero
- * fuera del documento (ver la migracion propuesta en
- * `migrations/proposals/`), y eso no se implementa a ciegas: sin un
- * PostgreSQL de pruebas no habria forma de comprobar que el arreglo funciona
- * ni de que no rompe el dinero que ya circula.
- *
- * Cuando exista TEST_DATABASE_URL, esta prueba en rojo es el punto de
- * partida del arreglo; en verde, su certificado.
+ * Fallaba de verdad hasta el commit 977f262 (`actual: 0`): una replica
+ * apuntaba la reserva y otra, con una copia vieja del documento, la borraba
+ * al persistir. Desde que la reserva vive en su propia tabla, la escritura
+ * del documento no tiene forma de tocarla.
  */
 test('§28 · una escritura obsoleta del documento no puede borrar la reserva', saltar, async () => {
   const { pool, dbA, dbB, a, b } = await dosReplicas();
   const id = `drv_pg_${sufijo()}`;
+  let pasajero = null;
   try {
     const base = conductor(id, { walletBalance: 0 });
     dbA.users.push(base);
@@ -258,7 +273,185 @@ test('§28 · una escritura obsoleta del documento no puede borrar la reserva', 
     assert.equal(await leerComprometido(pool, id), 1.5,
       'la reserva sobrevive a una escritura obsoleta del documento completo');
   } finally {
-    await limpiar(pool, [id]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
+    await pool.end();
+  }
+});
+
+// --------------------------------------------------------------------------
+// §3 · dos VIAJES distintos, el mismo conductor, a la vez
+// --------------------------------------------------------------------------
+
+test('§3 · dos viajes concurrentes no pueden gastar la misma capacidad', saltar, async () => {
+  const { pool, dbA, a, b } = await dosReplicas();
+  const id = `drv_pg_${sufijo()}`;
+  const viajeA = `trip_pg_${sufijo()}`;
+  const viajeB = `trip_pg_${sufijo()}`;
+  let pasajero = null;
+  try {
+    dbA.users.push(conductor(id, { walletBalance: -4.5 }));
+    await a.persistRecord('users', dbA.users[0]);
+    pasajero = await crearPasajero(pool, a, dbA);
+    for (const t of [viajeA, viajeB]) {
+      await pool.query(`insert into public.trips (id, payload) values ($1, $2::jsonb)`,
+        [t, JSON.stringify({ id: t, status: 'SEARCHING', driverId: null, passengerId: pasajero, fareUSD: 3 })]);
+    }
+
+    // Capacidad real: -4.50 → solo cabe $0.50. Cada viaje pide $0.40.
+    const [uno, dos] = await Promise.all([
+      a.acceptTripWithReservation({ tripId: viajeA, driverId: id, commissionUSD: 0.4, floorUSD: -5, updatedAt: new Date().toISOString() }),
+      b.acceptTripWithReservation({ tripId: viajeB, driverId: id, commissionUSD: 0.4, floorUSD: -5, updatedAt: new Date().toISOString() })
+    ]);
+    const aceptados = [uno, dos].filter(r => r === 'OK');
+    assert.equal(aceptados.length, 1, 'solo UNA carrera cabe en su capacidad');
+    assert.ok([uno, dos].includes('NO_CAPACITY'), 'la otra se rechaza por capacidad');
+
+    // Y la rechazada no deja reserva viva.
+    const { rows } = await pool.query(
+      `select trip_id, status from public.driver_commission_reservations where driver_id = $1`, [id]);
+    assert.equal(rows.length, 1, 'una sola reserva, con su viaje como dueño');
+    assert.equal(rows[0].status, 'RESERVED');
+  } finally {
+    await pool.query(`delete from public.trips where id = any($1::text[])`, [[viajeA, viajeB]]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
+    await pool.end();
+  }
+});
+
+// --------------------------------------------------------------------------
+// §4 y §15 · la cancelación devuelve la capacidad, y solo una vez
+// --------------------------------------------------------------------------
+
+test('§15 · cancelar libera la reserva, y repetirlo no libera dos veces', saltar, async () => {
+  const { pool, dbA, a } = await dosReplicas();
+  const id = `drv_pg_${sufijo()}`;
+  const viaje = `trip_pg_${sufijo()}`;
+  let pasajero = null;
+  try {
+    dbA.users.push(conductor(id, { walletBalance: 0 }));
+    await a.persistRecord('users', dbA.users[0]);
+    pasajero = await crearPasajero(pool, a, dbA);
+    await pool.query(`insert into public.trips (id, payload) values ($1, $2::jsonb)`,
+      [viaje, JSON.stringify({ id: viaje, status: 'SEARCHING', driverId: null, passengerId: pasajero })]);
+
+    assert.equal(await a.acceptTripWithReservation({ tripId: viaje, driverId: id, commissionUSD: 1.2, floorUSD: -5, updatedAt: new Date().toISOString() }), 'OK');
+    assert.equal(await a.readReservedCommission(id), 1.2, 'la capacidad está comprometida');
+
+    assert.equal(await a.releaseTripReservation(viaje), true, 'se libera');
+    assert.equal(await a.readReservedCommission(id), 0, 'y la capacidad vuelve entera');
+    assert.equal(await a.releaseTripReservation(viaje), false, 'repetirlo no hace nada');
+    assert.equal(await a.readReservedCommission(id), 0);
+  } finally {
+    await pool.query(`delete from public.trips where id = $1`, [viaje]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
+    await pool.end();
+  }
+});
+
+// --------------------------------------------------------------------------
+// §16 · el reconciliador repara lo que dejó un proceso muerto
+// --------------------------------------------------------------------------
+
+test('§16 · una reserva viva con el viaje ya cancelado se repara una sola vez', saltar, async () => {
+  const { pool, dbA, a } = await dosReplicas();
+  const id = `drv_pg_${sufijo()}`;
+  const viaje = `trip_pg_${sufijo()}`;
+  let pasajero = null;
+  try {
+    dbA.users.push(conductor(id, { walletBalance: 0 }));
+    await a.persistRecord('users', dbA.users[0]);
+    pasajero = await crearPasajero(pool, a, dbA);
+    await pool.query(`insert into public.trips (id, payload) values ($1, $2::jsonb)`,
+      [viaje, JSON.stringify({ id: viaje, status: 'SEARCHING', driverId: null, passengerId: pasajero })]);
+    await a.acceptTripWithReservation({ tripId: viaje, driverId: id, commissionUSD: 0.9, floorUSD: -5, updatedAt: new Date().toISOString() });
+
+    // El proceso muere: el viaje se cancela pero la reserva queda viva.
+    await pool.query(
+      `update public.trips set payload = jsonb_set(payload, '{status}', to_jsonb('CANCELLED'::text), true) where id = $1`,
+      [viaje]);
+    assert.equal(await a.readReservedCommission(id), 0.9, 'la reserva quedó huérfana');
+
+    const primera = await a.reconcileStaleReservations();
+    assert.equal(primera.released, 1, 'el reconciliador la libera');
+    assert.equal(await a.readReservedCommission(id), 0, 'y la capacidad vuelve');
+
+    const segunda = await a.reconcileStaleReservations();
+    assert.equal(segunda.released, 0, 'y no la libera dos veces');
+  } finally {
+    await pool.query(`delete from public.trips where id = $1`, [viaje]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
+    await pool.end();
+  }
+});
+
+// --------------------------------------------------------------------------
+// §17 · la liquidación cierra la reserva con lo aplicado y lo diferido
+// --------------------------------------------------------------------------
+
+test('§17 · al completar, la reserva guarda lo aplicado y lo que quedo a deber', saltar, async () => {
+  const { pool, dbA, a } = await dosReplicas();
+  const id = `drv_pg_${sufijo()}`;
+  const viaje = `trip_pg_${sufijo()}`;
+  let pasajero = null;
+  try {
+    dbA.users.push(conductor(id, { walletBalance: -4.8 }));
+    await a.persistRecord('users', dbA.users[0]);
+    pasajero = await crearPasajero(pool, a, dbA);
+    await pool.query(`insert into public.trips (id, payload) values ($1, $2::jsonb)`,
+      [viaje, JSON.stringify({ id: viaje, status: 'SEARCHING', driverId: null, passengerId: pasajero })]);
+    // -4.80 con comisión de 1.00: solo caben 0.20 antes del suelo.
+    assert.equal(await a.acceptTripWithReservation({ tripId: viaje, driverId: id, commissionUSD: 0.2, floorUSD: -5, updatedAt: new Date().toISOString() }), 'OK');
+
+    assert.equal(await a.settleTripReservation({ tripId: viaje, appliedUSD: 0.2, deferredUSD: 0.8 }), true);
+    const { rows } = await pool.query(
+      `select status, applied_usd, deferred_usd from public.driver_commission_reservations where trip_id = $1`, [viaje]);
+    assert.equal(rows[0].status, 'SETTLED');
+    assert.equal(Number(rows[0].applied_usd), 0.2, 'lo aplicado');
+    assert.equal(Number(rows[0].deferred_usd), 0.8, 'y la deuda, CON DUEÑO: este viaje');
+    assert.equal(await a.readReservedCommission(id), 0, 'ya no ocupa capacidad');
+    // Liquidar dos veces no altera nada.
+    assert.equal(await a.settleTripReservation({ tripId: viaje, appliedUSD: 99, deferredUSD: 99 }), false);
+  } finally {
+    await pool.query(`delete from public.trips where id = $1`, [viaje]);
+    await limpiar(pool, [id, pasajero].filter(Boolean));
+    await pool.end();
+  }
+});
+
+// --------------------------------------------------------------------------
+// §18 · el resultado del mes no lo puede revertir una escritura obsoleta
+// --------------------------------------------------------------------------
+
+test('§18 · una escritura obsoleta no revierte el cobro mensual ya hecho', saltar, async () => {
+  const { pool, dbA, dbB, a, b } = await dosReplicas();
+  const id = `drv_pg_${sufijo()}`;
+  let pasajero = null;
+  try {
+    const base = conductor(id, { walletBalance: 10, maintenance: { anchorAt: Date.now() - 31 * DIA_MS, lastChargedPeriod: 0, pendingPeriods: [] } });
+    dbA.users.push(base);
+    await a.persistRecord('users', base);
+    dbB.users.push({ ...base });   // la copia vieja de la otra réplica
+
+    const cobrado = await a.chargeDriverMaintenance({
+      transaction: {
+        id: `transaction_maint_${id}_1`, userId: id, type: 'DRIVER_ACCOUNT_MAINTENANCE',
+        maintenancePeriod: 1, amount: -1, currency: 'USD', status: 'APPROVED',
+        createdAt: new Date().toISOString()
+      },
+      driver: { ...base, walletBalance: 9, maintenance: { ...base.maintenance, lastChargedPeriod: 1 } }
+    });
+    assert.equal(cobrado, 'CHARGED');
+    assert.equal(await leerSaldo(pool, id), 9);
+
+    // La réplica perdedora persiste su documento viejo.
+    await b.persistRecord('users', dbB.users[0]);
+
+    // El apunte del libro es único e imborrable por esa vía.
+    const { rows } = await pool.query(
+      `select count(*)::int as n from public.transactions where id = $1`, [`transaction_maint_${id}_1`]);
+    assert.equal(rows[0].n, 1, 'un solo apunte, y sigue ahí');
+  } finally {
+    await limpiar(pool, [id, pasajero].filter(Boolean));
     await pool.end();
   }
 });

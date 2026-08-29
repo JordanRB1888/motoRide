@@ -560,6 +560,18 @@ function settleDriverForCompletedTrip(trip) {
     driver.deferredCommissionUSD = roundMoney(Number(driver.deferredCommissionUSD || 0) + comisionDiferida);
     trip.deferredCommissionUSD = comisionDiferida;
   }
+  // La reserva de ESTE viaje se cierra con lo aplicado y lo que quedó a
+  // deber: pasa de viva a liquidada, y su importe deja de ocupar capacidad.
+  // El apunte durable conserva el viaje, lo aplicado y el resto pendiente,
+  // así que la deuda tiene dueño y no vive solo en un número acumulado.
+  if (DRIVER_FINANCE_ON && !platformCollectedPayment
+    && typeof persistence.settleTripReservation === 'function') {
+    persistence.settleTripReservation({
+      tripId: trip.id,
+      appliedUSD: roundMoney(-amount),
+      deferredUSD: comisionDiferida
+    }).catch(error => console.error(`[+58express DriverFinance] reserva no liquidada: ${error?.name || 'UNKNOWN'}`));
+  }
   // La comision de esta carrera deja de estar «comprometida»: ya se liquido.
   if (DRIVER_FINANCE_ON && Number(driver.committedCommission || 0) > 0) {
     driver.committedCommission = roundMoney(Math.max(0, committedCommissionOf(driver) - commission));
@@ -614,6 +626,20 @@ function settleDriverForCompletedTrip(trip) {
  * Devuelve el saldo resultante. Con la funcionalidad apagada acredita tal
  * cual, como siempre.
  */
+/**
+ * DRIVER-FINANCE-1 v3: el dinero comprometido de una carrera vuelve a estar
+ * disponible en cuanto la carrera muere sin completarse. Solo actúa sobre
+ * reservas vivas, así que repetirlo no libera dos veces.
+ */
+async function liberarReservaDeViaje(tripId) {
+  if (!DRIVER_FINANCE_ON || typeof persistence.releaseTripReservation !== 'function') return false;
+  try { return await persistence.releaseTripReservation(tripId); }
+  catch (error) {
+    console.error(`[+58express DriverFinance] no se pudo liberar la reserva: ${error?.message ?? '?'}`);
+    return false;
+  }
+}
+
 function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
   const credito = roundMoney(Number(amount) || 0);
   if (!DRIVER_FINANCE_ON || owner?.role !== 'driver') {
@@ -1930,6 +1956,7 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores
   }
   try {
     transitionTrip(trip, req.body.status, { actorId: req.user.id, actorRole: 'admin' });
+    if (req.body.status === 'CANCELLED') await liberarReservaDeViaje(trip.id);
   } catch (error) {
     return res.status(409).json({ error: error.code });
   }
@@ -2290,6 +2317,8 @@ function dispatchTripToDrivers(trip) {
     const candidate = session.candidates[session.index];
     if (!candidate) {
       transitionTrip(trip, TRIP_STATUS.CANCELLED, { actorRole: 'system', reason: 'NO_DRIVERS_AVAILABLE' });
+      // Nunca hubo conductor, pero si algo quedó reservado se suelta igual.
+      liberarReservaDeViaje(trip.id).catch(() => {});
       if (!await persistDatabase()) {
         console.error(`[+58express Database] No se pudo persistir la cancelación automática de ${trip.id}`);
         return;
@@ -2568,44 +2597,38 @@ io.on('connection', (socket) => {
     // PostgreSQL es el árbitro final entre procesos/instancias. El UPDATE
     // condicional solo reserva el viaje si todavía sigue SEARCHING y sin
     // conductor; el cerrojo en memoria por sí solo no cubre otra instancia.
-    // DRIVER-FINANCE-1: la puerta financiera se REVISA aqui otra vez. Entre
-    // la oferta y este momento el saldo pudo cambiar, o el conductor pudo
-    // aceptar otra carrera: decidir con la foto vieja permitiria empezar un
-    // viaje cuya comision lo hundiria bajo el suelo.
-    let comisionReservada = 0;
-    if (DRIVER_FINANCE_ON) {
-      if (!canTakeNewWork(authenticatedDriver, finanzasConductor)) return reject('FINANCIAL_BALANCE_BLOCK');
-      const comision = isWalletPayment(trip.paymentMethod)
-        ? 0
-        : roundMoney(tripFareUSD(trip) * (Number.isFinite(Number(trip.commissionRate))
-          ? Number(trip.commissionRate)
-          : Number(pricingConfig.commissionRate || 0.15)));
-      if (comision > 0) {
-        if (wouldBreachFloor(authenticatedDriver, comision, finanzasConductor)) {
-          return reject('FINANCIAL_BALANCE_BLOCK');
-        }
-        // Reserva ATOMICA: la condicion y el apunte ocurren en la base, en la
-        // misma sentencia, asi que dos aceptaciones simultaneas no pueden
-        // apoyarse las dos en el mismo saldo.
-        const reservada = typeof persistence.reserveDriverCommission === 'function'
-          ? await persistence.reserveDriverCommission(driverId, comision, -DRIVER_DEBT_LIMIT_USD)
-          : true;
-        if (!reservada) return reject('FINANCIAL_BALANCE_BLOCK');
-        authenticatedDriver.committedCommission = roundMoney(committedCommissionOf(authenticatedDriver) + comision);
-        comisionReservada = comision;
-      }
+    // DRIVER-FINANCE-1 v3: capacidad, reserva y asignacion en UNA sola
+    // transaccion. Antes eran dos operaciones sueltas y entre ellas cabia un
+    // estado imposible de reparar: dinero comprometido para una carrera que
+    // nunca llego a asignarse, sin dueno que lo liberara. Ahora la reserva
+    // lleva el VIAJE como clave: o entran las tres cosas o no entra ninguna.
+    const comisionDeEsteViaje = (DRIVER_FINANCE_ON && !isWalletPayment(trip.paymentMethod))
+      ? roundMoney(tripFareUSD(trip) * (Number.isFinite(Number(trip.commissionRate))
+        ? Number(trip.commissionRate)
+        : Number(pricingConfig.commissionRate || 0.15)))
+      : 0;
+
+    if (DRIVER_FINANCE_ON && !canTakeNewWork(authenticatedDriver, finanzasConductor)) {
+      return reject('FINANCIAL_BALANCE_BLOCK');
     }
 
-    const reserved = await persistence.reserveTripAssignment(tripId, driverId, new Date().toISOString());
-    if (!reserved) {
-      if (comisionReservada > 0) {
-        authenticatedDriver.committedCommission = roundMoney(Math.max(0, committedCommissionOf(authenticatedDriver) - comisionReservada));
-        if (typeof persistence.releaseDriverCommission === 'function') {
-          await persistence.releaseDriverCommission(driverId, comisionReservada);
-        }
-      }
-      return reject('ALREADY_ACCEPTED');
+    const instanteAsignacion = new Date().toISOString();
+    let reserved;
+    if (typeof persistence.acceptTripWithReservation === 'function') {
+      const desenlace = await persistence.acceptTripWithReservation({
+        tripId,
+        driverId,
+        commissionUSD: comisionDeEsteViaje,
+        floorUSD: -DRIVER_DEBT_LIMIT_USD,
+        updatedAt: instanteAsignacion
+      });
+      if (desenlace === 'NO_CAPACITY') return reject('FINANCIAL_BALANCE_BLOCK');
+      reserved = desenlace === 'OK';
+    } else {
+      // Sin la operacion atomica (desarrollo/pruebas): el camino de siempre.
+      reserved = await persistence.reserveTripAssignment(tripId, driverId, instanteAsignacion);
     }
+    if (!reserved) return reject('ALREADY_ACCEPTED');
 
     // A partir de aquí se muta estado. La transición va protegida para que un
     // evento malicioso no pueda derribar el proceso, y el cerrojo se revierte
@@ -2615,6 +2638,8 @@ io.on('connection', (socket) => {
       transitionTrip(trip, TRIP_STATUS.DRIVER_ASSIGNED, { actorId: driverId, actorRole: 'driver' });
     } catch (error) {
       tripLocks.delete(tripId);
+      // La reserva no puede quedar viva si la carrera no llegó a arrancar.
+      await liberarReservaDeViaje(tripId);
       return reject(error.code || 'INVALID_TRIP_TRANSITION');
     }
 
@@ -2738,6 +2763,10 @@ io.on('connection', (socket) => {
       socket.emit('rideCancellationRejected', { tripId, error: 'DATABASE_WRITE_FAILED' });
       return;
     }
+    // La carrera no se hará: el dinero que tenía comprometido vuelve a estar
+    // disponible. Sin esto, una cancelación le mermaba la capacidad al
+    // conductor para siempre.
+    await liberarReservaDeViaje(tripId);
 
     console.log(`[+58express Socket.IO] Ride [${tripId}] cancelled by passenger`);
     let audience = io.to(`user:${passengerId}`).to('admins');

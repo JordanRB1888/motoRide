@@ -343,6 +343,41 @@ export function shouldSuspendForInactivity(driver, nowMs, { enabled = isDriverFi
  * No toca el calendario del mantenimiento (relojes independientes) ni levanta
  * el bloqueo por deuda: quien debe sigue sin trabajar hasta quedar positivo.
  */
+/**
+ * ¿Los metadatos financieros de este conductor son creíbles?
+ *
+ * Un ancla corrupta no se arregla inventando un «ahora»: eso reescribiría en
+ * silencio la cronología de su cuenta y podría cobrarle o suspenderlo contra
+ * una fecha falsa. Ante datos que no se entienden, el evaluador se aparta de
+ * ese conductor y lo deja registrado.
+ */
+export function financeStateDefect(driver) {
+  const m = driver?.maintenance;
+  if (m !== undefined && m !== null) {
+    if (typeof m !== 'object' || Array.isArray(m)) return 'MAINTENANCE_NOT_OBJECT';
+    if (m.anchorAt !== undefined && m.anchorAt !== null && !Number.isFinite(Number(m.anchorAt))) {
+      return 'MAINTENANCE_ANCHOR_NOT_A_DATE';
+    }
+    if (Number.isFinite(Number(m.anchorAt)) && Number(m.anchorAt) <= 0) return 'MAINTENANCE_ANCHOR_OUT_OF_RANGE';
+    if (m.lastChargedPeriod !== undefined && m.lastChargedPeriod !== null
+      && (!Number.isInteger(Number(m.lastChargedPeriod)) || Number(m.lastChargedPeriod) < 0)) {
+      return 'MAINTENANCE_PERIOD_INVALID';
+    }
+    if (m.pendingPeriods !== undefined && m.pendingPeriods !== null && !Array.isArray(m.pendingPeriods)) {
+      return 'MAINTENANCE_PENDING_NOT_LIST';
+    }
+  }
+  const actividad = driver?.activityAnchorAt;
+  if (actividad !== undefined && actividad !== null && !Number.isFinite(Number(actividad))) {
+    return 'ACTIVITY_ANCHOR_NOT_A_DATE';
+  }
+  const ultimo = driver?.lastQualifyingTripAt;
+  if (ultimo !== undefined && ultimo !== null && !Number.isFinite(Number(ultimo))) {
+    return 'LAST_TRIP_NOT_A_DATE';
+  }
+  return null;
+}
+
 export function applyInactivityGrace(driver, atMs) {
   if (!driver || driver.role !== 'driver' || !Number.isFinite(Number(atMs))) return false;
   driver.activityAnchorAt = Number(atMs);
