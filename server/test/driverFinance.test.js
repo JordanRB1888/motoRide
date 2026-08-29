@@ -46,7 +46,9 @@ function crearEntorno({ drivers = [conductor()], nowMs = HOY } = {}) {
   const servicio = createDriverFinanceService({
     database,
     persistRecord: async () => true,
-    notify: async (userId, event, title, message) => { avisos.push({ userId, event, title, message }); },
+    // v4: el adaptador CONFIRMA la entrega. Solo `true` cuenta como
+    // entregado; cualquier otra cosa es un aviso que hay que reintentar.
+    notify: async (userId, event, title, message) => { avisos.push({ userId, event, title, message }); return true; },
     enabled: true,
     now: () => reloj.ms,
     logger: silencioso

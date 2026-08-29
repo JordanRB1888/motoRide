@@ -164,7 +164,9 @@ export function createTripOfflineEventsRouter({
       }
 
       // LA MISMA transicion de negocio del camino en linea.
-      const resultado = applyTransition(trip, evento.action, req.user.id);
+      // La transicion escribe dinero en la base desde DRIVER-FINANCE-1 v4:
+      // se espera, igual que en el camino en linea.
+      const resultado = await applyTransition(trip, evento.action, req.user.id);
       if (!resultado.ok) {
         resultados.push({
           ...base,

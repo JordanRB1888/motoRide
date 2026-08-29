@@ -41,7 +41,7 @@ function crearEntorno({ drivers = [conductor()], nowMs = HOY, enabled = true, pe
     database,
     persistRecord: async () => persistOk,
     persistence,
-    notify: async (userId, event, title, message) => { avisos.push({ userId, event, title, message }); },
+    notify: async (userId, event, title, message) => { avisos.push({ userId, event, title, message }); return true; },
     enabled,
     now: () => reloj.ms,
     logger: silencioso
@@ -49,20 +49,30 @@ function crearEntorno({ drivers = [conductor()], nowMs = HOY, enabled = true, pe
   return { database, servicio, reloj, avisos };
 }
 
-/** Persistencia de mentira con la MISMA garantía que la real: la clave
- *  primaria decide, y el apunte y el saldo entran juntos o no entran. */
-function persistenciaAtomica(database, { fallarEn = null } = {}) {
-  const escritas = new Set();
-  return {
-    intentos: 0,
-    async chargeDriverMaintenance({ transaction, driver }) {
-      this.intentos += 1;
-      if (fallarEn === this.intentos) return 'FAILED';
-      if (escritas.has(transaction.id)) return 'ALREADY_CHARGED';
-      escritas.add(transaction.id);
-      return 'CHARGED';
-    }
-  };
+/**
+ * v4: sin PostgreSQL detrás no hay libro contable, y el árbitro de
+ * exactamente-una-vez es el propio proceso. Estas pruebas cubren ESE camino;
+ * el de las réplicas se prueba contra PostgreSQL real en
+ * `driverFinancePostgres.test.js`, que es el único sitio donde puede probarse.
+ */
+function entornoConEscrituraQueFalla({ drivers, nowMs = HOY, fallarEn = 1 } = {}) {
+  const database = { users: [...drivers], transactions: [], notifications: [] };
+  const reloj = { ms: nowMs };
+  const avisos = [];
+  let intentos = 0;
+  const servicio = createDriverFinanceService({
+    database,
+    persistRecord: async (coleccion) => {
+      if (coleccion !== 'transactions') return true;
+      intentos += 1;
+      return intentos !== fallarEn;
+    },
+    notify: async (userId, event) => { avisos.push({ userId, event }); return true; },
+    enabled: true,
+    now: () => reloj.ms,
+    logger: silencioso
+  });
+  return { database, servicio, reloj, avisos };
 }
 
 // --------------------------------------------------------------------------
@@ -100,20 +110,9 @@ test('CRITICO-1 · lo ya COMPROMETIDO cuenta para el suelo', () => {
 // CRÍTICO 2 · el cobro mensual, exactamente una vez de verdad
 // --------------------------------------------------------------------------
 
-/** Entorno con la persistencia atómica de mentira ya enchufada. */
-function entornoAtomico({ drivers, nowMs = HOY, fallarEn = null } = {}) {
-  const entorno = crearEntorno({ drivers, nowMs });
-  entorno.atomica = persistenciaAtomica(entorno.database, { fallarEn });
-  const servicio = createDriverFinanceService({
-    database: entorno.database,
-    persistRecord: async () => true,
-    persistence: entorno.atomica,
-    notify: async (userId, event, title, message) => { entorno.avisos.push({ userId, event, title, message }); },
-    enabled: true,
-    now: () => entorno.reloj.ms,
-    logger: silencioso
-  });
-  return { ...entorno, servicio };
+/** Entorno normal, con escrituras que siempre salen bien. */
+function entornoAtomico({ drivers, nowMs = HOY } = {}) {
+  return crearEntorno({ drivers, nowMs });
 }
 
 test('CRITICO-2 · dos evaluadores CONCURRENTES cobran el mes una sola vez', async () => {
@@ -135,7 +134,7 @@ test('CRITICO-2 · dos evaluadores CONCURRENTES cobran el mes una sola vez', asy
 });
 
 test('CRITICO-2 · si la escritura falla, ni se cobra ni se apunta ni se avanza', async () => {
-  const entorno = entornoAtomico({ drivers: [conductor({ walletBalance: 10 })], fallarEn: 1 });
+  const entorno = entornoConEscrituraQueFalla({ drivers: [conductor({ walletBalance: 10 })], fallarEn: 1 });
   await entorno.servicio.runDriverFinancePass();
   entorno.reloj.ms = HOY + 30 * DIA;
 
@@ -312,6 +311,7 @@ test('MEDIO-2 · un aviso que no se entrega se reintenta, no se pierde', async (
     notify: async (userId, event) => {
       if (event === 'driver_inactivity_warning' && falla) throw new Error('proveedor caido');
       entregados.push(event);
+      return true;
     },
     enabled: true, now: () => reloj.ms, logger: silencioso
   });
@@ -327,4 +327,47 @@ test('MEDIO-2 · un aviso que no se entrega se reintenta, no se pierde', async (
 
   await servicio.runDriverFinancePass();
   assert.equal(entregados.length, 1, 'y no se repite');
+});
+
+
+// --------------------------------------------------------------------------
+// v4 · el aviso que «terminó bien» sin haber llegado
+// --------------------------------------------------------------------------
+
+test('v4 · un adaptador que falla EN SILENCIO no marca el aviso como dado', async () => {
+  // El hallazgo: el adaptador escribía la notificación y, si esa escritura
+  // fallaba, volvía sin lanzar. El servicio lo tomaba por entregado, marcaba
+  // el umbral y no reintentaba jamás. Un recordatorio perdido para siempre,
+  // sin ni un error en el registro.
+  const driver = conductor({
+    lastQualifyingTripAt: HOY - 23 * DIA,
+    activityAnchorAt: HOY - 40 * DIA,
+    maintenance: { anchorAt: HOY - 5 * DIA, lastChargedPeriod: 0, pendingPeriods: [] }
+  });
+  const database = { users: [driver], transactions: [], notifications: [] };
+  const reloj = { ms: HOY };
+  let confirma = false;
+  let intentos = 0;
+  const servicio = createDriverFinanceService({
+    database,
+    persistRecord: async () => true,
+    // Ni lanza ni confirma: exactamente el adaptador que encontró la auditoría.
+    notify: async (userId, event) => {
+      if (event !== 'driver_inactivity_warning') return true;
+      intentos += 1;
+      return confirma ? true : undefined;
+    },
+    enabled: true, now: () => reloj.ms, logger: silencioso
+  });
+
+  const primera = await servicio.runDriverFinancePass();
+  assert.equal(intentos, 1, 'se intentó');
+  assert.equal(primera.inactivityWarnings, 0, 'pero NO cuenta como entregado');
+  assert.ok(!driver.inactivityWarnedThreshold, 'y el umbral no queda marcado');
+
+  confirma = true;
+  const segunda = await servicio.runDriverFinancePass();
+  assert.equal(intentos, 2, 'se reintenta');
+  assert.equal(segunda.inactivityWarnings, 1, 'y ahora sí cuenta');
+  assert.equal(driver.inactivityWarnedThreshold, 7);
 });

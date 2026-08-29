@@ -523,7 +523,25 @@ function debitPassengerWalletForCompletedTrip(trip) {
   return transaction;
 }
 
-function settleDriverForCompletedTrip(trip) {
+/**
+ * DRIVER-FINANCE-1 v4 — la liquidación del conductor, con la base de datos
+ * como autoridad.
+ *
+ * Dos caminos, una sola puerta de dinero:
+ *
+ *  · efectivo — el conductor cobró en mano y la plataforma le descuenta su
+ *    comisión del saldo operativo. El suelo de −$5 es DURO: lo que no cabe
+ *    queda anotado como deuda CON DUEÑO (la fila de esta carrera), nunca
+ *    perdonado y nunca hundiéndolo más.
+ *  · billetera — la plataforma cobró y le acredita su parte. Ese ingreso
+ *    entra por la MISMA cobranza que una recarga: primero salda lo que debe,
+ *    y solo lo que sobra queda como saldo libre.
+ *
+ * Con el libro contable presente, todo eso ocurre dentro de UNA transacción
+ * que además es el testigo de exactamente-una-vez. Sin él —proceso único—, se
+ * conserva el camino de siempre.
+ */
+async function settleDriverForCompletedTrip(trip) {
   if (!trip || trip.status !== TRIP_STATUS.COMPLETED) return null;
   const existing = database.transactions.find(item => ['DRIVER_EARNING', 'PLATFORM_COMMISSION'].includes(item.type) && item.tripId === trip.id);
   if (existing) return existing;
@@ -539,81 +557,147 @@ function settleDriverForCompletedTrip(trip) {
   const commission = roundMoney(gross * tasaComision);
   const net = Math.max(0, roundMoney(gross - commission));
   const platformCollectedPayment = isWalletPayment(trip.paymentMethod);
-  // DRIVER-FINANCE-1: el suelo de deuda es DURO tambien aqui. En efectivo el
-  // conductor cobro en mano y la plataforma le descuenta su comision del
-  // saldo operativo; ese descuento no puede empujarlo por debajo de -$5. Si
-  // no cabe entero se aplica hasta el suelo y el resto queda anotado como
-  // obligacion suya con la plataforma: ni se le perdona ni se le hunde.
-  let comisionDiferida = 0;
-  let amount;
-  if (platformCollectedPayment) {
-    amount = net;
-  } else if (DRIVER_FINANCE_ON) {
-    const { applied, deferred } = commissionWithinFloor(driver, commission);
-    amount = -applied;
-    comisionDiferida = deferred;
-  } else {
-    amount = -commission;
-  }
-  driver.walletBalance = roundMoney(Number(driver.walletBalance || 0) + amount);
-  if (comisionDiferida > 0) {
-    driver.deferredCommissionUSD = roundMoney(Number(driver.deferredCommissionUSD || 0) + comisionDiferida);
-    trip.deferredCommissionUSD = comisionDiferida;
-  }
-  // La reserva de ESTE viaje se cierra con lo aplicado y lo que quedó a
-  // deber: pasa de viva a liquidada, y su importe deja de ocupar capacidad.
-  // El apunte durable conserva el viaje, lo aplicado y el resto pendiente,
-  // así que la deuda tiene dueño y no vive solo en un número acumulado.
-  if (DRIVER_FINANCE_ON && !platformCollectedPayment
-    && typeof persistence.settleTripReservation === 'function') {
-    persistence.settleTripReservation({
-      tripId: trip.id,
-      appliedUSD: roundMoney(-amount),
-      deferredUSD: comisionDiferida
-    }).catch(error => console.error(`[+58express DriverFinance] reserva no liquidada: ${error?.name || 'UNKNOWN'}`));
-  }
-  // La comision de esta carrera deja de estar «comprometida»: ya se liquido.
-  if (DRIVER_FINANCE_ON && Number(driver.committedCommission || 0) > 0) {
-    driver.committedCommission = roundMoney(Math.max(0, committedCommissionOf(driver) - commission));
-  }
+
   trip.driverEarningUSD = net;
   trip.platformCommissionUSD = commission;
   trip.driverSettlementType = platformCollectedPayment ? 'WALLET_CREDIT' : 'COMMISSION_DEBIT';
-  const transaction = {
+
+  const instante = new Date().toISOString();
+  const construirApunte = ({ applied, deferred, balanceAfter }) => ({
     id: `transaction_${crypto.randomUUID()}`,
     userId: driver.id,
     tripId: trip.id,
     type: platformCollectedPayment ? 'DRIVER_EARNING' : 'PLATFORM_COMMISSION',
-    amount,
+    amount: platformCollectedPayment ? net : -applied,
     gross,
     commission,
-    commissionApplied: platformCollectedPayment ? commission : roundMoney(-amount),
-    commissionDeferred: comisionDiferida,
+    commissionApplied: platformCollectedPayment ? commission : applied,
+    commissionDeferred: deferred,
     net,
     paymentMethod: trip.paymentMethod || 'efectivo',
     currency: 'USD',
     status: 'APPROVED',
-    balanceAfter: driver.walletBalance,
-    createdAt: new Date().toISOString()
-  };
-  database.transactions.push(transaction);
+    balanceAfter,
+    createdAt: instante
+  });
+
+  let transaction = null;
+  let comisionDiferida = 0;
+
+  const libro = DRIVER_FINANCE_ON && persistence.financeReady === true;
+  if (libro) {
+    // El conductor necesita su fila antes de mover dinero: sembrarla es
+    // idempotente y no cambia ni un céntimo.
+    await driverFinance.ensureState(driver);
+    const resultado = await persistence.settleTripForDriver({
+      tripId: trip.id,
+      driverId: driver.id,
+      commissionUSD: platformCollectedPayment ? 0 : commission,
+      creditUSD: platformCollectedPayment ? net : 0,
+      builders: {
+        settlement: construirApunte,
+        maintenance: ({ period, balanceAfter }) => construirApunteMantenimiento(driver, period, balanceAfter, instante),
+        deferred: ({ paid, balanceAfter }) => construirApunteDeuda(driver, paid, balanceAfter, trip.id, instante)
+      }
+    });
+    if (resultado.outcome === 'ALREADY_SETTLED') {
+      // No es un error: otra replica ya liquido esta carrera. Se deja
+      // constancia para que el desenlace nunca sea silencioso.
+      console.log(`[+58express DriverFinance] liquidacion ya hecha por otro: ${trip.id}`);
+      return null;
+    }
+    if (resultado.outcome !== 'SETTLED') {
+      console.error(`[+58express DriverFinance] liquidación no durable para un viaje (${resultado.outcome})`);
+      return null;
+    }
+    comisionDiferida = resultado.deferred;
+    transaction = resultado.transaction;
+    for (const apunte of resultado.transactions) {
+      if (!database.transactions.some(t => t.id === apunte.id)) database.transactions.push(apunte);
+    }
+    driverFinance.applySnapshot(driver, await persistence.readDriverFinance(driver.id));
+  } else {
+    // Proceso único: el documento es la autoridad, como siempre.
+    let amount;
+    if (platformCollectedPayment) {
+      amount = net;
+    } else if (DRIVER_FINANCE_ON) {
+      const reparto = commissionWithinFloor(driver, commission);
+      amount = -reparto.applied;
+      comisionDiferida = reparto.deferred;
+    } else {
+      amount = -commission;
+    }
+    driver.walletBalance = roundMoney(Number(driver.walletBalance || 0) + amount);
+    if (comisionDiferida > 0) {
+      driver.deferredCommissionUSD = roundMoney(Number(driver.deferredCommissionUSD || 0) + comisionDiferida);
+    }
+    if (DRIVER_FINANCE_ON && Number(driver.committedCommission || 0) > 0) {
+      driver.committedCommission = roundMoney(Math.max(0, committedCommissionOf(driver) - commission));
+    }
+    transaction = construirApunte({
+      applied: platformCollectedPayment ? commission : roundMoney(-amount),
+      deferred: comisionDiferida,
+      balanceAfter: driver.walletBalance
+    });
+  }
+
+  if (comisionDiferida > 0) trip.deferredCommissionUSD = comisionDiferida;
+  if (!transaction) return null;
+  if (!database.transactions.some(t => t.id === transaction.id)) database.transactions.push(transaction);
+
+  const aplicadaAhora = platformCollectedPayment ? commission : roundMoney(-transaction.amount);
   database.notifications.push({
     id: `notification_${crypto.randomUUID()}`,
     userId: driver.id,
     title: platformCollectedPayment ? 'Ganancia acreditada' : 'Comisión de viaje registrada',
     message: platformCollectedPayment
-      ? `Se acreditaron $${net.toFixed(2)} por el viaje. Saldo: $${driver.walletBalance.toFixed(2)}.`
+      ? `Se acreditaron $${net.toFixed(2)} por el viaje. Saldo: $${roundMoney(driver.walletBalance || 0).toFixed(2)}.`
       // DRIVER-FINANCE-1 v3: si parte de la comisión no cupo bajo el límite
       // de deuda, se dice tal cual. Antes el mensaje afirmaba que se había
       // descontado entera y no era verdad.
       : comisionDiferida > 0
-        ? `Recibiste el pago directamente. Se descontó $${roundMoney(-amount).toFixed(2)} de la comisión de +58Express y quedan $${comisionDiferida.toFixed(2)} pendientes por tu límite de saldo. Saldo operativo: $${driver.walletBalance.toFixed(2)}.`
-        : `Recibiste el pago directamente. Se descontó la comisión de +58Express por $${commission.toFixed(2)}. Saldo operativo: $${driver.walletBalance.toFixed(2)}.`,
+        ? `Recibiste el pago directamente. Se descontó $${aplicadaAhora.toFixed(2)} de la comisión de +58Express y quedan $${comisionDiferida.toFixed(2)} pendientes por tu límite de saldo. Saldo operativo: $${roundMoney(driver.walletBalance || 0).toFixed(2)}.`
+        : `Recibiste el pago directamente. Se descontó la comisión de +58Express por $${commission.toFixed(2)}. Saldo operativo: $${roundMoney(driver.walletBalance || 0).toFixed(2)}.`,
     category: 'FINANCE',
     read: false,
     createdAt: transaction.createdAt
   });
   return transaction;
+}
+
+/** Apunte del mantenimiento saldado con un ingreso. Identificador
+ *  DETERMINISTA: la clave primaria impide cobrar dos veces el mismo mes. */
+function construirApunteMantenimiento(driver, periodo, saldoDespues, instante) {
+  return {
+    id: `transaction_maint_${driver.id}_${periodo}`,
+    userId: driver.id,
+    type: DRIVER_MAINTENANCE_TRANSACTION_TYPE,
+    idempotencyKey: `driver-maintenance:${driver.id}:${periodo}`,
+    maintenancePeriod: periodo,
+    amount: -DRIVER_MAINTENANCE_FEE_USD,
+    description: DRIVER_MAINTENANCE_LABEL,
+    currency: 'USD',
+    status: 'APPROVED',
+    balanceAfter: saldoDespues,
+    createdAt: instante
+  };
+}
+
+/** Apunte de la comisión diferida que un ingreso acaba de saldar. */
+function construirApunteDeuda(driver, pagado, saldoDespues, sourceId, instante) {
+  return {
+    id: `transaction_${crypto.randomUUID()}`,
+    userId: driver.id,
+    type: 'DRIVER_DEFERRED_COMMISSION_PAYMENT',
+    amount: -pagado,
+    description: 'Comisión pendiente saldada',
+    sourceTransactionId: sourceId,
+    currency: 'USD',
+    status: 'APPROVED',
+    balanceAfter: saldoDespues,
+    createdAt: instante
+  };
 }
 
 /**
@@ -631,6 +715,60 @@ function settleDriverForCompletedTrip(trip) {
  * disponible en cuanto la carrera muere sin completarse. Solo actúa sobre
  * reservas vivas, así que repetirlo no libera dos veces.
  */
+/**
+ * DRIVER-FINANCE-1 v4 — LA puerta por la que se toma trabajo nuevo, tanto en
+ * una carrera en vivo como al reclamar un traslado programado.
+ *
+ * Todo lo que decide ocurre DENTRO de una transacción sobre la fila del
+ * conductor ya bloqueada: bloqueo financiero, deuda diferida, mantenimientos
+ * vencidos, regla de reactivación en positivo, capacidad frente al suelo,
+ * reserva con dueño y asignación del viaje. La tercera auditoría demostró por
+ * qué importa: con la elegibilidad comprobada en memoria antes del `begin`,
+ * una réplica con la foto vieja aceptaba a quien otra ya había bloqueado.
+ */
+async function tomarTrabajoConReserva({ trip, driver, assignment, updatedAt }) {
+  const comision = (DRIVER_FINANCE_ON && !isWalletPayment(trip.paymentMethod))
+    ? roundMoney(tripFareUSD(trip) * (Number.isFinite(Number(trip.commissionRate))
+      ? Number(trip.commissionRate)
+      : Number(pricingConfig.commissionRate || 0.15)))
+    : 0;
+
+  if (!DRIVER_FINANCE_ON || persistence.financeReady !== true) {
+    // Sin política o sin libro contable: el camino de siempre. Con la
+    // política encendida pero sin libro, la puerta se decide sobre el
+    // documento — que en un proceso único ES la autoridad.
+    if (DRIVER_FINANCE_ON) {
+      if (!canTakeNewWork(driver, finanzasConductor)) return { ok: false, code: 'FINANCIAL_BALANCE_BLOCK' };
+      if (wouldBreachFloor(driver, comision, finanzasConductor)) return { ok: false, code: 'FINANCIAL_BALANCE_BLOCK' };
+    }
+    if (assignment === 'SCHEDULED') return { ok: true, updatedAt };
+    const reservado = await persistence.reserveTripAssignment(trip.id, driver.id, updatedAt);
+    return reservado ? { ok: true, updatedAt } : { ok: false, code: 'ALREADY_ACCEPTED' };
+  }
+
+  await driverFinance.ensureState(driver);
+  const desenlace = await persistence.acceptTripWithReservation({
+    tripId: trip.id,
+    driverId: driver.id,
+    commissionUSD: comision,
+    floorUSD: -DRIVER_DEBT_LIMIT_USD,
+    updatedAt,
+    assignment,
+    enforceEligibility: true,
+    policy: { canTakeNewWork: instantanea => canTakeNewWork(instantanea, finanzasConductor) }
+  });
+
+  if (desenlace.outcome === 'OK') {
+    driverFinance.applySnapshot(driver, await persistence.readDriverFinance(driver.id));
+    return { ok: true, updatedAt, durable: desenlace.trip };
+  }
+  if (desenlace.outcome === 'FINANCIAL_BALANCE_BLOCK' || desenlace.outcome === 'NO_CAPACITY') {
+    return { ok: false, code: 'FINANCIAL_BALANCE_BLOCK' };
+  }
+  if (desenlace.outcome === 'NO_FINANCE_STATE') return { ok: false, code: 'FINANCE_STATE_UNAVAILABLE' };
+  return { ok: false, code: 'ALREADY_ACCEPTED' };
+}
+
 async function liberarReservaDeViaje(tripId) {
   if (!DRIVER_FINANCE_ON || typeof persistence.releaseTripReservation !== 'function') return false;
   try { return await persistence.releaseTripReservation(tripId); }
@@ -640,65 +778,72 @@ async function liberarReservaDeViaje(tripId) {
   }
 }
 
-function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
+async function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
   const credito = roundMoney(Number(amount) || 0);
   if (!DRIVER_FINANCE_ON || owner?.role !== 'driver') {
-    return roundMoney(Number(owner.walletBalance || 0) + credito);
+    owner.walletBalance = roundMoney(Number(owner.walletBalance || 0) + credito);
+    return owner.walletBalance;
   }
+
+  const instante = new Date().toISOString();
+  if (persistence.financeReady === true) {
+    await driverFinance.ensureState(owner);
+    const r = await persistence.creditDriverWallet({
+      driverId: owner.id,
+      creditUSD: credito,
+      sourceId,
+      at: instante,
+      builders: {
+        maintenance: ({ period, balanceAfter }) => construirApunteMantenimiento(owner, period, balanceAfter, instante),
+        deferred: ({ paid, balanceAfter }) => construirApunteDeuda(owner, paid, balanceAfter, sourceId, instante)
+      }
+    });
+    if (r.outcome === 'CREDITED') {
+      for (const apunte of r.transactions) {
+        if (!database.transactions.some(t => t.id === apunte.id)) database.transactions.push(apunte);
+      }
+      driverFinance.applySnapshot(owner, await persistence.readDriverFinance(owner.id));
+      return owner.walletBalance;
+    }
+    console.error(`[+58express DriverFinance] crédito no durable (${r.outcome})`);
+    return roundMoney(Number(owner.walletBalance || 0));
+  }
+
+  // Proceso único: el mismo reparto, decidido por la función pura.
   const plan = planCreditApplication(owner, credito);
   owner.walletBalance = plan.balanceAfter;
-
   if (plan.deferredPaid > 0) {
     owner.deferredCommissionUSD = plan.deferredRemaining;
-    database.transactions.push({
-      id: `transaction_${crypto.randomUUID()}`,
-      userId: owner.id,
-      type: 'DRIVER_DEFERRED_COMMISSION_PAYMENT',
-      amount: -plan.deferredPaid,
-      description: 'Comisión pendiente saldada',
-      sourceTransactionId: sourceId,
-      currency: 'USD',
-      status: 'APPROVED',
-      balanceAfter: owner.walletBalance,
-      createdAt: new Date().toISOString()
-    });
+    database.transactions.push(construirApunteDeuda(owner, plan.deferredPaid, owner.walletBalance, sourceId, instante));
   }
   for (const periodo of plan.maintenancePaidPeriods) {
-    database.transactions.push({
-      id: `transaction_maint_${owner.id}_${periodo}`,
-      userId: owner.id,
-      type: DRIVER_MAINTENANCE_TRANSACTION_TYPE,
-      idempotencyKey: `driver-maintenance:${owner.id}:${periodo}`,
-      maintenancePeriod: periodo,
-      amount: -DRIVER_MAINTENANCE_FEE_USD,
-      description: DRIVER_MAINTENANCE_LABEL,
-      currency: 'USD',
-      status: 'APPROVED',
-      balanceAfter: owner.walletBalance,
-      createdAt: new Date().toISOString()
-    });
+    database.transactions.push(construirApunteMantenimiento(owner, periodo, owner.walletBalance, instante));
   }
   if (plan.maintenancePaidPeriods.length && owner.maintenance) {
     owner.maintenance.pendingPeriods = plan.maintenanceRemainingPeriods;
   }
   // El bloqueo se levanta en el MISMO acto que lo hace posible, no en el
-  // paso diario: quien ya esta al dia no debe esperar a mañana para trabajar.
+  // paso diario: quien ya está al día no debe esperar a mañana para trabajar.
   if (owner.financialBlock?.active === true && canTakeNewWork(owner, finanzasConductor)) {
-    owner.financialBlock = { active: false, clearedAt: new Date().toISOString() };
+    owner.financialBlock = { active: false, clearedAt: instante };
   }
   return owner.walletBalance;
 }
 
-function settleCompletedTrip(trip) {
+async function settleCompletedTrip(trip) {
   const passengerTransaction = debitPassengerWalletForCompletedTrip(trip);
-  const driverTransaction = settleDriverForCompletedTrip(trip);
+  const driverTransaction = await settleDriverForCompletedTrip(trip);
   // DRIVER-FINANCE-1: ESTA es la única actividad que cuenta. Una carrera
   // COMPLETADA y liquidada reinicia el reloj de inactividad del conductor —
   // ni abrir la app, ni ponerse en línea, ni aceptar una oferta lo hacen. El
   // reloj del mantenimiento mensual sigue corriendo aparte, sin tocarse.
   if (driverTransaction) {
     const driver = database.users.find(user => user.id === trip.driverId);
-    if (driver) {
+    // El reloj vive donde vive el resto del estado financiero: con libro
+    // contable, en su fila; sin él, en el documento. Con la política apagada
+    // se conserva el gesto de siempre y no se escribe ni un campo de más.
+    if (driver && DRIVER_FINANCE_ON) await driverFinance.registerQualifyingTrip(driver, Date.now());
+    else if (driver) {
       driver.lastQualifyingTripAt = Date.now();
       driver.inactivityWarnedThreshold = null;
     }
@@ -733,7 +878,7 @@ function emitCompletedTripWalletUpdates(trip, settlement) {
  * conexion-- y por construccion no pueden divergir. No persiste ni anuncia:
  * eso lo hace quien llama, tras un persist correcto.
  */
-function aplicarTransicionDelConductor(trip, status, driverId) {
+async function aplicarTransicionDelConductor(trip, status, driverId) {
   if (status === TRIP_STATUS.COMPLETED) {
     try {
       ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
@@ -751,7 +896,11 @@ function aplicarTransicionDelConductor(trip, status, driverId) {
     if (assignedDriver) assignedDriver.status = DRIVER_STATUS.AVAILABLE;
     tripLocks.delete(trip.id);
   }
-  const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
+  // Una carrera que el conductor cancela también libera su reserva: sin esto,
+  // el dinero comprometido le mermaba la capacidad hasta que pasara el
+  // reconciliador.
+  if (trip.status === TRIP_STATUS.CANCELLED) await liberarReservaDeViaje(trip.id);
+  const settlement = trip.status === TRIP_STATUS.COMPLETED ? await settleCompletedTrip(trip) : null;
   return { ok: true, settlement };
 }
 
@@ -870,6 +1019,8 @@ app.use('/api', createTripOfflineEventsRouter({
   requireAuth,
   requireApprovedDriver,
   applyTransition: (trip, status, driverId) => aplicarTransicionDelConductor(trip, status, driverId),
+  // OFFLINE-TRIP-1A: la transición es asíncrona desde v4 (el dinero se
+  // escribe en la base). El router la espera igual que el camino en línea.
   announceTransition: (trip, settlement) => anunciarTransicionDelConductor(trip, settlement),
   persistDatabase
 }));
@@ -1076,11 +1227,16 @@ const driverFinance = createDriverFinanceService({
       createdAt: new Date().toISOString()
     };
     database.notifications.push(doc);
+    // DRIVER-FINANCE-1 v4: el exito es EXPLICITO. Antes esta funcion volvia
+    // sin valor cuando la escritura fallaba, y el servicio lo interpretaba
+    // como aviso entregado: el recordatorio se perdia y no se reintentaba
+    // jamas. Ahora solo `true` significa que llego.
     if (!await persistRecord('notifications', doc)) {
       database.notifications.splice(database.notifications.indexOf(doc), 1);
-      return;
+      return false;
     }
     io.to(`user:${userId}`).emit('platform:notification', { ...doc });
+    return true;
   },
   logger: console
 });
@@ -1788,31 +1944,43 @@ app.patch('/api/notifications/me/read-all', requireAuth, limitadores.notificacio
   res.json({ ok: true });
 });
 
-app.get('/api/wallet/me', requireAuth, (req, res) => {
-  // DRIVER-FINANCE-1: la elegibilidad la decide el SERVIDOR y viaja ya
-  // resuelta. La pantalla no puede deducirla del saldo: un conductor que
-  // estuvo bloqueado y recargo hasta 0.00 sigue bloqueado, y con solo el
-  // numero delante la interfaz diria lo contrario.
-  const finanzas = req.user?.role === 'driver' && DRIVER_FINANCE_ON
+app.get('/api/wallet/me', requireAuth, async (req, res) => {
+  // DRIVER-FINANCE-1 v4: la elegibilidad la decide el SERVIDOR sobre el
+  // estado AUTORITATIVO, no sobre el documento. La pantalla no puede
+  // deducirla del saldo: un conductor que estuvo bloqueado y recargó hasta
+  // 0.00 sigue bloqueado, y con solo el número delante la interfaz diría lo
+  // contrario. Y si sus obligaciones vivieran en el documento, el servidor
+  // podría enseñar una deuda menor de la real.
+  const esConductor = req.user?.role === 'driver' && DRIVER_FINANCE_ON;
+  let referencia = req.user;
+  if (esConductor && persistence.financeReady === true) {
+    const autoritativo = await persistence.readDriverFinance(req.user.id);
+    if (autoritativo) {
+      driverFinance.applySnapshot(req.user, autoritativo);
+      referencia = { ...req.user, ...autoritativo };
+    }
+  }
+  const finanzas = esConductor
     ? {
       enabled: true,
-      blocked: !canTakeNewWork(req.user, finanzasConductor),
-      blockReason: req.user.financialBlock?.active === true
-        ? req.user.financialBlock.reason ?? 'FINANCIAL_BALANCE_BLOCK'
+      authoritative: persistence.financeReady === true,
+      blocked: !canTakeNewWork(referencia, finanzasConductor),
+      blockReason: referencia.financialBlock?.active === true
+        ? referencia.financialBlock.reason ?? 'FINANCIAL_BALANCE_BLOCK'
         : null,
       debtLimitUSD: -DRIVER_DEBT_LIMIT_USD,
       // Lo que de verdad necesita recargar: saldo negativo + TODAS sus
       // obligaciones + un céntimo para quedar en positivo.
-      amountToRegainEligibility: requiredRechargeToClear(req.user),
-      requiredRechargeUSD: requiredRechargeToClear(req.user),
-      committedCommissionUSD: committedCommissionOf(req.user),
-      deferredCommissionUSD: deferredCommissionOf(req.user),
-      pendingMaintenanceUSD: pendingMaintenanceOf(req.user),
-      totalObligationsUSD: totalObligations(req.user)
+      amountToRegainEligibility: requiredRechargeToClear(referencia),
+      requiredRechargeUSD: requiredRechargeToClear(referencia),
+      committedCommissionUSD: committedCommissionOf(referencia),
+      deferredCommissionUSD: deferredCommissionOf(referencia),
+      pendingMaintenanceUSD: pendingMaintenanceOf(referencia),
+      totalObligationsUSD: totalObligations(referencia)
     }
     : { enabled: false };
   res.json({
-    balance: Number(req.user.walletBalance || 0),
+    balance: Number(referencia.walletBalance || 0),
     currency: 'USD',
     driverFinance: finanzas,
     transactions: database.transactions.filter(item => item.userId === req.user.id).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 150)
@@ -1865,10 +2033,22 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
     // recaudara jamas. El orden lo fija el dueno: saldo negativo, luego
     // comisiones diferidas, luego mantenimientos vencidos y al final lo
     // libre. Nada se perdona en silencio.
-    owner.walletBalance = aplicarCreditoAlConductor(owner, transaction.amount, transaction.id);
+    owner.walletBalance = await aplicarCreditoAlConductor(owner, transaction.amount, transaction.id);
   }
   if (status === 'APPROVED' && owner && transaction.type === 'PAYOUT') {
-    owner.walletBalance = Math.round((Number(owner.walletBalance || 0) - transaction.amount) * 100) / 100;
+    // El retiro sale del saldo AUTORITATIVO. Restarlo en el documento dejaría
+    // el débito a merced de la siguiente escritura obsoleta.
+    if (DRIVER_FINANCE_ON && owner.role === 'driver' && persistence.financeReady === true) {
+      await driverFinance.ensureState(owner);
+      const r = await persistence.debitDriverWallet({ driverId: owner.id, amountUSD: transaction.amount });
+      if (r.outcome !== 'DEBITED') {
+        transaction.status = 'PENDING';
+        return res.status(409).json({ error: r.outcome === 'INSUFFICIENT_BALANCE' ? 'INSUFFICIENT_BALANCE' : 'PAYOUT_NOT_DURABLE' });
+      }
+      driverFinance.applySnapshot(owner, await persistence.readDriverFinance(owner.id));
+    } else {
+      owner.walletBalance = Math.round((Number(owner.walletBalance || 0) - transaction.amount) * 100) / 100;
+    }
   }
   const isPayout = transaction.type === 'PAYOUT';
   database.adminActions.push({ id:`admin_action_${crypto.randomUUID()}`, adminId:req.user.id, targetUserId:transaction.userId, action:`${isPayout?'payout':'topup'}_${status.toLowerCase()}`, transactionId:transaction.id, createdAt:new Date().toISOString() });
@@ -1964,7 +2144,7 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores
   tripLocks.delete(trip.id);
   const driver = database.users.find(user => user.id === trip.driverId);
   if (driver) driver.status = 'AVAILABLE';
-  const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
+  const settlement = trip.status === TRIP_STATUS.COMPLETED ? await settleCompletedTrip(trip) : null;
   if (!await persistHttp(res)) return;
   emitCompletedTripWalletUpdates(trip, settlement);
   io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
@@ -2229,7 +2409,20 @@ app.post('/api/trips/scheduled/:id/claim', requireAuth, requireApprovedDriver, l
   const trip = database.trips.find(item=>item.id===req.params.id && item.status==='SCHEDULED');
   if(!trip)return res.status(404).json({error:'SCHEDULED_TRIP_NOT_FOUND'});
   if(trip.assignedDriverId && trip.assignedDriverId!==req.user.id)return res.status(409).json({error:'ALREADY_ASSIGNED'});
-  trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=new Date().toISOString();
+  // DRIVER-FINANCE-1 v4: reclamar un traslado programado es tomar trabajo
+  // nuevo, así que cruza EXACTAMENTE la misma puerta financiera que aceptar
+  // una carrera en vivo. Antes no la cruzaba, y un conductor bloqueado por
+  // deuda podía adjudicarse traslados futuros sin reservar su comisión.
+  const puerta = await tomarTrabajoConReserva({
+    trip,
+    driver: req.user,
+    assignment: 'SCHEDULED',
+    updatedAt: new Date().toISOString()
+  });
+  if (!puerta.ok) {
+    return res.status(puerta.code === 'FINANCIAL_BALANCE_BLOCK' ? 402 : 409).json({ error: puerta.code });
+  }
+  trip.assignedDriverId=req.user.id;trip.driverId=req.user.id;trip.updatedAt=puerta.updatedAt;
   if (!await persistHttp(res)) return;
   io.to(`user:${trip.passengerId}`).to('admins').emit('scheduled_trip:claimed',{tripId:trip.id,driver:driverPublicProfile(req.user)});res.json(trip);
 });
@@ -2594,53 +2787,41 @@ io.on('connection', (socket) => {
       return reject('INVALID_TRIP_TRANSITION');
     }
 
-    // PostgreSQL es el árbitro final entre procesos/instancias. El UPDATE
-    // condicional solo reserva el viaje si todavía sigue SEARCHING y sin
-    // conductor; el cerrojo en memoria por sí solo no cubre otra instancia.
-    // DRIVER-FINANCE-1 v3: capacidad, reserva y asignacion en UNA sola
-    // transaccion. Antes eran dos operaciones sueltas y entre ellas cabia un
-    // estado imposible de reparar: dinero comprometido para una carrera que
-    // nunca llego a asignarse, sin dueno que lo liberara. Ahora la reserva
-    // lleva el VIAJE como clave: o entran las tres cosas o no entra ninguna.
-    const comisionDeEsteViaje = (DRIVER_FINANCE_ON && !isWalletPayment(trip.paymentMethod))
-      ? roundMoney(tripFareUSD(trip) * (Number.isFinite(Number(trip.commissionRate))
-        ? Number(trip.commissionRate)
-        : Number(pricingConfig.commissionRate || 0.15)))
-      : 0;
-
-    if (DRIVER_FINANCE_ON && !canTakeNewWork(authenticatedDriver, finanzasConductor)) {
-      return reject('FINANCIAL_BALANCE_BLOCK');
-    }
-
+    // PostgreSQL es el árbitro final entre procesos/instancias, y desde v4
+    // también de la elegibilidad financiera: puerta de deuda, capacidad,
+    // reserva con dueño y asignación ocurren en UNA transacción sobre la fila
+    // del conductor ya bloqueada. O entran las cuatro cosas o no entra
+    // ninguna, y ninguna se decide con una foto que pueda haber envejecido.
     const instanteAsignacion = new Date().toISOString();
-    let reserved;
-    if (typeof persistence.acceptTripWithReservation === 'function') {
-      const desenlace = await persistence.acceptTripWithReservation({
-        tripId,
-        driverId,
-        commissionUSD: comisionDeEsteViaje,
-        floorUSD: -DRIVER_DEBT_LIMIT_USD,
-        updatedAt: instanteAsignacion
-      });
-      if (desenlace === 'NO_CAPACITY') return reject('FINANCIAL_BALANCE_BLOCK');
-      reserved = desenlace === 'OK';
-    } else {
-      // Sin la operacion atomica (desarrollo/pruebas): el camino de siempre.
-      reserved = await persistence.reserveTripAssignment(tripId, driverId, instanteAsignacion);
-    }
-    if (!reserved) return reject('ALREADY_ACCEPTED');
+    const puerta = await tomarTrabajoConReserva({
+      trip, driver: authenticatedDriver, assignment: 'SEARCHING', updatedAt: instanteAsignacion
+    });
+    if (!puerta.ok) return reject(puerta.code);
 
-    // A partir de aquí se muta estado. La transición va protegida para que un
-    // evento malicioso no pueda derribar el proceso, y el cerrojo se revierte
-    // si algo falla.
+    // A PARTIR DE AQUÍ LA BASE YA DECIDIÓ: el viaje está asignado y su
+    // comisión reservada, de forma durable. Nada de lo que siga puede
+    // deshacerlo, porque deshacerlo sería contradecir a la autoridad.
+    //
+    // Por eso la transición local se aplica REACCIONANDO al resultado
+    // durable, y un fallo posterior de escritura del documento se registra
+    // pero no revierte el dinero: la tercera auditoría encontró justo ese
+    // camino —commit hecho, compensación a medias— produciendo un viaje
+    // asignado con la reserva ya liberada.
     tripLocks.set(tripId, true);
     try {
       transitionTrip(trip, TRIP_STATUS.DRIVER_ASSIGNED, { actorId: driverId, actorRole: 'driver' });
     } catch (error) {
-      tripLocks.delete(tripId);
-      // La reserva no puede quedar viva si la carrera no llegó a arrancar.
-      await liberarReservaDeViaje(tripId);
-      return reject(error.code || 'INVALID_TRIP_TRANSITION');
+      // La validez de la transición se comprobó ANTES del commit, así que
+      // esto no debería ocurrir. Si ocurre, manda la base: se alinea la copia
+      // en memoria con lo durable en vez de inventar una tercera versión.
+      trip.status = TRIP_STATUS.DRIVER_ASSIGNED;
+      console.error(`[+58express Socket.IO] transición local desalineada tras el commit: ${error.code || 'UNKNOWN'}`);
+    }
+    // La copia en memoria se alinea con LO DURABLE, no al revés.
+    if (puerta.durable) {
+      trip.status = puerta.durable.status ?? trip.status;
+      trip.driverId = puerta.durable.driverId ?? trip.driverId;
+      trip.updatedAt = puerta.durable.updatedAt ?? trip.updatedAt;
     }
 
     if (dispatchTimers.has(tripId)) {
@@ -2654,7 +2835,12 @@ io.on('connection', (socket) => {
     trip.driverId = driverId;
     // El conductor pasa a BUSY solo con la asignación ya consolidada.
     authenticatedDriver.status = DRIVER_STATUS.BUSY;
-    if (!await persistDatabase()) return reject('PERSISTENCE_FAILED');
+    // La asignación ya es durable. Si el documento del conductor no llega a
+    // escribirse, se avisa y se sigue: rechazar aquí dejaría al conductor sin
+    // su carrera y a la base diciendo que sí la tiene.
+    if (!await persistDatabase()) {
+      console.error(`[+58express Database] asignación durable con documento sin persistir: ${tripId}`);
+    }
 
     console.log(`[+58express Socket.IO] Atomic lock success! Ride [${tripId}] assigned to ${driver.firstName}`);
 
@@ -2703,7 +2889,7 @@ io.on('connection', (socket) => {
       socket.emit('tripStatusRejected', { tripId, status: null, error: 'INVALID_TRIP_STATUS' });
       return;
     }
-    const resultado = aplicarTransicionDelConductor(trip, status, socket.data.auth.userId);
+    const resultado = await aplicarTransicionDelConductor(trip, status, socket.data.auth.userId);
     if (!resultado.ok) {
       socket.emit('tripStatusRejected', {
         tripId, status, error: resultado.code,
