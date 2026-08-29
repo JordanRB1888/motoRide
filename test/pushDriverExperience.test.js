@@ -10,7 +10,13 @@ import {
 } from '../src/services/pushClientMessages.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const leer = relativo => fs.readFileSync(path.join(raiz, relativo), 'utf8');
+// Los saltos de linea se normalizan al leer. Este fichero recorta el fuente
+// con indexOf sobre patrones que llevan un salto UNIX, y el repositorio usa
+// core.autocrlf=true: en un checkout limpio de Windows el fichero llega con
+// CRLF, la busqueda falla y la porcion sale vacia. El test se ponia rojo por
+// el final de linea, no por el producto.
+const leer = relativo => fs.readFileSync(path.join(raiz, relativo), 'utf8')
+  .split('\r\n').join('\n');
 
 /**
  * Puente service worker -> aplicacion, y experiencia de permiso del conductor.

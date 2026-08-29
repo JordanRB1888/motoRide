@@ -53,11 +53,18 @@ import { createPushNotificationService, isWebPushEnabled } from './services/push
 import { createDriverFinanceService } from './services/driverFinance.js';
 import {
   DRIVER_DEBT_LIMIT_USD,
-  amountToRegainEligibility,
+  DRIVER_MAINTENANCE_FEE_USD,
+  DRIVER_MAINTENANCE_LABEL,
+  DRIVER_MAINTENANCE_TRANSACTION_TYPE,
   canTakeNewWork,
   commissionWithinFloor,
   committedCommissionOf,
+  deferredCommissionOf,
   isDriverFinanceEnabled,
+  pendingMaintenanceOf,
+  planCreditApplication,
+  requiredRechargeToClear,
+  totalObligations,
   wouldBreachFloor
 } from './domain/driverFinance.js';
 
@@ -584,12 +591,76 @@ function settleDriverForCompletedTrip(trip) {
     title: platformCollectedPayment ? 'Ganancia acreditada' : 'Comisión de viaje registrada',
     message: platformCollectedPayment
       ? `Se acreditaron $${net.toFixed(2)} por el viaje. Saldo: $${driver.walletBalance.toFixed(2)}.`
-      : `Recibiste el pago directamente. Se descontó la comisión de +58Express por $${commission.toFixed(2)}. Saldo operativo: $${driver.walletBalance.toFixed(2)}.`,
+      // DRIVER-FINANCE-1 v3: si parte de la comisión no cupo bajo el límite
+      // de deuda, se dice tal cual. Antes el mensaje afirmaba que se había
+      // descontado entera y no era verdad.
+      : comisionDiferida > 0
+        ? `Recibiste el pago directamente. Se descontó $${roundMoney(-amount).toFixed(2)} de la comisión de +58Express y quedan $${comisionDiferida.toFixed(2)} pendientes por tu límite de saldo. Saldo operativo: $${driver.walletBalance.toFixed(2)}.`
+        : `Recibiste el pago directamente. Se descontó la comisión de +58Express por $${commission.toFixed(2)}. Saldo operativo: $${driver.walletBalance.toFixed(2)}.`,
     category: 'FINANCE',
     read: false,
     createdAt: transaction.createdAt
   });
   return transaction;
+}
+
+/**
+ * DRIVER-FINANCE-1 v3 — la ÚNICA puerta por la que entra dinero a un
+ * conductor. Reparte el ingreso segun la prioridad del dueno (saldo
+ * negativo, comisiones diferidas, mantenimientos pendientes, resto libre),
+ * deja constancia de cada obligacion saldada y actualiza el bloqueo en el
+ * mismo acto: no se espera al paso diario para levantarlo.
+ *
+ * Devuelve el saldo resultante. Con la funcionalidad apagada acredita tal
+ * cual, como siempre.
+ */
+function aplicarCreditoAlConductor(owner, amount, sourceId = null) {
+  const credito = roundMoney(Number(amount) || 0);
+  if (!DRIVER_FINANCE_ON || owner?.role !== 'driver') {
+    return roundMoney(Number(owner.walletBalance || 0) + credito);
+  }
+  const plan = planCreditApplication(owner, credito);
+  owner.walletBalance = plan.balanceAfter;
+
+  if (plan.deferredPaid > 0) {
+    owner.deferredCommissionUSD = plan.deferredRemaining;
+    database.transactions.push({
+      id: `transaction_${crypto.randomUUID()}`,
+      userId: owner.id,
+      type: 'DRIVER_DEFERRED_COMMISSION_PAYMENT',
+      amount: -plan.deferredPaid,
+      description: 'Comisión pendiente saldada',
+      sourceTransactionId: sourceId,
+      currency: 'USD',
+      status: 'APPROVED',
+      balanceAfter: owner.walletBalance,
+      createdAt: new Date().toISOString()
+    });
+  }
+  for (const periodo of plan.maintenancePaidPeriods) {
+    database.transactions.push({
+      id: `transaction_maint_${owner.id}_${periodo}`,
+      userId: owner.id,
+      type: DRIVER_MAINTENANCE_TRANSACTION_TYPE,
+      idempotencyKey: `driver-maintenance:${owner.id}:${periodo}`,
+      maintenancePeriod: periodo,
+      amount: -DRIVER_MAINTENANCE_FEE_USD,
+      description: DRIVER_MAINTENANCE_LABEL,
+      currency: 'USD',
+      status: 'APPROVED',
+      balanceAfter: owner.walletBalance,
+      createdAt: new Date().toISOString()
+    });
+  }
+  if (plan.maintenancePaidPeriods.length && owner.maintenance) {
+    owner.maintenance.pendingPeriods = plan.maintenanceRemainingPeriods;
+  }
+  // El bloqueo se levanta en el MISMO acto que lo hace posible, no en el
+  // paso diario: quien ya esta al dia no debe esperar a mañana para trabajar.
+  if (owner.financialBlock?.active === true && canTakeNewWork(owner, finanzasConductor)) {
+    owner.financialBlock = { active: false, clearedAt: new Date().toISOString() };
+  }
+  return owner.walletBalance;
 }
 
 function settleCompletedTrip(trip) {
@@ -1704,9 +1775,14 @@ app.get('/api/wallet/me', requireAuth, (req, res) => {
         ? req.user.financialBlock.reason ?? 'FINANCIAL_BALANCE_BLOCK'
         : null,
       debtLimitUSD: -DRIVER_DEBT_LIMIT_USD,
-      amountToRegainEligibility: amountToRegainEligibility(req.user),
+      // Lo que de verdad necesita recargar: saldo negativo + TODAS sus
+      // obligaciones + un céntimo para quedar en positivo.
+      amountToRegainEligibility: requiredRechargeToClear(req.user),
+      requiredRechargeUSD: requiredRechargeToClear(req.user),
       committedCommissionUSD: committedCommissionOf(req.user),
-      deferredCommissionUSD: Number(req.user.deferredCommissionUSD || 0)
+      deferredCommissionUSD: deferredCommissionOf(req.user),
+      pendingMaintenanceUSD: pendingMaintenanceOf(req.user),
+      totalObligationsUSD: totalObligations(req.user)
     }
     : { enabled: false };
   res.json({
@@ -1756,7 +1832,15 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
   transaction.reviewedBy = req.user.id;
   transaction.reviewedAt = new Date().toISOString();
   transaction.reviewNote = sanitizeText(req.body.reviewNote, 500) || null;
-  if (status === 'APPROVED' && owner && transaction.type === 'TOP_UP') owner.walletBalance = Math.round((Number(owner.walletBalance || 0) + transaction.amount) * 100) / 100;
+  if (status === 'APPROVED' && owner && transaction.type === 'TOP_UP') {
+    // DRIVER-FINANCE-1 v3: el dinero que entra paga primero lo que se debe.
+    // Antes se acreditaba entero y las comisiones diferidas quedaban como
+    // deuda incobrable: escritas en el documento y sin ningun camino que las
+    // recaudara jamas. El orden lo fija el dueno: saldo negativo, luego
+    // comisiones diferidas, luego mantenimientos vencidos y al final lo
+    // libre. Nada se perdona en silencio.
+    owner.walletBalance = aplicarCreditoAlConductor(owner, transaction.amount, transaction.id);
+  }
   if (status === 'APPROVED' && owner && transaction.type === 'PAYOUT') {
     owner.walletBalance = Math.round((Number(owner.walletBalance || 0) - transaction.amount) * 100) / 100;
   }

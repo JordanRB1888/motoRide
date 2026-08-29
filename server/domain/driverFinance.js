@@ -79,16 +79,50 @@ export function canTakeNewWork(driver, { enabled = isDriverFinanceEnabled() } = 
   // Con la funcionalidad apagada nadie queda fuera por dinero: el sistema se
   // comporta exactamente como antes de DRIVER-FINANCE-1.
   if (!enabled) return true;
-  if (driver?.financialBlock?.active === true) return meetsReactivationBalance(driver);
+  // Politica DEFINITIVA del dueno: la deuda no es solo el saldo. Quien
+  // estuvo bloqueado vuelve a trabajar cuando su saldo es POSITIVO y ademas
+  // no le queda ninguna obligacion: ni comisiones diferidas de carreras ni
+  // mantenimientos sin pagar. Un saldo bonito con deudas escondidas detras
+  // no es estar al dia.
+  if (driver?.financialBlock?.active === true) {
+    return meetsReactivationBalance(driver) && totalObligations(driver) === 0;
+  }
   return !isDebtBlocked(driver, { enabled });
+}
+
+/** Comisiones de carreras que no cupieron bajo el suelo y siguen a deber. */
+export const deferredCommissionOf = driver =>
+  roundMoney(Math.max(0, Number(driver?.deferredCommissionUSD ?? 0)));
+
+/** Mantenimientos vencidos sin cobrar, en dinero. */
+export const pendingMaintenanceOf = driver =>
+  roundMoney((driver?.maintenance?.pendingPeriods ?? []).length * DRIVER_MAINTENANCE_FEE_USD);
+
+/** TODA la deuda del conductor con la plataforma, aparte del saldo. */
+export const totalObligations = driver =>
+  roundMoney(deferredCommissionOf(driver) + pendingMaintenanceOf(driver));
+
+/**
+ * La recarga EXACTA para quedar al dia: cubrir el saldo negativo, pagar
+ * todas las obligaciones y quedarse con al menos un centavo. Se cuenta en
+ * centavos ENTEROS para que no aparezca un 6.809999999 en pantalla.
+ *
+ * Ejemplo del encargo: saldo -5.00, comision diferida 0.80 y mantenimiento
+ * pendiente 1.00 -> 500 + 180 + 1 = 681 centavos = $6.81.
+ */
+export function requiredRechargeToClear(driver) {
+  const saldoCent = Math.round(balanceOf(driver) * 100);
+  const obligacionesCent = Math.round(totalObligations(driver) * 100);
+  if (saldoCent > 0 && obligacionesCent === 0) return 0;
+  const faltanCent = Math.max(0, -saldoCent) + obligacionesCent + 1;
+  return faltanCent / 100;
 }
 
 /** Lo que le falta para volver a ser elegible: el primer céntimo por encima
  *  de cero. Sirve para decírselo con un número exacto, no con un «recarga». */
 export function amountToRegainEligibility(driver) {
-  const saldo = balanceOf(driver);
-  if (saldo > 0) return 0;
-  return roundMoney(-saldo + 0.01);
+  // Alias historico: lo que de verdad hace falta incluye las obligaciones.
+  return requiredRechargeToClear(driver);
 }
 
 /**
@@ -126,6 +160,50 @@ export function commissionWithinFloor(driver, commissionUSD) {
   const margen = roundMoney(balanceOf(driver) + DRIVER_DEBT_LIMIT_USD);
   const aplicable = roundMoney(Math.max(0, Math.min(comision, margen)));
   return { applied: aplicable, deferred: roundMoney(comision - aplicable) };
+}
+
+
+/**
+ * Reparte un ingreso del conductor segun la prioridad que fijo el dueno:
+ *
+ *   1. el saldo negativo se cubre solo con el ingreso,
+ *   2. despues las comisiones diferidas de carreras (lo mas viejo primero),
+ *   3. despues los mantenimientos pendientes (periodo mas viejo primero),
+ *   4. y solo lo que sobre queda como saldo libre.
+ *
+ * Es una funcion PURA: calcula el reparto y devuelve el plan. Quien la usa
+ * es el unico que escribe, y asi el reparto se puede probar al centimo sin
+ * base de datos. Nunca perdona una obligacion: lo que no alcanza, sigue
+ * debiendose.
+ */
+export function planCreditApplication(driver, creditUSD) {
+  const ingresoCent = Math.max(0, Math.round(Number(creditUSD || 0) * 100));
+  let disponible = Math.round(balanceOf(driver) * 100) + ingresoCent;
+
+  // 1 y 2) comisiones diferidas: solo se pagan con dinero POSITIVO.
+  let diferidaCent = Math.round(deferredCommissionOf(driver) * 100);
+  const pagoDiferida = Math.max(0, Math.min(diferidaCent, disponible));
+  disponible -= pagoDiferida;
+  diferidaCent -= pagoDiferida;
+
+  // 3) mantenimientos pendientes, del periodo mas viejo al mas nuevo.
+  const periodos = [...(driver?.maintenance?.pendingPeriods ?? [])].map(Number).sort((a, b) => a - b);
+  const cuotaCent = Math.round(DRIVER_MAINTENANCE_FEE_USD * 100);
+  const pagados = [];
+  for (const periodo of periodos) {
+    if (disponible < cuotaCent) break;
+    disponible -= cuotaCent;
+    pagados.push(periodo);
+  }
+
+  return {
+    // 4) lo que queda de verdad en su cuenta.
+    balanceAfter: disponible / 100,
+    deferredPaid: pagoDiferida / 100,
+    deferredRemaining: diferidaCent / 100,
+    maintenancePaidPeriods: pagados,
+    maintenanceRemainingPeriods: periodos.filter(p => !pagados.includes(p))
+  };
 }
 
 // ---------------------------------------------------------------------------

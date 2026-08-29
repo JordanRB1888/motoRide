@@ -32,7 +32,7 @@ const uploadFields = upload.fields(DRIVER_DOCUMENT_TYPES.map(name => ({ name, ma
 const singleDocumentUpload = upload.single('file');
 
 import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from '../services/httpRateLimit.js';
-import { applyInactivityGrace } from '../domain/driverFinance.js';
+import { applyInactivityGrace, isDriverFinanceEnabled } from '../domain/driverFinance.js';
 
 // El limitador de /api/driver-applications no alcanza a todas estas rutas:
 // el router se monta en /api, de modo que /api/admin/driver-applications,
@@ -367,7 +367,9 @@ export function createDriverApplicationsRouter({
       // DRIVER-FINANCE-1: quien vuelve de una suspension por inactividad
       // estrena 30 dias nuevos. Sin esto el evaluador diario lo suspenderia
       // otra vez contra el mismo plazo vencido, en bucle.
-      applyInactivityGrace(user, Date.now());
+      // Con la funcionalidad APAGADA no se escribe ni un campo suyo: esta
+      // ruta llego a hacerlo y convertia la bandera en una mentira.
+      if (isDriverFinanceEnabled()) applyInactivityGrace(user, Date.now());
       notificationTitle = 'Cuenta de conductor reactivada';
       notificationMessage = 'Tu acceso operativo a +58Express fue restaurado.';
     } else {
