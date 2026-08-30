@@ -638,9 +638,9 @@ test('P · dos creditos simultaneos reparten sin cobrar nada dos veces', saltar,
 
     const [uno, dos] = await Promise.all([
       a.creditDriverWallet({ driverId: id, creditUSD: 1, operationId: `v4-credito-a:${id}`,
- sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v4-credito-a:${id}`, sourceId: 'A', builders: CONSTRUCTORES(id) }),
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v4-credito-a:${id}`, builders: CONSTRUCTORES(id) }),
       b.creditDriverWallet({ driverId: id, creditUSD: 1, operationId: `v4-credito-b:${id}`,
- sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v4-credito-b:${id}`, sourceId: 'B', builders: CONSTRUCTORES(id) })
+ sourceType: 'ADMIN_ADJUSTMENT', sourceId: `v4-credito-b:${id}`, builders: CONSTRUCTORES(id) })
     ]);
     assert.equal(uno.outcome, 'CREDITED');
     assert.equal(dos.outcome, 'CREDITED');

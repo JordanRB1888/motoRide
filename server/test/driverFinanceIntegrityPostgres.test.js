@@ -221,7 +221,10 @@ test('§5/§7/§8 · reutilizar la identidad con otro importe, dirección u orig
   const { pool, dbA, a } = await montar();
   let id = null;
   const operacion = `topup:auditoria-${sufijo()}`;
-  const origen = { sourceType: 'TOPUP', sourceId: 'topup123' };
+  // v8 · el origen de negocio es UNICO en la base, asi que tiene que ser
+  // propio de esta ejecucion, igual que la identidad de la operacion.
+  const solicitud = `topup-${sufijo()}`;
+  const origen = { sourceType: 'TOPUP', sourceId: solicitud };
   try {
     ({ id } = await altaConductor(a, dbA, { walletBalance: 1 }));
     assert.equal((await a.creditDriverWallet({
@@ -244,14 +247,14 @@ test('§5/§7/§8 · reutilizar la identidad con otro importe, dirección u orig
     // Otro ORIGEN, misma cantidad y dirección.
     const otroOrigen = await a.creditDriverWallet({
       driverId: id, creditUSD: 2, operationId: operacion,
-      sourceType: 'PAYOUT', sourceId: 'topup123', builders: CONSTRUCTORES(id)
+      sourceType: 'PAYOUT', sourceId: solicitud, builders: CONSTRUCTORES(id)
     });
     assert.equal(otroOrigen.outcome, 'OPERATION_ID_CONFLICT');
 
     // Otro IDENTIFICADOR de origen.
     const otroIdentificador = await a.creditDriverWallet({
       driverId: id, creditUSD: 2, operationId: operacion,
-      sourceType: 'TOPUP', sourceId: 'otro456', builders: CONSTRUCTORES(id)
+      sourceType: 'TOPUP', sourceId: `otro-${solicitud}`, builders: CONSTRUCTORES(id)
     });
     assert.equal(otroIdentificador.outcome, 'OPERATION_ID_CONFLICT');
 
@@ -274,7 +277,7 @@ test('§6 · la misma identidad para OTRO conductor no toca a ninguno de los dos
   const { pool, dbA, a } = await montar();
   let uno = null; let dos = null;
   const operacion = `topup:auditoria-${sufijo()}`;
-  const origen = { sourceType: 'TOPUP', sourceId: 'topup123' };
+  const origen = { sourceType: 'TOPUP', sourceId: `topup-${sufijo()}` };
   try {
     ({ id: uno } = await altaConductor(a, dbA, { walletBalance: 1 }));
     ({ id: dos } = await altaConductor(a, dbA, { walletBalance: 10 }));
@@ -304,10 +307,17 @@ test('§9 · un testigo LEGADO, sin origen conocido, nunca autoriza un duplicado
   const operacion = `topup:legado-${sufijo()}`;
   try {
     ({ id } = await altaConductor(a, dbA, { walletBalance: 5 }));
+    // v8 · un testigo legado NO se puede insertar: la base lo prohíbe, porque
+    // una operación nueva sin origen conocido sería irrecuperable. La única
+    // forma de que exista uno es la que lo creó de verdad —el relleno de la
+    // migración, que es un UPDATE— y así se reproduce aquí.
     await pool.query(
       `insert into public.driver_money_operations
          (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
-       values ($1, $2, 'CREDIT', 2, 7, 'LEGACY_UNKNOWN', $1)`, [operacion, id]);
+       values ($1, $2, 'CREDIT', 2, 7, 'TOPUP', $1)`, [operacion, id]);
+    await pool.query(
+      `update public.driver_money_operations set source_type = 'LEGACY_UNKNOWN'
+        where operation_id = $1`, [operacion]);
 
     const r = await a.creditDriverWallet({
       driverId: id, creditUSD: 2, operationId: operacion,
@@ -329,13 +339,15 @@ test('§9b · el resolutor de COMMIT incierto también compara la semántica', s
   const a = await createPostgresPersistence({ pool, database: dbA, logger: silencioso });
   let id = null;
   const operacion = `topup:auditoria-${sufijo()}`;
+  // v8 · propio de esta ejecución: el origen es único en la base.
+  const ajeno = `topup-ajeno-${sufijo()}`;
   try {
     ({ id } = await altaConductor(a, dbA, { walletBalance: 1 }));
     // Ya existe una operación con esa identidad, pero de OTRO importe.
     await pool.query(
       `insert into public.driver_money_operations
          (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
-       values ($1, $2, 'CREDIT', 99, 100, 'TOPUP', 'topup123')`, [operacion, id]);
+       values ($1, $2, 'CREDIT', 99, 100, 'TOPUP', $3)`, [operacion, id, ajeno]);
 
     const poolSaboteado = {
       connect: async () => {
@@ -356,7 +368,7 @@ test('§9b · el resolutor de COMMIT incierto también compara la semántica', s
     const almacen = createDriverFinanceStore({ pool: poolSaboteado, logger: silencioso });
     const r = await almacen.creditDriverWallet({
       driverId: id, creditUSD: 2, operationId: operacion,
-      sourceType: 'TOPUP', sourceId: 'topup123', builders: CONSTRUCTORES(id)
+      sourceType: 'TOPUP', sourceId: ajeno, builders: CONSTRUCTORES(id)
     });
     // La transacción aborta al ver el testigo ajeno, así que ni llega al
     // commit: el desenlace es el conflicto, nunca «ya aplicado».

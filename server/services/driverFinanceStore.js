@@ -49,6 +49,17 @@ const FEE_CENT = CENT(DRIVER_MAINTENANCE_FEE_USD);
  *  o la carrera esta viva, o esta hecha y su dinero aun no se cobro. */
 const OCUPAN_CAPACIDAD = "('RESERVED', 'SETTLEMENT_PENDING')";
 
+/**
+ * El origen de los testigos que ya existian cuando el libro empezo a exigir
+ * uno. No es un origen: es la anotacion explicita de que NO SE SABE.
+ *
+ * Sirve para describir el pasado y para nada mas. Una operacion NUEVA anotada
+ * asi entraria la primera vez y despues seria irrecuperable —su reintento
+ * legitimo no podria probar nada y fallaria cerrado para siempre—, asi que se
+ * rechaza aqui, y la base lo rechaza otra vez por su cuenta.
+ */
+const ORIGEN_LEGADO = 'LEGACY_UNKNOWN';
+
 /** Las cuatro tablas del libro contable. Si falta alguna, el almacen se
  *  declara NO disponible y la aplicacion sigue con su comportamiento de
  *  siempre: el codigo puede desplegarse antes que la migracion. */
@@ -457,9 +468,23 @@ export function createDriverFinanceStore({
     }
 
     if (diferidaPagadaCent > 0) {
+      // El TOTAL acumulado que este conductor lleva pagado de deuda diferida,
+      // leido DESPUES de los pagos de arriba y dentro de la misma transaccion.
+      //
+      // Es la identidad deterministica del apunte, y funciona porque solo
+      // crece: dos pagos distintos jamas comparten total, y repetir el mismo
+      // pago reproduce exactamente el mismo identificador. Un identificador
+      // aleatorio no daria ninguna de las dos garantias.
+      const acumulado = await client.query(
+        `select coalesce(sum(deferred_paid_usd), 0) as total
+           from public.driver_commission_reservations
+          where driver_id = $1`,
+        [driverId]
+      );
       const apunte = builders?.deferred?.({
         paid: USD(diferidaPagadaCent),
         balanceAfter: USD(disponible),
+        paidTotal: roundMoney(Number(acumulado.rows[0].total)),
         sourceId
       });
       if (apunte) {
@@ -510,7 +535,10 @@ export function createDriverFinanceStore({
       `insert into public.driver_money_operations
          (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
        values ($1, $2, $3, $4, $5, $6, $7)
-       on conflict (operation_id) do nothing`,
+       -- Sin objetivo a proposito: la operacion tiene DOS unicidades —su
+       -- identidad y su origen de negocio— y cualquiera de las dos que choque
+       -- significa lo mismo, que alguien se adelanto.
+       on conflict do nothing`,
       [operationId, driverId, kind, roundMoney(Math.max(0, Number(amountUSD) || 0)), balanceAfter, sourceType, sourceId]
     );
     return r.rowCount === 1;
@@ -543,25 +571,133 @@ export function createDriverFinanceStore({
    * duda, conflicto — que es la respuesta segura cuando hay dinero de por
    * medio.
    */
-  function mismaOperacion(fila, esperado) {
+  /**
+   * `LEGACY_UNKNOWN` describe el pasado; no autoriza el futuro.
+   *
+   * La septima auditoria comprobo que una operacion nueva anotada con ese
+   * origen entraba la primera vez y despues quedaba atrapada: su reintento
+   * exacto no podia probar nada y fallaba cerrado para siempre. Es dinero que
+   * se mueve una vez y nunca se puede reconciliar. Se rechaza antes de tocar
+   * nada, con un error propio para que no se confunda con otra cosa.
+   */
+  function rechazarOrigenLegado() {
+    logger.error('[+58express DriverFinance] origen LEGACY_UNKNOWN en una operacion NUEVA: rechazado');
+    return { outcome: 'LEGACY_SOURCE_NOT_ALLOWED' };
+  }
+
+  function mismoEfecto(fila, esperado) {
     if (!fila) return false;
-    if (fila.source_type === 'LEGACY_UNKNOWN') return false;
+    if (fila.source_type === ORIGEN_LEGADO) return false;
     return fila.driver_id === esperado.driverId
       && fila.kind === esperado.kind
-      && Number(fila.amount_usd) === roundMoney(Math.max(0, Number(esperado.amountUSD) || 0))
+      && Number(fila.amount_usd) === roundMoney(Math.max(0, Number(esperado.amountUSD) || 0));
+  }
+
+  function mismaOperacion(fila, esperado) {
+    return mismoEfecto(fila, esperado)
       && fila.source_type === esperado.sourceType
       && fila.source_id === esperado.sourceId;
   }
 
-  /** El desenlace de un duplicado, leido de la base y comparado. */
-  async function resolverDuplicado(esperado) {
-    const fila = await leerOperacion(esperado.operationId);
-    if (!fila) return { outcome: 'FAILED' };
-    if (!mismaOperacion(fila, esperado)) {
-      logger.error('[+58express DriverFinance] identidad de operacion reutilizada con otra semantica: rechazada');
-      return { outcome: 'OPERATION_ID_CONFLICT' };
+  /**
+   * Lo que la base tiene anotado BAJO ESE ORIGEN DE NEGOCIO, sea cual sea la
+   * identidad con la que se anoto.
+   *
+   * La septima auditoria movio el mismo dinero dos veces sin romper ninguna
+   * regla: `operation_id` era unico, si — pero le puso DOS identidades al
+   * MISMO origen (`TOPUP` / `request-123`) y la recarga entro dos veces.
+   * Saldo 1.00 -> 3.00 -> 5.00. Una recarga es UN hecho de negocio, y un hecho
+   * de negocio mueve dinero una sola vez, se le llame como se le llame.
+   */
+  async function leerOperacionPorOrigen(sourceType, sourceId) {
+    if (!sourceType || !sourceId || sourceType === ORIGEN_LEGADO) return null;
+    const { rows } = await pool.query(
+      `select ${CAMPOS_OPERACION} from public.driver_money_operations
+        where source_type = $1 and source_id = $2`,
+      [sourceType, sourceId]
+    );
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Las DOS identidades, resueltas DENTRO de la transaccion y ANTES de mover
+   * nada: la de la operacion y la del origen de negocio.
+   *
+   *   nada existe                            -> null (la operacion es nueva)
+   *   existe la misma operacion              -> ALREADY_APPLIED
+   *   existe la identidad, otra semantica    -> OPERATION_ID_CONFLICT
+   *   existe el origen con OTRA identidad
+   *     y el mismo efecto                    -> ALREADY_APPLIED (la canonica)
+   *     y distinto efecto                    -> SOURCE_IDENTITY_CONFLICT
+   *
+   * En ningun caso de conflicto se mueve dinero.
+   */
+  async function resolverIdentidades(client, esperado) {
+    if (esperado.operationId) {
+      const porIdentidad = await client.query(
+        `select ${CAMPOS_OPERACION} from public.driver_money_operations
+          where operation_id = $1 for update`,
+        [esperado.operationId]
+      );
+      if (porIdentidad.rowCount === 1) {
+        const fila = porIdentidad.rows[0];
+        if (mismaOperacion(fila, esperado)) {
+          return { outcome: 'ALREADY_APPLIED', balanceAfter: Number(fila.balance_after_usd), transactions: [] };
+        }
+        logger.error('[+58express DriverFinance] identidad de operacion reutilizada con otra semantica: rechazada');
+        return { outcome: 'OPERATION_ID_CONFLICT' };
+      }
     }
-    return { outcome: 'ALREADY_APPLIED', balanceAfter: Number(fila.balance_after_usd), transactions: [] };
+    if (esperado.sourceType && esperado.sourceId && esperado.sourceType !== ORIGEN_LEGADO) {
+      const porOrigen = await client.query(
+        `select ${CAMPOS_OPERACION} from public.driver_money_operations
+          where source_type = $1 and source_id = $2 for update`,
+        [esperado.sourceType, esperado.sourceId]
+      );
+      if (porOrigen.rowCount === 1) {
+        const fila = porOrigen.rows[0];
+        if (mismoEfecto(fila, esperado)) {
+          // El MISMO hecho de negocio con otro nombre. Ya ocurrio: se responde
+          // con la operacion canonica y no se mueve un centimo.
+          return {
+            outcome: 'ALREADY_APPLIED',
+            balanceAfter: Number(fila.balance_after_usd),
+            transactions: [],
+            canonicalOperationId: fila.operation_id
+          };
+        }
+        logger.error('[+58express DriverFinance] origen de negocio reutilizado con otra semantica: rechazado');
+        return { outcome: 'SOURCE_IDENTITY_CONFLICT' };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * El desenlace de un duplicado, leido de la base y comparado. Puede haber
+   * chocado por cualquiera de las dos unicidades, asi que se miran las dos.
+   */
+  async function resolverDuplicado(esperado) {
+    const porIdentidad = esperado.operationId ? await leerOperacion(esperado.operationId) : null;
+    if (porIdentidad) {
+      if (!mismaOperacion(porIdentidad, esperado)) {
+        logger.error('[+58express DriverFinance] identidad de operacion reutilizada con otra semantica: rechazada');
+        return { outcome: 'OPERATION_ID_CONFLICT' };
+      }
+      return { outcome: 'ALREADY_APPLIED', balanceAfter: Number(porIdentidad.balance_after_usd), transactions: [] };
+    }
+    const porOrigen = await leerOperacionPorOrigen(esperado.sourceType, esperado.sourceId);
+    if (!porOrigen) return { outcome: 'FAILED' };
+    if (!mismoEfecto(porOrigen, esperado)) {
+      logger.error('[+58express DriverFinance] origen de negocio reutilizado con otra semantica: rechazado');
+      return { outcome: 'SOURCE_IDENTITY_CONFLICT' };
+    }
+    return {
+      outcome: 'ALREADY_APPLIED',
+      balanceAfter: Number(porOrigen.balance_after_usd),
+      transactions: [],
+      canonicalOperationId: porOrigen.operation_id
+    };
   }
 
   /**
@@ -572,13 +708,21 @@ export function createDriverFinanceStore({
   function resolverCommitDeOperacion(esperado) {
     return async () => {
       const fila = await leerOperacion(esperado.operationId);
-      if (!fila) return 'NOT_COMMITTED';
-      return mismaOperacion(fila, esperado) ? 'COMMITTED' : 'CONFLICT';
+      if (fila) return mismaOperacion(fila, esperado) ? 'COMMITTED' : 'CONFLICT';
+      // Y aqui se pregunta SOLO por la identidad, nunca por el origen. Es
+      // deliberado: un veredicto de COMMITTED devuelve el resultado que esta
+      // transaccion calculo y publica su sombra, y eso solo es cierto si fue
+      // ELLA la que entro. Si otra movio el mismo hecho bajo otro nombre, esta
+      // no entro —su fila no esta— y ese resultado seria una invencion.
+      //
+      // No se pierde nada: el reintento resuelve las dos identidades antes de
+      // tocar nada y descubre el origen ya aplicado. Lo unico que ocurre es
+      // que la verdad la dice el reintento y no una suposicion.
+      return 'NOT_COMMITTED';
     };
   }
 
   /**
-   * Escribe el saldo autoritativo. La exencion del suelo se retira sola en  /**
    * Escribe el saldo autoritativo. La exencion del suelo se retira sola en
    * cuanto el conductor vuelve a estar por encima de el: a partir de ahi la
    * base misma le impide volver a hundirse.
@@ -837,6 +981,7 @@ export function createDriverFinanceStore({
       logger.error('[+58express DriverFinance] credito sin identidad completa de operacion: rechazado');
       return { outcome: 'OPERATION_ID_REQUIRED' };
     }
+    if (sourceType === ORIGEN_LEGADO) return rechazarOrigenLegado();
     const esperado = {
       operationId, driverId, kind: 'CREDIT', amountUSD: USD(importe), sourceType, sourceId
     };
@@ -850,22 +995,12 @@ export function createDriverFinanceStore({
       // hacia que un reintento marcase PAGADO un mantenimiento nuevo sin
       // descontarle nada al conductor. Una repeticion valida tiene que salir
       // de aqui SIN haber tocado absolutamente nada.
-      if (operationId) {
-        const previa = await client.query(
-          `select ${CAMPOS_OPERACION} from public.driver_money_operations
-            where operation_id = $1 for update`,
-          [operationId]
-        );
-        if (previa.rowCount === 1) {
-          abortar(mismaOperacion(previa.rows[0], esperado)
-            ? {
-              outcome: 'ALREADY_APPLIED',
-              balanceAfter: Number(previa.rows[0].balance_after_usd),
-              transactions: []
-            }
-            : { outcome: 'OPERATION_ID_CONFLICT' });
-        }
-      }
+      //
+      // Y se miran las DOS identidades: la de la operacion y la del origen de
+      // negocio. La septima auditoria acredito la misma recarga dos veces sin
+      // mas que cambiarle el `operation_id`.
+      const yaOcurrio = await resolverIdentidades(client, esperado);
+      if (yaOcurrio) abortar(yaOcurrio);
 
       // Y SOLO AHORA los efectos.
       const disponibleInicial = CENT(bloqueado.snapshot.walletBalance) + importe;
@@ -924,6 +1059,7 @@ export function createDriverFinanceStore({
       logger.error('[+58express DriverFinance] debito sin identidad completa de operacion: rechazado');
       return { outcome: 'OPERATION_ID_REQUIRED' };
     }
+    if (sourceType === ORIGEN_LEGADO) return rechazarOrigenLegado();
     const importe = roundMoney(Math.max(0, Number(amountUSD) || 0));
     const esperado = { operationId, driverId, kind: 'DEBIT', amountUSD: importe, sourceType, sourceId };
 
@@ -931,17 +1067,10 @@ export function createDriverFinanceStore({
       const bloqueado = await bloquearEstado(client, driverId);
       if (!bloqueado) return { outcome: 'NO_FINANCE_STATE' };
 
-      // Antes de mirar el saldo: ¿esta operacion ya ocurrio, y es LA MISMA?
-      const previa = await client.query(
-        `select ${CAMPOS_OPERACION} from public.driver_money_operations
-          where operation_id = $1 for update`,
-        [operationId]
-      );
-      if (previa.rowCount === 1) {
-        abortar(mismaOperacion(previa.rows[0], esperado)
-          ? { outcome: 'ALREADY_APPLIED', balanceAfter: Number(previa.rows[0].balance_after_usd) }
-          : { outcome: 'OPERATION_ID_CONFLICT' });
-      }
+      // Antes de mirar el saldo: ¿este dinero ya salio? Por su identidad o por
+      // su origen de negocio — las dos cosas, y en ese orden.
+      const yaOcurrio = await resolverIdentidades(client, esperado);
+      if (yaOcurrio) abortar(yaOcurrio);
 
       if (roundMoney(bloqueado.snapshot.walletBalance - importe) < 0) {
         return { outcome: 'INSUFFICIENT_BALANCE', balanceAfter: bloqueado.snapshot.walletBalance };
@@ -1192,6 +1321,83 @@ export function createDriverFinanceStore({
     }
   }
 
+  /**
+   * LA puerta por la que una carrera puede cambiar de conductor.
+   *
+   * La septima auditoria encontro la ultima grieta de la propiedad. La
+   * liquidacion comprueba —con los cerrojos en la mano— que la reserva y el
+   * viaje son del conductor al que va a cobrar, y eso es cierto mientras su
+   * transaccion vive. Deja de serlo un instante despues: una reasignacion
+   * generica esperando detras del cerrojo entra en cuanto la liquidacion
+   * confirma, y el resultado es
+   *
+   *     reserva SETTLED -> conductor A   (a quien se le cobro la comision)
+   *     viaje asignado  -> conductor B
+   *
+   * La comision se la come A y la carrera figura de B.
+   *
+   * Hoy el producto NO reasigna: la unica asignacion que existe es la de una
+   * carrera que estaba SEARCHING, y esa pasa por `acceptTripWithReservation`.
+   * Esta primitiva existe para que, el dia que haya una reasignacion de
+   * verdad, tenga UNA sola puerta y esa puerta sepa de dinero. El invariante
+   * durable lo declara ademas la base, porque una puerta no sirve de nada
+   * contra quien no pasa por ella.
+   *
+   * No inventa politica: se limita a exigir que la comision no este ya
+   * liquidada. Reasignar una carrera aun no liquidada sigue siendo legitimo, y
+   * la reserva se libera para que el conductor anterior recupere su capacidad.
+   */
+  function reassignTripDriver({ tripId, fromDriverId, toDriverId, updatedAt }) {
+    return enTransaccion('reasignacion del conductor', async (client, abortar) => {
+      // El orden global de cerrojos, tambien aqui: conductor, reserva, viaje.
+      if (fromDriverId) await bloquearEstado(client, fromDriverId);
+
+      const reserva = await client.query(
+        `select driver_id, status from public.driver_commission_reservations
+          where trip_id = $1 for update`,
+        [tripId]
+      );
+      const viaje = await client.query(
+        `select payload->>'driverId' as driver_id, status from public.trips
+          where id = $1 for update`,
+        [tripId]
+      );
+      if (viaje.rowCount !== 1) abortar({ outcome: 'TRIP_NOT_FOUND' });
+
+      // Quien pide la reasignacion no decide de quien era la carrera: lo dice
+      // la base, igual que en la liquidacion.
+      if (fromDriverId && viaje.rows[0].driver_id !== fromDriverId) {
+        abortar({ outcome: 'OWNERSHIP_MISMATCH', currentDriverId: viaje.rows[0].driver_id });
+      }
+      if (reserva.rowCount === 1 && reserva.rows[0].status === 'SETTLED') {
+        abortar({ outcome: 'ALREADY_SETTLED', settledDriverId: reserva.rows[0].driver_id });
+      }
+      if (reserva.rowCount === 1 && reserva.rows[0].status === 'SETTLEMENT_PENDING') {
+        // La carrera esta hecha y su dinero pendiente de cobrar. Moverla de
+        // dueno ahora perderia esa deuda para siempre.
+        abortar({ outcome: 'SETTLEMENT_PENDING', pendingDriverId: reserva.rows[0].driver_id });
+      }
+
+      if (reserva.rowCount === 1 && reserva.rows[0].status === 'RESERVED') {
+        await client.query(
+          `update public.driver_commission_reservations
+              set status = 'RELEASED', resolved_at = now()
+            where trip_id = $1 and status = 'RESERVED'`,
+          [tripId]
+        );
+      }
+      await client.query(
+        `update public.trips
+            set payload = jsonb_set(
+                  jsonb_set(payload, '{driverId}', to_jsonb($2::text), true),
+                  '{updatedAt}', to_jsonb($3::text), true)
+          where id = $1`,
+        [tripId, toDriverId, updatedAt ?? new Date().toISOString()]
+      );
+      return { outcome: 'REASSIGNED', releasedReservation: reserva.rowCount === 1 };
+    }, { outcome: 'FAILED' });
+  }
+
   async function readReservedCommission(driverId) {
     const r = await pool.query(
       `select coalesce(sum(reserved_usd), 0) as total
@@ -1378,6 +1584,7 @@ export function createDriverFinanceStore({
     confirmInactivityWarning,
     releaseInactivityWarning,
     releaseTripReservation,
+    reassignTripDriver,
     readReservedCommission,
     listPendingSettlements,
     reconcileStaleReservations

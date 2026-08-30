@@ -187,22 +187,94 @@ begin
 
     union all
 
-    -- 3) Las restricciones que dan sentido al dinero: la direccion de la
-    --    operacion, que el importe no sea negativo y que el conductor exista
-    --    de verdad. Se validan por su DEFINICION, no por su nombre.
-    select 'a ' || regla.tabla || ' le falta ' || regla.descripcion as detalle
+    -- 3) Las claves foraneas, por sus COLUMNAS REALES.
+    --
+    --    La septima auditoria demostro que buscar texto en la definicion no
+    --    prueba nada: creo la tabla de operaciones con una clave foranea
+    --    `source_id -> users(id)`, cuya definicion contiene «REFERENCES
+    --    users» y por tanto pasaba el patron — mientras `driver_id`, que es
+    --    la columna que dice de QUIEN es el dinero, quedaba sin restringir.
+    --
+    --    Aqui se exige la terna completa: columna local, tabla referenciada y
+    --    columna referenciada. Una clave sobre otra columna ya no cuenta.
+    select 'la clave foranea ' || fk.tabla || '(' || fk.columna || ') deberia apuntar a '
+             || fk.tabla_ref || '(' || fk.columna_ref || ') y '
+             || coalesce(
+                  (select 'la unica que hay sale de (' || a.attname || ')'
+                     from pg_constraint k
+                     join pg_attribute a on a.attrelid = k.conrelid and a.attnum = k.conkey[1]
+                    where k.conrelid = to_regclass('public.' || fk.tabla)
+                      and k.contype = 'f'
+                    limit 1),
+                  'no hay ninguna') as detalle
       from (values
-        ('driver_money_operations', 'la comprobacion de direccion (CREDIT/DEBIT)', 'c', '%kind%CREDIT%'),
-        ('driver_money_operations', 'la comprobacion de importe no negativo',      'c', '%amount_usd%>=%'),
-        ('driver_money_operations', 'la clave foranea al conductor',               'f', '%REFERENCES users%')
-      ) as regla(tabla, descripcion, tipo, patron)
-     where to_regclass('public.' || regla.tabla) is not null
+        ('driver_money_operations',        'driver_id', 'users', 'id'),
+        ('driver_finance_state',           'driver_id', 'users', 'id'),
+        ('driver_commission_reservations', 'driver_id', 'users', 'id'),
+        ('driver_maintenance_obligations', 'driver_id', 'users', 'id'),
+        ('driver_inactivity_warnings',     'driver_id', 'users', 'id')
+      ) as fk(tabla, columna, tabla_ref, columna_ref)
+     where to_regclass('public.' || fk.tabla) is not null
+       and to_regclass('public.' || fk.tabla_ref) is not null
        and not exists (
          select 1 from pg_constraint k
-          where k.conrelid = to_regclass('public.' || regla.tabla)
-            and k.contype = regla.tipo
-            and pg_get_constraintdef(k.oid) like regla.patron
+          where k.conrelid = to_regclass('public.' || fk.tabla)
+            and k.contype = 'f'
+            and k.confrelid = to_regclass('public.' || fk.tabla_ref)
+            and array_length(k.conkey, 1) = 1
+            and array_length(k.confkey, 1) = 1
+            and (select a.attname from pg_attribute a
+                  where a.attrelid = k.conrelid and a.attnum = k.conkey[1]) = fk.columna
+            and (select a.attname from pg_attribute a
+                  where a.attrelid = k.confrelid and a.attnum = k.confkey[1]) = fk.columna_ref
        )
+
+    union all
+
+    -- 4) La NULABILIDAD de lo que no puede faltar nunca.
+    --
+    --    Tambien la encontro la septima auditoria: una identidad de operacion,
+    --    un importe, un conductor o un estado que admitan NULL rompen el libro
+    --    en silencio — se podria anotar dinero sin dueno, o una reserva sin
+    --    estado. Solo se exige a las columnas DE SIEMPRE: las que esta misma
+    --    migracion anade se declaran NOT NULL mas abajo, y si algun dato lo
+    --    impidiera ese `alter` fallaria por si solo, en voz alta.
+    select obligatoria.tabla || '.' || obligatoria.columna
+             || ' admite NULL y no puede' as detalle
+      from (values
+        ('driver_money_operations',        'operation_id'),
+        ('driver_money_operations',        'driver_id'),
+        ('driver_money_operations',        'kind'),
+        ('driver_money_operations',        'amount_usd'),
+        ('driver_money_operations',        'balance_after_usd'),
+        ('driver_finance_state',           'driver_id'),
+        ('driver_finance_state',           'wallet_balance_usd'),
+        ('driver_finance_state',           'deferred_commission_usd'),
+        ('driver_finance_state',           'last_charged_period'),
+        ('driver_finance_state',           'block_active'),
+        ('driver_commission_reservations', 'trip_id'),
+        ('driver_commission_reservations', 'driver_id'),
+        ('driver_commission_reservations', 'reserved_usd'),
+        ('driver_commission_reservations', 'applied_usd'),
+        ('driver_commission_reservations', 'deferred_usd'),
+        ('driver_commission_reservations', 'status'),
+        ('driver_maintenance_obligations', 'id'),
+        ('driver_maintenance_obligations', 'driver_id'),
+        ('driver_maintenance_obligations', 'period'),
+        ('driver_maintenance_obligations', 'amount_usd'),
+        ('driver_maintenance_obligations', 'status'),
+        ('driver_inactivity_warnings',     'driver_id'),
+        ('driver_inactivity_warnings',     'anchor_at'),
+        ('driver_inactivity_warnings',     'threshold_days'),
+        ('driver_inactivity_warnings',     'claimed_at')
+      ) as obligatoria(tabla, columna)
+     where to_regclass('public.' || obligatoria.tabla) is not null
+       and exists (
+         select 1 from information_schema.columns c
+          where c.table_schema = 'public' and c.table_name = obligatoria.tabla
+            and c.column_name = obligatoria.columna and c.is_nullable = 'YES'
+       )
+
   ) as hallazgos;
 
   if problemas is not null then
@@ -210,6 +282,133 @@ begin
   end if;
 end
 $compatibilidad$;
+
+-- ---------------------------------------------------------------------
+-- Comprobacion previa II: que la restriccion EXISTA no prueba que SIRVA.
+-- ---------------------------------------------------------------------
+-- La septima auditoria construyo una tabla de operaciones con
+-- `check (kind = 'CREDIT')` y `check (amount_usd >= -999999)`: dos
+-- restricciones con los nombres y las palabras correctas que, en realidad,
+-- prohiben una operacion valida y permiten dinero negativo. El catalogo no
+-- distingue eso; la base, si.
+--
+-- Aqui se le pregunta a la base directamente, con inserciones de sonda que
+-- SIEMPRE se deshacen: cada una vive dentro de su propio bloque con manejador,
+-- que es una subtransaccion, y termina cancelandose a proposito. No queda ni
+-- una fila. Y solo se ejecuta si la tabla YA existe: en una base limpia no hay
+-- nada que sondear.
+do $sondas$
+declare
+  hay_origen boolean;
+  columnas text;
+  extra text;
+  conductor text;
+  sonda record;
+  acepta boolean;
+  problemas text := null;
+begin
+  if to_regclass('public.driver_money_operations') is null then
+    return;
+  end if;
+
+  select exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'driver_money_operations'
+       and column_name = 'source_type'
+  ) into hay_origen;
+
+  columnas := 'operation_id, driver_id, kind, amount_usd, balance_after_usd'
+           || case when hay_origen then ', source_type, source_id' else '' end;
+  extra := case when hay_origen then ', ''TOPUP'', ''sonda-de-esquema''' else '' end;
+
+  -- Cada sonda tiene que medir UNA cosa. Las tres primeras miden las
+  -- comprobaciones, asi que se les da un conductor que existe de verdad: de lo
+  -- contrario un rechazo de la clave foranea se confundiria con un rechazo de
+  -- la comprobacion, y la sonda acusaria a la inocente. La cuarta —esa si mide
+  -- la clave foranea— usa un conductor inexistente a proposito.
+  select u.id into conductor from public.users u limit 1;
+  conductor := coalesce(conductor, 'sonda_conductor_inexistente');
+
+  for sonda in
+    select * from (values
+      ('DEBIT',  '0.00',  true,
+       'la comprobacion de direccion RECHAZA un DEBIT, que es una operacion valida'),
+      ('SONDA',  '0.00',  false,
+       'la comprobacion de direccion ACEPTA un valor que no es CREDIT ni DEBIT'),
+      ('CREDIT', '-1.00', false,
+       'la comprobacion de importe ACEPTA dinero negativo')
+    ) as s(kind, importe, debe_aceptar, queja)
+  loop
+    acepta := false;
+    begin
+      execute format(
+        'insert into public.driver_money_operations (%s) values (%L, %L, %L, %s, 0%s)',
+        columnas, 'sonda_esquema_driver_finance', conductor,
+        sonda.kind, sonda.importe, extra);
+      acepta := true;
+      -- La fila entro: se cancela la subtransaccion para no dejar rastro.
+      raise exception using errcode = 'DF001';
+    exception
+      when sqlstate 'DF001' then null;   -- la cancelacion es nuestra
+      when others then null;             -- la base la rechazo: era lo esperado
+    end;
+    if acepta <> sonda.debe_aceptar then
+      problemas := coalesce(problemas || '; ', '') || sonda.queja;
+    end if;
+  end loop;
+
+  -- Y la cuarta sonda: ¿el conductor tiene que existir de verdad? Se exige la
+  -- comprobacion INMEDIATA solo para preguntarlo, y se devuelve el diferimiento
+  -- declarado justo despues.
+  set constraints all immediate;
+  acepta := false;
+  begin
+    execute format(
+      'insert into public.driver_money_operations (%s) values (%L, %L, %L, %s, 0%s)',
+      columnas, 'sonda_esquema_driver_finance', 'sonda_conductor_inexistente',
+      'CREDIT', '1.00', extra);
+    acepta := true;
+    raise exception using errcode = 'DF001';
+  exception
+    when sqlstate 'DF001' then null;
+    when others then null;
+  end;
+  -- Se deja en modo INMEDIATO a proposito: lo que quede pendiente de una
+  -- transaccion ajena se comprueba AHORA y no cuando esta migracion intente
+  -- declarar sus columnas NOT NULL, que es cuando ya no se podria.
+  if acepta then
+    problemas := coalesce(problemas || '; ', '')
+      || 'se puede anotar dinero de un conductor que no existe: falta la clave foranea a users(id)';
+  end if;
+
+  if problemas is not null then
+    raise exception 'DRIVER_FINANCE_SCHEMA_INEFFECTIVE: %', problemas;
+  end if;
+
+  -- Y antes de declarar la unicidad del ORIGEN: ¿ya hay dos operaciones
+  -- validas que compartan el mismo origen de negocio? Si las hay, la migracion
+  -- se para aqui. NO se borra ni se fusiona ningun testigo de dinero: eso lo
+  -- mira una persona.
+  --
+  -- Produccion nunca activo esta funcionalidad y su tabla esta vacia, pero eso
+  -- se COMPRUEBA, no se supone.
+  if hay_origen then
+    execute $duplicados$
+      select string_agg(d.source_type || '/' || d.source_id || ' (x' || d.n || ')', ', ')
+        from (select source_type, source_id, count(*)::text as n
+                from public.driver_money_operations
+               where source_type is not null and source_id is not null
+                 and source_type <> 'LEGACY_UNKNOWN'
+               group by source_type, source_id
+              having count(*) > 1) as d
+    $duplicados$ into problemas;
+    if problemas is not null then
+      raise exception 'DRIVER_FINANCE_DUPLICATE_SOURCE: % ya movieron dinero mas de una vez '
+                      'bajo el mismo origen; la unicidad no se puede declarar sin revisarlos', problemas;
+    end if;
+  end if;
+end
+$sondas$;
 
 -- ---------------------------------------------------------------------
 -- A. Reserva de comision, con DUENO durable: el viaje.
@@ -378,6 +577,54 @@ alter table public.driver_money_operations
   alter column source_type set not null;
 alter table public.driver_money_operations
   alter column source_id set not null;
+
+-- ---------------------------------------------------------------------
+-- El ORIGEN DE NEGOCIO es tambien una identidad, y la base la hace unica.
+-- ---------------------------------------------------------------------
+-- La septima auditoria movio el mismo dinero dos veces sin romper ninguna
+-- regla: `operation_id` era unico, si — pero le puso DOS identidades distintas
+-- al MISMO origen (`TOPUP` / `request-123`) y la recarga entro dos veces.
+-- Saldo 1.00 -> 3.00 -> 5.00.
+--
+-- La proteccion no puede vivir solo en la aplicacion: dos procesos pueden
+-- hacer su comprobacion previa a la vez y los dos encontrarla limpia. La
+-- declara la base.
+--
+-- `LEGACY_UNKNOWN` queda FUERA del indice, y a proposito: los testigos
+-- migrados no tienen origen real que pueda ser unico, y exigirselo obligaria a
+-- inventarles uno o a borrarlos. Ninguna de las dos cosas es aceptable con
+-- dinero de por medio.
+create unique index if not exists driver_money_operations_origen_unico
+  on public.driver_money_operations (source_type, source_id)
+  where source_type <> 'LEGACY_UNKNOWN';
+
+-- `LEGACY_UNKNOWN` describe el pasado, no autoriza el futuro.
+--
+-- Una operacion nueva anotada asi entra la primera vez y despues es
+-- IRRECUPERABLE: su reintento legitimo no puede probar nada y falla cerrado
+-- para siempre. La aplicacion ya lo rechaza, pero la aplicacion no es el
+-- ultimo guardian de una tabla de dinero.
+create or replace function public.driver_finance_origen_legado_no()
+returns trigger
+language plpgsql
+as $legado$
+begin
+  if new.source_type = 'LEGACY_UNKNOWN' then
+    raise exception 'DRIVER_FINANCE_LEGACY_SOURCE_NOT_ALLOWED'
+      using detail = 'LEGACY_UNKNOWN solo describe testigos migrados de origen desconocido; '
+                     'una operacion nueva tiene que declarar su origen real';
+  end if;
+  return new;
+end
+$legado$;
+
+-- Solo en INSERT: el relleno de mas arriba es un UPDATE, asi que reaplicar la
+-- migracion sobre una base ya migrada sigue convergiendo sin tropezar consigo
+-- misma.
+drop trigger if exists driver_finance_origen_legado_trg on public.driver_money_operations;
+create trigger driver_finance_origen_legado_trg
+  before insert on public.driver_money_operations
+  for each row execute function public.driver_finance_origen_legado_no();
 
 -- ---------------------------------------------------------------------
 -- Invariantes de estado. Se declaran de forma idempotente: se retira la
@@ -575,6 +822,71 @@ drop trigger if exists driver_finance_project_trg on public.users;
 create trigger driver_finance_project_trg
   before insert or update on public.users
   for each row execute function public.driver_finance_project();
+
+-- ---------------------------------------------------------------------
+-- El DUENO de una carrera liquidada ya no cambia. Lo impide la base.
+-- ---------------------------------------------------------------------
+-- La septima auditoria encontro la ultima grieta de la propiedad: la
+-- liquidacion comprueba, con los cerrojos en la mano, que la reserva Y el
+-- viaje son del conductor al que va a cobrar. Eso es cierto mientras la
+-- transaccion vive — y deja de serlo un instante despues.
+--
+-- Su reproduccion fue exacta: una reasignacion generica del viaje esperando
+-- detras del cerrojo, que entra en cuanto la liquidacion confirma. Resultado:
+--
+--   reserva  SETTLED  -> conductor A   (a quien se le cobro la comision)
+--   viaje    asignado -> conductor B
+--
+-- La comision se la come A y la carrera figura de B. Ninguna comprobacion
+-- dentro de la liquidacion puede evitarlo, porque el dano ocurre DESPUES.
+--
+-- Por eso el invariante vive aqui, donde ninguna escritura puede rodearlo: ni
+-- una reasignacion futura, ni un `persistRecord` obsoleto, ni una replica con
+-- una copia vieja del documento. Es la misma leccion que la proyeccion —el
+-- documento no es la autoridad—, aplicada a la propiedad en vez de al saldo.
+--
+-- Solo se opone a lo que de verdad rompe la contabilidad: cambiar de conductor
+-- una carrera cuya comision YA se liquido. Reasignar antes de liquidar sigue
+-- siendo perfectamente legitimo, y el producto de hoy ni siquiera lo hace.
+do $dueno$
+begin
+  if to_regclass('public.trips') is null then
+    return;
+  end if;
+
+  create or replace function public.driver_finance_dueno_liquidado()
+  returns trigger
+  language plpgsql
+  as $guardia$
+  declare
+    dueno_nuevo text;
+    dueno_viejo text;
+    dueno_liquidado text;
+  begin
+    dueno_nuevo := nullif(new.payload->>'driverId', '');
+    dueno_viejo := nullif(old.payload->>'driverId', '');
+    -- Que no cambie el dueno es el caso normal: ni se consulta nada.
+    if dueno_nuevo is not distinct from dueno_viejo then
+      return new;
+    end if;
+    select r.driver_id into dueno_liquidado
+      from public.driver_commission_reservations r
+     where r.trip_id = new.id and r.status = 'SETTLED';
+    if dueno_liquidado is not null and dueno_liquidado is distinct from dueno_nuevo then
+      raise exception 'DRIVER_FINANCE_TRIP_OWNER_SETTLED'
+        using detail = 'la comision de esta carrera ya se liquido a su conductor: '
+                       'cambiarle el dueno dejaria el dinero cobrado a uno y la carrera puesta a otro';
+    end if;
+    return new;
+  end
+  $guardia$;
+
+  drop trigger if exists driver_finance_dueno_liquidado_trg on public.trips;
+  create trigger driver_finance_dueno_liquidado_trg
+    before update on public.trips
+    for each row execute function public.driver_finance_dueno_liquidado();
+end
+$dueno$;
 
 -- ---------------------------------------------------------------------
 -- Cierre de acceso, igual que el resto del esquema.

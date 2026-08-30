@@ -319,6 +319,30 @@ export function createDriverFinanceService({
     };
   }
 
+  /**
+   * Apunte de la deuda diferida que este ingreso acaba de saldar.
+   *
+   * Su identidad la da el TOTAL acumulado que el conductor lleva pagado, que
+   * solo crece: dos pagos distintos nunca coinciden y el mismo pago repetido
+   * produce el mismo identificador. El apunte se escribe dentro de la misma
+   * transacción que mueve la deuda, así que o entran los dos o no entra
+   * ninguno — y por eso el reintento del planificador, un reinicio o dos
+   * conciliaciones simultáneas no pueden duplicarlo.
+   */
+  function construirApunteDeDeuda(driver, pagado, saldoDespues, totalPagado, ahora) {
+    return {
+      id: `transaction_deferred_${driver.id}_${Math.round(Number(totalPagado) * 100)}`,
+      userId: driver.id,
+      type: 'DRIVER_DEFERRED_COMMISSION_PAYMENT',
+      amount: -pagado,
+      description: 'Comisión pendiente saldada',
+      currency: 'USD',
+      status: 'APPROVED',
+      balanceAfter: saldoDespues,
+      createdAt: new Date(ahora).toISOString()
+    };
+  }
+
   /** Añade el apunte al libro en memoria sin duplicarlo. */
   function registrarEnMemoria(transaccion) {
     if (!transaccion) return;
@@ -460,7 +484,13 @@ export function createDriverFinanceService({
         at: new Date(ahora).toISOString(),
         builders: {
           maintenance: ({ period, balanceAfter }) =>
-            construirTransaccion(driver, period, DRIVER_MAINTENANCE_FEE_USD, balanceAfter, ahora)
+            construirTransaccion(driver, period, DRIVER_MAINTENANCE_FEE_USD, balanceAfter, ahora),
+          // La séptima auditoría encontró que aquí faltaba: la conciliación
+          // saldaba deuda diferida y le bajaba el saldo al conductor sin dejar
+          // rastro en su historial. La aritmética estaba bien; lo que faltaba
+          // era poder mirarlo.
+          deferred: ({ paid, balanceAfter, paidTotal }) =>
+            construirApunteDeDeuda(driver, paid, balanceAfter, paidTotal, ahora)
         }
       });
       if (r.outcome !== 'CREDITED') return;

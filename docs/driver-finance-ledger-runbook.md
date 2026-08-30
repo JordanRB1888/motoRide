@@ -93,6 +93,70 @@ es un error que haya que corregir a mano: hay que **reintentar la misma
 aprobación**, que usará la misma identidad y descubrirá si aquel movimiento
 llegó a entrar. Aprobar de nuevo nunca duplica el dinero.
 
+### Y el origen de negocio también es una identidad
+
+Una identidad de operación no basta. La séptima auditoría movió la misma
+recarga dos veces sin romper ninguna regla: le puso **dos nombres al mismo
+hecho**.
+
+```
+op-A · TOPUP / request-123 · +2.00      saldo 1.00 → 3.00
+op-B · TOPUP / request-123 · +2.00      saldo 3.00 → 5.00
+```
+
+Por eso cada operación guarda además **de dónde viene** —`source_type` y
+`source_id`— y la base declara esa pareja **única**:
+
+```sql
+create unique index driver_money_operations_origen_unico
+  on driver_money_operations (source_type, source_id)
+  where source_type <> 'LEGACY_UNKNOWN';
+```
+
+Una recarga es UN hecho de negocio, y un hecho mueve dinero **una sola vez**,
+se le llame como se le llame. Si llega bajo otra identidad pero con el mismo
+efecto, se responde con la operación canónica y no se mueve nada; si el efecto
+difiere —otro conductor, otro importe, otra dirección— es `SOURCE_IDENTITY_CONFLICT`
+y no se mueve nada tampoco.
+
+Está en la base y no solo en el código a propósito: dos procesos pueden hacer
+su comprobación previa a la vez y los dos encontrarla limpia.
+
+### `LEGACY_UNKNOWN` describe el pasado; no autoriza el futuro
+
+Los testigos que existieran antes de que estos campos existieran llevan
+`source_type = 'LEGACY_UNKNOWN'`, que no es un origen inventado sino la
+anotación explícita de que **no se sabe**. Quedan fuera del índice único
+—no tienen un origen real que pueda serlo— y el código nunca los acepta como
+prueba de una repetición.
+
+Una operación **nueva** con ese origen se rechaza dos veces: en la aplicación
+(`LEGACY_SOURCE_NOT_ALLOWED`) y en la base, con un disparador `before insert`.
+La razón es concreta: entraría la primera vez y después quedaría atrapada
+—su reintento legítimo no podría probar nada y fallaría cerrado para siempre—.
+Es dinero que se mueve una vez y no se puede reconciliar nunca.
+
+### El dueño de una carrera liquidada no cambia
+
+La liquidación comprueba, con los cerrojos en la mano, que la reserva y el
+viaje son del conductor al que va a cobrar. Eso es cierto mientras su
+transacción vive, y deja de serlo un instante después: una escritura del
+documento del viaje esperando detrás del cerrojo entra en cuanto la
+liquidación confirma, y deja la comisión cobrada a uno y la carrera puesta a
+otro.
+
+El invariante vive por eso en la base —`driver_finance_dueno_liquidado_trg`,
+`before update on trips`—, donde ninguna escritura puede rodearlo. Si algo
+intenta cambiar el conductor de una carrera cuya comisión ya está liquidada,
+la escritura falla con `DRIVER_FINANCE_TRIP_OWNER_SETTLED`.
+
+Reasignar **antes** de liquidar sigue siendo legítimo. Hoy el producto no
+reasigna en absoluto: la única asignación que existe es la de una carrera
+`SEARCHING`, y pasa por `acceptTripWithReservation`. Para cuando haya una
+reasignación de verdad existe ya una puerta que sabe de dinero,
+`reassignTripDriver`, que libera la reserva del conductor anterior y se niega
+si la comisión ya está liquidada o pendiente de cobro.
+
 ## Orden de cerrojos
 
 Todas las operaciones de dinero toman los cerrojos en **el mismo orden**. Es la
@@ -111,6 +175,32 @@ El reconciliador era la excepción y se corrigió: bloqueaba reservas antes que
 el estado del conductor, al revés que todos los demás. Ahora busca candidatos
 **sin cerrojos** y resuelve cada uno en su propia transacción, tomando primero
 la fila del conductor.
+
+## El fin de carrera no espera al libro del conductor
+
+Cuando el conductor completa una carrera pasan dos cosas independientes: el
+viaje y el cobro a la pasajera se hacen durables, y el dinero del conductor se
+liquida. Estaban encadenadas, y la pasajera esperaba a las dos.
+
+Medido en el camino real, contra la base de pruebas:
+
+```
+persistencia del viaje y del cobro a la pasajera   1.7 s   ← ya es durable
+ensureState                                        2.9 s
+settleTripForDriver                                4.5 s
+registerQualifyingTrip                             2.2 s
+------------------------------------------------------------------
+la pasajera recibía el fin de carrera a los       11.5 s
+```
+
+Ahora son dos anuncios, cada uno en cuanto lo suyo es cierto: el **estado** y
+la cartera de la pasajera en cuanto el viaje es durable, y la cartera del
+conductor cuando su liquidación se resuelve. El camino sin conexión hace
+exactamente lo mismo, en el mismo orden.
+
+La liquidación no cambió: sigue ocurriendo después de que el viaje sea durable
+y exactamente una vez. Lo único que dejó de hacer es retener un anuncio que ya
+era cierto.
 
 ## Orden de despliegue
 

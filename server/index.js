@@ -610,7 +610,8 @@ async function settleDriverForCompletedTrip(trip) {
       builders: {
         settlement: construirApunte,
         maintenance: ({ period, balanceAfter }) => construirApunteMantenimiento(driver, period, balanceAfter, instante),
-        deferred: ({ paid, balanceAfter }) => construirApunteDeuda(driver, paid, balanceAfter, trip.id, instante)
+        deferred: ({ paid, balanceAfter, paidTotal }) =>
+          construirApunteDeuda(driver, paid, balanceAfter, trip.id, instante, paidTotal)
       }
     });
     if (resultado.outcome === 'ALREADY_SETTLED') {
@@ -705,10 +706,22 @@ function construirApunteMantenimiento(driver, periodo, saldoDespues, instante) {
   };
 }
 
-/** Apunte de la comisión diferida que un ingreso acaba de saldar. */
-function construirApunteDeuda(driver, pagado, saldoDespues, sourceId, instante) {
+/**
+ * Apunte de la comisión diferida que un ingreso acaba de saldar.
+ *
+ * Su identidad es DETERMINISTA —el total acumulado que el conductor lleva
+ * pagado de deuda— y no aleatoria. La séptima auditoría encontró que la
+ * conciliación de crédito cero saldaba deuda y bajaba el saldo sin dejar
+ * apunte: la aritmética era correcta y el historial mentía. Ahora el apunte
+ * existe siempre, y como su identidad se deriva de un total que solo crece,
+ * ni el reintento del planificador, ni un reinicio, ni dos conciliaciones a la
+ * vez pueden duplicarlo.
+ */
+function construirApunteDeuda(driver, pagado, saldoDespues, sourceId, instante, totalPagado) {
   return {
-    id: `transaction_${crypto.randomUUID()}`,
+    id: Number.isFinite(Number(totalPagado))
+      ? `transaction_deferred_${driver.id}_${Math.round(Number(totalPagado) * 100)}`
+      : `transaction_${crypto.randomUUID()}`,
     userId: driver.id,
     type: 'DRIVER_DEFERRED_COMMISSION_PAYMENT',
     amount: -pagado,
@@ -841,7 +854,8 @@ async function aplicarCreditoAlConductor(owner, amount, { operationId, sourceTyp
       policyEnabled: DRIVER_FINANCE_ON,
       builders: {
         maintenance: ({ period, balanceAfter }) => construirApunteMantenimiento(owner, period, balanceAfter, instante),
-        deferred: ({ paid, balanceAfter }) => construirApunteDeuda(owner, paid, balanceAfter, sourceId, instante)
+        deferred: ({ paid, balanceAfter, paidTotal }) =>
+          construirApunteDeuda(owner, paid, balanceAfter, sourceId, instante, paidTotal)
       }
     });
     if (r.outcome === 'CREDITED' || r.outcome === 'ALREADY_APPLIED') {
@@ -852,8 +866,9 @@ async function aplicarCreditoAlConductor(owner, amount, { operationId, sourceTyp
       return { outcome: r.outcome, balance: roundMoney(Number(owner.walletBalance || 0)) };
     }
     if (r.outcome !== 'NO_FINANCE_STATE') {
-      // AMBIGUOUS, FAILED u OPERATION_ID_REQUIRED: NO se inventa un saldo. La
-      // ruta tiene que decidir con la verdad, y la verdad es que no se sabe.
+      // AMBIGUOUS o FAILED (no se sabe), o cualquiera de los conflictos de
+      // identidad y origen (se sabe, y la respuesta es que no). En ningun caso
+      // se inventa un saldo: la ruta tiene que decidir con la verdad.
       console.error(`[+58express DriverFinance] crédito no resuelto (${r.outcome})`);
       return { outcome: r.outcome, balance: roundMoney(Number(owner.walletBalance || 0)) };
     }
@@ -923,21 +938,44 @@ async function liquidarConductorTrasPersistir(trip, settlement) {
   return { ...settlement, driverPending: false, driverTransaction };
 }
 
+/**
+ * Desenlaces del libro que NO son incertidumbre sino conflicto: el dinero que
+ * se pide ya está anotado bajo otra semántica, o la solicitud no trae un
+ * origen con el que se pueda probar nada.
+ *
+ * Distinguirlos importa de verdad. Un desenlace incierto se responde `503`
+ * con `retryable`, y el siguiente intento descubre qué pasó. Un conflicto no
+ * cambia por reintentarlo: responderlo como incierto mandaría a la
+ * administración a reintentar para siempre.
+ */
+const CONFLICTOS_DE_OPERACION = new Set([
+  'OPERATION_ID_CONFLICT',
+  'SOURCE_IDENTITY_CONFLICT',
+  'LEGACY_SOURCE_NOT_ALLOWED',
+  'OPERATION_ID_REQUIRED'
+]);
+
+function emitirCarteraDePasajera(trip, settlement) {
+  if (!settlement?.passengerTransaction) return;
+  const passenger = database.users.find(user => user.id === trip.passengerId);
+  io.to(`user:${trip.passengerId}`).emit('wallet:updated', {
+    balance: roundMoney(passenger?.walletBalance || 0),
+    transaction: settlement.passengerTransaction
+  });
+}
+
+function emitirCarteraDeConductor(trip, settlement) {
+  if (!settlement?.driverTransaction) return;
+  const driver = database.users.find(user => user.id === trip.driverId);
+  io.to(`user:${trip.driverId}`).emit('wallet:updated', {
+    balance: roundMoney(driver?.walletBalance || 0),
+    transaction: settlement.driverTransaction
+  });
+}
+
 function emitCompletedTripWalletUpdates(trip, settlement) {
-  if (settlement?.passengerTransaction) {
-    const passenger = database.users.find(user => user.id === trip.passengerId);
-    io.to(`user:${trip.passengerId}`).emit('wallet:updated', {
-      balance: roundMoney(passenger?.walletBalance || 0),
-      transaction: settlement.passengerTransaction
-    });
-  }
-  if (settlement?.driverTransaction) {
-    const driver = database.users.find(user => user.id === trip.driverId);
-    io.to(`user:${trip.driverId}`).emit('wallet:updated', {
-      balance: roundMoney(driver?.walletBalance || 0),
-      transaction: settlement.driverTransaction
-    });
-  }
+  emitirCarteraDePasajera(trip, settlement);
+  emitirCarteraDeConductor(trip, settlement);
 }
 
 /**
@@ -984,8 +1022,35 @@ async function aplicarTransicionDelConductor(trip, status, driverId) {
  * Anuncio en tiempo real de una transicion YA persistida. Payload construido
  * por el servidor a partir del viaje: nunca se retransmite lo recibido.
  */
+/**
+ * DRIVER-FINANCE-1 v8 — el fin de carrera NO espera al libro del conductor.
+ *
+ * La septima auditoria encontro que la pasajera nunca recibia el `COMPLETED`
+ * dentro del contrato. La instrumentacion del camino real lo dejo medido:
+ *
+ *   persistencia del viaje y del cobro a la pasajera   1.7 s   <- ya es durable
+ *   ensureState                                        2.9 s
+ *   settleTripForDriver                                4.5 s
+ *   registerQualifyingTrip                             2.2 s
+ *   ------------------------------------------------------------------
+ *   la pasajera lo recibia a los                      11.5 s
+ *
+ * No era una carrera ni un fallo de la liquidacion: era ORDEN. El estado de la
+ * carrera ya era durable a los 1.7 s —la pasajera ya estaba cobrada— y aun asi
+ * su pantalla se quedaba en «en curso» mientras se resolvia el dinero del
+ * conductor, que no le concierne. Con una base mas lejos o una liquidacion mas
+ * lenta, esa espera no tiene techo.
+ *
+ * Ahora son dos anuncios, cada uno en cuanto lo suyo es cierto:
+ *
+ *   1. el ESTADO y la cartera de la pasajera, en cuanto el viaje es durable;
+ *   2. la cartera del conductor, cuando su liquidacion se resuelve.
+ *
+ * La liquidacion sigue ocurriendo exactamente una vez y en el mismo orden que
+ * antes: lo unico que deja de hacer es retener el anuncio de la pasajera.
+ */
 function anunciarTransicionDelConductor(trip, settlement) {
-  emitCompletedTripWalletUpdates(trip, settlement);
+  emitirCarteraDePasajera(trip, settlement);
   io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).to('admins').emit('tripStatusUpdated', {
     tripId: trip.id,
     status: trip.status,
@@ -1095,12 +1160,13 @@ app.use('/api', createTripOfflineEventsRouter({
   requireAuth,
   requireApprovedDriver,
   applyTransition: (trip, status, driverId) => aplicarTransicionDelConductor(trip, status, driverId),
-  // OFFLINE-TRIP-1A: la transición es asíncrona (el dinero se escribe en la
-  // base) y el anuncio liquida primero. El router espera las dos, igual que
-  // el camino en línea: un solo juego de reglas y un solo orden.
+  // OFFLINE-TRIP-1A: exactamente el mismo orden que el camino en línea —el
+  // estado en cuanto es durable, el dinero del conductor después—, porque
+  // online y offline no pueden divergir. Un solo juego de reglas.
   announceTransition: async (trip, settlement) => {
+    anunciarTransicionDelConductor(trip, settlement);
     const liquidado = await liquidarConductorTrasPersistir(trip, settlement);
-    anunciarTransicionDelConductor(trip, liquidado);
+    emitirCarteraDeConductor(trip, liquidado);
   },
   persistDatabase
 }));
@@ -2141,10 +2207,12 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
       sourceType: 'TOPUP',
       sourceId: transaction.id
     });
-    if (r.outcome === 'OPERATION_ID_CONFLICT') {
-      // Esa identidad existe en el libro pero describe OTRA operación. No se
-      // aprueba nada apoyándose en un testigo que no es el de esta solicitud.
-      return res.status(409).json({ error: 'MONEY_OPERATION_CONFLICT' });
+    if (CONFLICTOS_DE_OPERACION.has(r.outcome)) {
+      // El libro dice que ese dinero es de OTRA operación —o que la solicitud
+      // no trae un origen con el que se pueda probar nada—. No se aprueba
+      // apoyándose en un testigo que no es el de esta solicitud, y NO es un
+      // 503: reintentar no lo va a cambiar nunca.
+      return res.status(409).json({ error: 'MONEY_OPERATION_CONFLICT', reason: r.outcome });
     }
     if (r.outcome !== 'CREDITED' && r.outcome !== 'ALREADY_APPLIED') {
       // Ni aprobada ni rechazada: recuperable. El siguiente intento usará la
@@ -2174,8 +2242,8 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
         debitadoEnElLibro = true;
       } else if (r.outcome === 'INSUFFICIENT_BALANCE') {
         return res.status(409).json({ error: 'INSUFFICIENT_BALANCE' });
-      } else if (r.outcome === 'OPERATION_ID_CONFLICT') {
-        return res.status(409).json({ error: 'MONEY_OPERATION_CONFLICT' });
+      } else if (CONFLICTOS_DE_OPERACION.has(r.outcome)) {
+        return res.status(409).json({ error: 'MONEY_OPERATION_CONFLICT', reason: r.outcome });
       } else if (r.outcome !== 'NO_FINANCE_STATE') {
         // Incierto: la solicitud sigue PENDIENTE y el reintento, con la misma
         // identidad, descubrirá si aquel débito entró.
@@ -3068,10 +3136,15 @@ io.on('connection', (socket) => {
       socket.emit('tripStatusRejected', { tripId, status, error: 'DATABASE_WRITE_FAILED' });
       return;
     }
-    // El viaje y el cobro a la pasajera YA son durables: solo ahora se toca
-    // el dinero del conductor.
+    // El viaje y el cobro a la pasajera YA son durables: se anuncian AHORA.
+    // Retenerlos hasta que se resuelva el dinero del conductor era lo que
+    // dejaba a la pasajera esperando un fin de carrera que ya habia ocurrido.
+    anunciarTransicionDelConductor(trip, resultado.settlement);
+    // Y solo despues se toca el dinero del conductor, en el mismo orden de
+    // siempre. Si queda en el aire, la reserva sigue viva y el reconciliador la
+    // rescata: la carrera esta hecha, el dinero se debe, y el sistema lo sabe.
     const liquidado = await liquidarConductorTrasPersistir(trip, resultado.settlement);
-    anunciarTransicionDelConductor(trip, liquidado);
+    emitirCarteraDeConductor(trip, liquidado);
   });
 
   // Passenger Ride Cancelled Event

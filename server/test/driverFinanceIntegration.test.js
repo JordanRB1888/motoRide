@@ -44,6 +44,26 @@ const esperar = ms => new Promise(resolve => setTimeout(resolve, ms));
  * de esta prueba con un problema del intermediario. Confirmando cada paso se
  * elimina el solapamiento sin relajar ni una sola comprobación de dinero.
  */
+/**
+ * v8 — el fin de carrera de la pasajera ya no espera al libro del conductor
+ * (esa espera era el defecto que encontro la septima auditoria), asi que la
+ * liquidacion se resuelve DESPUES del anuncio. Esta espera no relaja ninguna
+ * comprobacion: sigue exigiendo `SETTLED`, la comision exacta y un solo
+ * apunte. Lo unico que hace es no mirar antes de tiempo.
+ */
+async function esperarReservaDurable(pool, tripId, estado, limiteMs = 30_000) {
+  const hasta = Date.now() + limiteMs;
+  let ultimo = null;
+  while (Date.now() < hasta) {
+    const { rows } = await pool.query(
+      `select status from public.driver_commission_reservations where trip_id = $1`, [tripId]);
+    ultimo = rows[0]?.status ?? null;
+    if (ultimo === estado) return true;
+    await esperar(300);
+  }
+  throw new Error(`la reserva nunca llegó a ${estado} (se quedó en ${ultimo})`);
+}
+
 async function esperarEstadoDurable(pool, tripId, estado, limiteMs = 20_000) {
   const hasta = Date.now() + limiteMs;
   while (Date.now() < hasta) {
@@ -249,7 +269,7 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
   conductor.emit('tripStatusUpdated', { tripId: tripEfectivo, status: 'COMPLETED' });
   await completada;
   await esperarEstadoDurable(pool, tripEfectivo, 'COMPLETED');
-  await esperar(600);
+  await esperarReservaDurable(pool, tripEfectivo, 'SETTLED');
   if (process.env.DEBUG_INTEGRACION === '1') {
     const { rows } = await pool.query(
       `select pid, state, wait_event_type, wait_event, left(regexp_replace(query, '\s+', ' ', 'g'), 110) as consulta,

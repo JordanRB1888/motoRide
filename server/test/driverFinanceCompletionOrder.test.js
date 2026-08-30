@@ -86,7 +86,7 @@ test('los TRES caminos de completación liquidan después de persistir', () => {
   assert.equal(llamadas.length, 3,
     'socket del conductor, reconciliación sin conexión y cierre administrativo: ni uno más');
 
-  const contextos = llamadas.map(m => fuente.slice(Math.max(0, m.index - 500), m.index));
+  const contextos = llamadas.map(m => fuente.slice(Math.max(0, m.index - 1400), m.index));
 
   // 1) El camino en línea: el socket persiste y solo entonces liquida.
   assert.ok(contextos.some(c => /if \(!await persistDatabase\(\)\) \{[\s\S]*tripStatusRejected/.test(c)),
@@ -143,4 +143,43 @@ test('la autoridad del saldo NO depende de la bandera de la política', () => {
   assert.ok(credito.includes('if (persistence.financeReady === true) {'),
     'el crédito entra al libro aunque la política esté apagada');
   assert.ok(credito.includes('policyEnabled: DRIVER_FINANCE_ON'));
+});
+
+// ---------------------------------------------------------------------------
+// v8 · el fin de carrera de la pasajera no espera al libro del conductor
+// ---------------------------------------------------------------------------
+//
+// La septima auditoria midio 11.5 segundos entre un viaje que YA era durable
+// -la pasajera ya estaba cobrada- y el anuncio que su pantalla esperaba. No
+// era una carrera ni un fallo de la liquidacion: el anuncio estaba encadenado
+// al dinero del conductor, que no le concierne.
+
+test('v8 · el estado se anuncia ANTES de liquidar, y la cartera del conductor despues', () => {
+  for (const [camino, ancla] of [
+    ['el socket del conductor', 'const resultado = await aplicarTransicionDelConductor(trip, status'],
+    ['la reconciliacion sin conexion', 'announceTransition: async (trip, settlement)']
+  ]) {
+    const desde = fuente.indexOf(ancla);
+    assert.notEqual(desde, -1, `no se encontro ${camino}`);
+    const bloque = fuente.slice(desde, desde + 2600);
+    const anuncio = bloque.indexOf('anunciarTransicionDelConductor(trip');
+    const liquidacion = bloque.indexOf('liquidarConductorTrasPersistir(trip');
+    const cartera = bloque.indexOf('emitirCarteraDeConductor(trip');
+    assert.ok(anuncio > -1 && liquidacion > -1 && cartera > -1,
+      `${camino} tiene que anunciar, liquidar y emitir la cartera del conductor`);
+    assert.ok(anuncio < liquidacion,
+      `${camino}: el estado se anuncia en cuanto es durable, sin esperar al dinero del conductor`);
+    assert.ok(liquidacion < cartera,
+      `${camino}: la cartera del conductor se emite cuando su liquidacion se resuelve, no antes`);
+  }
+});
+
+test('v8 · el anuncio de la transicion NO arrastra la cartera del conductor', () => {
+  const desde = fuente.indexOf('function anunciarTransicionDelConductor(');
+  assert.notEqual(desde, -1);
+  const cuerpo = fuente.slice(desde, fuente.indexOf('\n}', desde));
+  assert.ok(cuerpo.includes('emitirCarteraDePasajera'),
+    'la cartera de la pasajera SI: ya es durable cuando el viaje lo es');
+  assert.ok(!cuerpo.includes('emitirCarteraDeConductor'),
+    'la del conductor NO: aun no se sabe, y esperarla retenia el fin de carrera');
 });

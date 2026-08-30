@@ -524,3 +524,154 @@ test('v7 · desde la forma ANTERIOR de la tabla de operaciones, se actualiza sin
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// v8 · que la restriccion EXISTA no prueba que SIRVA
+// ---------------------------------------------------------------------------
+//
+// La septima auditoria demostro que buscar palabras en la definicion de una
+// restriccion no establece su semantica. Construyo una tabla de operaciones
+// con nombres convincentes y esto dentro:
+//
+//   check (kind = 'CREDIT')          -> prohibe un DEBIT perfectamente valido
+//   check (amount_usd >= -999999)    -> permite dinero negativo
+//   foreign key (source_id) -> users -> contiene «REFERENCES users» y no
+//                                       restringe al conductor en absoluto
+//
+// La migracion la acepto. Ahora se le pregunta a la BASE, con inserciones que
+// siempre se deshacen, y se validan las claves foraneas por sus columnas.
+
+const OPERACIONES_DEBILES = `
+create table public.driver_money_operations (
+  operation_id text not null,
+  driver_id text not null,
+  kind text not null,
+  amount_usd numeric(12, 2) not null,
+  balance_after_usd numeric(12, 2) not null,
+  source_type text not null,
+  source_id text not null,
+  applied_at timestamptz not null default now(),
+  constraint driver_money_operations_pkey primary key (operation_id),
+  constraint driver_money_operations_kind_check check (kind = 'CREDIT'),
+  constraint driver_money_operations_amount_check check (amount_usd >= -999999),
+  constraint driver_money_operations_driver_fk
+    foreign key (source_id) references public.users(id)
+    on delete no action deferrable initially deferred
+);
+`;
+
+test('v8 · una comprobación de dirección que prohíbe DEBIT se rechaza', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    await cliente.query('drop table if exists public.driver_money_operations cascade');
+    await cliente.query(OPERACIONES_DEBILES);
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        // Basta con que la migración se pare antes de tocar nada durable: da
+        // igual cuál de las tres debilidades acuse primero.
+        assert.match(error.message, /DRIVER_FINANCE_SCHEMA_(INEFFECTIVE|INCOMPATIBLE)/,
+          'los nombres eran los correctos; lo que no servía era lo que hacían');
+        return true;
+      }
+    );
+  });
+});
+
+test('v8 · una clave foránea sobre la columna equivocada se rechaza', saltar, async () => {
+  // `source_id -> users(id)` contiene «REFERENCES users» y pasaba el patrón,
+  // mientras `driver_id` —la columna que dice de QUIÉN es el dinero— quedaba
+  // sin restringir.
+  await enTransaccionDeshecha(async cliente => {
+    await cliente.query('drop table if exists public.driver_money_operations cascade');
+    // Con las dos comprobaciones CORRECTAS, para que la única debilidad que
+    // quede sea la clave foránea.
+    await cliente.query(`create table public.driver_money_operations (
+      operation_id text primary key,
+      driver_id text not null,
+      kind text not null check (kind in ('CREDIT', 'DEBIT')),
+      amount_usd numeric(12, 2) not null check (amount_usd >= 0),
+      balance_after_usd numeric(12, 2) not null,
+      source_type text not null,
+      source_id text not null,
+      applied_at timestamptz not null default now(),
+      constraint driver_money_operations_driver_fk
+        foreign key (source_id) references public.users(id)
+        on delete no action deferrable initially deferred)`);
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SCHEMA_(INEFFECTIVE|INCOMPATIBLE)/);
+        assert.match(error.message, /driver_id|conductor que no existe/);
+        return true;
+      }
+    );
+  });
+});
+
+test('v8 · una columna crítica que admite NULL se rechaza', saltar, async () => {
+  // Se podría anotar dinero sin dueño, o una reserva sin estado.
+  await enTransaccionDeshecha(async cliente => {
+    await cliente.query('alter table public.driver_money_operations alter column driver_id drop not null');
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SCHEMA_INCOMPATIBLE/);
+        assert.match(error.message, /driver_money_operations\.driver_id admite NULL/);
+        return true;
+      }
+    );
+  });
+});
+
+test('v8 · dos operaciones con el MISMO origen paran la migración: no se borra ninguna', saltar, async () => {
+  // La unicidad del origen no se puede declarar sobre datos que ya la violan.
+  // Y la salida correcta NO es fusionar ni borrar testigos de dinero: es
+  // pararse y que lo mire una persona.
+  await enTransaccionDeshecha(async cliente => {
+    const { rows: [alguien] } = await cliente.query(`select id from public.users limit 1`);
+    if (!alguien) return;
+    await cliente.query('drop index if exists public.driver_money_operations_origen_unico');
+    await cliente.query(
+      `insert into public.driver_money_operations
+         (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+       values ('dup_a_v8', $1, 'CREDIT', 2, 3, 'TOPUP', 'origen-repetido-v8'),
+              ('dup_b_v8', $1, 'CREDIT', 2, 5, 'TOPUP', 'origen-repetido-v8')`,
+      [alguien.id]);
+    await cliente.query('set constraints all immediate');
+
+    // Un punto de retorno: la migracion va a fallar a proposito, y sin el la
+    // transaccion quedaria abortada y no se podria comprobar lo que importa,
+    // que es que los testigos siguen intactos.
+    await cliente.query('savepoint antes_de_migrar');
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_DUPLICATE_SOURCE/);
+        assert.match(error.message, /origen-repetido-v8/);
+        return true;
+      }
+    );
+    await cliente.query('rollback to savepoint antes_de_migrar');
+
+    // Y ninguno de los dos testigos se ha tocado.
+    const { rows } = await cliente.query(
+      `select count(*)::int as n from public.driver_money_operations
+        where source_id = 'origen-repetido-v8'`);
+    assert.equal(rows[0].n, 2, 'los dos siguen ahí: revisarlos es cosa de una persona');
+  });
+});
+
+test('v8 · la migración declara la unicidad del origen y el rechazo del legado', saltar, () => {
+  const minusculas = sql.toLowerCase();
+  assert.ok(minusculas.includes('create unique index if not exists driver_money_operations_origen_unico'),
+    'sin unicidad del origen, el mismo hecho de negocio mueve dinero dos veces');
+  assert.ok(minusculas.includes("where source_type <> 'legacy_unknown'"),
+    'y los testigos migrados quedan fuera: no tienen un origen real que pueda ser único');
+  assert.ok(minusculas.includes('driver_finance_legacy_source_not_allowed'),
+    'una operación nueva no puede nacer sin origen conocido');
+  assert.ok(minusculas.includes('driver_finance_trip_owner_settled'),
+    'ni una carrera ya liquidada puede cambiar de dueño');
+});
