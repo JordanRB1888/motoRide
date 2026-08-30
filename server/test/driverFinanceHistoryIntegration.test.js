@@ -206,3 +206,135 @@ test('§24/§26/§27 · la comisión pendiente saldada se ve donde debe, y solo 
   const intento = await get('/api/admin/finance', passengerToken);
   assert.equal(intento.status, 403, 'la auditoría de finanzas sigue siendo solo de administración');
 });
+
+// ==========================================================================
+// v10 · la auditoria completa, por paginas
+// ==========================================================================
+//
+// La novena auditoria encontro que la ruta cortaba en cien y no ofrecia forma
+// de seguir: los apuntes mas antiguos quedaban sencillamente fuera del alcance
+// de quien audita. Y ordenar solo por fecha deja indefinido el orden entre
+// apuntes del MISMO instante —y los hay: una conciliacion escribe varios en la
+// misma transaccion—, asi que en el corte de una pagina unos podian saltarse y
+// otros salir dos veces.
+
+test('§23 · el historial completo se recorre por paginas, sin perder ni repetir', saltar, async (t) => {
+  const pool = new pg.Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 4 });
+
+  const sufijo = marca();
+  const driverId = `drv_pag_${sufijo}`;
+  const TOTAL = 137;
+  // Un tercio comparten instante EXACTO: es el caso que rompe una paginacion
+  // que solo ordena por fecha.
+  const MISMO_INSTANTE = new Date('2026-08-30T03:00:00.000Z').toISOString();
+
+  // UNA sola despedida, y en el orden que importa: primero se suelta el
+  // servidor, luego se limpia y solo al final se cierra el pozo.
+  let servidor = null;
+  let pasajeraId = null;
+  t.after(async () => {
+    if (servidor) servidor.kill('SIGKILL');
+    await esperar(300);
+    const ids = [driverId, pasajeraId].filter(Boolean);
+    await pool.query(`delete from public.transactions where user_id = any($1::text[])`, [ids]);
+    await pool.query(`delete from public.driver_finance_state where driver_id = any($1::text[])`, [ids]);
+    await pool.query(`delete from public.users where id = any($1::text[])`, [ids]);
+    await pool.end();
+  });
+
+  // El conductor y sus apuntes se siembran ANTES de levantar el servidor, que
+  // es como llegan de verdad: el proceso los carga al arrancar.
+  await pool.query(
+    `insert into public.users (id, payload) values ($1, $2::jsonb)`,
+    [driverId, JSON.stringify({
+      id: driverId, role: 'driver', email: `${driverId}@prueba.test`,
+      phone: `+58 409${sufijo.slice(0, 7)}`, firstName: 'Conductor', lastName: 'Paginado',
+      isVerified: true, status: 'AVAILABLE', accountStatus: 'ACTIVE', vehicleType: 'MOTO',
+      walletBalance: 0, createdAt: new Date().toISOString()
+    })]);
+
+  const esperados = [];
+  for (let i = 0; i < TOTAL; i++) {
+    const id = `transaction_pag_${sufijo}_${String(i).padStart(3, '0')}`;
+    const createdAt = i % 3 === 0
+      ? MISMO_INSTANTE
+      : new Date(Date.parse('2026-08-30T03:00:00.000Z') - (i * 60_000)).toISOString();
+    esperados.push(id);
+    await pool.query(
+      `insert into public.transactions (id, payload) values ($1, $2::jsonb)`,
+      [id, JSON.stringify({
+        id, userId: driverId,
+        type: i % 2 === 0 ? 'DRIVER_DEFERRED_COMMISSION_PAYMENT' : 'DRIVER_ACCOUNT_MAINTENANCE',
+        amount: -1, currency: 'USD', status: 'APPROVED', balanceAfter: 10 - i * 0.01, createdAt
+      })]);
+  }
+
+  const { url, child } = await levantarServidor(pool);
+  servidor = child;
+
+  const json = async r => ({ status: r.status, body: await r.json().catch(() => null) });
+  const post = (ruta, cuerpo) => fetch(`${url}${ruta}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo)
+  });
+  const get = (ruta, token) => fetch(`${url}${ruta}`, { headers: { authorization: `Bearer ${token}` } });
+
+  const acceso = await json(await post('/api/auth/login',
+    { identifier: 'admin@58express.com', password: CLAVE_ADMIN, role: 'admin' }));
+  assert.equal(acceso.status, 200);
+  const adminToken = acceso.body.token;
+
+  // ---- Se recorre entero, pagina a pagina --------------------------------
+  const vistos = [];
+  let cursor = null;
+  let paginas = 0;
+  do {
+    const ruta = `/api/admin/finance/driver-movements?limit=25${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+    const pagina = await json(await get(ruta, adminToken));
+    assert.equal(pagina.status, 200, 'la auditoria responde');
+    assert.ok(pagina.body.items.length <= 25, 'y respeta el tamaño de pagina');
+    vistos.push(...pagina.body.items.filter(m => m.user?.id === driverId).map(m => m.id));
+    cursor = pagina.body.nextCursor;
+    paginas += 1;
+    assert.ok(paginas < 60, 'la paginacion tiene que terminar');
+  } while (cursor);
+
+  assert.ok(paginas > 5, `hicieron falta varias paginas (${paginas}), no una sola`);
+  assert.equal(new Set(vistos).size, vistos.length, 'NINGUNO se repitio');
+  assert.deepEqual([...vistos].sort(), [...esperados].sort(),
+    'y NINGUNO se quedo fuera: el historial completo es alcanzable');
+
+  // ---- El orden es determinista y estable --------------------------------
+  const primera = await json(await get('/api/admin/finance/driver-movements?limit=25', adminToken));
+  const otraVez = await json(await get('/api/admin/finance/driver-movements?limit=25', adminToken));
+  assert.deepEqual(primera.body.items.map(m => m.id), otraVez.body.items.map(m => m.id),
+    'dos lecturas iguales devuelven lo mismo, en el mismo orden');
+  for (let i = 1; i < primera.body.items.length; i++) {
+    const antes = primera.body.items[i - 1];
+    const ahora = primera.body.items[i];
+    const cmp = Date.parse(ahora.createdAt) - Date.parse(antes.createdAt);
+    assert.ok(cmp <= 0, 'de mas reciente a mas antiguo');
+    if (cmp === 0) {
+      assert.ok(antes.id.localeCompare(ahora.id) < 0,
+        'y con el MISMO instante desempata el identificador, siempre igual');
+    }
+  }
+
+  // ---- Un tope: el cliente no puede reintroducir el problema -------------
+  const excesivo = await json(await get('/api/admin/finance/driver-movements?limit=999999', adminToken));
+  assert.equal(excesivo.status, 400, 'pedir el libro entero de una vez no se permite');
+  const cursorRoto = await json(await get('/api/admin/finance/driver-movements?cursor=no-es-un-cursor!!', adminToken));
+  assert.equal(cursorRoto.status, 400, 'ni un cursor manipulado');
+
+  // ---- Y sigue siendo solo de administracion -----------------------------
+  const alta = await json(await post('/api/auth/register', {
+    email: `pag.pasajera.${sufijo}@prueba.test`,
+    phone: `+5845${Math.floor(1000000 + Math.random() * 8999999)}`,
+    password: 'password123', role: 'passenger', firstName: 'Pasajera', lastName: 'Paginada'
+  }));
+  assert.equal(alta.status, 201);
+  pasajeraId = alta.body.user.id;
+  const intentoPasajera = await get('/api/admin/finance/driver-movements', alta.body.token);
+  assert.equal(intentoPasajera.status, 403, 'la pasajera no audita el libro de nadie');
+  const sinSesion = await fetch(`${url}/api/admin/finance/driver-movements`);
+  assert.equal(sinSesion.status, 401, 'y sin sesion, ni eso');
+});

@@ -812,3 +812,89 @@ test('v9 · la migracion declara lo que v9 anade', saltar, () => {
   assert.ok(minusculas.includes("'settled', 'settlement_pending'"),
     'la propiedad tambien es vinculante mientras el dinero se debe');
 });
+
+// ---------------------------------------------------------------------------
+// v10 · un testigo que ya estuviera SIN forma canonica para la migracion
+// ---------------------------------------------------------------------------
+//
+// La novena auditoria encontro la puerta economica: un testigo de v8 guardado
+// como `'  topup-id  '` pasaba la migracion de v9, y despues un reintento con
+// `'topup-id'` no lo encontraba en el indice unico y volvia a acreditar.
+// Saldo 1.00 -> 3.00 -> 5.00, con el indice puesto.
+//
+// La migracion no puede recortarlo por su cuenta: eso seria DECIDIR, sin
+// saberlo, que los dos son el mismo hecho financiero — que es justo lo que hay
+// que probar, no suponer.
+
+const CH = cp => String.fromCodePoint(cp);
+
+test('v10 · un origen con relleno que ya existiera para la migracion: no se recorta solo', saltar, async () => {
+  const rellenos = [
+    ['espacios alrededor', '  topup-id  '],
+    ['tabulador delante', '\ttopup-id'],
+    ['BOM delante', `${CH(0xFEFF)}topup-id`],
+    ['NBSP al final', `topup-id${CH(0x00A0)}`],
+    ['solo un BOM', CH(0xFEFF)]
+  ];
+
+  for (const [etiqueta, valor] of rellenos) {
+    await enTransaccionDeshecha(async cliente => {
+      const { rows: [alguien] } = await cliente.query(`select id from public.users limit 1`);
+      if (!alguien) return;
+      await cliente.query(
+        'alter table public.driver_money_operations drop constraint if exists driver_money_operations_origen_no_vacio');
+      await cliente.query(
+        `insert into public.driver_money_operations
+           (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+         values ('sin_canonizar_v10', $1, 'CREDIT', 2, 3, 'TOPUP', $2)`, [alguien.id, valor]);
+      await cliente.query('set constraints all immediate');
+
+      await cliente.query('savepoint antes_de_migrar');
+      await assert.rejects(
+        () => cliente.query(sql),
+        error => {
+          assert.match(error.message, /DRIVER_FINANCE_BLANK_SOURCE/, etiqueta);
+          return true;
+        }
+      );
+      await cliente.query('rollback to savepoint antes_de_migrar');
+
+      const { rows } = await cliente.query(
+        `select source_id from public.driver_money_operations where operation_id = 'sin_canonizar_v10'`);
+      assert.equal(rows.length, 1, `${etiqueta}: el testigo sigue ahi`);
+      assert.equal(rows[0].source_id, valor,
+        `${etiqueta}: ni se recorta, ni se fusiona, ni se le inventa nada`);
+    });
+  }
+});
+
+test('v10 · un origen YA canonico no estorba a la migracion', saltar, async () => {
+  // El contrapeso: sin el, «rechaza siempre» pasaria por «valida bien».
+  await enTransaccionDeshecha(async cliente => {
+    const { rows: [alguien] } = await cliente.query(`select id from public.users limit 1`);
+    if (!alguien) return;
+    await cliente.query(
+      `insert into public.driver_money_operations
+         (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+       values ('canonico_v10', $1, 'CREDIT', 2, 3, 'TOPUP', 'topup-id-canonico-v10')`, [alguien.id]);
+    await cliente.query('set constraints all immediate');
+
+    await cliente.query(sql);
+
+    const { rows } = await cliente.query(
+      `select source_id from public.driver_money_operations where operation_id = 'canonico_v10'`);
+    assert.equal(rows[0].source_id, 'topup-id-canonico-v10', 'intacto y aceptado');
+  });
+});
+
+test('v10 · la migracion declara la forma canonica del origen', saltar, () => {
+  const minusculas = sql.toLowerCase();
+  assert.ok(minusculas.includes('btrim(source_id'),
+    'lo guardado tiene que ser identico a su forma canonica, no solo «no vacio»');
+  assert.ok(sql.includes('\\u00A0') || sql.includes('\\u00a0'),
+    'el conjunto de blancos tiene que incluir NBSP: `\\s` de PostgreSQL no lo cubre');
+  assert.ok(sql.includes('\\uFEFF') || sql.includes('\\ufeff'),
+    'y el BOM, que fue exactamente lo que se colo');
+  assert.ok(!minusculas.includes("source_id ~ '\\s'"),
+    'la comprobacion vieja no puede seguir ahi: no era equivalente al trim de JavaScript');
+});

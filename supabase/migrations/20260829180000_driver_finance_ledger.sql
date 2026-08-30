@@ -407,21 +407,34 @@ begin
                       'bajo el mismo origen; la unicidad no se puede declarar sin revisarlos', problemas;
     end if;
 
-    -- Y antes de declarar que el origen no puede estar en blanco: ¿ya hay
-    -- alguna fila que lo tenga? Si la hay, la migracion se para.
+    -- Y antes de declarar la forma canonica del origen: ¿ya hay alguna fila
+    -- que no la tenga? Si la hay, la migracion se para.
     --
-    -- NO se recorta ni se repara ningun testigo de dinero. Una operacion sin
-    -- procedencia es un hecho financiero sin identificar, y arreglarlo a
-    -- ciegas seria inventarle una. Lo mira una persona.
-    execute $enblanco$
-      select count(*)::text from public.driver_money_operations
-       where coalesce(source_type, '') !~ '\S'
-          or coalesce(source_id, '') !~ '\S'
-    $enblanco$ into problemas;
-    if problemas is not null and problemas <> '0' then
-      raise exception 'DRIVER_FINANCE_BLANK_SOURCE: % operaciones tienen un origen vacio o de solo '
-                      'espacios; no se puede declarar la restriccion sin revisarlas, y NO se reparan solas',
-                      problemas;
+    -- NO se recorta ni se repara ningun testigo de dinero. Recortar
+    -- `'  topup-id  '` a `'topup-id'` seria decidir, sin saberlo, que los dos
+    -- son el mismo hecho financiero — y eso es exactamente lo que hay que
+    -- probar, no suponer. Y una operacion cuyo origen es solo blanco es un
+    -- hecho sin identificar: inventarle una identidad seria peor. Lo mira una
+    -- persona.
+    --
+    -- Se cuentan por separado para que el mensaje diga QUE pasa, sin sacar
+    -- ningun identificador de dinero al registro.
+    execute format($enblanco$
+      select count(*) filter (where coalesce(source_id, '') = ''
+                                 or btrim(coalesce(source_id, ''), %1$L) = ''
+                                 or btrim(coalesce(source_type, ''), %1$L) = '')::text
+             || '/' ||
+             count(*) filter (where coalesce(source_id, '') <> ''
+                                and btrim(coalesce(source_id, ''), %1$L) <> ''
+                                and btrim(coalesce(source_type, ''), %1$L) <> ''
+                                and (source_id <> btrim(source_id, %1$L)
+                                  or source_type <> btrim(source_type, %1$L)))::text
+        from public.driver_money_operations
+    $enblanco$, E'\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF') into problemas;
+    if problemas is not null and problemas <> '0/0' then
+      raise exception 'DRIVER_FINANCE_BLANK_SOURCE: hay operaciones cuyo origen no esta en forma '
+                      'canonica (en blanco/con relleno: %); no se puede declarar la restriccion sin '
+                      'revisarlas, y NO se reparan solas', problemas;
     end if;
   end if;
 end
@@ -876,16 +889,32 @@ begin
   -- afectados: su `source_id` es su propio `operation_id`, que nunca esta en
   -- blanco.
   --
-  -- Se exige que haya al menos un caracter que NO sea espacio en blanco, y se
-  -- comprueba con `\S` a proposito: `btrim` sin argumentos solo recorta
-  -- espacios, asi que un `source_id` de un tabulador o un salto de linea lo
-  -- habria pasado tranquilamente. `\S` cubre todo el blanco, igual que el
-  -- `trim` de la aplicacion.
+  -- Y no basta con que diga algo: tiene que estar ya en su forma CANONICA.
+  --
+  -- La novena auditoria demostro que `~ '\S'` no es equivalente al `trim` de
+  -- JavaScript. PostgreSQL acepto un `source_id` compuesto solo por un BOM
+  -- (U+FEFF), que para la aplicacion es la cadena vacia. Y peor: un testigo de
+  -- v8 guardado como `'  topup-id  '` pasaba la migracion, y despues un
+  -- reintento con `'topup-id'` no lo encontraba en el indice unico y volvia a
+  -- acreditar. Saldo 1.00 -> 3.00 -> 5.00, con el indice puesto.
+  --
+  -- La regla que cierra las dos puertas es la misma y es una sola:
+  --
+  --     el valor GUARDADO tiene que ser identico a su forma canonica
+  --
+  -- Se compara con `btrim` sobre el conjunto EXACTO de 25 caracteres que
+  -- recorta `String.prototype.trim` de ECMAScript, enumerados a mano. Ni
+  -- `[[:space:]]` ni `\s` sirven: los dos dejan pasar NBSP y BOM. Y U+200B
+  -- (espacio de ancho cero) NO esta en la lista a proposito, porque JavaScript
+  -- tampoco lo recorta: ahi es contenido, no relleno.
   alter table public.driver_money_operations
     drop constraint if exists driver_money_operations_origen_no_vacio;
   alter table public.driver_money_operations
     add constraint driver_money_operations_origen_no_vacio
-    check (source_type ~ '\S' and source_id ~ '\S');
+    check (
+      source_type = btrim(source_type, E'\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF') and length(source_type) > 0
+      and source_id = btrim(source_id, E'\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF') and length(source_id) > 0
+    );
 
   -- Un aviso entregado no puede serlo antes de reclamarse.
   alter table public.driver_inactivity_warnings

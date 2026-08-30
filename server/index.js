@@ -1895,6 +1895,79 @@ app.patch('/api/admin/pricing', requireAuth, requireRole('admin'), limitadores.a
   res.json(next);
 });
 
+/**
+ * Movimientos del LIBRO del conductor: los que no son ni un viaje ni una
+ * solicitud de billetera, y que hasta v8 no salían por ninguna parte.
+ *
+ * ORDEN ESTABLE, y es lo que hace posible paginar sin perder ni repetir
+ * registros. La novena auditoría encontró que ordenar solo por fecha dejaba
+ * indefinido el orden entre apuntes del mismo instante —y los hay: una
+ * conciliación escribe varios en la misma transacción—, así que en el corte de
+ * una página unos podían saltarse y otros salir dos veces.
+ *
+ * El desempate es el identificador, que es inmutable y único.
+ */
+const MOVIMIENTOS_DEL_LIBRO = ['DRIVER_DEFERRED_COMMISSION_PAYMENT', 'DRIVER_ACCOUNT_MAINTENANCE'];
+
+function movimientosDelLibro() {
+  return database.transactions
+    .filter(item => MOVIMIENTOS_DEL_LIBRO.includes(item.type))
+    .slice()
+    .sort((a, b) => {
+      const porFecha = new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      if (porFecha !== 0) return porFecha;
+      // Mismo instante: manda el identificador, siempre en el mismo sentido.
+      return String(a.id).localeCompare(String(b.id));
+    });
+}
+
+/**
+ * Lo justo para auditar —quién, qué, cuánto, cuándo y con qué saldo quedó— y
+ * nada de la contabilidad interna: ni reservas, ni identidades de operación,
+ * ni orígenes.
+ */
+const proyectarMovimientoDelLibro = item => ({
+  id: item.id,
+  type: item.type,
+  amount: item.amount,
+  currency: item.currency || 'USD',
+  status: item.status,
+  balanceAfter: item.balanceAfter,
+  createdAt: item.createdAt,
+  user: publicUser(database.users.find(user => user.id === item.userId))
+});
+
+const DRIVER_MOVEMENTS_PAGE = { defaultLimit: 25, maxLimit: 100 };
+
+/**
+ * La auditoría COMPLETA, por páginas.
+ *
+ * La versión anterior cortaba en cien y no ofrecía forma de seguir: los
+ * apuntes más antiguos quedaban sencillamente fuera del alcance de quien
+ * audita. Un historial financiero truncado en silencio no es un historial.
+ *
+ * Se pagina por cursor y no por desplazamiento porque esta colección crece
+ * mientras se recorre, y con `offset` un apunte nuevo desplazaría todo.
+ */
+app.get('/api/admin/finance/driver-movements', requireAuth, requireRole('admin'), limitadores.finanzas, (req, res) => {
+  let limit;
+  try {
+    limit = parseLimit(req.query.limit, DRIVER_MOVEMENTS_PAGE);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_QUERY' });
+  }
+  try {
+    const pagina = paginate(movimientosDelLibro(), {
+      limit,
+      cursor: req.query.cursor,
+      sortKeyOf: item => item.createdAt || ''
+    });
+    return res.json({ ...pagina, items: pagina.items.map(proyectarMovimientoDelLibro) });
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_CURSOR' });
+  }
+});
+
 app.get('/api/admin/finance', requireAuth, requireRole('admin'), limitadores.finanzas, (req, res) => {
   const commissionRate = Number(pricingConfig.commissionRate || 0.15);
   const transactions = database.trips.filter(trip => trip.status === 'COMPLETED').map(trip => {
@@ -1904,31 +1977,10 @@ app.get('/api/admin/finance', requireAuth, requireRole('admin'), limitadores.fin
     const passenger = database.users.find(user => user.id === trip.passengerId);
     return { id: trip.id, date: trip.completedAt || trip.closedAt || trip.updatedAt, gross, commission, driverNet: Math.round((gross - commission) * 100) / 100, settlementType:trip.driverSettlementType || (isWalletPayment(trip.paymentMethod) ? 'WALLET_CREDIT' : 'COMMISSION_DEBIT'), payoutStatus: trip.payoutStatus || 'CREDITED', paymentMethod: trip.paymentMethod || 'EFECTIVO', driver: publicUser(driver), passenger: publicUser(passenger) };
   }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-  // Movimientos del LIBRO del conductor que no son ni un viaje ni una
-  // solicitud de billetera, y que hasta ahora no salían por ninguna parte: la
-  // octava auditoría encontró que el pago de una comisión pendiente bajaba un
-  // saldo real sin dejar rastro en la auditoría. El mantenimiento mensual
-  // estaba en la misma situación, y es el mismo tipo de movimiento.
-  //
-  // Se expone lo justo para auditar —quién, qué, cuánto, cuándo y con qué
-  // saldo quedó— y nada de la contabilidad interna: ni reservas, ni
-  // identidades de operación, ni orígenes.
-  const MOVIMIENTOS_DEL_LIBRO = ['DRIVER_DEFERRED_COMMISSION_PAYMENT', 'DRIVER_ACCOUNT_MAINTENANCE'];
-  const driverMovements = database.transactions
-    .filter(item => MOVIMIENTOS_DEL_LIBRO.includes(item.type))
-    .slice()
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, 100)
-    .map(item => ({
-      id: item.id,
-      type: item.type,
-      amount: item.amount,
-      currency: item.currency || 'USD',
-      status: item.status,
-      balanceAfter: item.balanceAfter,
-      createdAt: item.createdAt,
-      user: publicUser(database.users.find(user => user.id === item.userId))
-    }));
+  // Un adelanto para la tarjeta del panel; la auditoría completa vive en
+  // `/api/admin/finance/driver-movements`, paginada.
+  const driverMovements = movimientosDelLibro().slice(0, DRIVER_MOVEMENTS_PAGE.defaultLimit)
+    .map(proyectarMovimientoDelLibro);
 
   res.json({
     bcvRate: Number(pricingConfig.bcvRate || 0), commissionRate, transactions,

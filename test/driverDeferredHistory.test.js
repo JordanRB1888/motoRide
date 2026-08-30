@@ -58,3 +58,30 @@ test('y ninguna pantalla de pasajera conoce este movimiento', () => {
   assert.equal(pasajera.filter(fuente => fuente.includes(TIPO)).length, 0,
     'el libro del conductor no se asoma a la aplicación de la pasajera');
 });
+
+// ---------------------------------------------------------------------------
+// v10 · el saldo resultante se VE, no solo viaja en la respuesta
+// ---------------------------------------------------------------------------
+//
+// La novena auditoria lo encontro: la integracion probaba que `balanceAfter`
+// llegaba, y la pantalla nunca lo pintaba. La prueba anterior solo miraba la
+// presencia del tipo y su etiqueta, asi que no podia detectarlo.
+
+test('v10 · la pantalla de ganancias pinta el saldo resultante del movimiento', () => {
+  assert.ok(ganancias.includes('balanceAfter'),
+    'un historial de dinero sin el saldo con el que quedo la cuenta no situa nada');
+  // Y lo pinta DENTRO de la fila del movimiento, no en cualquier sitio.
+  const fila = ganancias.slice(ganancias.indexOf('earning-row-amount'));
+  assert.ok(fila.slice(0, 400).includes('saldoTras(item)'),
+    'el saldo va en la fila del movimiento, junto a su importe');
+});
+
+test('v10 · y NO lo inventa cuando el apunte no lo trae', () => {
+  const desde = ganancias.indexOf('const saldoTras');
+  assert.notEqual(desde, -1, 'el ayudante existe');
+  const cuerpo = ganancias.slice(desde, desde + 400);
+  assert.ok(/Number\.isFinite\(Number\(item\?\.balanceAfter\)\)/.test(cuerpo),
+    'solo se muestra cuando el apunte lo trae de verdad');
+  assert.ok(cuerpo.includes("? `") && cuerpo.includes(": ''"),
+    'y si no lo trae, no se pinta nada: un saldo inventado es peor que ninguno');
+});

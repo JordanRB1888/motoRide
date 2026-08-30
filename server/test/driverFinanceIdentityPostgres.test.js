@@ -391,3 +391,210 @@ test('§16 · una carrera RESERVADA y aún no hecha sí se puede reasignar', sal
     await pool.end();
   }
 });
+
+// ==========================================================================
+// v10 · RESERVED -> PENDING es el traspaso REAL de la propiedad
+// ==========================================================================
+//
+// La novena auditoria lo reprodujo exactamente asi:
+//
+//   1. viaje COMPLETED/A · reserva RESERVED/A
+//   2. una escritura generica cambia el viaje a B y retiene su cerrojo
+//      -el disparador lo permite: mientras la reserva sigue RESERVED,
+//       reasignar es legitimo-
+//   3. el reconciliador bloquea A y la reserva, y espera al viaje
+//   4. la escritura confirma B
+//   5. el reconciliador sigue, mira SOLO el estado, y deja
+//      SETTLEMENT_PENDING/A
+//
+//   viaje B · reserva pendiente A — el reparto prohibido, exacto.
+
+/** Espera a VER que otra transaccion tiene tomado el cerrojo del viaje. */
+async function esperarCerrojoDelViaje(pool, tripId, limiteMs = 20_000) {
+  const cliente = await pool.connect();
+  try {
+    const hasta = Date.now() + limiteMs;
+    while (Date.now() < hasta) {
+      try {
+        await cliente.query('begin');
+        await cliente.query(`select 1 from public.trips where id = $1 for update nowait`, [tripId]);
+        await cliente.query('rollback');
+        await new Promise(r => setTimeout(r, 100));
+      } catch {
+        await cliente.query('rollback').catch(() => {});
+        return true;
+      }
+    }
+    return false;
+  } finally {
+    cliente.release();
+  }
+}
+
+test('§12 · la escritura generica gana primero: el reconciliador NO promueve a A', saltar, async () => {
+  const { pool, dbA, a } = await montar();
+  const otraConexion = createPostgresPool({ connectionString });
+  let idA = null;
+  let idB = null;
+  let pasajero = null;
+  const viaje = `trip_v10_${sufijo()}`;
+  try {
+    ({ id: idA } = await altaConductor(a, dbA, { walletBalance: 5 }));
+    ({ id: idB } = await altaConductor(a, dbA, { walletBalance: 5 }));
+    pasajero = await crearPasajero(a, dbA);
+    await crearViaje(pool, viaje, pasajero, { status: 'COMPLETED', driverId: idA });
+    await pool.query(
+      `insert into public.driver_commission_reservations (trip_id, driver_id, reserved_usd, status)
+       values ($1, $2, 0.60, 'RESERVED')`, [viaje, idA]);
+
+    // Actor 1 · la escritura generica: toma el cerrojo del viaje y espera.
+    const cliente = await otraConexion.connect();
+    let escritura;
+    try {
+      await cliente.query('begin');
+      await cliente.query(
+        `update public.trips set payload = jsonb_set(payload, '{driverId}', to_jsonb($2::text), true)
+          where id = $1`, [viaje, idB]);
+
+      // Actor 2 · el reconciliador de PRODUCCION, que se quedara esperando el
+      // viaje detras de ese cerrojo.
+      escritura = a.reconcileStaleReservations({ limit: 50 });
+      await new Promise(r => setTimeout(r, 1500));
+
+      // Y ahora la escritura confirma B: el reconciliador reanuda con el
+      // viaje ya cambiado de dueno.
+      await cliente.query('commit');
+    } finally {
+      cliente.release();
+    }
+    const resumen = await escritura;
+
+    const reserva = await leerReserva(pool, viaje);
+    assert.equal(await leerDuenoDelViaje(pool, viaje), idB, 'el viaje quedo de B');
+    assert.notEqual(reserva.status, 'SETTLEMENT_PENDING',
+      'PROHIBIDO: viaje de B con la deuda pendiente de A');
+    assert.notEqual(reserva.status, 'SETTLED', 'y tampoco cobrada a A');
+    assert.equal(reserva.status, 'RELEASED',
+      'se libera sin cobrar a nadie, que es lo que ya hace el codigo cuando una '
+      + 'carrera deja de ser de ese conductor');
+    assert.equal(await leerEstado(pool, idA), 5, 'a A no se le cobro nada');
+    assert.equal(await leerEstado(pool, idB), 5, 'y a B tampoco');
+    assert.ok(resumen.ownerMismatch >= 1, 'y queda contado, no en silencio');
+  } finally {
+    await otraConexion.end();
+    await limpiar(pool, [idA, idB, pasajero].filter(Boolean), [viaje]);
+    await pool.end();
+  }
+});
+
+test('§13 · el reconciliador gana primero: la escritura generica ya no puede cambiar el dueno', saltar, async () => {
+  const { pool, dbA, a } = await montar();
+  let idA = null;
+  let idB = null;
+  let pasajero = null;
+  const viaje = `trip_v10_${sufijo()}`;
+  try {
+    ({ id: idA } = await altaConductor(a, dbA, { walletBalance: 5 }));
+    ({ id: idB } = await altaConductor(a, dbA, { walletBalance: 5 }));
+    pasajero = await crearPasajero(a, dbA);
+    await crearViaje(pool, viaje, pasajero, { status: 'COMPLETED', driverId: idA });
+    await pool.query(
+      `insert into public.driver_commission_reservations (trip_id, driver_id, reserved_usd, status)
+       values ($1, $2, 0.60, 'RESERVED')`, [viaje, idA]);
+
+    // El reconciliador valida a A y promueve: la carrera esta hecha y su
+    // dinero se debe.
+    await a.reconcileStaleReservations({ limit: 50 });
+    const promovida = await leerReserva(pool, viaje);
+    assert.equal(promovida.status, 'SETTLEMENT_PENDING', 'la deuda de A queda viva y con dueno');
+    assert.equal(promovida.driver_id, idA);
+
+    // Y a partir de aqui la propiedad esta serializada: la escritura generica
+    // choca con el invariante durable.
+    await assert.rejects(
+      () => pool.query(
+        `update public.trips set payload = jsonb_set(payload, '{driverId}', to_jsonb($2::text), true)
+          where id = $1`, [viaje, idB]),
+      error => {
+        assert.match(error.message, /TRIP_OWNER_SETTLED/);
+        return true;
+      }
+    );
+    assert.equal(await leerDuenoDelViaje(pool, viaje), idA,
+      'FINAL_FINANCIAL_OWNER_MATCH: el viaje y su deuda siguen siendo del mismo');
+  } finally {
+    await limpiar(pool, [idA, idB, pasajero].filter(Boolean), [viaje]);
+    await pool.end();
+  }
+});
+
+test('§15 · tras la promocion valida, la recuperacion liquida a A exactamente una vez', saltar, async () => {
+  const { pool, dbA, a } = await montar();
+  let id = null;
+  let pasajero = null;
+  const viaje = `trip_v10_${sufijo()}`;
+  try {
+    ({ id } = await altaConductor(a, dbA, { walletBalance: 5 }));
+    pasajero = await crearPasajero(a, dbA);
+    await crearViaje(pool, viaje, pasajero, { status: 'COMPLETED', driverId: id });
+    await pool.query(
+      `insert into public.driver_commission_reservations (trip_id, driver_id, reserved_usd, status)
+       values ($1, $2, 0.60, 'RESERVED')`, [viaje, id]);
+
+    await a.reconcileStaleReservations({ limit: 50 });
+    assert.equal((await leerReserva(pool, viaje)).status, 'SETTLEMENT_PENDING');
+
+    // El rescate: reinicio, reintento, lo que sea. Se liquida una vez.
+    const primera = await a.settleTripForDriver({
+      tripId: viaje, driverId: id, commissionUSD: 0.6, creditUSD: 0,
+      policyEnabled: true, builders: CONSTRUCTORES(id)
+    });
+    assert.equal(primera.outcome, 'SETTLED');
+    assert.equal(await leerEstado(pool, id), 4.4);
+
+    const segunda = await a.settleTripForDriver({
+      tripId: viaje, driverId: id, commissionUSD: 0.6, creditUSD: 0,
+      policyEnabled: true, builders: CONSTRUCTORES(id)
+    });
+    assert.equal(segunda.outcome, 'ALREADY_SETTLED', 'sin comision doble');
+    assert.equal(await leerEstado(pool, id), 4.4);
+  } finally {
+    await limpiar(pool, [id, pasajero].filter(Boolean), [viaje]);
+    await pool.end();
+  }
+});
+
+test('§14 · una carrera VIVA reasignada antes de comprometerse: sin falsos positivos', saltar, async () => {
+  // El reconciliador no puede castigar a nadie por lo que el producto permite:
+  // mientras la carrera no este hecha, reasignar es legitimo y su reserva ni
+  // siquiera es candidata.
+  const { pool, dbA, a } = await montar();
+  let idA = null;
+  let idB = null;
+  let pasajero = null;
+  const viaje = `trip_v10_${sufijo()}`;
+  try {
+    ({ id: idA } = await altaConductor(a, dbA, { walletBalance: 5 }));
+    ({ id: idB } = await altaConductor(a, dbA, { walletBalance: 5 }));
+    pasajero = await crearPasajero(a, dbA);
+    await crearViaje(pool, viaje, pasajero, { status: 'DRIVER_ASSIGNED', driverId: idA });
+    await pool.query(
+      `insert into public.driver_commission_reservations (trip_id, driver_id, reserved_usd, status)
+       values ($1, $2, 0.60, 'RESERVED')`, [viaje, idA]);
+
+    const r = await a.reassignTripDriver({ tripId: viaje, fromDriverId: idA, toDriverId: idB });
+    assert.equal(r.outcome, 'REASSIGNED');
+    assert.equal((await leerReserva(pool, viaje)).status, 'RELEASED',
+      'A recupera su capacidad');
+    assert.equal(await leerEstado(pool, idA), 5, 'y nadie paga nada');
+    assert.equal(await leerEstado(pool, idB), 5);
+
+    // Y el reconciliador la deja en paz: ya esta resuelta.
+    const resumen = await a.reconcileStaleReservations({ limit: 50 });
+    assert.equal(resumen.ownerMismatch, 0, 'no la cuenta como anomalia');
+    assert.equal((await leerReserva(pool, viaje)).status, 'RELEASED');
+  } finally {
+    await limpiar(pool, [idA, idB, pasajero].filter(Boolean), [viaje]);
+    await pool.end();
+  }
+});

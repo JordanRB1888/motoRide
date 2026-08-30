@@ -1490,7 +1490,7 @@ export function createDriverFinanceStore({
    *     sin conclusiones de dinero.
    */
   async function reconcileStaleReservations({ limit = 25, staleScheduledHours = 24 } = {}) {
-    const resumen = { seen: 0, released: 0, settled: 0, pendingSettlements: 0, orphans: 0, staleScheduled: 0, stillActive: 0 };
+    const resumen = { seen: 0, released: 0, settled: 0, pendingSettlements: 0, orphans: 0, staleScheduled: 0, stillActive: 0, ownerMismatch: 0 };
     let candidatos;
     try {
       const { rows } = await pool.query(
@@ -1530,12 +1530,12 @@ export function createDriverFinanceStore({
         await client.query(
           `select 1 from public.driver_finance_state where driver_id = $1 for update`, [fila.driver_id]);
         const viva = await client.query(
-          `select status from public.driver_commission_reservations
+          `select status, driver_id from public.driver_commission_reservations
             where trip_id = $1 and status = 'RESERVED' for update`, [fila.trip_id]);
         if (viva.rowCount !== 1) return 'YA_RESUELTA';
 
         const viaje = await client.query(
-          `select status,
+          `select status, payload->>'driverId' as driver_id,
                   (status = 'SCHEDULED'
                    and (payload->>'scheduledAt') is not null
                    and (payload->>'scheduledAt')::timestamptz < now() - ($2 || ' hours')::interval) as programado_vencido
@@ -1545,6 +1545,46 @@ export function createDriverFinanceStore({
         if (viaje.rowCount !== 1) return 'HUERFANA';
         const estado = viaje.rows[0].status;
         const programadoVencido = viaje.rows[0].programado_vencido === true;
+
+        // DRIVER-FINANCE-1 v10 — AQUI se traspasa la propiedad, y aqui se
+        // comprueba.
+        //
+        // `RESERVED -> SETTLEMENT_PENDING` (o `-> SETTLED`) es el momento en
+        // que una reserva deja de ser capacidad comprometida y pasa a ser
+        // dinero con dueno. El guardia durable del viaje no puede protegerlo:
+        // mientras la reserva sigue RESERVED, reasignar es legitimo y el
+        // disparador lo permite a proposito.
+        //
+        // La novena auditoria lo reprodujo exactamente asi:
+        //
+        //   1. viaje COMPLETED/A · reserva RESERVED/A
+        //   2. una escritura generica cambia el viaje a B y retiene su cerrojo
+        //   3. el reconciliador bloquea A y la reserva, y espera al viaje
+        //   4. la escritura confirma B
+        //   5. el reconciliador sigue, mira SOLO el estado, y deja
+        //      SETTLEMENT_PENDING/A
+        //
+        //   viaje B · reserva pendiente A — el reparto prohibido, exacto.
+        //
+        // Se relee el viaje BLOQUEADO, asi que este `driverId` es el de
+        // despues de que la otra escritura confirmara. Si no es el de la
+        // reserva, no se promueve nada.
+        //
+        // Y no se cobra a nadie: se LIBERA, que es lo que ya hace el codigo de
+        // al lado cuando una carrera deja de ser de ese conductor —una
+        // cancelacion, una reasignacion legitima— y lo que hace la propia
+        // puerta de reasignacion. Cobrarle a A una carrera que la base dice
+        // que es de B seria justo el dano que se quiere evitar; dejarla
+        // RESERVED para siempre le comeria la capacidad a A por un dato
+        // anomalo que el no provoco.
+        if (viaje.rows[0].driver_id !== viva.rows[0].driver_id) {
+          await client.query(
+            `update public.driver_commission_reservations
+                set status = 'RELEASED', resolved_at = now()
+              where trip_id = $1 and status = 'RESERVED'`,
+            [fila.trip_id]);
+          return 'DUENO_DISTINTO';
+        }
 
         // Y si el viaje ya no es candidato -arranco, se reasigno, dejo de
         // estar vencido-, la reserva se queda EXACTAMENTE como esta.
@@ -1588,7 +1628,8 @@ export function createDriverFinanceStore({
         return 'PENDIENTE_DE_LIQUIDAR';
       }, 'FALLIDA');
 
-      if (desenlace === 'LIBERADA') resumen.released += 1;
+      if (desenlace === 'DUENO_DISTINTO') { resumen.released += 1; resumen.ownerMismatch += 1; }
+      else if (desenlace === 'LIBERADA') resumen.released += 1;
       else if (desenlace === 'PROGRAMADO_VENCIDO') { resumen.released += 1; resumen.staleScheduled += 1; }
       else if (desenlace === 'LIQUIDADA') resumen.settled += 1;
       else if (desenlace === 'PENDIENTE_DE_LIQUIDAR') resumen.pendingSettlements += 1;
@@ -1596,6 +1637,13 @@ export function createDriverFinanceStore({
       else if (desenlace === 'SIGUE_VIVA') resumen.stillActive += 1;
     }
 
+    if (resumen.ownerMismatch) {
+      // No es una incidencia rutinaria: significa que el documento de un viaje
+      // cambio de conductor por un camino que el producto no tiene. Se libera
+      // sin cobrar a nadie y se deja dicho, para que alguien lo mire.
+      logger.warn('[+58express DriverFinance] reservas cuyo viaje ya era de OTRO conductor: '
+        + `${resumen.ownerMismatch} (liberadas sin cobrar)`);
+    }
     if (resumen.orphans) {
       logger.warn(`[+58express DriverFinance] reservas sin viaje: ${resumen.orphans}`);
     }

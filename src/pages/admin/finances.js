@@ -134,7 +134,7 @@ export async function renderFinances(container) {
       </div>
 
       <section class="finance-card finance-wallet-card" id="finance-ledger-card">
-        <header><div><h3>Movimientos de cuenta de conductores</h3><p>Comisiones pendientes saldadas y mantenimiento mensual: débitos reales del saldo.</p></div><span>${(data.driverMovements || []).length} movimientos</span></header>
+        <header><div><h3>Movimientos de cuenta de conductores</h3><p>Comisiones pendientes saldadas y mantenimiento mensual: débitos reales del saldo. La auditoría completa se recorre por páginas.</p></div><span>últimos ${(data.driverMovements || []).length}</span></header>
         <div class="finance-table-scroll"><table class="finance-table"><thead><tr><th>Conductor</th><th>Movimiento</th><th>Monto</th><th>Saldo resultante</th><th>Fecha</th></tr></thead><tbody>
           ${(data.driverMovements || []).slice(0, 8).map(item => `<tr><td>${escapeHtml(personName(item.user) || '—')}</td><td>${movementLabel(item.type)}</td><td><strong>${money(item.amount)}</strong></td><td>${money(item.balanceAfter)}</td><td>${new Date(item.createdAt).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })}</td></tr>`).join('') || '<tr><td colspan="5" class="finance-empty">Todavía no hay movimientos de cuenta.</td></tr>'}
         </tbody></table></div>
