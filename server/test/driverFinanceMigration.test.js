@@ -675,3 +675,140 @@ test('v8 · la migración declara la unicidad del origen y el rechazo del legado
   assert.ok(minusculas.includes('driver_finance_trip_owner_settled'),
     'ni una carrera ya liquidada puede cambiar de dueño');
 });
+
+// ---------------------------------------------------------------------------
+// v9 · el indice del ORIGEN, por su FORMA y no por su nombre
+// ---------------------------------------------------------------------------
+//
+// `create unique index if not exists` mira el NOMBRE y nada mas. La octava
+// auditoria creo un indice con el nombre exacto que se esperaba pero sobre
+// `(operation_id, source_id)`: el `if not exists` no hizo nada, la migracion
+// paso, y la unicidad del origen -lo unico que impide que el mismo hecho de
+// negocio mueva dinero dos veces- simplemente no existia.
+
+const rehacerIndiceDeOrigen = async (cliente, definicion) => {
+  await cliente.query('drop index if exists public.driver_money_operations_origen_unico');
+  await cliente.query(definicion);
+};
+
+test('v9 · un indice de origen con el nombre correcto sobre otras columnas se rechaza', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    await rehacerIndiceDeOrigen(cliente, `create unique index driver_money_operations_origen_unico
+      on public.driver_money_operations (operation_id, source_id)
+      where source_type <> 'LEGACY_UNKNOWN'`);
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SOURCE_INDEX_INVALID/,
+          'el nombre coincidia; lo que no coincidia eran las columnas');
+        assert.match(error.message, /source_type,source_id/);
+        return true;
+      }
+    );
+  });
+});
+
+test('v9 · un indice de origen con el PREDICADO equivocado se rechaza', saltar, async () => {
+  // Mismas columnas, misma unicidad, mismo nombre — y un predicado que deja
+  // fuera justo lo que tiene que proteger.
+  for (const predicado of [
+    "where source_type <> 'TOPUP'",
+    "where source_type is not null",
+    ''
+  ]) {
+    await enTransaccionDeshecha(async cliente => {
+      await rehacerIndiceDeOrigen(cliente, `create unique index driver_money_operations_origen_unico
+        on public.driver_money_operations (source_type, source_id) ${predicado}`);
+
+      await assert.rejects(
+        () => cliente.query(sql),
+        error => {
+          assert.match(error.message, /DRIVER_FINANCE_SOURCE_INDEX_INVALID/);
+          assert.match(error.message, /predicado/);
+          return true;
+        }
+      );
+    });
+  }
+});
+
+test('v9 · un indice de origen que NO es unico se rechaza', saltar, async () => {
+  await enTransaccionDeshecha(async cliente => {
+    await rehacerIndiceDeOrigen(cliente, `create index driver_money_operations_origen_unico
+      on public.driver_money_operations (source_type, source_id)
+      where source_type <> 'LEGACY_UNKNOWN'`);
+
+    await assert.rejects(
+      () => cliente.query(sql),
+      error => {
+        assert.match(error.message, /DRIVER_FINANCE_SOURCE_INDEX_INVALID/);
+        assert.match(error.message, /UNICO/);
+        return true;
+      }
+    );
+  });
+});
+
+test('v9 · el indice de origen CORRECTO se acepta y la migracion converge', saltar, async () => {
+  // El contrapeso de los tres anteriores: sin el, «rechaza todo» pasaria por
+  // «valida bien».
+  await enTransaccionDeshecha(async cliente => {
+    await rehacerIndiceDeOrigen(cliente, `create unique index driver_money_operations_origen_unico
+      on public.driver_money_operations (source_type, source_id)
+      where source_type <> 'LEGACY_UNKNOWN'`);
+    await cliente.query(sql);
+    const { rows } = await cliente.query(
+      `select indisunique, pg_get_expr(indpred, indrelid) as predicado
+         from pg_index where indexrelid = 'public.driver_money_operations_origen_unico'::regclass`);
+    assert.equal(rows[0].indisunique, true);
+    assert.equal(rows[0].predicado, "(source_type <> 'LEGACY_UNKNOWN'::text)");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v9 · el origen tiene que decir algo, y las filas que ya estan se miran antes
+// ---------------------------------------------------------------------------
+
+test('v9 · una operacion con el origen en blanco para la migracion: no se repara sola', saltar, async () => {
+  // Arreglar a ciegas un hecho financiero sin procedencia seria inventarle una.
+  for (const enBlanco of ['', ' ', '\t']) {
+    await enTransaccionDeshecha(async cliente => {
+      const { rows: [alguien] } = await cliente.query(`select id from public.users limit 1`);
+      if (!alguien) return;
+      await cliente.query('alter table public.driver_money_operations drop constraint if exists driver_money_operations_origen_no_vacio');
+      await cliente.query(
+        `insert into public.driver_money_operations
+           (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+         values ('sin_origen_v9', $1, 'CREDIT', 2, 3, 'TOPUP', $2)`, [alguien.id, enBlanco]);
+      await cliente.query('set constraints all immediate');
+
+      await cliente.query('savepoint antes_de_migrar');
+      await assert.rejects(
+        () => cliente.query(sql),
+        error => {
+          assert.match(error.message, /DRIVER_FINANCE_BLANK_SOURCE/);
+          return true;
+        }
+      );
+      await cliente.query('rollback to savepoint antes_de_migrar');
+
+      const { rows } = await cliente.query(
+        `select source_id from public.driver_money_operations where operation_id = 'sin_origen_v9'`);
+      assert.equal(rows.length, 1, 'el testigo sigue ahi: no se borra');
+      assert.equal(rows[0].source_id, enBlanco, 'y no se le recorta ni se le inventa un origen');
+    });
+  }
+});
+
+test('v9 · la migracion declara lo que v9 anade', saltar, () => {
+  const minusculas = sql.toLowerCase();
+  assert.ok(minusculas.includes('driver_money_operations_origen_no_vacio'),
+    'un origen en blanco no identifica nada, y la base tiene que decirlo');
+  assert.ok(minusculas.includes('driver_finance_source_index_invalid'),
+    'el indice del origen se valida por su forma, no por su nombre');
+  assert.ok(minusculas.includes('driver_finance_blank_source'),
+    'y las filas que ya estuvieran en blanco paran la migracion');
+  assert.ok(minusculas.includes("'settled', 'settlement_pending'"),
+    'la propiedad tambien es vinculante mientras el dinero se debe');
+});

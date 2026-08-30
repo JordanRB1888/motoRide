@@ -955,6 +955,18 @@ const CONFLICTOS_DE_OPERACION = new Set([
   'OPERATION_ID_REQUIRED'
 ]);
 
+/**
+ * Lo unico que hace falta hacer ante una transicion REPETIDA: darle otra
+ * oportunidad a una liquidacion que pudiera haber quedado en el aire.
+ *
+ * No persiste —nada cambio— y no anuncia —ya se anuncio—. La cartera del
+ * conductor solo se emite si esta vez SI hubo liquidacion.
+ */
+async function rematarLiquidacionPendiente(trip, settlement) {
+  const liquidado = await liquidarConductorTrasPersistir(trip, settlement);
+  emitirCarteraDeConductor(trip, liquidado);
+}
+
 function emitirCarteraDePasajera(trip, settlement) {
   if (!settlement?.passengerTransaction) return;
   const passenger = database.users.find(user => user.id === trip.passengerId);
@@ -989,6 +1001,32 @@ function emitCompletedTripWalletUpdates(trip, settlement) {
  * eso lo hace quien llama, tras un persist correcto.
  */
 async function aplicarTransicionDelConductor(trip, status, driverId) {
+  // DRIVER-FINANCE-1 v9 — una transicion REPETIDA no vuelve a ocurrir.
+  //
+  // La maquina de estados admite `estado -> mismo estado`, y tiene que
+  // admitirlo: es lo que hace idempotente la reconciliacion sin conexion. Pero
+  // hasta ahora eso se traducia en volver a persistir y volver a ANUNCIAR, y
+  // la octava auditoria lo midio: un segundo `COMPLETED` del conductor le
+  // mandaba a la pasajera un segundo fin de carrera canonico. El dinero seguia
+  // siendo exactamente-una-vez; el aviso, no.
+  //
+  // Se detecta ANTES que nada, y por una razon concreta: la comprobacion de
+  // saldo de la pasajera se hace mas abajo, y en un fin de carrera repetido ya
+  // se le cobro — volver a preguntarle si le alcanza podria rechazar por falta
+  // de fondos una carrera que ya esta pagada y cerrada.
+  if (normalizeTripStatus(trip.status) === normalizeTripStatus(status)) {
+    return {
+      ok: true,
+      repetida: true,
+      // Sin cobro a la pasajera —ya ocurrio— pero SI se deja abierta la
+      // liquidacion del conductor: si la primera vez quedo en el aire, este
+      // reintento la remata. El dinero es exactamente-una-vez por
+      // construccion, asi que la via de recuperacion no cuesta nada.
+      settlement: normalizeTripStatus(status) === TRIP_STATUS.COMPLETED
+        ? { passengerTransaction: null, driverTransaction: null, driverPending: true }
+        : null
+    };
+  }
   if (status === TRIP_STATUS.COMPLETED) {
     try {
       ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
@@ -1163,8 +1201,10 @@ app.use('/api', createTripOfflineEventsRouter({
   // OFFLINE-TRIP-1A: exactamente el mismo orden que el camino en línea —el
   // estado en cuanto es durable, el dinero del conductor después—, porque
   // online y offline no pueden divergir. Un solo juego de reglas.
-  announceTransition: async (trip, settlement) => {
-    anunciarTransicionDelConductor(trip, settlement);
+  announceTransition: async (trip, settlement, { repetida = false } = {}) => {
+    // Una tanda que solo repite lo ya aplicado no vuelve a anunciar el estado:
+    // online y offline no pueden divergir tampoco en esto.
+    if (!repetida) anunciarTransicionDelConductor(trip, settlement);
     const liquidado = await liquidarConductorTrasPersistir(trip, settlement);
     emitirCarteraDeConductor(trip, liquidado);
   },
@@ -1864,9 +1904,36 @@ app.get('/api/admin/finance', requireAuth, requireRole('admin'), limitadores.fin
     const passenger = database.users.find(user => user.id === trip.passengerId);
     return { id: trip.id, date: trip.completedAt || trip.closedAt || trip.updatedAt, gross, commission, driverNet: Math.round((gross - commission) * 100) / 100, settlementType:trip.driverSettlementType || (isWalletPayment(trip.paymentMethod) ? 'WALLET_CREDIT' : 'COMMISSION_DEBIT'), payoutStatus: trip.payoutStatus || 'CREDITED', paymentMethod: trip.paymentMethod || 'EFECTIVO', driver: publicUser(driver), passenger: publicUser(passenger) };
   }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  // Movimientos del LIBRO del conductor que no son ni un viaje ni una
+  // solicitud de billetera, y que hasta ahora no salían por ninguna parte: la
+  // octava auditoría encontró que el pago de una comisión pendiente bajaba un
+  // saldo real sin dejar rastro en la auditoría. El mantenimiento mensual
+  // estaba en la misma situación, y es el mismo tipo de movimiento.
+  //
+  // Se expone lo justo para auditar —quién, qué, cuánto, cuándo y con qué
+  // saldo quedó— y nada de la contabilidad interna: ni reservas, ni
+  // identidades de operación, ni orígenes.
+  const MOVIMIENTOS_DEL_LIBRO = ['DRIVER_DEFERRED_COMMISSION_PAYMENT', 'DRIVER_ACCOUNT_MAINTENANCE'];
+  const driverMovements = database.transactions
+    .filter(item => MOVIMIENTOS_DEL_LIBRO.includes(item.type))
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 100)
+    .map(item => ({
+      id: item.id,
+      type: item.type,
+      amount: item.amount,
+      currency: item.currency || 'USD',
+      status: item.status,
+      balanceAfter: item.balanceAfter,
+      createdAt: item.createdAt,
+      user: publicUser(database.users.find(user => user.id === item.userId))
+    }));
+
   res.json({
     bcvRate: Number(pricingConfig.bcvRate || 0), commissionRate, transactions,
     walletRequests: database.transactions.filter(item => ['TOP_UP','PAYOUT'].includes(item.type)).slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).map(item=>({...item,user:publicUser(database.users.find(user=>user.id===item.userId))})),
+    driverMovements,
     summary: {
       gross: transactions.reduce((s, t) => s + t.gross, 0),
       commission: transactions.reduce((s, t) => s + t.commission, 0),
@@ -3130,6 +3197,12 @@ io.on('connection', (socket) => {
         tripId, status, error: resultado.code,
         balance: resultado.balance, required: resultado.required
       });
+      return;
+    }
+    if (resultado.repetida) {
+      // Nada cambio: ni se persiste ni se vuelve a anunciar. Solo se remata la
+      // liquidacion si aquella vez quedo pendiente.
+      await rematarLiquidacionPendiente(trip, resultado.settlement);
       return;
     }
     if (!await persistDatabase()) {

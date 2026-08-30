@@ -256,6 +256,15 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
   assert.equal(estadoInicial.rowCount, 1, 'y el conductor ya tiene su fila en el libro');
 
   // ---- §29 · completar la carrera de verdad --------------------------------
+  //
+  // v9 · y CONTANDO los fines de carrera canónicos. La octava auditoría
+  // encontró que un `COMPLETED` repetido del conductor le mandaba a la
+  // pasajera un segundo fin de carrera: el dinero seguía siendo
+  // exactamente-una-vez, el aviso no.
+  const finesDeCarrera = [];
+  pasajera.on('tripStatusUpdated', update => {
+    if (update.tripId === tripEfectivo && update.status === 'COMPLETED') finesDeCarrera.push(update);
+  });
   const completada = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('no llegó el fin de carrera')), 15_000);
     pasajera.on('tripStatusUpdated', update => {
@@ -298,7 +307,9 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
       where trip_id = $1 and transaction_type = 'PLATFORM_COMMISSION'`, [tripEfectivo]);
   assert.equal(apuntes.rows[0].n, 1, 'un solo apunte en el libro');
 
-  // Repetir el fin de carrera NO puede volver a cobrar.
+  assert.equal(finesDeCarrera.length, 1, 'la pasajera recibió UN fin de carrera canónico');
+
+  // §20 · Repetir el fin de carrera NO puede volver a cobrar NI volver a avisar.
   conductor.emit('tripStatusUpdated', { tripId: tripEfectivo, status: 'COMPLETED' });
   await esperar(1200);
   const saldoRepetido = await pool.query(
@@ -308,6 +319,42 @@ test('§28/§29 · aceptar, completar y reclamar por el camino REAL, contra Post
     `select count(*)::int as n from public.transactions
       where trip_id = $1 and transaction_type = 'PLATFORM_COMMISSION'`, [tripEfectivo]);
   assert.equal(apuntesRepetidos.rows[0].n, 1, 'ni duplica el apunte');
+  assert.equal(finesDeCarrera.length, 1,
+    'Y SIGUE SIENDO UNO: antes llegaba un segundo fin de carrera a la pasajera');
+
+  // §21 · dos fines de carrera SIMULTÁNEOS, en el mismo instante.
+  conductor.emit('tripStatusUpdated', { tripId: tripEfectivo, status: 'COMPLETED' });
+  conductor.emit('tripStatusUpdated', { tripId: tripEfectivo, status: 'COMPLETED' });
+  await esperar(1500);
+  assert.equal(finesDeCarrera.length, 1, 'dos a la vez tampoco producen un segundo aviso');
+
+  // §22 · y el camino SIN CONEXIÓN reclamando lo mismo que ya ocurrió en línea.
+  const sinConexion = await json(await post(`/api/trips/${tripEfectivo}/offline-events`, {
+    events: [{
+      eventId: crypto.randomUUID(),
+      action: 'COMPLETED',
+      sequence: 1,
+      deviceTimestamp: new Date().toISOString()
+    }]
+  }, driverToken));
+  assert.ok([200, 409].includes(sinConexion.status),
+    `la reconciliación sin conexión responde con criterio (${sinConexion.status})`);
+  await esperar(1500);
+  assert.equal(finesDeCarrera.length, 1,
+    'online y offline reclamando el mismo fin de carrera producen UN solo evento');
+
+  const saldoFinal = await pool.query(
+    `select wallet_balance_usd from public.driver_finance_state where driver_id = $1`, [driverId]);
+  assert.equal(Number(saldoFinal.rows[0].wallet_balance_usd), -0.6,
+    'y el dinero siguió siendo exactamente-una-vez en las tres repeticiones');
+  const apuntesFinales = await pool.query(
+    `select count(*)::int as n from public.transactions
+      where trip_id = $1 and transaction_type = 'PLATFORM_COMMISSION'`, [tripEfectivo]);
+  assert.equal(apuntesFinales.rows[0].n, 1, 'una comisión, y una sola');
+  const cobrosPasajera = await pool.query(
+    `select count(*)::int as n from public.transactions
+      where trip_id = $1 and transaction_type = 'RIDE_PAYMENT'`, [tripEfectivo]);
+  assert.ok(cobrosPasajera.rows[0].n <= 1, 'y a la pasajera no se le cobró de más');
 
   // ---- §13 · la reclamación de un traslado cruza la puerta financiera ------
   const traslado = await json(await post('/api/trips/scheduled', {

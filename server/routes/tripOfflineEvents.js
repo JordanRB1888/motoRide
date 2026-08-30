@@ -183,7 +183,7 @@ export function createTripOfflineEventsRouter({
 
       libro.push(registrarEntrada(evento, OFFLINE_EVENT_RESULT.APPLIED, ahora));
       huboAplicados = true;
-      anuncios.push({ settlement: resultado.settlement });
+      anuncios.push({ settlement: resultado.settlement, repetida: resultado.repetida === true });
       resultados.push({ ...base, result: OFFLINE_EVENT_RESULT.APPLIED, status: trip.status });
     }
 
@@ -208,7 +208,12 @@ export function createTripOfflineEventsRouter({
       if (anuncios.length && typeof announceTransition === 'function') {
         // El anuncio liquida el dinero del conductor ANTES de emitir, y eso
         // ocurre solo despues de que la persistencia haya salido bien.
-        await announceTransition(trip, anuncios.at(-1).settlement ?? null);
+        //
+        // v9: si en esta tanda TODO fue repeticion de un estado que el viaje ya
+        // tenia, no se vuelve a anunciar el estado —la contraparte ya lo
+        // recibio— pero la liquidacion pendiente sigue teniendo su reintento.
+        await announceTransition(trip, anuncios.at(-1).settlement ?? null,
+          { repetida: anuncios.every(a => a.repetida) });
       }
     }
 

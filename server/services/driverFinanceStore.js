@@ -60,6 +60,32 @@ const OCUPAN_CAPACIDAD = "('RESERVED', 'SETTLEMENT_PENDING')";
  */
 const ORIGEN_LEGADO = 'LEGACY_UNKNOWN';
 
+/**
+ * LA frontera de canonicalizacion de la identidad de origen, y la unica.
+ *
+ * La octava auditoria acredito la misma recarga dos veces usando dos cadenas
+ * de espacios distintas: `' '` y `'   '`. Las dos pasaban la comprobacion de
+ * veracidad de JavaScript, las dos eran claves DISTINTAS del indice unico, y
+ * ninguna de las dos identificaba nada. Saldo 1.00 -> 3.00 -> 5.00.
+ *
+ * Que se canonicaliza, exactamente:
+ *
+ *   · se recortan los espacios de los extremos (`trim`), incluidos tabuladores
+ *     y saltos de linea;
+ *   · nada mas.
+ *
+ * NO se cambia mayusculas ni minusculas, NI se normaliza Unicode, y es
+ * deliberado: `source_id` lleva identificadores EXTERNOS —de una solicitud de
+ * recarga, de un retiro— y transformarlos convertiria una identidad valida en
+ * otra distinta. Recortar es lo unico que no puede cambiar el significado de
+ * un identificador que ya venia bien.
+ *
+ * Lo que queda vacio despues de recortar no es una identidad: es la ausencia
+ * de una, y se rechaza.
+ */
+const canonizarOrigen = valor => (typeof valor === 'string' ? valor.trim() : '');
+const origenValido = valor => canonizarOrigen(valor).length > 0;
+
 /** Las cuatro tablas del libro contable. Si falta alguna, el almacen se
  *  declara NO disponible y la aplicacion sigue con su comportamiento de
  *  siempre: el codigo puede desplegarse antes que la migracion. */
@@ -531,6 +557,12 @@ export function createDriverFinanceStore({
    * nada que hacer, porque ese dinero ya se movio exactamente una vez.
    */
   async function anotarOperacion(client, { operationId, driverId, kind, amountUSD, balanceAfter, sourceType, sourceId }) {
+    // Nadie anota una operacion sin origen real, ni siquiera por dentro. La
+    // base lo rechaza tambien, pero un testigo sin procedencia no deberia
+    // llegar nunca hasta alli.
+    if (!origenValido(sourceType) || !origenValido(sourceId)) {
+      throw new Error('DRIVER_FINANCE_SOURCE_IDENTITY_REQUIRED');
+    }
     const r = await client.query(
       `insert into public.driver_money_operations
          (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
@@ -610,7 +642,8 @@ export function createDriverFinanceStore({
    * de negocio mueve dinero una sola vez, se le llame como se le llame.
    */
   async function leerOperacionPorOrigen(sourceType, sourceId) {
-    if (!sourceType || !sourceId || sourceType === ORIGEN_LEGADO) return null;
+    if (!origenValido(sourceType) || !origenValido(sourceId)) return null;
+    if (canonizarOrigen(sourceType) === ORIGEN_LEGADO) return null;
     const { rows } = await pool.query(
       `select ${CAMPOS_OPERACION} from public.driver_money_operations
         where source_type = $1 and source_id = $2`,
@@ -648,7 +681,8 @@ export function createDriverFinanceStore({
         return { outcome: 'OPERATION_ID_CONFLICT' };
       }
     }
-    if (esperado.sourceType && esperado.sourceId && esperado.sourceType !== ORIGEN_LEGADO) {
+    if (origenValido(esperado.sourceType) && origenValido(esperado.sourceId)
+        && esperado.sourceType !== ORIGEN_LEGADO) {
       const porOrigen = await client.query(
         `select ${CAMPOS_OPERACION} from public.driver_money_operations
           where source_type = $1 and source_id = $2 for update`,
@@ -972,18 +1006,23 @@ export function createDriverFinanceStore({
     sourceRef = null, at = new Date().toISOString(), policyEnabled = true, builders = {}
   }) {
     const importe = Math.max(0, CENT(creditUSD));
+    // El origen se canonicaliza ANTES de decidir nada, para que la validacion
+    // y el testigo hablen exactamente de lo mismo.
+    const tipo = canonizarOrigen(sourceType);
+    const origen = canonizarOrigen(sourceId);
     // Un ingreso SIN identidad completa no se acepta. Es una regla dura a
     // proposito: sin ella, un reintento vuelve a acreditar, y sin origen no se
     // puede distinguir una repeticion legitima de una identidad reutilizada.
     // La unica excepcion es el credito de CERO, que no mueve dinero — solo
     // recorre las obligaciones vivas, y cada una lleva su propio testigo.
-    if (importe > 0 && (!operationId || !sourceType || !sourceId)) {
+    if (importe > 0 && (!operationId || !origenValido(sourceType) || !origenValido(sourceId))) {
       logger.error('[+58express DriverFinance] credito sin identidad completa de operacion: rechazado');
       return { outcome: 'OPERATION_ID_REQUIRED' };
     }
-    if (sourceType === ORIGEN_LEGADO) return rechazarOrigenLegado();
+    if (tipo === ORIGEN_LEGADO) return rechazarOrigenLegado();
     const esperado = {
-      operationId, driverId, kind: 'CREDIT', amountUSD: USD(importe), sourceType, sourceId
+      operationId, driverId, kind: 'CREDIT', amountUSD: USD(importe),
+      sourceType: tipo || null, sourceId: origen || null
     };
 
     const resultado = await enTransaccion('credito con cobranza', async (client, abortar) => {
@@ -1004,13 +1043,13 @@ export function createDriverFinanceStore({
 
       // Y SOLO AHORA los efectos.
       const disponibleInicial = CENT(bloqueado.snapshot.walletBalance) + importe;
-      const cobranza = await cobrarObligaciones(client, driverId, disponibleInicial, builders, sourceRef ?? sourceId, policyEnabled);
+      const cobranza = await cobrarObligaciones(client, driverId, disponibleInicial, builders, sourceRef ?? origen, policyEnabled);
       const saldoNuevo = roundMoney(USD(cobranza.disponible));
 
       if (operationId) {
         const nueva = await anotarOperacion(client, {
           operationId, driverId, kind: 'CREDIT', amountUSD: USD(importe),
-          balanceAfter: saldoNuevo, sourceType, sourceId
+          balanceAfter: saldoNuevo, sourceType: tipo, sourceId: origen
         });
         // Otra transaccion se adelanto entre la lectura y la escritura. Se
         // deshace TODO y se resuelve leyendo la base con calma.
@@ -1055,13 +1094,17 @@ export function createDriverFinanceStore({
    * `PAYOUT`, mañana `WITHDRAWAL`— y esta capa no necesita saber mas.
    */
   async function debitDriverWallet({ driverId, amountUSD, operationId = null, sourceType = null, sourceId = null }) {
-    if (!operationId || !sourceType || !sourceId) {
+    const tipo = canonizarOrigen(sourceType);
+    const origen = canonizarOrigen(sourceId);
+    if (!operationId || !origenValido(sourceType) || !origenValido(sourceId)) {
       logger.error('[+58express DriverFinance] debito sin identidad completa de operacion: rechazado');
       return { outcome: 'OPERATION_ID_REQUIRED' };
     }
-    if (sourceType === ORIGEN_LEGADO) return rechazarOrigenLegado();
+    if (tipo === ORIGEN_LEGADO) return rechazarOrigenLegado();
     const importe = roundMoney(Math.max(0, Number(amountUSD) || 0));
-    const esperado = { operationId, driverId, kind: 'DEBIT', amountUSD: importe, sourceType, sourceId };
+    const esperado = {
+      operationId, driverId, kind: 'DEBIT', amountUSD: importe, sourceType: tipo, sourceId: origen
+    };
 
     const resultado = await enTransaccion('debito de liquidacion', async (client, abortar) => {
       const bloqueado = await bloquearEstado(client, driverId);
@@ -1079,7 +1122,7 @@ export function createDriverFinanceStore({
 
       const nueva = await anotarOperacion(client, {
         operationId, driverId, kind: 'DEBIT', amountUSD: importe,
-        balanceAfter: saldoNuevo, sourceType, sourceId
+        balanceAfter: saldoNuevo, sourceType: tipo, sourceId: origen
       });
       if (!nueva) abortar({ outcome: 'RECHECK' });
 

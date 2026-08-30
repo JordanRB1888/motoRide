@@ -406,9 +406,101 @@ begin
       raise exception 'DRIVER_FINANCE_DUPLICATE_SOURCE: % ya movieron dinero mas de una vez '
                       'bajo el mismo origen; la unicidad no se puede declarar sin revisarlos', problemas;
     end if;
+
+    -- Y antes de declarar que el origen no puede estar en blanco: ¿ya hay
+    -- alguna fila que lo tenga? Si la hay, la migracion se para.
+    --
+    -- NO se recorta ni se repara ningun testigo de dinero. Una operacion sin
+    -- procedencia es un hecho financiero sin identificar, y arreglarlo a
+    -- ciegas seria inventarle una. Lo mira una persona.
+    execute $enblanco$
+      select count(*)::text from public.driver_money_operations
+       where coalesce(source_type, '') !~ '\S'
+          or coalesce(source_id, '') !~ '\S'
+    $enblanco$ into problemas;
+    if problemas is not null and problemas <> '0' then
+      raise exception 'DRIVER_FINANCE_BLANK_SOURCE: % operaciones tienen un origen vacio o de solo '
+                      'espacios; no se puede declarar la restriccion sin revisarlas, y NO se reparan solas',
+                      problemas;
+    end if;
   end if;
 end
 $sondas$;
+
+-- ---------------------------------------------------------------------
+-- Comprobacion previa III: el indice del ORIGEN, por su FORMA.
+-- ---------------------------------------------------------------------
+-- `create unique index if not exists` mira el NOMBRE y nada mas. La octava
+-- auditoria creo un indice con el nombre exacto que se esperaba
+-- —`driver_money_operations_origen_unico`— pero sobre `(operation_id,
+-- source_id)`. El `if not exists` no hizo nada, la migracion paso, y la
+-- unicidad del origen —lo unico que impide que el mismo hecho de negocio
+-- mueva dinero dos veces— simplemente no existia.
+--
+-- Aqui se exige todo lo que define ese indice: que sea UNICO, sobre esta
+-- tabla, sobre EXACTAMENTE esas columnas y en ese orden, con EXACTAMENTE ese
+-- predicado, y en estado utilizable. Si algo no cuadra, la migracion se para:
+-- no se reemplaza un indice de dinero por las buenas.
+do $indice_origen$
+declare
+  problema text := null;
+  columnas text;
+  predicado text;
+  fila record;
+begin
+  if to_regclass('public.driver_money_operations') is null then
+    return;
+  end if;
+
+  select i.indisunique, i.indisvalid, i.indisready, i.indislive,
+         i.indnatts, i.indnkeyatts,
+         pg_get_expr(i.indpred, i.indrelid) as predicado
+    into fila
+    from pg_class c
+    join pg_index i on i.indexrelid = c.oid
+   where c.relname = 'driver_money_operations_origen_unico'
+     and c.relnamespace = 'public'::regnamespace
+     and i.indrelid = to_regclass('public.driver_money_operations');
+
+  if not found then
+    -- No existe todavia: mas abajo se crea con la forma correcta. Pero si
+    -- existe un objeto con ESE nombre que no es un indice de esta tabla, hay
+    -- que decirlo, porque el `if not exists` tampoco lo tocara.
+    if to_regclass('public.driver_money_operations_origen_unico') is not null then
+      raise exception 'DRIVER_FINANCE_SOURCE_INDEX_INVALID: ya existe algo llamado '
+                      'driver_money_operations_origen_unico que no es el indice de origen de esta tabla';
+    end if;
+    return;
+  end if;
+
+  select string_agg(a.attname, ',' order by u.ord)
+    into columnas
+    from pg_index i
+    cross join lateral unnest(i.indkey) with ordinality as u(attnum, ord)
+    join pg_attribute a on a.attrelid = i.indrelid and a.attnum = u.attnum
+   where i.indexrelid = 'public.driver_money_operations_origen_unico'::regclass
+     and u.ord <= i.indnkeyatts;
+
+  predicado := coalesce(regexp_replace(fila.predicado, '\s+', ' ', 'g'), '');
+
+  if not fila.indisunique then
+    problema := 'no es UNICO';
+  elsif columnas is distinct from 'source_type,source_id' then
+    problema := 'esta sobre (' || coalesce(columnas, 'nada') || ') y debe estar sobre (source_type,source_id)';
+  elsif fila.indnkeyatts <> 2 or fila.indnatts <> 2 then
+    problema := 'tiene columnas de mas: el indice del origen son dos y solo dos';
+  elsif predicado <> '(source_type <> ''LEGACY_UNKNOWN''::text)' then
+    problema := 'su predicado es «' || predicado || '» y debe excluir EXACTAMENTE los testigos legados';
+  elsif not (fila.indisvalid and fila.indisready and fila.indislive) then
+    problema := 'existe pero no esta en uso (invalido, no listo o marcado para borrar)';
+  end if;
+
+  if problema is not null then
+    raise exception 'DRIVER_FINANCE_SOURCE_INDEX_INVALID: el indice de unicidad del origen %. '
+                    'No se sustituye por las buenas: un indice de dinero lo revisa una persona', problema;
+  end if;
+end
+$indice_origen$;
 
 -- ---------------------------------------------------------------------
 -- A. Reserva de comision, con DUENO durable: el viaje.
@@ -598,6 +690,62 @@ create unique index if not exists driver_money_operations_origen_unico
   on public.driver_money_operations (source_type, source_id)
   where source_type <> 'LEGACY_UNKNOWN';
 
+-- Que exista con la forma correcta es necesario; que MUERDA es lo que importa.
+-- Se le pregunta a la base con filas de sonda que siempre se deshacen.
+do $muerde$
+declare
+  conductor text;
+  acepta boolean;
+begin
+  select u.id into conductor from public.users u limit 1;
+  if conductor is null then
+    return;   -- una base sin usuarios no puede sondear la clave foranea
+  end if;
+
+  -- 1) Dos operaciones con el MISMO origen valido: la segunda tiene que fallar.
+  acepta := false;
+  begin
+    insert into public.driver_money_operations
+      (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+    values ('sonda_origen_1', conductor, 'CREDIT', 1, 1, 'TOPUP', 'sonda-origen-unico'),
+           ('sonda_origen_2', conductor, 'CREDIT', 1, 2, 'TOPUP', 'sonda-origen-unico');
+    acepta := true;
+    raise exception using errcode = 'DF002';
+  exception
+    when sqlstate 'DF002' then null;
+    when others then null;
+  end;
+  if acepta then
+    raise exception 'DRIVER_FINANCE_SOURCE_INDEX_INEFFECTIVE: el indice existe pero no impide que el '
+                    'mismo origen de negocio mueva dinero dos veces';
+  end if;
+
+  -- 2) Y dos testigos LEGADOS con el mismo origen SI tienen que caber: no
+  --    tienen procedencia real que pueda ser unica, y exigirsela obligaria a
+  --    inventarles una o a borrarlos. Nacen validos y se marcan despues, que
+  --    es exactamente lo que hace el relleno de mas arriba.
+  acepta := false;
+  begin
+    insert into public.driver_money_operations
+      (operation_id, driver_id, kind, amount_usd, balance_after_usd, source_type, source_id)
+    values ('sonda_legado_1', conductor, 'CREDIT', 1, 1, 'TOPUP', 'sonda-legado-a'),
+           ('sonda_legado_2', conductor, 'CREDIT', 1, 2, 'TOPUP', 'sonda-legado-b');
+    update public.driver_money_operations
+       set source_type = 'LEGACY_UNKNOWN', source_id = 'sonda-legado-comun'
+     where operation_id in ('sonda_legado_1', 'sonda_legado_2');
+    acepta := true;
+    raise exception using errcode = 'DF002';
+  exception
+    when sqlstate 'DF002' then null;
+    when others then null;
+  end;
+  if not acepta then
+    raise exception 'DRIVER_FINANCE_SOURCE_INDEX_INEFFECTIVE: el indice alcanza a los testigos legados, '
+                    'que no tienen procedencia real y no pueden ser unicos entre si';
+  end if;
+end
+$muerde$;
+
 -- `LEGACY_UNKNOWN` describe el pasado, no autoriza el futuro.
 --
 -- Una operacion nueva anotada asi entra la primera vez y despues es
@@ -715,6 +863,29 @@ begin
   alter table public.driver_money_operations
     add constraint driver_money_operations_origen
     check (source_type in ('TOPUP', 'PAYOUT', 'WITHDRAWAL', 'ADMIN_ADJUSTMENT', 'LEGACY_UNKNOWN'));
+
+  -- Y el IDENTIFICADOR del origen tiene que decir algo.
+  --
+  -- La octava auditoria acredito la misma recarga dos veces usando dos cadenas
+  -- de espacios distintas —`' '` y `'   '`—: las dos pasaban `not null`, las
+  -- dos eran claves DISTINTAS del indice unico, y ninguna identificaba nada.
+  -- Saldo 1.00 -> 3.00 -> 5.00.
+  --
+  -- `not null` no basta: una cadena vacia o de solo espacios es la AUSENCIA de
+  -- una identidad disfrazada de identidad. Los testigos migrados no se ven
+  -- afectados: su `source_id` es su propio `operation_id`, que nunca esta en
+  -- blanco.
+  --
+  -- Se exige que haya al menos un caracter que NO sea espacio en blanco, y se
+  -- comprueba con `\S` a proposito: `btrim` sin argumentos solo recorta
+  -- espacios, asi que un `source_id` de un tabulador o un salto de linea lo
+  -- habria pasado tranquilamente. `\S` cubre todo el blanco, igual que el
+  -- `trim` de la aplicacion.
+  alter table public.driver_money_operations
+    drop constraint if exists driver_money_operations_origen_no_vacio;
+  alter table public.driver_money_operations
+    add constraint driver_money_operations_origen_no_vacio
+    check (source_type ~ '\S' and source_id ~ '\S');
 
   -- Un aviso entregado no puede serlo antes de reclamarse.
   alter table public.driver_inactivity_warnings
@@ -846,8 +1017,21 @@ create trigger driver_finance_project_trg
 -- documento no es la autoridad—, aplicada a la propiedad en vez de al saldo.
 --
 -- Solo se opone a lo que de verdad rompe la contabilidad: cambiar de conductor
--- una carrera cuya comision YA se liquido. Reasignar antes de liquidar sigue
--- siendo perfectamente legitimo, y el producto de hoy ni siquiera lo hace.
+-- una carrera cuyo dinero YA es de alguien. Reasignar antes de que exista ese
+-- compromiso sigue siendo perfectamente legitimo, y el producto de hoy ni
+-- siquiera lo hace.
+--
+-- Y son DOS estados, no uno. La octava auditoria encontro que el guardia solo
+-- miraba `SETTLED`:
+--
+--   SETTLED             la comision ya se cobro a ese conductor
+--   SETTLEMENT_PENDING  la carrera esta HECHA y su dinero se debe todavia
+--
+-- El segundo es igual de vinculante: es una obligacion recuperable con dueno.
+-- Cambiarle la carrera de conductor dejaria al reconciliador cobrandole a A el
+-- viaje que ahora es de B — o dejando esa deuda sin nadie. `RESERVED` no entra:
+-- una carrera reservada y aun no hecha se puede reasignar sin que el dinero
+-- haya cambiado de manos, y la reserva se libera.
 do $dueno$
 begin
   if to_regclass('public.trips') is null then
@@ -861,7 +1045,8 @@ begin
   declare
     dueno_nuevo text;
     dueno_viejo text;
-    dueno_liquidado text;
+    dueno_comprometido text;
+    estado_comprometido text;
   begin
     dueno_nuevo := nullif(new.payload->>'driverId', '');
     dueno_viejo := nullif(old.payload->>'driverId', '');
@@ -869,13 +1054,13 @@ begin
     if dueno_nuevo is not distinct from dueno_viejo then
       return new;
     end if;
-    select r.driver_id into dueno_liquidado
+    select r.driver_id, r.status into dueno_comprometido, estado_comprometido
       from public.driver_commission_reservations r
-     where r.trip_id = new.id and r.status = 'SETTLED';
-    if dueno_liquidado is not null and dueno_liquidado is distinct from dueno_nuevo then
+     where r.trip_id = new.id and r.status in ('SETTLED', 'SETTLEMENT_PENDING');
+    if dueno_comprometido is not null and dueno_comprometido is distinct from dueno_nuevo then
       raise exception 'DRIVER_FINANCE_TRIP_OWNER_SETTLED'
-        using detail = 'la comision de esta carrera ya se liquido a su conductor: '
-                       'cambiarle el dueno dejaria el dinero cobrado a uno y la carrera puesta a otro';
+        using detail = 'el dinero de esta carrera ya es de su conductor (' || estado_comprometido
+                       || '): cambiarle el dueno dejaria la comision de uno y la carrera de otro';
     end if;
     return new;
   end

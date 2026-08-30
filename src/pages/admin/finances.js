@@ -26,6 +26,9 @@ export async function renderFinances(container) {
   const statusLabel = status => status === 'APPROVED' ? 'Aprobado' : status === 'REJECTED' ? 'Rechazado' : 'Pendiente';
   const typeLabel = type => type === 'TOP_UP' ? 'Recarga' : type === 'PAYOUT' ? 'Liquidación' : 'Ganancia';
   const personName = person => person ? `${person.firstName || ''} ${person.lastName || ''}`.trim() : 'Usuario';
+  const movementLabel = type => type === 'DRIVER_DEFERRED_COMMISSION_PAYMENT'
+    ? 'Comisión pendiente saldada'
+    : type === 'DRIVER_ACCOUNT_MAINTENANCE' ? 'Mantenimiento de cuenta' : type;
   const reload = async () => {
     const next = await apiService.get('/admin/finance');
     if (next) {
@@ -129,6 +132,13 @@ export async function renderFinances(container) {
           <button class="finance-see-all" data-open-topups>Ver todas las solicitudes ${icon('chevronRight', 16)}</button>
         </section>
       </div>
+
+      <section class="finance-card finance-wallet-card" id="finance-ledger-card">
+        <header><div><h3>Movimientos de cuenta de conductores</h3><p>Comisiones pendientes saldadas y mantenimiento mensual: débitos reales del saldo.</p></div><span>${(data.driverMovements || []).length} movimientos</span></header>
+        <div class="finance-table-scroll"><table class="finance-table"><thead><tr><th>Conductor</th><th>Movimiento</th><th>Monto</th><th>Saldo resultante</th><th>Fecha</th></tr></thead><tbody>
+          ${(data.driverMovements || []).slice(0, 8).map(item => `<tr><td>${escapeHtml(personName(item.user) || '—')}</td><td>${movementLabel(item.type)}</td><td><strong>${money(item.amount)}</strong></td><td>${money(item.balanceAfter)}</td><td>${new Date(item.createdAt).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })}</td></tr>`).join('') || '<tr><td colspan="5" class="finance-empty">Todavía no hay movimientos de cuenta.</td></tr>'}
+        </tbody></table></div>
+      </section>
 
       <section class="finance-card finance-trips-card" id="finance-trips-card">
         <header><div><h3>Viajes completados</h3><p>Wallet acredita el neto; pagos directos descuentan la comisión al conductor.</p></div>

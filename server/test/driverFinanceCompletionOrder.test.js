@@ -83,8 +83,9 @@ test('la transición canónica NO toca el dinero del conductor', () => {
 test('los TRES caminos de completación liquidan después de persistir', () => {
   const llamadas = [...fuente.matchAll(/liquidarConductorTrasPersistir\(/g)]
     .filter(m => !fuente.slice(Math.max(0, m.index - 40), m.index).includes('async function'));
-  assert.equal(llamadas.length, 3,
-    'socket del conductor, reconciliación sin conexión y cierre administrativo: ni uno más');
+  assert.equal(llamadas.length, 4,
+    'socket del conductor, reconciliación sin conexión, cierre administrativo y el remate '
+    + 'de una transición repetida: ni uno más');
 
   const contextos = llamadas.map(m => fuente.slice(Math.max(0, m.index - 1400), m.index));
 
@@ -99,7 +100,7 @@ test('los TRES caminos de completación liquidan después de persistir', () => {
   // 3) La reconciliación sin conexión: liquida DENTRO del anuncio que el
   //    router invoca, y el router solo anuncia después de persistir. Ese
   //    segundo tramo se comprueba en el propio router, más abajo.
-  assert.ok(contextos.some(c => c.includes('announceTransition: async (trip, settlement)')),
+  assert.ok(contextos.some(c => c.includes('announceTransition: async (trip, settlement')),
     'la reconciliación sin conexión liquida dentro del anuncio');
 });
 
@@ -157,7 +158,7 @@ test('la autoridad del saldo NO depende de la bandera de la política', () => {
 test('v8 · el estado se anuncia ANTES de liquidar, y la cartera del conductor despues', () => {
   for (const [camino, ancla] of [
     ['el socket del conductor', 'const resultado = await aplicarTransicionDelConductor(trip, status'],
-    ['la reconciliacion sin conexion', 'announceTransition: async (trip, settlement)']
+    ['la reconciliacion sin conexion', 'announceTransition: async (trip, settlement']
   ]) {
     const desde = fuente.indexOf(ancla);
     assert.notEqual(desde, -1, `no se encontro ${camino}`);
@@ -182,4 +183,54 @@ test('v8 · el anuncio de la transicion NO arrastra la cartera del conductor', (
     'la cartera de la pasajera SI: ya es durable cuando el viaje lo es');
   assert.ok(!cuerpo.includes('emitirCarteraDeConductor'),
     'la del conductor NO: aun no se sabe, y esperarla retenia el fin de carrera');
+});
+
+// ---------------------------------------------------------------------------
+// v9 · una transicion REPETIDA no vuelve a anunciarse
+// ---------------------------------------------------------------------------
+//
+// La maquina de estados admite `estado -> mismo estado`, y tiene que
+// admitirlo: es lo que hace idempotente la reconciliacion sin conexion. Pero
+// eso se traducia en volver a persistir y volver a ANUNCIAR, y la octava
+// auditoria lo midio: un segundo `COMPLETED` del conductor le mandaba a la
+// pasajera un segundo fin de carrera canonico.
+
+test('v9 · la repeticion se detecta ANTES de comprobar el saldo de la pasajera', () => {
+  const desde = fuente.indexOf('async function aplicarTransicionDelConductor(');
+  assert.notEqual(desde, -1);
+  const cuerpo = fuente.slice(desde, desde + 2400);
+  const repeticion = cuerpo.indexOf('repetida: true');
+  const saldo = cuerpo.indexOf('ensureWalletCanCoverTrip');
+  assert.ok(repeticion > -1, 'la transicion tiene que reconocer la repeticion');
+  assert.ok(saldo > -1);
+  assert.ok(repeticion < saldo,
+    'y antes de mirar el saldo: en un fin de carrera repetido a la pasajera YA se le cobro, '
+    + 'y volver a preguntarle si le alcanza rechazaria una carrera ya pagada y cerrada');
+});
+
+test('v9 · una transicion repetida no persiste ni re-anuncia por ningun camino', () => {
+  // El camino en linea.
+  const socket = fuente.slice(fuente.indexOf("const resultado = await aplicarTransicionDelConductor(trip, status"));
+  const bloque = socket.slice(0, 1800);
+  const repetida = bloque.indexOf('resultado.repetida');
+  const persist = bloque.indexOf('await persistDatabase()');
+  const anuncio = bloque.indexOf('anunciarTransicionDelConductor(trip');
+  assert.ok(repetida > -1, 'el socket tiene que mirar si fue una repeticion');
+  assert.ok(repetida < persist && repetida < anuncio,
+    'y salirse antes de persistir y de anunciar');
+  assert.ok(bloque.slice(repetida, persist).includes('rematarLiquidacionPendiente'),
+    'lo unico que sigue haciendo es rematar una liquidacion que quedara en el aire');
+
+  // Y el camino sin conexion, con el mismo criterio.
+  const offline = fuente.slice(fuente.indexOf('announceTransition: async (trip, settlement'));
+  assert.ok(offline.slice(0, 600).includes('if (!repetida) anunciarTransicionDelConductor'),
+    'online y offline no pueden divergir tampoco en esto');
+});
+
+test('v9 · el router sin conexion le dice al anuncio si TODO fue repeticion', () => {
+  const router = fs.readFileSync(path.join(raiz, 'routes', 'tripOfflineEvents.js'), 'utf8');
+  assert.ok(router.includes('repetida: resultado.repetida === true'),
+    'cada evento aplicado registra si repetia un estado que el viaje ya tenia');
+  assert.ok(router.includes('repetida: anuncios.every(a => a.repetida)'),
+    'y solo se calla el anuncio si NINGUNO cambio nada');
 });
