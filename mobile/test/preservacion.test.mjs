@@ -355,6 +355,33 @@ test('el disco central es la MISMA pieza en los dos roles', () => {
   assert.equal((fuente.match(/<Disco/g) ?? []).length, 2, 'los dos controles pintan el mismo disco');
 });
 
+test('el disco va en el CENTRO de la barra, no a un lado', () => {
+  // Estaba pintado después de los dos grupos y acababa pegado al borde
+  // derecho. Es el elemento principal de la barra y tiene que caer bajo el
+  // pulgar sin recolocar la mano, así que va en medio.
+  const fuente = leer('ui/Navegacion.tsx');
+  const barra = fuente.slice(fuente.indexOf('export function BarraDeNavegacion'));
+
+  const izquierda = barra.indexOf('destinos={izquierda}');
+  const centro = barra.indexOf('{control ?');
+  const derecha = barra.indexOf('destinos={derecha}');
+
+  assert.ok(izquierda > 0 && centro > 0 && derecha > 0, 'la barra tiene tres zonas');
+  assert.ok(izquierda < centro, 'el disco va después del grupo izquierdo');
+  assert.ok(centro < derecha, 'y antes del derecho');
+});
+
+test('el disco sobresale por encima de la barra', () => {
+  // Es lo que lo separa de los demás destinos: si se queda a ras, se lee como
+  // una pestaña más y deja de ser la acción principal.
+  const fuente = leer('ui/Navegacion.tsx');
+  const margenes = [...fuente.matchAll(/marginTop: -(\d+)/g)].map(coincidencia => Number(coincidencia[1]));
+  assert.equal(margenes.length, 2, 'los dos controles suben');
+  for (const margen of margenes) {
+    assert.ok(margen >= 26, `sube sólo ${margen} puntos: no se despega de los iconos`);
+  }
+});
+
 test('el disco de la pasajera se cierra desde donde se abrió', () => {
   const fuente = leer('ui/Navegacion.tsx');
   assert.match(fuente, /abierto/, 'el disco conoce su estado abierto');

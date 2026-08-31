@@ -179,7 +179,7 @@ const BASE = `
   .barra{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:flex-start;
     background:var(--superficie);border-top:1px solid var(--borde);padding:10px 6px 22px}
   .dest-nav{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
-  .disco-zona{width:74px;display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:-24px}
+  .disco-zona{width:76px;display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:-30px}
   .disco{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;position:relative;
     background:var(--elevada);border:2px solid var(--borde);box-shadow:0 6px 12px rgba(0,0,0,.42)}
   .disco img{width:34px;height:34px;object-fit:contain}
@@ -464,7 +464,7 @@ const PANTALLAS = {
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS}${hito(47, 29, 'orig')}${CTRL}</div>
       ${CABECERA_PASAJERA}
-      <div class="hoja" style="${hojaMedia};bottom:82px">
+      <div class="hoja" style="${hojaMedia};bottom:76px">
         <span class="asa"></span>
         <div class="campo">${icono('destino', 'var(--acento)', 19)}
           <span class="cuerpo t2">¿A dónde vas?</span></div>
@@ -486,7 +486,7 @@ const PANTALLAS = {
   pedir: () => `
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS_TRES}</div>
-      <div class="hoja" style="${hojaMedia};bottom:82px">
+      <div class="hoja" style="${hojaMedia};bottom:76px">
         <span class="asa"></span>
         <span class="pastilla" style="align-self:flex-start;padding:7px 9px 7px 11px">
           ${icono('perfil', 'var(--texto-2)', 15)}<span class="etq t2">Para mí</span>
@@ -578,7 +578,7 @@ const PANTALLAS = {
         <span class="etq t3">Fuera de línea</span><span class="crece"></span>
         <span class="etq t2">Zona demo · Maracaibo</span>
       </div>
-      <div class="hoja" style="${hojaMedia};bottom:92px">
+      <div class="hoja" style="${hojaMedia};bottom:76px">
         <span class="asa"></span>
         <div style="display:grid;gap:var(--gap)">
           <div style="display:grid;gap:5px">
@@ -604,7 +604,7 @@ const PANTALLAS = {
         <span class="etq ok">En línea · GPS activo</span><span class="crece"></span>
         <span class="etq t2">Zona demo · Maracaibo</span>
       </div>
-      <div class="hoja" style="bottom:92px;padding-top:var(--pad)">
+      <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
         <div style="display:flex;padding-bottom:var(--pad)">
           ${[['Viajes', '8'], ['En ruta', '5 h 20 m'], ['Resumen', '—']].map(([e, v], i) => `
             <div style="flex:1;display:flex">

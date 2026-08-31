@@ -182,8 +182,10 @@ export function ControlDeDisponibilidad({ enLinea, onAlternar }: {
       style={({ pressed }) => ({
         alignItems: 'center',
         gap: 3,
-        // Sobresale por encima de la barra sin hacerla más alta.
-        marginTop: -24,
+        // Sobresale por encima de la barra sin hacerla más alta. A -24 apenas
+        // se despegaba de la fila de iconos y no se leía como el elemento
+        // principal, que es justo lo que tiene que ser.
+        marginTop: -30,
         transform: [{ scale: pressed ? 0.94 : 1 }]
       })}
     >
@@ -221,7 +223,7 @@ export function ControlDePedido({ abierto, onAlternar }: {
       style={({ pressed }) => ({
         alignItems: 'center',
         gap: 3,
-        marginTop: -24,
+        marginTop: -30,
         transform: [{ scale: pressed ? 0.94 : 1 }]
       })}
     >
@@ -269,7 +271,8 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
   const tema = useTema();
   const inferior = useSafeAreaInsets().bottom;
   const mitad = Math.ceil(destinos.length / 2);
-  const grupos = control ? [destinos.slice(0, mitad), destinos.slice(mitad)] : [destinos];
+  const izquierda = control ? destinos.slice(0, mitad) : destinos;
+  const derecha = control ? destinos.slice(mitad) : [];
 
   return (
     <View style={{
@@ -285,20 +288,45 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
       borderTopWidth: 1,
       borderTopColor: tema.color.borde
     }}>
-      {grupos.map((grupo, indice) => (
-        <View key={`grupo-${indice}`} style={{ flexDirection: 'row', flex: 1 }}>
-          {grupo.map(destino => (
-            <Destino
-              key={destino.clave}
-              destino={destino}
-              activo={destino.clave === activo}
-              onPress={() => onSeleccionar?.(destino.clave)}
-            />
-          ))}
-        </View>
-      ))}
+      {/* Izquierda, disco, derecha. El orden importa: pintado después de los
+          dos grupos, el disco acababa pegado al borde derecho en vez de en el
+          centro, que es justo donde tiene que estar para alcanzarlo con el
+          pulgar sin recolocar la mano. */}
+      <Grupo
+        destinos={izquierda}
+        activo={activo}
+        onSeleccionar={onSeleccionar}
+      />
 
-      {control ? <View style={{ width: 74, alignItems: 'center' }}>{control}</View> : null}
+      {control ? <View style={{ width: 76, alignItems: 'center' }}>{control}</View> : null}
+
+      {derecha.length > 0 ? (
+        <Grupo
+          destinos={derecha}
+          activo={activo}
+          onSeleccionar={onSeleccionar}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/** Una mitad de la barra. Los dos lados reparten su ancho por igual. */
+function Grupo({ destinos, activo, onSeleccionar }: {
+  readonly destinos: readonly DestinoDeNavegacion[];
+  readonly activo: string;
+  readonly onSeleccionar?: (clave: string) => void;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', flex: 1 }}>
+      {destinos.map(destino => (
+        <Destino
+          key={destino.clave}
+          destino={destino}
+          activo={destino.clave === activo}
+          onPress={() => onSeleccionar?.(destino.clave)}
+        />
+      ))}
     </View>
   );
 }
