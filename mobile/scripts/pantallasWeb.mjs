@@ -436,20 +436,18 @@ export const PANTALLAS = {
 
       <div style="flex:1;display:flex;flex-direction:column;gap:var(--gap);
         padding:var(--bloques) var(--margen) 0">
-        <div style="flex:1"></div>
-
-        ${[['pasajero', 'Pasajero', 'Pide tu moto y sigue el viaje en el mapa', true],
-           ['conductor', 'Conductor', 'Conéctate, recibe viajes y gestiona tu jornada', false]
+        ${[['pasajero', 'Pasajero', 'Pide tu moto y síguela en el mapa', true],
+           ['conductor', 'Conductor', 'Conéctate y empieza a recibir viajes', false]
           ].map(([rol, titulo, detalle, on]) => `
-          <div class="veh-fila ${on ? 'on' : ''}" style="padding:var(--gap);gap:14px;
-            background:${on ? 'var(--elevada)' : 'var(--superficie)'}">
+          <div class="veh-fila ${on ? 'on' : ''}" style="padding:12px 14px;gap:13px;
+            text-align:left;background:${on ? 'var(--elevada)' : 'var(--superficie)'}">
             ${on ? '<span class="filo"></span>' : ''}
-            <span style="width:128px;height:128px;border-radius:var(--r-campo);overflow:hidden;
-              flex:0 0 128px;display:grid;place-items:center">
-              <img src="marca/rol-${rol}.png" width="128" height="128"
+            <span style="width:56px;height:56px;border-radius:var(--r-campo);overflow:hidden;
+              flex:0 0 56px;display:grid;place-items:center">
+              <img src="marca/rol-${rol}.png" width="56" height="56"
                 style="object-fit:contain;opacity:${on ? 1 : 0.6}" alt="${titulo}">
             </span>
-            <span style="flex:1;display:grid;gap:3px">
+            <span style="flex:1;display:grid;gap:2px;text-align:left">
               <span class="enc">${titulo}</span>
               <span class="pie t2">${detalle}</span></span>
           </div>`).join('')}

@@ -303,24 +303,19 @@ export function C2SelectorDeRol() {
         paddingTop: tema.ritmo.entreBloques,
         gap: tema.ritmo.entreElementos
       }}>
-        {/* Las dos opciones son lo único que hay que decidir aquí, así que se
-            quedan con el centro de la pantalla en lugar de amontonarse arriba
-            dejando un hueco muerto encima del botón. */}
-        <View style={{ flex: 1 }} />
-
         <OpcionDeRol
           titulo="Pasajero"
-          detalle="Pide tu moto y sigue el viaje en el mapa"
+          detalle="Pide tu moto y síguela en el mapa"
           activa={rol === 'pasajero'}
           onPress={() => setRol('pasajero')}
-          ilustracion={<AvatarDeRol rol="pasajero" atenuado={rol !== 'pasajero'} />}
+          ilustracion={<AvatarDeRol rol="pasajero" tamano={56} atenuado={rol !== 'pasajero'} />}
         />
         <OpcionDeRol
           titulo="Conductor"
-          detalle="Conéctate, recibe viajes y gestiona tu jornada"
+          detalle="Conéctate y empieza a recibir viajes"
           activa={rol === 'conductor'}
           onPress={() => setRol('conductor')}
-          ilustracion={<AvatarDeRol rol="conductor" atenuado={rol !== 'conductor'} />}
+          ilustracion={<AvatarDeRol rol="conductor" tamano={56} atenuado={rol !== 'conductor'} />}
         />
 
         <View style={{ flex: 1 }} />
@@ -362,8 +357,12 @@ function OpcionDeRol({ titulo, detalle, activa, onPress, ilustracion }: {
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 14,
-        padding: tema.ritmo.entreElementos,
+        gap: 13,
+        // Relleno corto y avatar de 56: la tarjeta queda en unos 80 puntos.
+        // Con el avatar a 128 y relleno de 16 pasaba de 160 y las dos ocupaban
+        // media pantalla para decir dos palabras.
+        paddingVertical: 12,
+        paddingHorizontal: 14,
         borderRadius: tema.radio.tarjeta,
         backgroundColor: activa ? tema.color.superficieElevada : tema.color.superficie,
         overflow: 'hidden'
@@ -380,7 +379,7 @@ function OpcionDeRol({ titulo, detalle, activa, onPress, ilustracion }: {
           traen el suyo, negro, y meterlas en una caja de otro tono dibujaría
           un recuadro alrededor de cada una. */}
       <View style={{
-        width: 128, height: 128,
+        width: 56, height: 56,
         alignItems: 'center', justifyContent: 'center',
         borderRadius: tema.radio.campo,
         overflow: 'hidden'
@@ -388,7 +387,10 @@ function OpcionDeRol({ titulo, detalle, activa, onPress, ilustracion }: {
         {ilustracion}
       </View>
 
-      <View style={{ flex: 1, gap: 3 }}>
+      {/* Todo el texto alineado igual y centrado con el avatar. Antes el título
+          iba a la izquierda y el detalle salía centrado: dos alineaciones
+          distintas dentro de la misma fila es lo que se veía mal. */}
+      <View style={{ flex: 1, gap: 2, justifyContent: 'center' }}>
         <Txt nivel="encabezado">{titulo}</Txt>
         <Txt nivel="pie" tono="secundario">{detalle}</Txt>
       </View>
