@@ -9,13 +9,17 @@
     "start:server": "npm --prefix server start",
     "build": "vite build",
     "preview": "node --max-http-header-size=65536 ./node_modules/vite/bin/vite.js preview",
-    "test:frontend": "node --test test/*.test.js"
+    "test:frontend": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report playwright-report"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "esbuild": "^0.25.12",
     "vite": "^6.3.5"
   }

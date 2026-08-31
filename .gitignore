@@ -16,3 +16,10 @@ server/data/private-uploads/
 *.pem
 *.key
 coverage/
+
+# Playwright: informes, trazas, capturas y videos son artefactos de ejecucion.
+# Pueden contener datos de las cuentas de prueba, asi que jamas al repositorio.
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
