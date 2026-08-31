@@ -16,7 +16,14 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   const port = 10900 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
-    env: { ...process.env, PORT: String(port), DATA_FILE: dataFile },
+    env: {
+      ...process.env, PORT: String(port), DATA_FILE: dataFile,
+      // WALLET-PAYOUTS-1A: el retiro ANTIGUO esta apagado por defecto. Este
+      // ciclo lo recorre de punta a punta, asi que se enciende explicitamente
+      // para conservar esa cobertura. La compuerta tiene sus propias pruebas en
+      // `legacyPayoutGate.test.js`.
+      LEGACY_PAYOUTS_ENABLED: '1'
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   t.after(() => child.kill());

@@ -52,6 +52,10 @@ import {
 import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
+import {
+  bloquearSiApagado as bloquearRetiroAntiguoSiApagado,
+  esAprobacionDeRetiroAntiguo
+} from './services/legacyPayoutGate.js';
 
 const app = express();
 const allowedOrigins = String(process.env.CLIENT_ORIGIN || 'https://plus58express.vercel.app,http://localhost:3000,http://localhost:5173,http://127.0.0.1:4173')
@@ -1630,6 +1634,18 @@ app.post('/api/wallet/topups', requireAuth, limitadores.cartera, async (req, res
 });
 
 app.post('/api/wallet/payouts', requireAuth, requireApprovedDriver, limitadores.cartera, async (req, res) => {
+  // WALLET-PAYOUTS-1A. El flujo ANTIGUO de retiros esta apagado por defecto.
+  //
+  // Va DESPUES de `requireAuth` y `requireApprovedDriver` a proposito: la
+  // compuerta no sustituye a la autenticacion, y una peticion sin token debe
+  // seguir muriendo en el 401 como siempre. Y va ANTES de leer el saldo o
+  // escribir nada, para que con la bandera apagada no quede ni una transaccion
+  // creada ni un saldo tocado.
+  //
+  // No hay puente automatico a la fundacion nueva: se rechaza y punto.
+  const compuerta = bloquearRetiroAntiguoSiApagado();
+  if (compuerta) return res.status(compuerta.estado).json(compuerta.cuerpo);
+
   const available = Number(req.user.walletBalance || 0);
   const amount = Math.round(Number(req.body.amount || available) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0 || amount > available) return res.status(400).json({ error:'INVALID_PAYOUT' });
@@ -1649,6 +1665,23 @@ app.patch('/api/admin/transactions/:id', requireAuth, requireRole('admin'), limi
   if (transaction.type === 'TOP_UP' && status === 'APPROVED' && req.body.referenceConfirmed !== true) {
     return res.status(400).json({ error:'TOPUP_REFERENCE_CONFIRMATION_REQUIRED' });
   }
+
+  // WALLET-PAYOUTS-1A. Aprobar un PAYOUT antiguo es la unica rama de esta ruta
+  // que RESTA del saldo, y lo hace sin cerrojo y llamandolo «pagado» sin que
+  // exista transferencia ni referencia bancaria. Con el flujo antiguo apagado,
+  // se bloquea antes de tocar nada.
+  //
+  // La comprobacion es deliberadamente ESTRECHA:
+  //
+  //  · solo `PAYOUT`. Las recargas (`TOP_UP`) y cualquier otro tipo siguen
+  //    exactamente igual;
+  //  · solo `APPROVED`. Rechazar no mueve dinero, y dejarlo pasar es lo que
+  //    permite resolver de forma segura los retiros que queden pendientes.
+  if (esAprobacionDeRetiroAntiguo(transaction.type, status)) {
+    const compuerta = bloquearRetiroAntiguoSiApagado();
+    if (compuerta) return res.status(compuerta.estado).json(compuerta.cuerpo);
+  }
+
   const owner = database.users.find(item => item.id === transaction.userId);
   if (status === 'APPROVED' && transaction.type === 'PAYOUT' && Number(owner?.walletBalance || 0) < transaction.amount) return res.status(409).json({ error:'INSUFFICIENT_BALANCE' });
   transaction.status = status;
