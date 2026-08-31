@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Image, View } from 'react-native';
 import {
+  AVATARES_DE_ROL,
   EMBLEMA,
   LOGO_HORIZONTAL,
   PROPORCION_DEL_LOGO,
@@ -133,6 +134,29 @@ export function Emblema({ tamano = 132 }: { readonly tamano?: number }) {
       accessibilityLabel="+58 Express"
       accessibilityRole="image"
       style={{ width: tamano, height: tamano, borderRadius: tamano / 2 }}
+    />
+  );
+}
+
+/**
+ * El avatar de un rol, para el selector.
+ *
+ * Cuadrado, porque las dos ilustraciones lo son: meterlas en un hueco apaisado
+ * obligaría a recortar por los lados y se perdería justo lo que las hace
+ * reconocibles —el pin arriba, la moto abajo—.
+ */
+export function AvatarDeRol({ rol, tamano = 128, atenuado = false }: {
+  readonly rol: 'pasajero' | 'conductor';
+  readonly tamano?: number;
+  readonly atenuado?: boolean;
+}) {
+  return (
+    <Image
+      source={AVATARES_DE_ROL[rol]}
+      accessibilityLabel={rol === 'pasajero' ? 'Pasajero' : 'Conductor'}
+      accessibilityRole="image"
+      resizeMode="contain"
+      style={{ width: tamano, height: tamano, opacity: atenuado ? 0.6 : 1 }}
     />
   );
 }

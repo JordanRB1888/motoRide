@@ -47,7 +47,7 @@ import {
   DESTINOS_DE_CONDUCTOR,
   DESTINOS_DE_PASAJERA
 } from '../ui/Navegacion';
-import { LogoQueEntra, MarcadorDeVehiculo, Vehiculo } from '../ui/Marca';
+import { AvatarDeRol, LogoQueEntra, Vehiculo } from '../ui/Marca';
 import { EntradaDeTransporteSeguro } from '../ui/Servicio';
 import {
   BuscandoVehiculo,
@@ -313,14 +313,14 @@ export function C2SelectorDeRol() {
           detalle="Pide tu moto y sigue el viaje en el mapa"
           activa={rol === 'pasajero'}
           onPress={() => setRol('pasajero')}
-          ilustracion={<MiniMapaConMoto />}
+          ilustracion={<AvatarDeRol rol="pasajero" atenuado={rol !== 'pasajero'} />}
         />
         <OpcionDeRol
           titulo="Conductor"
           detalle="Conéctate, recibe viajes y gestiona tu jornada"
           activa={rol === 'conductor'}
           onPress={() => setRol('conductor')}
-          ilustracion={<Vehiculo tipo="MOTO" ancho={104} atenuado={rol !== 'conductor'} />}
+          ilustracion={<AvatarDeRol rol="conductor" atenuado={rol !== 'conductor'} />}
         />
 
         <View style={{ flex: 1 }} />
@@ -376,11 +376,13 @@ function OpcionDeRol({ titulo, detalle, activa, onPress, ilustracion }: {
         }} />
       ) : null}
 
+      {/* Cuadrado, como las ilustraciones. Y sin fondo propio: las dos ya
+          traen el suyo, negro, y meterlas en una caja de otro tono dibujaría
+          un recuadro alrededor de cada una. */}
       <View style={{
-        width: 108, height: 80,
+        width: 128, height: 128,
         alignItems: 'center', justifyContent: 'center',
         borderRadius: tema.radio.campo,
-        backgroundColor: tema.color.fondo,
         overflow: 'hidden'
       }}>
         {ilustracion}
@@ -391,35 +393,6 @@ function OpcionDeRol({ titulo, detalle, activa, onPress, ilustracion }: {
         <Txt nivel="pie" tono="secundario">{detalle}</Txt>
       </View>
     </Pressable>
-  );
-}
-
-/**
- * Un trozo de mapa con la moto: lo que la pasajera va a estar mirando.
- *
- * Se dibuja aquí en lugar de encoger el lienzo real porque doce calles en 108
- * puntos se leen como papel cuadriculado. Con dos basta para que se entienda
- * que es una calle y que la moto va por ella.
- */
-function MiniMapaConMoto() {
-  const tema = useTema();
-
-  return (
-    <View style={{
-      width: 108, height: 80,
-      backgroundColor: tema.color.superficie,
-      alignItems: 'center', justifyContent: 'center'
-    }}>
-      <View style={{
-        position: 'absolute', left: 0, right: 0, top: '62%', height: 9,
-        backgroundColor: tema.color.textoTenue, opacity: 0.24
-      }} />
-      <View style={{
-        position: 'absolute', top: 0, bottom: 0, left: '26%', width: 5,
-        backgroundColor: tema.color.textoTenue, opacity: 0.24
-      }} />
-      <MarcadorDeVehiculo tipo="MOTO" tamano={46} rumbo={16} />
-    </View>
   );
 }
 

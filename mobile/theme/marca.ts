@@ -96,6 +96,22 @@ export const PROPORCION_DEL_LOGO = 738 / 261;
 export const EMBLEMA: ImageSourcePropType =
   require('../assets/splash-icon.png') as ImageSourcePropType;
 
+/**
+ * Los avatares del selector de rol.
+ *
+ * Los encargó el dueño y llegan con la identidad ya puesta: negro y amarillo,
+ * el pin del mapa, la ruta trazada y la moto. Sustituyen a lo que había —un
+ * recorte de mapa y la fotografía del vehículo—, que servía pero era un apaño.
+ *
+ * Se guardan a 288 píxeles: se usan en un hueco de 96 puntos, así que eso cubre
+ * pantallas de tres veces la densidad. Los originales venían a 1254 y pesaban
+ * 1,3 y 1,5 MB; a ese tamaño son 82 y 100 KB.
+ */
+export const AVATARES_DE_ROL = Object.freeze({
+  pasajero: require('../assets/marca/rol-pasajero.png') as ImageSourcePropType,
+  conductor: require('../assets/marca/rol-conductor.png') as ImageSourcePropType
+});
+
 /** Resuelve la imagen de un vehículo. Equivale a `getVehicleAsset` de la web. */
 export function imagenDeVehiculo(
   tipo: TipoDeVehiculo,

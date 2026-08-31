@@ -342,6 +342,66 @@ test('el script de cuenta de prueba SÓLO acepta servidores privados', () => {
 });
 
 // ---------------------------------------------------------------------------
+// La revisión visual no puede separarse del producto
+// ---------------------------------------------------------------------------
+
+test('el dibujo web importa los tokens, no los copia', () => {
+  // Es el riesgo de verdad de tener un dibujo paralelo: que se convierta en una
+  // maqueta bonita que luego haya que volver a diseñar. La defensa es que todo
+  // lo que sea DATO venga de los mismos ficheros que consume el teléfono.
+  const web = leer('scripts/pantallasWeb.mjs');
+  assert.match(web, /from '\.\.\/theme\/directions\.ts'/, 'los colores y espacios');
+  assert.match(web, /from '\.\.\/theme\/hoja\.ts'/, 'las alturas de la hoja');
+});
+
+test('el dibujo web no escribe colores a mano', () => {
+  // Un hexadecimal suelto aquí es una decisión de diseño que el teléfono no
+  // conoce: se ve bien en el navegador y no existe en la aplicación.
+  //
+  // Se permiten los grises del andamiaje —el marco del teléfono, la sombra— que
+  // no forman parte de lo que se evalúa, y el azul del agua del mapa, que sale
+  // del token de información.
+  const codigo = sinComentarios('scripts/pantallasWeb.mjs');
+  const hexadecimales = [...new Set(codigo.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [])];
+  const permitidos = new Set(['#63c9ff', '#000', '#0000', '#111', '#1a1a1a', '#0d0d0d', '#eee', '#999', '#888', '#ccc', '#e8e8e8']);
+
+  for (const color of hexadecimales) {
+    assert.ok(
+      permitidos.has(color.toLowerCase()),
+      `«${color}» está escrito a mano: debería salir de theme/`
+    );
+  }
+});
+
+test('el servidor de revisión sólo escucha en local', () => {
+  // Un servidor de desarrollo abierto a la red es una puerta que nadie recuerda
+  // haber dejado puesta.
+  const servidor = leer('scripts/servidorDeRevision.mjs');
+  assert.match(servidor, /listen\(PUERTO, '127\.0\.0\.1'/, 'escucha sólo en el propio equipo');
+  assert.doesNotMatch(sinComentarios('scripts/servidorDeRevision.mjs'), /0\.0\.0\.0/);
+});
+
+test('el servidor de revisión no necesita backend', () => {
+  // Se revisa con fixtures. Pedir un servidor levantado para mirar un botón
+  // convertiría la revisión en un trámite.
+  const servidor = sinComentarios('scripts/servidorDeRevision.mjs');
+  for (const prohibido of ['fetch(', 'EXPO_PUBLIC', 'AuthContext', 'SecureStore']) {
+    assert.equal(servidor.includes(prohibido), false, `el servidor usa ${prohibido}`);
+  }
+});
+
+test('los avatares de rol son los que envió el dueño', () => {
+  const marca = leer('theme/marca.ts');
+  assert.match(marca, /AVATARES_DE_ROL/);
+  for (const rol of ['pasajero', 'conductor']) {
+    const ruta = path.join(raizMovil, `assets/marca/rol-${rol}.png`);
+    assert.ok(fs.existsSync(ruta), `falta el avatar de ${rol}`);
+    const medidas = medidasDePng(ruta);
+    assert.equal(medidas.ancho, medidas.alto, 'los avatares son cuadrados');
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Nombres y estructura
 // ---------------------------------------------------------------------------
 
