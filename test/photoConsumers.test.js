@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalPhotoPath, createPrivatePhotoLoader, hydratePrivatePhotos } from '../src/utils/privatePhoto.js';
-import { composeApiUrl } from '../src/services/apiUrl.js';
+import { composeApiUrl } from '../src/services/apiUrl.ts';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const leer = relativo => fs.readFileSync(path.join(raiz, relativo), 'utf8');
@@ -47,7 +47,7 @@ function makeHarness({ responder } = {}) {
 test('ninguna pantalla deja una ruta privada directamente en un src', () => {
   const ofensores = [];
   for (const relativo of todosLosFuentes()) {
-    if (relativo === 'src/utils/privatePhoto.js' || relativo === 'src/services/apiUrl.js') continue;
+    if (relativo === 'src/utils/privatePhoto.js' || relativo === 'src/services/apiUrl.ts') continue;
     // Se ignora lo que ya pasa por una salvaguarda conocida.
     const fuente = leer(relativo)
       .replace(/neutralizePrivatePhoto\([^)]*\)/g, 'NEUTRO')

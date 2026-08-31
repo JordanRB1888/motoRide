@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeApiUrl, normalizeBaseUrl } from '../src/services/apiUrl.js';
+import { composeApiUrl, normalizeBaseUrl } from '../src/services/apiUrl.ts';
 
 /**
  * Estas pruebas comprueban la URL final completa, no un fragmento.

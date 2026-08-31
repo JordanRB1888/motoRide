@@ -1,0 +1,19 @@
+{
+  // Lo que ejecuta Node directamente: la configuración de Vite, la de
+  // Playwright y las pruebas E2E. Aquí sí hay APIs de Node.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": [
+    "vite.config.js",
+    "playwright.config.js",
+    "e2e/**/*.js",
+    "e2e/**/*.ts",
+    "shared/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

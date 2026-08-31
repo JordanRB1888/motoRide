@@ -1,8 +1,8 @@
 import { eventLogger } from '../utils/logger.js';
 import { db as clientCache } from './clientCache.js';
 import { offlineRequestQueue } from './offlineRequestQueue.js';
-import { composeApiUrl, normalizeBaseUrl } from './apiUrl.js';
-import { buildRequestError } from './httpErrorCodes.js';
+import { composeApiUrl, normalizeBaseUrl } from './apiUrl.ts';
+import { buildRequestError } from './httpErrorCodes.ts';
 
 class ApiService {
   constructor() {

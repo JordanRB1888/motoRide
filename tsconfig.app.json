@@ -1,0 +1,17 @@
+{
+  // Lo que empaqueta Vite: la aplicación del navegador y los contratos
+  // compartidos que consume.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    // Vite resuelve los módulos, no Node: `bundler` es el modo que se
+    // corresponde con eso y el que permite importar sin extensión.
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    // El navegador sí tiene DOM; los contratos compartidos NO deben usarlo
+    // (ver shared/contracts/README).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/**/*.ts", "src/**/*.js", "shared/**/*.ts"],
+  "exclude": ["node_modules", "dist", "e2e", "server"]
+}
