@@ -93,7 +93,7 @@ export function Campana({ sinLeer = 0, onPress }: {
         <View style={{
           position: 'absolute', top: 7, right: 9,
           width: 9, height: 9, borderRadius: 5,
-          backgroundColor: tema.color.acento,
+          backgroundColor: tema.color.acentoTexto,
           // El aro del color del fondo separa el punto de la campana; sin él
           // se leen como una sola forma.
           borderWidth: 2, borderColor: tema.color.fondo
@@ -396,7 +396,7 @@ export function C2Historial() {
                   backgroundColor: tema.color.textoSecundario
                 }} />
                 <View style={{ width: 2, flex: 1, minHeight: 16, backgroundColor: tema.color.borde }} />
-                <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: tema.color.acento }} />
+                <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: tema.color.acentoTexto }} />
               </View>
               <View style={{ flex: 1, gap: 8 }}>
                 <Txt nivel="cuerpo" tono="secundario" numberOfLines={1}>{viaje.origen}</Txt>
@@ -521,7 +521,7 @@ export function C2Avisos() {
               {aviso.sinLeer ? (
                 <View style={{
                   width: 8, height: 8, borderRadius: 4,
-                  backgroundColor: tema.color.acento
+                  backgroundColor: tema.color.acentoTexto
                 }} />
               ) : null}
             </View>

@@ -44,10 +44,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icono, type NombreDeIcono } from './Icono';
+import { Icono } from './Icono';
 import { Txt } from './componentes';
 import { VEHICULOS } from '../theme/marca';
 import { useTema } from '../theme/ThemeContext';
+import type { DestinoDeNavegacion } from '../theme/navegacion';
 
 /** Lee la preferencia de movimiento reducido del sistema y se mantiene al día. */
 function useMovimientoReducido(): boolean {
@@ -190,8 +191,12 @@ export function ControlDeDisponibilidad({ enLinea, onAlternar }: {
       })}
     >
       <Disco
-        aro={enLinea ? verde : tema.color.borde}
-        fondo={enLinea ? `${verde}38` : tema.color.superficieElevada}
+        // Desconectado, el aro va en texto atenuado y no en el borde de la
+        // interfaz. En noche los dos se ven; en día el borde es un alfa de
+        // 0,14 sobre una barra casi blanca, y el disco —que es lo que hay que
+        // pulsar para empezar a trabajar— se perdía contra ella.
+        aro={enLinea ? verde : tema.color.textoTenue}
+        fondo={enLinea ? `${verde}38` : tema.color.superficieHundida}
         moto={enLinea ? 1 : 0.45}
         latiendo={enLinea}
       />
@@ -245,11 +250,7 @@ export function ControlDePedido({ abierto, onAlternar }: {
 // Barra inferior
 // ---------------------------------------------------------------------------
 
-export interface DestinoDeNavegacion {
-  readonly clave: string;
-  readonly icono: NombreDeIcono;
-  readonly etiqueta: string;
-}
+export type { DestinoDeNavegacion };
 
 /**
  * La barra de navegación.
@@ -348,7 +349,11 @@ function Destino({ destino, activo, onPress }: {
     >
       <Icono
         nombre={destino.icono}
-        color={activo ? tema.color.acento : tema.color.textoTenue}
+        // `acentoTexto` y no `acento`: en modo día el amarillo de marca sobre
+        // la barra casi blanca queda en 1,35:1, y un elemento de interfaz
+        // necesita 3:1. En noche los dos tokens valen lo mismo, así que el
+        // aspecto nocturno —el aprobado— no cambia.
+        color={activo ? tema.color.acentoTexto : tema.color.textoTenue}
         tamano={23}
         activo={activo}
       />
@@ -362,45 +367,8 @@ function Destino({ destino, activo, onPress }: {
   );
 }
 
-/**
- * Los destinos de la pasajera. Cuatro, con el control de pedir en el centro.
- *
- * Son los que la aplicación tiene de verdad: inicio, historial de viajes,
- * Transporte Seguro y perfil. No hay comida, ni tienda, ni paquetería:
- * +58express es mototaxi, y una rejilla de servicios que no existen sería
- * prometer lo que no hay.
- */
-export const DESTINOS_DE_PASAJERA: readonly DestinoDeNavegacion[] = Object.freeze([
-  { clave: 'inicio', icono: 'inicio', etiqueta: 'Inicio' },
-  // «Historial», no «Viajes»: lo que hay ahí son los que YA hiciste. «Viajes»
-  // en una aplicación de viajes no distingue nada — podría ser cualquier cosa.
-  { clave: 'historial', icono: 'reloj', etiqueta: 'Historial' },
-  // «Viaje seguro», no «Seguridad»: dice de qué va, y coincide con el nombre
-  // que la marca ya usa. «Seguridad» a secas suena a ajustes de contraseña.
-  { clave: 'viaje-seguro', icono: 'escudo', etiqueta: 'Viaje seguro' },
-  { clave: 'perfil', icono: 'perfil', etiqueta: 'Perfil' }
-]);
-
-/**
- * Los del conductor. Cuatro, con la disponibilidad en el centro.
- *
- * No hay pestaña de dinero. La cartera está apagada en el servidor, y una
- * pestaña que lleva a una cifra vacía —o peor, inventada— no es navegación.
- */
-/**
- * Los del conductor. Cuatro, con la disponibilidad en el centro.
- *
- * «Saldo» ocupa el sitio que tenía «Jornada». Las cifras de la jornada —viajes
- * de hoy, tiempo en línea— ya salen al tocar el disco, así que una pestaña
- * entera para repetirlas era gastar uno de los cuatro sitios en algo que ya
- * está a un toque.
- *
- * Y el saldo sí necesita pantalla: recargar, pedir liquidación y revisar qué te
- * descontaron no se hace de un vistazo en un semáforo.
- */
-export const DESTINOS_DE_CONDUCTOR: readonly DestinoDeNavegacion[] = Object.freeze([
-  { clave: 'mapa', icono: 'inicio', etiqueta: 'Mapa' },
-  { clave: 'saldo', icono: 'dolar', etiqueta: 'Saldo' },
-  { clave: 'historial', icono: 'viajes', etiqueta: 'Historial' },
-  { clave: 'perfil', icono: 'perfil', etiqueta: 'Perfil' }
-]);
+// Los destinos viven en `theme/navegacion.ts`, sin dependencias de React
+// Native, para que el dibujo de revisión los importe en vez de repetirlos. Si
+// estuvieran en dos sitios, renombrar una pestaña dejaría el navegador
+// enseñando la de antes.
+export { DESTINOS_DE_PASAJERA, DESTINOS_DE_CONDUCTOR } from '../theme/navegacion';

@@ -1054,7 +1054,10 @@ export function C2Viaje() {
                 style={{
                   width: 42, height: 42, borderRadius: 21,
                   alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: tema.color.superficieElevada
+                  // Hundido, no elevado. Sobre una hoja casi blanca, un círculo
+                  // elevado queda a un paso del fondo y se lee como
+                  // desactivado, justo cuando hay que llamar al conductor.
+                  backgroundColor: tema.color.superficieHundida
                 }}
               >
                 <Icono
@@ -1071,7 +1074,10 @@ export function C2Viaje() {
           <View style={{ paddingTop: tema.ritmo.entreElementos, gap: 10 }}>
             {[
               { punto: tema.color.textoPrimario, texto: VIAJE_DEMO.origen },
-              { punto: tema.color.acento, texto: VIAJE_DEMO.destino }
+              // `acentoTexto`: nueve puntos de amarillo de marca sobre una hoja
+              // clara pierden fuerza. Los grandes —filo, disco, botón— siguen
+              // con el amarillo de marca, que ahí sí manda.
+              { punto: tema.color.acentoTexto, texto: VIAJE_DEMO.destino }
             ].map(parada => (
               <View key={parada.texto} style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
                 <View style={{
