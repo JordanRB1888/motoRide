@@ -9,7 +9,15 @@ server/data/*.sqlite
 server/data/*.sqlite-wal
 server/data/*.sqlite-shm
 server/data/private-uploads/
-.claude/
+# La carpeta de Claude Code es local: ajustes personales, cache, sesiones.
+#
+# Se ignora su CONTENIDO y no la carpeta: git no puede volver a incluir un
+# fichero si su directorio padre esta excluido, asi que con `.claude/` la
+# excepcion de abajo no tendria efecto.
+.claude/*
+# Menos las skills. Son conocimiento DEL PROYECTO —que esta protegido, por que,
+# como se audita— y sirven de poco si viven solo en un portatil.
+!.claude/skills/
 # Credenciales y material sensible: jamas al repositorio
 .env.*
 !.env.example

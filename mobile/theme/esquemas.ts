@@ -39,6 +39,15 @@ export interface EsquemaDeColor {
   readonly fondo: string;
   readonly superficie: string;
   readonly superficieElevada: string;
+  /**
+   * Lo que se hunde: campos de texto, chips, filas de dato.
+   *
+   * No es lo mismo que `fondo`, aunque en oscuro coincidan. En oscuro, un campo
+   * con el color del fondo dentro de una hoja se hunde y se ve; en claro, el
+   * fondo y la superficie están a seis puntos de luminancia y el campo
+   * desaparece. Aquí cada esquema decide cuánto hay que hundir para que se vea.
+   */
+  readonly superficieHundida: string;
   readonly borde: string;
   /** La superficie de marca: fondo de botón, filo, marcadores. */
   readonly acento: string;
@@ -96,6 +105,8 @@ export const ESQUEMA_OSCURO: EsquemaDeColor = {
   fondo: '#0b0a09',
   superficie: '#15140f',
   superficieElevada: '#1f1d18',
+  // Coincide con el fondo: sobre grafito, eso ya se lee como un hueco.
+  superficieHundida: '#0b0a09',
   borde: '#2a2721',
   acento: AMARILLO.base,
   acentoPresionado: AMARILLO.vivo,
@@ -125,6 +136,8 @@ export const ESQUEMA_CLARO: EsquemaDeColor = {
   fondo: '#f2f0ec',
   superficie: '#f8f7f4',
   superficieElevada: '#ffffff',
+  // Dos escalones por debajo, no uno. Es el `--x58-surface-sunken` de la web.
+  superficieHundida: '#e8e5df',
   // Un borde con alfa se adapta a la superficie que tenga debajo; uno sólido
   // se ve gris sobre blanco y casi negro sobre el marfil.
   borde: 'rgba(20, 18, 14, 0.14)',

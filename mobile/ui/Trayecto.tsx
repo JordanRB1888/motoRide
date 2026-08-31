@@ -54,7 +54,7 @@ export function ChipDeBeneficiario({ beneficiario, onPress }: {
         gap: 7,
         paddingLeft: 11, paddingRight: 9, paddingVertical: 7,
         borderRadius: 999,
-        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.fondo
+        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida
       })}
     >
       <Icono
@@ -133,7 +133,7 @@ export function OpcionesDeBeneficiario({ elegido, onElegir }: {
             <View style={{
               width: 38, height: 38, borderRadius: 19,
               alignItems: 'center', justifyContent: 'center',
-              backgroundColor: activa ? `${tema.color.acento}1f` : tema.color.fondo
+              backgroundColor: activa ? `${tema.color.acento}1f` : tema.color.superficieHundida
             }}>
               <Icono
                 nombre={opcion.icono}
@@ -229,7 +229,7 @@ export function Trayecto({ origen, destino, onTocarOrigen, onTocarDestino, onAna
           style={({ pressed }) => ({
             width: 42, height: 42, borderRadius: tema.radio.campo,
             alignItems: 'center', justifyContent: 'center',
-            backgroundColor: pressed ? tema.color.superficieElevada : tema.color.fondo
+            backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida
           })}
         >
           <Mas color={tema.color.textoSecundario} />
@@ -274,7 +274,7 @@ function CampoDeLugar({ texto, marcador, onPress, etiqueta, resaltado = false }:
         height: 46,
         paddingHorizontal: 14,
         borderRadius: tema.radio.campo,
-        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.fondo,
+        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida,
         borderWidth: resaltado && vacio ? 1 : 0,
         borderColor: tema.color.borde
       })}
@@ -342,7 +342,7 @@ export function LugaresGuardados({ lugares, onElegir, onAnadir, onNuevo }: {
               gap: 8,
               paddingLeft: 11, paddingRight: 13, paddingVertical: 9,
               borderRadius: 999,
-              backgroundColor: pressed ? tema.color.superficieElevada : tema.color.fondo,
+              backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida,
               opacity: configurado ? 1 : 0.72
             })}
           >

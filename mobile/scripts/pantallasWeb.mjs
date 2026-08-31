@@ -77,6 +77,7 @@ export function variables(tema, esquema = 'oscuro') {
     --texto:${c.textoPrimario}; --texto-2:${c.textoSecundario}; --texto-3:${c.textoTenue};
     --exito:${c.exito}; --aviso:${c.aviso}; --peligro:${c.peligro};
     --velo-mapa:${c.veloDelMapa}; --mapa:${c.fondoDelMapa};
+    --hundida:${c.superficieHundida};
     --calle:${c.calleDelMapa};
     --calle-opacidad:${OPACIDAD_DE_CALLE_POR_ESQUEMA[esquema]};
     --sombra-flotante:0 ${sombra.shadowOffset.height}px ${sombra.shadowRadius}px
@@ -174,7 +175,7 @@ export const BASE = `
   .sep{height:1px;background:var(--borde)}
 
   .campo{display:flex;align-items:center;gap:11px;height:52px;padding:0 15px;
-    border-radius:var(--r-campo);background:var(--fondo)}
+    border-radius:var(--r-campo);background:var(--hundida)}
   .campo .cuerpo{line-height:1}
   .lugar-fila{display:flex;align-items:center;gap:13px;padding:11px 0}
   .redondo{width:34px;height:34px;border-radius:50%;background:var(--elevada);display:grid;place-items:center}
@@ -182,7 +183,7 @@ export const BASE = `
      que la letra, y sin esto el texto queda un par de píxeles por debajo del
      icono aunque el contenedor esté centrado. */
   .pastilla{display:inline-flex;align-items:center;gap:8px;border-radius:999px;
-    background:var(--fondo);padding:10px 14px}
+    background:var(--hundida);padding:10px 14px}
   .pastilla .etq{line-height:1}
 
   /* Trayecto: la línea se pone amarilla cuando el destino está puesto. */
@@ -192,7 +193,7 @@ export const BASE = `
   .p-linea{width:2px;flex:1;min-height:22px;background:var(--acento)}
   .p-destino{width:13px;height:13px;border-radius:3px;background:var(--acento);flex:0 0 auto}
   .lugar{height:46px;display:flex;align-items:center;padding:0 14px;
-    border-radius:var(--r-campo);background:var(--fondo)}
+    border-radius:var(--r-campo);background:var(--hundida)}
   .cuadrado{width:42px;height:42px;border-radius:var(--r-campo);background:var(--fondo);
     display:grid;place-items:center}
 
@@ -542,7 +543,7 @@ export const PANTALLAS = {
         ${LUGARES}
         <div style="height:var(--gap)"></div>
         <div style="display:flex;align-items:center;gap:8px;padding:10px 13px;
-          border-radius:var(--r-campo);background:var(--fondo)">
+          border-radius:var(--r-campo);background:var(--hundida)">
           ${icono('dolar', 'var(--texto-2)', 16)}
           <span class="etq t3">Tasa BCV</span><span class="crece"></span>
           <span class="etq ac">Bs. 000,00</span>
@@ -582,7 +583,7 @@ export const PANTALLAS = {
               </span>
             </div>`).join('')}
           <div style="display:flex;align-items:center;gap:9px;padding:12px;
-            border-radius:var(--r-campo);background:var(--fondo)">
+            border-radius:var(--r-campo);background:var(--hundida)">
             ${icono('escudo', 'var(--aviso)', 16)}
             <span class="pie t3">Pedir por otra persona todavía no está conectado al servidor.</span>
           </div>

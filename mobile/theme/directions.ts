@@ -36,6 +36,8 @@ export interface Direccion {
     readonly fondo: string;
     readonly superficie: string;
     readonly superficieElevada: string;
+    /** Lo que se hunde: campos, chips, filas de dato. Ver `esquemas.ts`. */
+    readonly superficieHundida: string;
     readonly borde: string;
     readonly acento: string;
     readonly acentoPresionado: string;
@@ -136,6 +138,7 @@ const PREMIUM_MINIMAL: Direccion = {
     fondo: GRAFITO.fondo,
     superficie: GRAFITO.superficie,
     superficieElevada: GRAFITO.elevada,
+    superficieHundida: GRAFITO.fondo,
     borde: GRAFITO.borde,
     acento: AMARILLO.base,
     acentoPresionado: AMARILLO.intenso,
@@ -189,6 +192,7 @@ const URBAN_FUNCTIONAL: Direccion = {
     fondo: GRAFITO.abismo,
     superficie: GRAFITO.superficie,
     superficieElevada: GRAFITO.flotante,
+    superficieHundida: GRAFITO.abismo,
     borde: GRAFITO.bordeVivo,
     acento: AMARILLO.base,
     acentoPresionado: AMARILLO.intenso,
@@ -252,6 +256,7 @@ const SIGNATURE: Direccion = {
     fondo: '#0b0a09',
     superficie: '#15140f',
     superficieElevada: '#1f1d18',
+    superficieHundida: '#0b0a09',
     borde: '#2a2721',
     acento: AMARILLO.base,
     acentoPresionado: AMARILLO.vivo,

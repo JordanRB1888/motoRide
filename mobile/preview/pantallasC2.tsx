@@ -237,7 +237,7 @@ function CampoDeDestino({ onPress }: { readonly onPress?: () => void }) {
         paddingHorizontal: 15,
         height: 52,
         borderRadius: tema.radio.campo,
-        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.fondo
+        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida
       })}
     >
       <Icono nombre="destino" color={tema.color.acento} tamano={19} />
@@ -562,7 +562,7 @@ export function C2PedirViaje() {
             flexDirection: 'row', alignItems: 'center', gap: 8,
             paddingVertical: 10, paddingHorizontal: 13,
             borderRadius: tema.radio.campo,
-            backgroundColor: tema.color.fondo
+            backgroundColor: tema.color.superficieHundida
           }}>
             <Icono nombre="dolar" color={tema.color.textoSecundario} tamano={16} />
             <Txt nivel="etiqueta" tono="tenue">{TASA_DEMO.etiqueta}</Txt>

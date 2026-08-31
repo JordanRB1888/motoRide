@@ -163,7 +163,7 @@ function OpcionDeApariencia({ titulo, detalle, icono, activa, onPress }: {
       <View style={{
         width: 38, height: 38, borderRadius: 19,
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: activa ? `${tema.color.acento}26` : tema.color.fondo
+        backgroundColor: activa ? `${tema.color.acento}26` : tema.color.superficieHundida
       }}>
         <Icono
           nombre={icono}
