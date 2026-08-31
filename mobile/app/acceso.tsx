@@ -19,6 +19,7 @@ import { useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, TextInput, View } from 'react-native';
 
+import { AtajoAlLaboratorio } from '../components/AtajoAlLaboratorio';
 import { Pantalla } from '../components/Pantalla';
 import { Boton, Txt } from '../ui/componentes';
 import { LogoHorizontal } from '../ui/Marca';
@@ -150,6 +151,9 @@ export default function Acceso() {
           onPress={() => { router.replace('/rol'); }}
           deshabilitado={enviando}
         />
+
+        {/* Sólo en desarrollo: en release no dibuja nada. */}
+        <AtajoAlLaboratorio />
       </View>
     </Pantalla>
   );

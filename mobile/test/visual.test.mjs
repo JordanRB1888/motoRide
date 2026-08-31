@@ -186,7 +186,28 @@ test('las sombras son contenidas', () => {
 // La preview NO puede llegar a una versión publicada
 // ---------------------------------------------------------------------------
 
-test('las DOS puertas al laboratorio están cerradas en produccion', () => {
+test('el laboratorio es alcanzable desde la aplicacion', () => {
+  // Una ruta que nada enlaza no existe desde el telefono: habria que escribir
+  // la direccion a mano en Expo Go. La primera version puso la puerta solo en
+  // la pantalla de «falta configurar el servidor», y desaparecia justo cuando
+  // alguien creaba su .env y la aplicacion empezaba a funcionar.
+  for (const pantalla of ['app/rol.tsx', 'app/acceso.tsx']) {
+    assert.match(leer(pantalla), /<AtajoAlLaboratorio \/>/, `${pantalla} no enlaza el laboratorio`);
+  }
+  const atajo = leer('components/AtajoAlLaboratorio.tsx');
+  assert.match(atajo, /router\.push\('\/preview'\)/, 'lleva a la ruta del laboratorio');
+});
+
+test('se puede SALIR del laboratorio', () => {
+  // Se llega por la ruta —y hay a donde volver— o montado desde la pantalla de
+  // configuracion faltante, donde el router ni existe. Sin preguntar antes,
+  // salir desde el segundo caso reventaria.
+  const preview = leer('app/preview.tsx');
+  assert.match(preview, /router\.canGoBack\(\)/, 'pregunta si hay a donde volver');
+  assert.match(preview, /router\.back\(\)/);
+});
+
+test('las TRES puertas al laboratorio están cerradas en produccion', () => {
   // Hay dos formas de llegar: la ruta /preview y el atajo de la pantalla de
   // «falta configurar el servidor». Las dos tienen que comprobar el modo
   // desarrollo; cerrar sólo una deja la otra abierta en una version publicada.
@@ -195,8 +216,13 @@ test('las DOS puertas al laboratorio están cerradas en produccion', () => {
   assert.match(preview, /if \(!EN_DESARROLLO\) return/,
     'sale antes de montar cualquier pantalla de preview');
 
+  const atajo = leer('components/AtajoAlLaboratorio.tsx');
+  assert.match(atajo, /__DEV__/, 'el atajo comprueba el modo desarrollo');
+  assert.match(atajo, /if \(!EN_DESARROLLO\) return null/,
+    'fuera de desarrollo no dibuja ni el boton');
+
   const raiz = leer('app/_layout.tsx');
-  assert.match(raiz, /__DEV__/, 'el atajo comprueba el modo desarrollo');
+  assert.match(raiz, /__DEV__/, 'la puerta del aviso comprueba el modo desarrollo');
   assert.match(raiz, /verLaboratorio && EN_DESARROLLO/,
     'el atajo no monta el laboratorio fuera de desarrollo');
   assert.match(raiz, /EN_DESARROLLO \? \(/,

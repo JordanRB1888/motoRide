@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { AtajoAlLaboratorio } from '../components/AtajoAlLaboratorio';
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
 import { LogoHorizontal } from '../ui/Marca';
@@ -80,6 +81,9 @@ export default function SelectorDeRol() {
         <Text style={estilos.nota}>
           Puedes cambiar de modo cuando quieras desde tu perfil.
         </Text>
+
+        {/* Sólo en desarrollo: en release no dibuja nada. */}
+        <AtajoAlLaboratorio />
       </View>
     </Pantalla>
   );

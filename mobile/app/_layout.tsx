@@ -60,6 +60,9 @@ function AvisoDeConfiguracion({ detalle }: { readonly detalle: string }) {
           </Text>
         </View>
 
+        {/* Aquí NO se puede usar `AtajoAlLaboratorio`: ese navega con el router,
+            y sin configuración el Stack no está montado. Este monta el
+            laboratorio directamente, que es lo único que funciona sin router. */}
         {EN_DESARROLLO ? (
           <Pressable
             onPress={() => setVerLaboratorio(true)}

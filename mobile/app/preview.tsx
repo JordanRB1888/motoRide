@@ -20,6 +20,7 @@
 
 import { useState, type ComponentType } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -191,6 +192,24 @@ function Laboratorio() {
             <Text style={estilos.nombreDireccion}>{direccion.nombre}</Text>
             <Text style={estilos.caracter} numberOfLines={2}>{direccion.caracter}</Text>
           </View>
+
+          {/* La salida.
+              Al laboratorio se puede llegar por la ruta /preview —y entonces
+              hay a dónde volver— o montado directamente desde la pantalla de
+              configuración faltante, donde el router ni existe. Por eso se
+              pregunta antes: sin esta comprobación, salir desde el segundo caso
+              reventaría. */}
+          {router.canGoBack() ? (
+            <Pressable
+              onPress={() => { router.back(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Salir del laboratorio visual"
+              testID="salir-laboratorio"
+              style={estilos.salir}
+            >
+              <Text style={estilos.salirTexto}>Salir</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={estilos.pantallas}>
@@ -244,6 +263,12 @@ const estilos = StyleSheet.create({
   descripcion: { flex: 1, marginLeft: 4 },
   nombreDireccion: { color: '#eeeeee', fontSize: 13, fontWeight: '600' },
   caracter: { color: '#8a8a8a', fontSize: 11, lineHeight: 15 },
+
+  salir: {
+    paddingVertical: 7, paddingHorizontal: 13, borderRadius: 8,
+    backgroundColor: '#2a2a2a'
+  },
+  salirTexto: { color: '#dddddd', fontSize: 12, fontWeight: '600' },
 
   pantallas: { paddingHorizontal: 12 },
   chip: {
