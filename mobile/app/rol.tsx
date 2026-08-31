@@ -18,6 +18,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
+import { LogoHorizontal } from '../ui/Marca';
 import { colores, espaciado, tipografia } from '../theme/tokens';
 import { guardarUltimoRol, type RolMovil } from '../services/session';
 
@@ -39,10 +40,12 @@ export default function SelectorDeRol() {
 
   return (
     <Pantalla desplazable testID="selector-de-rol">
+      {/* El logotipo oficial, con la moto. Aquí la marca estaba escrita como
+          texto —«+58Express» en dos colores—, y existiendo el logotipo de
+          verdad eso era quedarse corto justo en la pantalla que abre la
+          aplicación. */}
       <View style={estilos.cabecera}>
-        <Text style={estilos.marca}>
-          <Text style={estilos.marcaAcento}>+58</Text>Express
-        </Text>
+        <LogoHorizontal ancho={214} />
         <Text style={estilos.lema}>Mototaxi en Maracaibo</Text>
       </View>
 
@@ -83,15 +86,7 @@ export default function SelectorDeRol() {
 }
 
 const estilos = StyleSheet.create({
-  cabecera: { paddingTop: espaciado.xxxl, alignItems: 'center', gap: espaciado.xs },
-  marca: {
-    color: colores.textoPrimario,
-    fontSize: tipografia.display.tamano,
-    lineHeight: tipografia.display.alto,
-    fontWeight: '700',
-    letterSpacing: -0.5
-  },
-  marcaAcento: { color: colores.acento },
+  cabecera: { paddingTop: espaciado.xxxl, alignItems: 'center', gap: espaciado.md },
   lema: {
     color: colores.textoSecundario,
     fontSize: tipografia.pie.tamano,

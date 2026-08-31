@@ -24,7 +24,7 @@
 
 import { AMARILLO, ESPACIO, ESTADO, GRAFITO, TEXTO, AREA_TACTIL_MINIMA } from './primitives';
 
-export const DIRECCIONES = ['A', 'B', 'C'] as const;
+export const DIRECCIONES = ['A', 'B', 'C', 'C2'] as const;
 export type ClaveDeDireccion = (typeof DIRECCIONES)[number];
 
 export interface Direccion {
@@ -268,13 +268,95 @@ const SIGNATURE: Direccion = {
   presenciaDelAcento: 'firma'
 };
 
+/**
+ * C2 — +58 Signature Refined. LA RECOMENDACIÓN ACTUAL.
+ *
+ * No es una dirección nueva: es C después de mirarla en pantallas reales, con
+ * mapa a sangre y los activos de marca dentro.
+ *
+ * QUÉ SE MANTIENE DE C
+ *
+ * Todo lo que le da identidad: el grafito profundo, el amarillo `#ffd21f`, el
+ * blanco cálido, el filo amarillo, los titulares apretados. Los colores son
+ * exactamente los mismos, valor por valor. Cambiar la paleta habría sido
+ * empezar de cero, y C ya estaba bien.
+ *
+ * QUÉ SE TOMA DE A
+ *
+ * Aire, pero no en cualquier sitio. Con el mapa ocupando la pantalla, el alto
+ * vertical se vuelve caro: cada punto que gana un margen exterior se lo quita
+ * al mapa. Así que el margen de pantalla y la separación entre bloques se
+ * quedan como en C, y el aire entra DENTRO de las superficies —de 20 a 24 en
+ * el relleno de tarjeta, de 12 a 16 entre elementos—. Es donde se nota la
+ * sensación de caro, y no cuesta mapa.
+ *
+ * QUÉ SE TOMA DE B
+ *
+ * Sólo legibilidad. Las etiquetas suben de 12 a 13 puntos: son las que se leen
+ * de reojo, en moto, con sol, y un punto más las salva. Nada más de B: su
+ * densidad y su borde amarillo se quedan en B.
+ *
+ * LO QUE DE VERDAD CAMBIA: FUERA LOS BORDES
+ *
+ * `conBorde` pasa a `false`, y es el cambio con más consecuencias. Cada tarjeta
+ * con borde dibuja un rectángulo, y siete rectángulos apilados son la «sopa de
+ * tarjetas» que había que quitar. Sin ellos las superficies se separan por
+ * color, como en A, y queda una sola línea con derecho a llamar la atención: la
+ * amarilla. El filo sólo funciona como firma si no compite con un contorno gris
+ * en cada elemento de la pantalla.
+ */
+const SIGNATURE_REFINED: Direccion = {
+  clave: 'C2',
+  nombre: '+58 Signature Refined',
+  caracter: 'C con el aire de A y la claridad de B. Mapa primero, filo amarillo con disciplina.',
+  // La identidad no se toca: mismos valores que C, uno por uno.
+  color: { ...SIGNATURE.color },
+  ritmo: {
+    margenPantalla: ESPACIO['5'],
+    entreBloques: ESPACIO['6'],
+    // El aire entra aquí dentro, que es donde se nota y no le cuesta mapa.
+    dentroDeTarjeta: ESPACIO['6'],
+    entreElementos: ESPACIO['4']
+  },
+  radio: { boton: 14, tarjeta: 20, campo: 12, insignia: 10 },
+  texto: {
+    display: { tamano: 32, alto: 37, peso: '800' },
+    titulo: { tamano: 24, alto: 29, peso: '700' },
+    encabezado: { tamano: 18, alto: 24, peso: '700' },
+    cuerpo: { tamano: 16, alto: 22 },
+    // Un punto más que C: son las que se leen de reojo y en movimiento.
+    etiqueta: { tamano: 13, alto: 17, peso: '600' },
+    pie: { tamano: 13, alto: 18 },
+    ajusteDeTitular: -0.8
+  },
+  superficie: {
+    // Sin borde. Ver arriba: es lo que desactiva la sopa de tarjetas.
+    conBorde: false,
+    sombra: {
+      shadowColor: '#000000',
+      shadowOpacity: 0.3,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4
+    }
+  },
+  presenciaDelAcento: 'firma'
+};
+
 export const CATALOGO: Readonly<Record<ClaveDeDireccion, Direccion>> = Object.freeze({
   A: PREMIUM_MINIMAL,
   B: URBAN_FUNCTIONAL,
-  C: SIGNATURE
+  C: SIGNATURE,
+  C2: SIGNATURE_REFINED
 });
 
-/** La que el equipo propone. La decisión final es del dueño. */
-export const DIRECCION_RECOMENDADA: ClaveDeDireccion = 'C';
+/**
+ * La que el equipo propone. La decisión final es del dueño.
+ *
+ * A, B y C siguen en el catálogo: se comparan con C2 en el laboratorio y no se
+ * retiran hasta que el dueño decida. Borrar la evidencia antes de la decisión
+ * dejaría sin nada con qué contrastar.
+ */
+export const DIRECCION_RECOMENDADA: ClaveDeDireccion = 'C2';
 
 export { AREA_TACTIL_MINIMA };

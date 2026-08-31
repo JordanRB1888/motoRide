@@ -20,7 +20,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, TextInput, View } from 'react-native';
 
 import { Pantalla } from '../components/Pantalla';
-import { Boton, Superficie, Txt } from '../ui/componentes';
+import { Boton, Txt } from '../ui/componentes';
+import { LogoHorizontal } from '../ui/Marca';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { esRolMovil, type RolMovil } from '../services/session';
@@ -85,6 +86,13 @@ export default function Acceso() {
 
   return (
     <Pantalla desplazable testID="acceso">
+      {/* La marca primero. Antes esta pantalla abría con un título de texto
+          sobre fondo vacío: correcta y de nadie. Lo que hay que reconocer al
+          abrir la aplicación es el logotipo, no un encabezado. */}
+      <View style={{ paddingTop: tema.ritmo.entreBloques, alignItems: 'center' }}>
+        <LogoHorizontal ancho={232} />
+      </View>
+
       <View style={{ paddingTop: tema.ritmo.entreBloques, gap: 6 }}>
         <Txt nivel="titulo" accessibilityRole="header">
           {experienciaElegida === 'driver' ? 'Acceso de conductor' : 'Acceso de pasajera'}
@@ -92,40 +100,41 @@ export default function Acceso() {
         <Txt nivel="cuerpo" tono="secundario">Entra con la cuenta que ya tienes.</Txt>
       </View>
 
+      {/* Los campos van sobre el fondo, sin tarjeta que los envuelva. Cada
+          campo ya tiene su propia superficie; meterlos además dentro de otra
+          era un recuadro dentro de un recuadro. */}
       <View style={[estilos.centro, { gap: tema.ritmo.entreElementos }]}>
-        <Superficie destacada>
-          <View style={{ gap: tema.ritmo.entreElementos }}>
-            <CampoDeTexto
-              etiqueta="Correo o teléfono"
-              value={identificador}
-              onChangeText={setIdentificador}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              textContentType="username"
-              returnKeyType="next"
-              editable={!enviando}
-              onSubmitEditing={() => campoContrasena.current?.focus()}
-              testID="campo-identificador"
-            />
+        <View style={{ gap: tema.ritmo.entreElementos }}>
+          <CampoDeTexto
+            etiqueta="Correo o teléfono"
+            value={identificador}
+            onChangeText={setIdentificador}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="username"
+            returnKeyType="next"
+            editable={!enviando}
+            onSubmitEditing={() => campoContrasena.current?.focus()}
+            testID="campo-identificador"
+          />
 
-            <CampoDeTexto
-              ref={campoContrasena}
-              etiqueta="Contraseña"
-              value={contrasena}
-              onChangeText={setContrasena}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-              returnKeyType="go"
-              editable={!enviando}
-              error={error}
-              onSubmitEditing={() => { void enviar(); }}
-              testID="campo-contrasena"
-            />
-          </View>
-        </Superficie>
+          <CampoDeTexto
+            ref={campoContrasena}
+            etiqueta="Contraseña"
+            value={contrasena}
+            onChangeText={setContrasena}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
+            returnKeyType="go"
+            editable={!enviando}
+            error={error}
+            onSubmitEditing={() => { void enviar(); }}
+            testID="campo-contrasena"
+          />
+        </View>
 
         <Boton
           titulo="Entrar"

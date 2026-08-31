@@ -18,7 +18,7 @@
  * botones no llevan a ningún sitio a propósito.
  */
 
-import { useState } from 'react';
+import { useState, type ComponentType } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -35,11 +35,40 @@ import {
   PreviewSelectorDeRol,
   PreviewViaje
 } from '../preview/pantallas';
+import {
+  C2Acceso,
+  C2Arranque,
+  C2ConductorEnLinea,
+  C2ConductorFueraDeLinea,
+  C2ElegirPuntoPasajera,
+  C2InicioPasajera,
+  C2SelectorDeRol,
+  C2ServicioPasajera,
+  C2Viaje
+} from '../preview/pantallasC2';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
 
-const PANTALLAS = [
+interface PantallaDelLaboratorio {
+  readonly clave: string;
+  readonly nombre: string;
+  /** Se monta sin props: las que tenga han de traer valor por defecto. */
+  readonly Componente: ComponentType;
+}
+
+/**
+ * Un catálogo tiene siempre al menos una pantalla, y el tipo lo dice: así el
+ * respaldo `pantallas[0]` no necesita una aserción para convencer al
+ * compilador de algo que ya es cierto.
+ */
+type CatalogoDePantallas = readonly [PantallaDelLaboratorio, ...PantallaDelLaboratorio[]];
+
+/**
+ * Las pantallas de A, B y C: la composición original, con el mapa metido
+ * dentro de una tarjeta. Se conservan tal cual para poder comparar contra C2.
+ */
+const PANTALLAS_ORIGINALES: CatalogoDePantallas = [
   { clave: 'arranque', nombre: 'Arranque', Componente: PreviewArranque },
   { clave: 'rol', nombre: 'Rol', Componente: PreviewSelectorDeRol },
   { clave: 'acceso', nombre: 'Acceso', Componente: PreviewAcceso },
@@ -48,7 +77,33 @@ const PANTALLAS = [
   { clave: 'conductor', nombre: 'Conductor', Componente: PreviewInicioConductor },
   { clave: 'viaje', nombre: 'Viaje', Componente: PreviewViaje },
   { clave: 'perfil', nombre: 'Perfil', Componente: PreviewPerfil }
-] as const;
+];
+
+/**
+ * Las de C2. Son OTRAS pantallas, no las mismas repintadas: el mapa pasa a ser
+ * el suelo y aparecen estados que antes no existían —la hoja subida con el
+ * selector de vehículo, elegir un punto en el mapa, el conductor conectado y
+ * desconectado—.
+ *
+ * Por eso el laboratorio cambia de juego según la dirección activa: pulsando C
+ * y luego C2 se ve exactamente qué cambia, que es la comparación que hay que
+ * poder hacer para decidir.
+ */
+const PANTALLAS_C2: CatalogoDePantallas = [
+  { clave: 'arranque', nombre: 'Arranque', Componente: C2Arranque },
+  { clave: 'rol', nombre: 'Rol', Componente: C2SelectorDeRol },
+  { clave: 'acceso', nombre: 'Acceso', Componente: C2Acceso },
+  { clave: 'pasajera', nombre: 'Pasajera', Componente: C2InicioPasajera },
+  { clave: 'servicio', nombre: 'Moto / Auto', Componente: C2ServicioPasajera },
+  { clave: 'punto', nombre: 'Elegir punto', Componente: C2ElegirPuntoPasajera },
+  { clave: 'conductor', nombre: 'Conductor', Componente: C2ConductorFueraDeLinea },
+  { clave: 'conductor-online', nombre: 'Conductor en línea', Componente: C2ConductorEnLinea },
+  { clave: 'viaje', nombre: 'Viaje', Componente: C2Viaje }
+];
+
+export function catalogoDePantallas(clave: ClaveDeDireccion): CatalogoDePantallas {
+  return clave === 'C2' ? PANTALLAS_C2 : PANTALLAS_ORIGINALES;
+}
 
 export default function LaboratorioVisual() {
   if (!EN_DESARROLLO) return <FueraDeDesarrollo />;
@@ -73,7 +128,12 @@ function Laboratorio() {
   const { clave, cambiarDireccion } = useControlDeTema();
   const [pantalla, setPantalla] = useState<string>('rol');
 
-  const actual = PANTALLAS.find(item => item.clave === pantalla) ?? PANTALLAS[1];
+  const pantallas = catalogoDePantallas(clave);
+  // Al cambiar de direccion puede desaparecer la pantalla que se estaba viendo
+  // -- «Perfil» no existe en C2, «Elegir punto» no existe en C --. En vez de
+  // dejar la pantalla en blanco, se cae al selector de rol, que existe en las
+  // dos.
+  const actual = pantallas.find(item => item.clave === pantalla) ?? pantallas[0];
   const direccion = CATALOGO[clave];
 
   return (
@@ -114,7 +174,7 @@ function Laboratorio() {
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={estilos.pantallas}>
-          {PANTALLAS.map(item => {
+          {pantallas.map(item => {
             const activa = item.clave === pantalla;
             return (
               <Pressable

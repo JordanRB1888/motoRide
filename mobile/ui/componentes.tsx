@@ -25,7 +25,7 @@ import { Icono, type NombreDeIcono } from './Icono';
 // Texto
 // ---------------------------------------------------------------------------
 
-export type Tono = 'primario' | 'secundario' | 'tenue' | 'acento' | 'sobreAcento';
+export type Tono = 'primario' | 'secundario' | 'tenue' | 'acento' | 'sobreAcento' | 'exito';
 export type Nivel = 'display' | 'titulo' | 'encabezado' | 'cuerpo' | 'etiqueta' | 'pie';
 
 export function Txt({
@@ -46,7 +46,10 @@ export function Txt({
     secundario: tema.color.textoSecundario,
     tenue: tema.color.textoTenue,
     acento: tema.color.acento,
-    sobreAcento: tema.color.sobreAcento
+    sobreAcento: tema.color.sobreAcento,
+    // El verde de «en linea». Es un tono del sistema, no un color suelto:
+    // asi el estado del conductor no se escribe a mano en cada pantalla.
+    exito: tema.color.exito
   };
 
   const esTitular = nivel === 'display' || nivel === 'titulo';

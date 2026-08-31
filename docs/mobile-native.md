@@ -386,6 +386,81 @@ y no pertenece al futuro móvil. Hay una prueba que recorre **todos** los ficher
 del cliente y falla si aparece. Es fácil que se cuele copiando de la web por
 costumbre, y no daría ningún error: recibiría un 403 y nadie sabría por qué.
 
+## Dirección visual — C2, +58 Signature Refined
+
+**Pendiente de la decisión del dueño.** C2 es la recomendación actual; A, B y C
+siguen en el catálogo para poder compararlas, y no se retiran hasta que decida.
+
+C2 no es una dirección nueva: es C mirada en pantallas reales, con el mapa
+convertido en el suelo y los activos de marca dentro. Los colores son los de C,
+valor por valor, y hay una prueba que lo comprueba.
+
+```
+mapa primero      el mapa ocupa la pantalla; la hoja inferior flota encima
+sin bordes        las superficies se separan por color: una sola línea amarilla
+aire por dentro   +4 en el relleno y entre elementos, sin robarle alto al mapa
+etiquetas +1pt    lo único que se toma de B: leer de reojo, en moto y con sol
+```
+
+Quitar el borde de las superficies es el cambio con más consecuencias. Cada
+tarjeta con borde dibuja un rectángulo, y siete rectángulos apilados son la sopa
+de tarjetas que había que quitar. Sin ellos queda **una sola línea con derecho a
+llamar la atención: la amarilla**.
+
+### El filo, con disciplina
+
+Una firma que lo lleva todo no señala nada. Aparece una vez por zona: en la hoja
+de la pasajera lo lleva Transporte Seguro; en el selector, sólo el vehículo
+elegido; en el viaje, sólo el estado. Una prueba cuenta las superficies con filo
+y falla si son más de dos.
+
+### La hoja inferior
+
+Tres estados —26 %, 46 %, 62 %— y **nunca tapa el mapa entero**.
+
+El tope de 62 % salió de mirarlo en pantalla. Estaba en 72 %, que sobre el papel
+dejaba casi un tercio de mapa; en el teléfono no era así, porque la barra de
+navegación se lleva otros 80 puntos por debajo. Lo que quedaba era una franja
+donde ya no cabía ni el vehículo más cercano.
+
+Las medidas viven en `theme/hoja.ts`, sin dependencias de React Native, para que
+el generador de evidencia y las pruebas lean los mismos números que el teléfono
+en lugar de una copia.
+
+### Los activos de marca
+
+`mobile/theme/marca.ts` es el equivalente de `src/utils/vehicleMedia.js`: la moto
+y el automóvil amarillos, con dos tomas cada uno —tres cuartos para elegir
+servicio, cenital para el mapa—, más el emblema y el logotipo apaisado.
+
+Las dos tomas no son intercambiables. La cenital es cuadrada para poder girar
+sobre su centro y apuntar al rumbo; usar la de tres cuartos sobre el mapa daría
+una moto de perfil que siempre mira a la derecha.
+
+Son los archivos oficiales, sin recortar ni recolorear. El manifiesto completo
+está en [preservacion-visual.md](preservacion-visual.md), y
+`mobile/test/preservacion.test.mjs` comprueba que siguen ahí, que no se
+deformaron y que nadie los sustituyó por un pictograma.
+
+### El control de disponibilidad
+
+La pieza signature del conductor, heredada de `src/styles/modern-yellow-lab.css`:
+disco de 56 puntos en el centro de la barra, sobresaliendo por encima, con la
+moto real dentro, aro verde y latido lento al conectarse.
+
+No vuelve el interruptor de la cabecera: éste es el único control de
+disponibilidad, como ya había decidido el diseño de la web.
+
+### El mapa
+
+`ui/Mapa.tsx` pinta calles claras sobre manzanas oscuras, que es como se leen los
+mapas en tema oscuro. **No hay proveedor elegido**: se sustituye por dentro sin
+tocar la composición de alrededor, y una prueba vigila que no aparezca ninguno.
+
+La composición ya tiene sitio para elegir origen y destino, mover el pin,
+confirmar un punto y los favoritos. La lógica no está hecha y no se inventó
+backend; lo que hay es el hueco, para que el diseño no cierre esas puertas.
+
 ## Dirección visual — VISUAL-PREVIEW-1
 
 **Pendiente de la decisión del dueño.** Se prepararon tres direcciones para

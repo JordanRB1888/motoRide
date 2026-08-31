@@ -25,13 +25,45 @@ const leer = relativa => fs.readFileSync(path.join(raizMovil, relativa), 'utf8')
 // Las tres direcciones
 // ---------------------------------------------------------------------------
 
-test('existen exactamente tres direcciones', () => {
-  assert.deepEqual([...DIRECCIONES], ['A', 'B', 'C']);
+test('existen exactamente cuatro direcciones', () => {
+  // C2 se suma; A, B y C NO se retiran. El dueño todavía no ha decidido, y sin
+  // las anteriores no habría contra qué comparar la refinada.
+  assert.deepEqual([...DIRECCIONES], ['A', 'B', 'C', 'C2']);
   for (const clave of DIRECCIONES) assert.ok(CATALOGO[clave], clave);
 });
 
-test('la recomendada es C', () => {
-  assert.equal(DIRECCION_RECOMENDADA, 'C');
+test('la recomendada es C2', () => {
+  assert.equal(DIRECCION_RECOMENDADA, 'C2');
+});
+
+test('C2 conserva EXACTAMENTE la identidad de C', () => {
+  // El contrato de preservación en forma de prueba. C2 refina composición,
+  // aire y jerarquía; la paleta es intocable. Si alguien «mejora» el amarillo
+  // o el grafito dentro de C2, la marca deja de ser la misma y esto salta.
+  assert.deepEqual(CATALOGO.C2.color, CATALOGO.C.color);
+  assert.equal(CATALOGO.C2.presenciaDelAcento, 'firma');
+  assert.equal(CATALOGO.C2.color.acento, '#ffd21f');
+});
+
+test('C2 respira más que C por dentro, sin robarle alto al mapa', () => {
+  // El aire de A entra donde se nota y no donde cuesta: dentro de las
+  // superficies, no en los márgenes exteriores. Con el mapa de fondo, cada
+  // punto de margen exterior es un punto menos de mapa.
+  assert.ok(CATALOGO.C2.ritmo.dentroDeTarjeta > CATALOGO.C.ritmo.dentroDeTarjeta);
+  assert.ok(CATALOGO.C2.ritmo.entreElementos > CATALOGO.C.ritmo.entreElementos);
+  assert.equal(CATALOGO.C2.ritmo.margenPantalla, CATALOGO.C.ritmo.margenPantalla);
+  assert.equal(CATALOGO.C2.ritmo.entreBloques, CATALOGO.C.ritmo.entreBloques);
+});
+
+test('C2 no lleva borde en las superficies', () => {
+  // Es lo que desactiva la sopa de tarjetas: sin un contorno gris por
+  // elemento, la única línea que pide atención es la amarilla.
+  assert.equal(CATALOGO.C2.superficie.conBorde, false);
+});
+
+test('C2 lee mejor de reojo que C', () => {
+  // Lo único que se toma de B: las etiquetas se leen en movimiento y con sol.
+  assert.ok(CATALOGO.C2.texto.etiqueta.tamano > CATALOGO.C.texto.etiqueta.tamano);
 });
 
 test('las tres comparten la MISMA estructura de tokens', () => {
@@ -81,12 +113,31 @@ test('cada dirección tiene profundidad: varias superficies distintas', () => {
   }
 });
 
-test('las tres tienen carácter DISTINTO, no son la misma con otro nombre', () => {
+test('cada dirección tiene carácter DISTINTO, ninguna es otra con otro nombre', () => {
   // Si dos direcciones coincidieran en ritmo y radios, comparar no serviría de
   // nada.
-  const huella = tema => `${tema.ritmo.margenPantalla}-${tema.ritmo.entreBloques}-${tema.radio.tarjeta}-${tema.texto.display.tamano}`;
+  //
+  // La huella incluye el relleno interior, el aire entre elementos, el borde y
+  // el cuerpo de etiqueta a propósito: son justo los cuatro valores donde C2 se
+  // separa de C. Con la huella antigua —márgenes, radio y display— C y C2 se
+  // distinguían sólo por un punto de radio, y la prueba habría pasado casi por
+  // casualidad sin mirar lo que de verdad cambió.
+  const huella = tema => [
+    tema.ritmo.margenPantalla,
+    tema.ritmo.entreBloques,
+    tema.ritmo.dentroDeTarjeta,
+    tema.ritmo.entreElementos,
+    tema.radio.tarjeta,
+    tema.texto.display.tamano,
+    tema.texto.etiqueta.tamano,
+    tema.superficie.conBorde
+  ].join('-');
   const huellas = DIRECCIONES.map(clave => huella(CATALOGO[clave]));
-  assert.equal(new Set(huellas).size, 3, 'hay direcciones que son visualmente idénticas');
+  assert.equal(
+    new Set(huellas).size,
+    DIRECCIONES.length,
+    'hay direcciones que son visualmente idénticas'
+  );
 });
 
 test('la presencia del acento va de menos a más', () => {
