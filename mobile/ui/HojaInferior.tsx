@@ -24,7 +24,7 @@
  */
 
 import { type ReactNode } from 'react';
-import { Dimensions, Pressable, View } from 'react-native';
+import { Dimensions, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTema } from '../theme/ThemeContext';
 import { altoDeHoja, siguienteEstadoDeHoja, type EstadoDeHoja } from '../theme/hoja';
@@ -41,6 +41,7 @@ export function HojaInferior({
   onCambiarEstado,
   conAsa = true,
   alturaAutomatica = false,
+  desplazable = false,
   espacioInferior = 0,
   children
 }: {
@@ -56,6 +57,14 @@ export function HojaInferior({
    * cambio de nada.
    */
   readonly alturaAutomatica?: boolean;
+  /**
+   * El contenido se desplaza si no cabe.
+   *
+   * Hace falta en las hojas con formulario: al abrirse el teclado la hoja se
+   * queda con la mitad del alto, y sin desplazamiento lo primero que
+   * desaparece es el botón de abajo — justo el que hay que pulsar.
+   */
+  readonly desplazable?: boolean;
   /** Hueco que hay que dejar abajo para la barra de navegación. */
   readonly espacioInferior?: number;
   readonly children?: ReactNode;
@@ -99,14 +108,29 @@ export function HojaInferior({
         </Pressable>
       ) : null}
 
-      <View style={{
-        flex: alturaAutomatica ? undefined : 1,
-        paddingHorizontal: tema.ritmo.margenPantalla,
-        paddingTop: conAsa ? tema.ritmo.entreElementos : tema.ritmo.dentroDeTarjeta,
-        paddingBottom: alturaAutomatica ? tema.ritmo.dentroDeTarjeta : 0
-      }}>
-        {children}
-      </View>
+      {desplazable ? (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingHorizontal: tema.ritmo.margenPantalla,
+            paddingTop: conAsa ? tema.ritmo.entreElementos : tema.ritmo.dentroDeTarjeta,
+            paddingBottom: tema.ritmo.dentroDeTarjeta
+          }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={{
+          flex: alturaAutomatica ? undefined : 1,
+          paddingHorizontal: tema.ritmo.margenPantalla,
+          paddingTop: conAsa ? tema.ritmo.entreElementos : tema.ritmo.dentroDeTarjeta,
+          paddingBottom: alturaAutomatica ? tema.ritmo.dentroDeTarjeta : 0
+        }}>
+          {children}
+        </View>
+      )}
     </View>
   );
 }

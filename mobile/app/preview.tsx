@@ -40,10 +40,12 @@ import {
   C2Arranque,
   C2ConductorEnLinea,
   C2ConductorFueraDeLinea,
+  C2ConfirmarViaje,
   C2ElegirPuntoPasajera,
   C2InicioPasajera,
+  C2ParaQuienEsElViaje,
+  C2PedirViaje,
   C2SelectorDeRol,
-  C2ServicioPasajera,
   C2Viaje
 } from '../preview/pantallasC2';
 
@@ -94,8 +96,10 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'rol', nombre: 'Rol', Componente: C2SelectorDeRol },
   { clave: 'acceso', nombre: 'Acceso', Componente: C2Acceso },
   { clave: 'pasajera', nombre: 'Pasajera', Componente: C2InicioPasajera },
-  { clave: 'servicio', nombre: 'Moto / Auto', Componente: C2ServicioPasajera },
+  { clave: 'pedir', nombre: 'Pedir viaje', Componente: C2PedirViaje },
+  { clave: 'para-quien', nombre: '¿Para quién?', Componente: C2ParaQuienEsElViaje },
   { clave: 'punto', nombre: 'Elegir punto', Componente: C2ElegirPuntoPasajera },
+  { clave: 'confirmar', nombre: 'Confirmar', Componente: C2ConfirmarViaje },
   { clave: 'conductor', nombre: 'Conductor', Componente: C2ConductorFueraDeLinea },
   { clave: 'conductor-online', nombre: 'Conductor en línea', Componente: C2ConductorEnLinea },
   { clave: 'viaje', nombre: 'Viaje', Componente: C2Viaje }

@@ -277,8 +277,10 @@ export function LienzoDeMapa({
         </View>
       ) : null}
 
+      {/* El control va por debajo de la cabecera flotante: a 14 puntos se
+          solapaba con la pastilla de la tasa, que ocupa la esquina derecha. */}
       {conControles ? (
-        <View style={{ position: 'absolute', right: 14, top: 14, gap: 10 }}>
+        <View style={{ position: 'absolute', right: 14, top: 92, gap: 10 }}>
           <BotonDeMapa icono="destino" etiqueta="Centrar en mi ubicación" />
         </View>
       ) : null}
@@ -304,8 +306,14 @@ function BotonDeMapa({ icono, etiqueta, onPress }: {
       style={({ pressed }) => ({
         width: 42, height: 42, borderRadius: 21,
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficie,
-        ...tema.superficie.sombra
+        backgroundColor: pressed ? tema.color.borde : tema.color.superficieElevada,
+        // Flota sobre el mapa, que pinta sus manzanas con `superficie`: sin
+        // subir un escalón el control desaparecería sobre el propio suelo.
+        shadowColor: '#000000',
+        shadowOpacity: 0.4,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 5 },
+        elevation: 8
       })}
     >
       <Icono nombre={icono} color={tema.color.textoSecundario} tamano={20} />

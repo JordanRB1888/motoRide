@@ -1,23 +1,30 @@
 /**
  * Las pantallas de C2.
  *
- * QUÉ CAMBIA RESPECTO A LAS DE C
+ * EL MAPA ES EL SUELO
  *
- * El mapa deja de ser una ilustración dentro de una tarjeta y pasa a ser el
- * suelo de la pantalla. Todo lo demás flota encima: una hoja inferior con lo
- * que la persona está haciendo, y la barra de navegación abajo.
+ * Deja de ser una ilustración dentro de una tarjeta y pasa a ser aquello sobre
+ * lo que ocurre todo. Encima flotan una hoja con lo que la persona está
+ * haciendo y la barra de navegación.
  *
- * Y desaparece la sopa de tarjetas. Donde antes había una lista de rectángulos
- * —destino, servicios, seguridad, accesos— ahora hay una superficie con grupos
- * separados por espacio y por una línea de un píxel. Se sigue leyendo igual y
- * se ve mucho más tranquilo.
+ * Y desaparece la sopa de tarjetas: donde había una lista de rectángulos
+ * —destino, servicios, seguridad, accesos— hay una superficie con grupos
+ * separados por espacio y por una línea de un píxel.
+ *
+ * EL DISCO CENTRAL ES LA ACCIÓN
+ *
+ * Los dos roles tienen el mismo disco en el centro de la barra, y lo que cambia
+ * es el color del aro: amarillo para pedir un viaje, verde para estar en línea,
+ * apagado para conectarse. Se aprende una forma y sirve en las dos pantallas.
+ *
+ * En la pasajera, tocarlo despliega la petición completa sobre el mapa; el
+ * mismo disco la cierra, convertido en aspa. No hay que buscar dónde se cierra
+ * lo que se abrió desde ahí.
  *
  * LA DISCIPLINA DEL FILO
  *
- * El filo amarillo aparece UNA vez por zona visual. En la hoja de la pasajera
- * lo lleva Transporte Seguro; en el selector, sólo el vehículo elegido; en el
- * viaje, sólo el estado en curso. Si lo llevara todo, no señalaría nada — que
- * es justo lo que se corrigió al cerrar la dirección C.
+ * El filo amarillo aparece UNA vez por zona visual. Si lo llevara todo, no
+ * señalaría nada — que es justo lo que se corrigió al cerrar la dirección C.
  *
  * ESTO ES UNA MAQUETA
  *
@@ -26,28 +33,38 @@
  * `AuthContext`; aquí sólo se prueba su aspecto.
  */
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Boton, Insignia, Superficie, Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { Arranque } from '../ui/Arranque';
 import { LienzoDeMapa, type HitoEnMapa, type VehiculoEnMapa } from '../ui/Mapa';
-import { HojaInferior, Separador, type EstadoDeHoja } from '../ui/HojaInferior';
+import { HojaInferior, Separador } from '../ui/HojaInferior';
 import {
   BarraDeNavegacion,
   ControlDeDisponibilidad,
+  ControlDePedido,
   DESTINOS_DE_CONDUCTOR,
   DESTINOS_DE_PASAJERA
 } from '../ui/Navegacion';
-import { LogoHorizontal } from '../ui/Marca';
-import { EntradaDeTransporteSeguro, SelectorDeServicio } from '../ui/Servicio';
+import { LogoHorizontal, MarcadorDeVehiculo, Vehiculo } from '../ui/Marca';
+import { EntradaDeTransporteSeguro } from '../ui/Servicio';
+import {
+  ChipDeBeneficiario,
+  LugaresGuardados,
+  OpcionesDeBeneficiario,
+  Trayecto,
+  type Beneficiario
+} from '../ui/Trayecto';
 import { useTema } from '../theme/ThemeContext';
 import type { TipoDeVehiculo } from '../theme/marca';
 import {
   CONDUCTOR_DEMO,
   DESTINOS_RECIENTES_DEMO,
   JORNADA_DEMO,
+  LUGARES_DEMO,
   PASAJERA_DEMO,
+  TASA_DEMO,
   VIAJE_DEMO
 } from './fixtures';
 
@@ -74,6 +91,88 @@ const HITOS_DE_VIAJE: readonly HitoEnMapa[] = [
   { clave: 'origen', en: { x: 28, y: 43 }, tipo: 'origen' },
   { clave: 'destino', en: { x: 73, y: 13 }, tipo: 'destino' }
 ];
+
+/**
+ * Lo que flota sobre el mapa.
+ *
+ * Sube un escalón de superficie y lleva sombra. Hace falta desde que el mapa
+ * pinta sus manzanas con `superficie`: con el mismo color, una pastilla encima
+ * no se distingue del suelo y el texto parece escrito sobre el mapa.
+ */
+const SOBRE_EL_MAPA = {
+  shadowColor: '#000000',
+  shadowOpacity: 0.4,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 5 },
+  elevation: 8
+} as const;
+
+const ORIGEN_DEMO = 'Maracaibo · punto de ejemplo';
+const DESTINO_DEMO = DESTINOS_RECIENTES_DEMO[0]?.titulo ?? 'Destino de ejemplo';
+
+/**
+ * La cabecera de la pasajera: quién eres y a cómo está el dólar.
+ *
+ * La tasa va aquí porque en Venezuela es lo primero que se mira antes de
+ * decidir un gasto, y porque el servidor ya la tiene: no es un adorno, es el
+ * dato con el que la persona traduce el precio del viaje a lo que lleva encima.
+ *
+ * Flota en dos pastillas en lugar de una barra opaca. Una barra de cabecera se
+ * come 70 puntos de mapa a cambio de enseñar dos datos.
+ */
+function CabeceraDePasajera() {
+  const tema = useTema();
+
+  return (
+    <View style={{
+      position: 'absolute',
+      left: tema.ritmo.margenPantalla,
+      right: tema.ritmo.margenPantalla,
+      top: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10
+    }}>
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', gap: 9,
+        paddingLeft: 5, paddingRight: 14, paddingVertical: 5,
+        borderRadius: 999,
+        backgroundColor: tema.color.superficieElevada,
+        ...SOBRE_EL_MAPA
+      }}>
+        <View style={{
+          width: 32, height: 32, borderRadius: 16,
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: tema.color.fondo
+        }}>
+          <Txt nivel="etiqueta">{PASAJERA_DEMO.iniciales}</Txt>
+        </View>
+        <View style={{ gap: 1 }}>
+          <Txt nivel="etiqueta">{PASAJERA_DEMO.nombre}</Txt>
+          <Txt nivel="pie" tono="tenue">{PASAJERA_DEMO.zona}</Txt>
+        </View>
+      </View>
+
+      <View style={{ flex: 1 }} />
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${TASA_DEMO.etiqueta}: ${TASA_DEMO.valor}. ${TASA_DEMO.nota}`}
+        style={({ pressed }) => ({
+          alignItems: 'flex-end',
+          gap: 1,
+          paddingHorizontal: 13, paddingVertical: 7,
+          borderRadius: 999,
+          backgroundColor: pressed ? tema.color.borde : tema.color.superficieElevada,
+          ...SOBRE_EL_MAPA
+        })}
+      >
+        <Txt nivel="pie" tono="tenue">{TASA_DEMO.etiqueta}</Txt>
+        <Txt nivel="etiqueta" tono="acento">{TASA_DEMO.valor}</Txt>
+      </Pressable>
+    </View>
+  );
+}
 
 /**
  * La fila de un lugar: un icono, un nombre y un detalle.
@@ -118,7 +217,7 @@ function FilaDeLugar({ titulo, detalle, icono = 'destino', onPress }: {
   );
 }
 
-/** El campo de «¿A dónde vas?». Es la acción principal de la pasajera. */
+/** El campo de «¿A dónde vas?», en reposo. Al tocarlo se abre la petición. */
 function CampoDeDestino({ onPress }: { readonly onPress?: () => void }) {
   const tema = useTema();
 
@@ -156,86 +255,166 @@ export function C2Arranque() {
 // ---------------------------------------------------------------------------
 
 /**
- * Refinado sobre la base de C: más aire arriba, el logotipo real en vez de un
- * título de texto, y la elección marcada con el filo.
+ * «¿Cómo quieres continuar?»
+ *
+ * La versión anterior era correcta y de nadie: logotipo, dos filas con un
+ * icono, un botón. Aquí cada opción **se ve**: quien va a conducir reconoce su
+ * moto, y quien va a pedirla ve el marcador que va a mirar en el mapa. Son los
+ * activos de marca haciendo de ilustración, sin encargar dibujos nuevos.
+ *
+ * Y hay un pie con ayuda. Ésta es la primera pantalla de la aplicación y la
+ * primera donde alguien se puede quedar atascado; dejarla sin salida es
+ * ahorrarse una línea a costa de quien no sabe qué elegir.
  */
 export function C2SelectorDeRol() {
   const tema = useTema();
   const [rol, setRol] = useState<'pasajero' | 'conductor'>('pasajero');
 
-  const opciones = [
-    { clave: 'pasajero' as const, icono: 'inicio' as const, titulo: 'Pasajero', detalle: 'Pide un viaje ahora' },
-    { clave: 'conductor' as const, icono: 'moto' as const, titulo: 'Conductor', detalle: 'Conéctate y recibe viajes' }
-  ];
+  return (
+    <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
+      {/* La franja de marca: un escalón de superficie que sostiene el logotipo
+          y separa la identidad de la decisión. */}
+      <View style={{
+        paddingTop: 52,
+        paddingBottom: 28,
+        paddingHorizontal: tema.ritmo.margenPantalla,
+        backgroundColor: tema.color.superficie,
+        borderBottomLeftRadius: 28,
+        borderBottomRightRadius: 28,
+        alignItems: 'center',
+        gap: 18
+      }}>
+        <LogoHorizontal ancho={210} />
+        <View style={{ alignItems: 'center', gap: 6 }}>
+          <Txt nivel="titulo" centrado>¿Cómo quieres continuar?</Txt>
+          <Txt nivel="pie" tono="secundario" centrado>
+            Puedes cambiar de modo cuando quieras.
+          </Txt>
+        </View>
+      </View>
+
+      <View style={{
+        flex: 1,
+        paddingHorizontal: tema.ritmo.margenPantalla,
+        paddingTop: tema.ritmo.entreBloques,
+        gap: tema.ritmo.entreElementos
+      }}>
+        {/* Las dos opciones son lo único que hay que decidir aquí, así que se
+            quedan con el centro de la pantalla en lugar de amontonarse arriba
+            dejando un hueco muerto encima del botón. */}
+        <View style={{ flex: 1 }} />
+
+        <OpcionDeRol
+          titulo="Pasajero"
+          detalle="Pide tu moto y sigue el viaje en el mapa"
+          activa={rol === 'pasajero'}
+          onPress={() => setRol('pasajero')}
+          ilustracion={<MiniMapaConMoto />}
+        />
+        <OpcionDeRol
+          titulo="Conductor"
+          detalle="Conéctate, recibe viajes y gestiona tu jornada"
+          activa={rol === 'conductor'}
+          onPress={() => setRol('conductor')}
+          ilustracion={<Vehiculo tipo="MOTO" ancho={104} atenuado={rol !== 'conductor'} />}
+        />
+
+        <View style={{ flex: 1 }} />
+
+        <Boton titulo="Continuar" onPress={() => undefined} />
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="¿Necesitas ayuda para entrar? Contactar con soporte"
+          style={({ pressed }) => ({
+            alignItems: 'center', gap: 2,
+            paddingVertical: 12,
+            opacity: pressed ? 0.6 : 1
+          })}
+        >
+          <Txt nivel="pie" tono="tenue">¿Necesitas ayuda para entrar?</Txt>
+          <Txt nivel="etiqueta" tono="acento">Contactar con soporte</Txt>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function OpcionDeRol({ titulo, detalle, activa, onPress, ilustracion }: {
+  readonly titulo: string;
+  readonly detalle: string;
+  readonly activa: boolean;
+  readonly onPress?: () => void;
+  readonly ilustracion: ReactNode;
+}) {
+  const tema = useTema();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: activa }}
+      accessibilityLabel={`${titulo}. ${detalle}`}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        padding: tema.ritmo.entreElementos,
+        borderRadius: tema.radio.tarjeta,
+        backgroundColor: activa ? tema.color.superficieElevada : tema.color.superficie,
+        overflow: 'hidden'
+      }}
+    >
+      {activa ? (
+        <View style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: 3, backgroundColor: tema.color.acento
+        }} />
+      ) : null}
+
+      <View style={{
+        width: 108, height: 80,
+        alignItems: 'center', justifyContent: 'center',
+        borderRadius: tema.radio.campo,
+        backgroundColor: tema.color.fondo,
+        overflow: 'hidden'
+      }}>
+        {ilustracion}
+      </View>
+
+      <View style={{ flex: 1, gap: 3 }}>
+        <Txt nivel="encabezado">{titulo}</Txt>
+        <Txt nivel="pie" tono="secundario">{detalle}</Txt>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Un trozo de mapa con la moto: lo que la pasajera va a estar mirando.
+ *
+ * Se dibuja aquí en lugar de encoger el lienzo real porque doce calles en 108
+ * puntos se leen como papel cuadriculado. Con dos basta para que se entienda
+ * que es una calle y que la moto va por ella.
+ */
+function MiniMapaConMoto() {
+  const tema = useTema();
 
   return (
     <View style={{
-      flex: 1,
-      backgroundColor: tema.color.fondo,
-      paddingHorizontal: tema.ritmo.margenPantalla,
-      paddingTop: 64,
-      paddingBottom: 32
+      width: 108, height: 80,
+      backgroundColor: tema.color.superficie,
+      alignItems: 'center', justifyContent: 'center'
     }}>
-      <View style={{ alignItems: 'center' }}>
-        <LogoHorizontal ancho={214} />
-      </View>
-
-      <View style={{ marginTop: 52, gap: 8 }}>
-        <Txt nivel="titulo">¿Cómo quieres continuar?</Txt>
-        <Txt nivel="cuerpo" tono="secundario">
-          Puedes cambiar de modo cuando quieras.
-        </Txt>
-      </View>
-
-      <View style={{ marginTop: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
-        {opciones.map(opcion => {
-          const activa = opcion.clave === rol;
-          return (
-            <Pressable
-              key={opcion.clave}
-              onPress={() => setRol(opcion.clave)}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: activa }}
-              accessibilityLabel={`${opcion.titulo}. ${opcion.detalle}`}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 15,
-                padding: tema.ritmo.dentroDeTarjeta,
-                borderRadius: tema.radio.tarjeta,
-                backgroundColor: activa ? tema.color.superficieElevada : tema.color.superficie,
-                overflow: 'hidden'
-              }}
-            >
-              {activa ? (
-                <View style={{
-                  position: 'absolute', left: 0, top: 0, bottom: 0,
-                  width: 3, backgroundColor: tema.color.acento
-                }} />
-              ) : null}
-              <View style={{
-                width: 46, height: 46, borderRadius: 23,
-                alignItems: 'center', justifyContent: 'center',
-                backgroundColor: activa ? `${tema.color.acento}1f` : tema.color.fondo
-              }}>
-                <Icono
-                  nombre={opcion.icono}
-                  color={activa ? tema.color.acento : tema.color.textoSecundario}
-                  tamano={23}
-                  activo={activa}
-                />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Txt nivel="encabezado">{opcion.titulo}</Txt>
-                <Txt nivel="pie" tono="secundario">{opcion.detalle}</Txt>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={{ flex: 1 }} />
-      <Boton titulo="Continuar" onPress={() => undefined} />
+      <View style={{
+        position: 'absolute', left: 0, right: 0, top: '62%', height: 9,
+        backgroundColor: tema.color.textoTenue, opacity: 0.24
+      }} />
+      <View style={{
+        position: 'absolute', top: 0, bottom: 0, left: '26%', width: 5,
+        backgroundColor: tema.color.textoTenue, opacity: 0.24
+      }} />
+      <MarcadorDeVehiculo tipo="MOTO" tamano={46} rumbo={16} />
     </View>
   );
 }
@@ -248,7 +427,7 @@ export function C2SelectorDeRol() {
  * El acceso, con marca de verdad.
  *
  * Antes era un formulario dentro de una tarjeta grande sobre fondo vacío:
- * correcto y de nadie. Ahora la mitad de arriba es la marca —el logotipo con la
+ * correcto y de nadie. Ahora la parte de arriba es la marca —el logotipo con la
  * moto, que es lo que hay que reconocer al abrir— y los campos van sobre el
  * fondo, sin recuadro que los envuelva.
  *
@@ -305,25 +484,17 @@ export function C2Acceso() {
 }
 
 // ---------------------------------------------------------------------------
-// 4 y 5 · Inicio de la pasajera
+// 4 · Inicio de la pasajera
 // ---------------------------------------------------------------------------
 
 /**
- * El inicio de la pasajera, con el mapa de suelo.
+ * El inicio en reposo: el mapa manda y abajo hay lo justo.
  *
- * La hoja empieza a media altura: cabe lo importante —a dónde vas y los
- * lugares de siempre— y por encima queda mapa suficiente para ver dónde está y
- * qué motos hay cerca.
- *
- * Subiendo la hoja aparece el selector de vehículo. Es la misma pantalla en
- * otro estado, no otra pantalla: el mapa no se pierde en ningún momento.
+ * A dónde vas, los sitios de siempre y lo último que hiciste. Nada más, porque
+ * nada más hace falta hasta que decidas ir a algún sitio.
  */
-export function C2InicioPasajera({ estadoInicial = 'media' }: {
-  readonly estadoInicial?: EstadoDeHoja;
-}) {
+export function C2InicioPasajera() {
   const tema = useTema();
-  const [estado, setEstado] = useState<EstadoDeHoja>(estadoInicial);
-  const [vehiculo, setVehiculo] = useState<TipoDeVehiculo>('MOTO');
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
@@ -331,84 +502,140 @@ export function C2InicioPasajera({ estadoInicial = 'media' }: {
         vehiculos={MOTOS_CERCA}
         hitos={[{ clave: 'yo', en: { x: 47, y: 29 }, tipo: 'origen' }]}
       >
-        {/* Saludo flotando sobre el mapa: sin cabecera opaca que le robe alto. */}
-        <View style={{
-          position: 'absolute',
-          left: tema.ritmo.margenPantalla,
-          top: 18,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 9,
-          paddingRight: 14, paddingLeft: 6, paddingVertical: 6,
-          borderRadius: 999,
-          backgroundColor: tema.color.superficie
-        }}>
-          <View style={{
-            width: 30, height: 30, borderRadius: 15,
-            alignItems: 'center', justifyContent: 'center',
-            backgroundColor: tema.color.superficieElevada
-          }}>
-            <Txt nivel="etiqueta">{PASAJERA_DEMO.iniciales}</Txt>
+        <CabeceraDePasajera />
+
+        <HojaInferior estado="media">
+          <CampoDeDestino />
+
+          <View style={{ height: tema.ritmo.entreElementos }} />
+          <LugaresGuardados lugares={LUGARES_DEMO} />
+
+          <View style={{ height: tema.ritmo.entreElementos }} />
+          <Separador />
+          <View style={{ paddingTop: 4 }}>
+            {DESTINOS_RECIENTES_DEMO.map(destino => (
+              <FilaDeLugar
+                key={destino.clave}
+                titulo={destino.titulo}
+                detalle={destino.detalle}
+                icono="reloj"
+              />
+            ))}
           </View>
-          <Txt nivel="etiqueta" tono="secundario">{PASAJERA_DEMO.zona}</Txt>
-        </View>
-
-        <HojaInferior estado={estado} onCambiarEstado={setEstado} espacioInferior={0}>
-          <CampoDeDestino onPress={() => setEstado('alta')} />
-
-          {estado === 'baja' ? null : (
-            <>
-              <View style={{ height: tema.ritmo.entreElementos }} />
-              <Separador />
-              <View style={{ paddingTop: 4 }}>
-                {DESTINOS_RECIENTES_DEMO.slice(0, estado === 'alta' ? 1 : 2).map(destino => (
-                  <FilaDeLugar
-                    key={destino.clave}
-                    titulo={destino.titulo}
-                    detalle={destino.detalle}
-                    icono="reloj"
-                  />
-                ))}
-              </View>
-            </>
-          )}
-
-          {estado === 'alta' ? (
-            <>
-              <Separador />
-              <View style={{ paddingTop: tema.ritmo.entreElementos, gap: tema.ritmo.entreElementos }}>
-                <Txt nivel="etiqueta" tono="secundario">CÓMO QUIERES IR</Txt>
-                <SelectorDeServicio
-                  opciones={[
-                    { tipo: 'MOTO', precio: '$1,50', minutos: 4 },
-                    { tipo: 'AUTO', precio: '$3,20', minutos: 7 }
-                  ]}
-                  elegido={vehiculo}
-                  onElegir={setVehiculo}
-                />
-                <EntradaDeTransporteSeguro />
-                <Boton titulo="Pedir viaje" onPress={() => undefined} />
-              </View>
-            </>
-          ) : (
-            <>
-              <Separador />
-              <View style={{ paddingTop: tema.ritmo.entreElementos }}>
-                <EntradaDeTransporteSeguro />
-              </View>
-            </>
-          )}
         </HojaInferior>
       </LienzoDeMapa>
 
-      <BarraDeNavegacion destinos={DESTINOS_DE_PASAJERA} activo="inicio" />
+      <BarraDeNavegacion
+        destinos={DESTINOS_DE_PASAJERA}
+        activo="inicio"
+        control={<ControlDePedido abierto={false} />}
+      />
     </View>
   );
 }
 
-/** El mismo inicio con la hoja arriba: el selector de vehículo a la vista. */
-export function C2ServicioPasajera() {
-  return <C2InicioPasajera estadoInicial="alta" />;
+/**
+ * La petición desplegada: lo que aparece al tocar el disco central.
+ *
+ * SÓLO «A DÓNDE VAS», NO «EN QUÉ VAS»
+ *
+ * La primera versión metía las dos decisiones en la misma hoja —trayecto y
+ * elección de vehículo— y no cabían: el botón de continuar quedaba debajo de
+ * la barra, que es tanto como no estar. Y al mirarlo se veía que además son
+ * dos cosas distintas: primero se decide a dónde, y sólo entonces tiene
+ * sentido comparar en qué ir y por cuánto.
+ *
+ * Así que aquí se resuelve el trayecto, y el vehículo se elige en la pantalla
+ * siguiente, donde caben las opciones con su precio y su tiempo.
+ */
+export function C2PedirViaje() {
+  const tema = useTema();
+  const [beneficiario, setBeneficiario] = useState<Beneficiario>('mi');
+
+  return (
+    <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
+      <LienzoDeMapa vehiculos={MOTOS_CERCA.slice(0, 3)} conControles={false}>
+        <HojaInferior estado="media" desplazable>
+          <ChipDeBeneficiario
+            beneficiario={beneficiario}
+            onPress={() => setBeneficiario(beneficiario === 'mi' ? 'otra-persona' : 'mi')}
+          />
+
+          <View style={{ height: tema.ritmo.entreElementos }} />
+          <Trayecto origen={ORIGEN_DEMO} destino={DESTINO_DEMO} />
+
+          <View style={{ height: tema.ritmo.entreElementos }} />
+          <LugaresGuardados lugares={LUGARES_DEMO} />
+
+          {/* Lo último a donde fuiste, aquí mismo. Es lo que se busca al abrir
+              esto: la mayoría de los viajes repiten sitio, y obligarlos a
+              escribir la dirección otra vez es trabajo inventado. */}
+          <View style={{ height: tema.ritmo.entreElementos }} />
+          <Separador />
+          <View style={{ paddingTop: 4 }}>
+            {DESTINOS_RECIENTES_DEMO.slice(0, 2).map(destino => (
+              <FilaDeLugar
+                key={destino.clave}
+                titulo={destino.titulo}
+                detalle={destino.detalle}
+                icono="reloj"
+              />
+            ))}
+          </View>
+
+          <View style={{ height: tema.ritmo.entreElementos }} />
+          <Boton titulo="Ver opciones" onPress={() => undefined} />
+        </HojaInferior>
+      </LienzoDeMapa>
+
+      <BarraDeNavegacion
+        destinos={DESTINOS_DE_PASAJERA}
+        activo="inicio"
+        control={<ControlDePedido abierto />}
+      />
+    </View>
+  );
+}
+
+/**
+ * «¿Para quién es el viaje?»
+ *
+ * El selector funciona en la interfaz, pero **el backend todavía no sabe pedir
+ * un viaje para un tercero**: no hay campo de beneficiario en la API ni forma
+ * de avisar a quien se va a montar. El aviso lo dice en la propia pantalla,
+ * porque una maqueta que enseña una función inexistente sin decirlo es una
+ * promesa.
+ */
+export function C2ParaQuienEsElViaje() {
+  const tema = useTema();
+  const [beneficiario, setBeneficiario] = useState<Beneficiario>('mi');
+
+  return (
+    <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
+      <LienzoDeMapa vehiculos={MOTOS_CERCA} conControles={false}>
+        <HojaInferior estado="media" alturaAutomatica>
+          <View style={{ gap: tema.ritmo.entreElementos }}>
+            <Txt nivel="titulo">¿Para quién es el viaje?</Txt>
+            <OpcionesDeBeneficiario elegido={beneficiario} onElegir={setBeneficiario} />
+
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 9,
+              padding: 12,
+              borderRadius: tema.radio.campo,
+              backgroundColor: tema.color.fondo
+            }}>
+              <Icono nombre="escudo" color={tema.color.aviso} tamano={16} />
+              <Txt nivel="pie" tono="tenue">
+                Pedir por otra persona todavía no está conectado al servidor.
+              </Txt>
+            </View>
+
+            <Boton titulo="Continuar" onPress={() => undefined} />
+          </View>
+        </HojaInferior>
+      </LienzoDeMapa>
+    </View>
+  );
 }
 
 /** Elegir un punto tocando el mapa. Aquí sólo se pinta el estado. */
@@ -433,6 +660,145 @@ export function C2ElegirPuntoPasajera() {
 }
 
 // ---------------------------------------------------------------------------
+// 5 · Confirmar el viaje
+// ---------------------------------------------------------------------------
+
+/**
+ * La última pantalla antes de pedir: qué vehículo, cuánto y con qué protección.
+ *
+ * Las opciones van en filas y no en tarjetas cuadradas. Con tarjetas hay que
+ * comparar en dos direcciones —de lado y hacia abajo— y lo que se compara aquí
+ * es una sola cosa: el precio. En filas los precios quedan alineados en una
+ * columna y la comparación es un barrido vertical.
+ *
+ * **Los precios van a cero a propósito.** La tarifa la calcula el servidor con
+ * su configuración y la tasa del BCV; poner cifras verosímiles en una maqueta
+ * es la forma más fácil de que alguien las tome por reales.
+ */
+export function C2ConfirmarViaje() {
+  const tema = useTema();
+  const [vehiculo, setVehiculo] = useState<TipoDeVehiculo>('MOTO');
+
+  return (
+    <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
+      <LienzoDeMapa vehiculos={MOTOS_CERCA.slice(0, 2)} hitos={HITOS_DE_VIAJE} conRuta>
+        {/* El trayecto, resumido y a la vista: se está a punto de pagar por ir
+            de un sitio a otro, y esos dos sitios no pueden estar ocultos. */}
+        <View style={{
+          position: 'absolute',
+          left: tema.ritmo.margenPantalla,
+          right: tema.ritmo.margenPantalla,
+          top: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 9,
+          paddingHorizontal: 14, paddingVertical: 11,
+          borderRadius: tema.radio.campo,
+          backgroundColor: tema.color.superficieElevada,
+          ...SOBRE_EL_MAPA
+        }}>
+          <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: tema.color.textoPrimario }} />
+          <Txt nivel="etiqueta" tono="secundario" numberOfLines={1}>Maracaibo</Txt>
+          <View style={{ width: 14, height: 2, borderRadius: 1, backgroundColor: tema.color.acento }} />
+          <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: tema.color.acento }} />
+          <Txt nivel="etiqueta" numberOfLines={1}>{DESTINO_DEMO}</Txt>
+        </View>
+
+        <HojaInferior estado="alta" alturaAutomatica>
+          <View style={{ gap: tema.ritmo.entreElementos }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Txt nivel="encabezado">Elige tu vehículo</Txt>
+              <View style={{ flex: 1 }} />
+              <Insignia texto="4 cerca" tono="exito" />
+            </View>
+
+            <View style={{ gap: 8 }}>
+              <FilaDeVehiculo
+                tipo="MOTO"
+                minutos={4}
+                activa={vehiculo === 'MOTO'}
+                onPress={() => setVehiculo('MOTO')}
+              />
+              <FilaDeVehiculo
+                tipo="AUTO"
+                minutos={7}
+                activa={vehiculo === 'AUTO'}
+                onPress={() => setVehiculo('AUTO')}
+              />
+            </View>
+
+            <EntradaDeTransporteSeguro />
+
+            <Separador />
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Txt nivel="etiqueta" tono="secundario">Se calcula con la tasa del BCV</Txt>
+              <View style={{ flex: 1 }} />
+              <Txt nivel="pie" tono="tenue">{TASA_DEMO.valor}</Txt>
+            </View>
+
+            <Boton titulo="Pedir viaje" onPress={() => undefined} />
+          </View>
+        </HojaInferior>
+      </LienzoDeMapa>
+    </View>
+  );
+}
+
+/** Una opción de vehículo, en fila: el vehículo, quién cabe, cuánto tarda y cuánto cuesta. */
+function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
+  readonly tipo: TipoDeVehiculo;
+  readonly minutos: number;
+  readonly activa: boolean;
+  readonly onPress?: () => void;
+}) {
+  const tema = useTema();
+  const plazas = tipo === 'MOTO' ? 1 : 4;
+  const nombre = tipo === 'MOTO' ? 'Moto' : 'Auto';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: activa }}
+      accessibilityLabel={`${nombre}, ${plazas} ${plazas === 1 ? 'persona' : 'personas'}, ${minutos} minutos`}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 8,
+        paddingRight: 14,
+        paddingLeft: 12,
+        borderRadius: tema.radio.tarjeta,
+        backgroundColor: activa ? tema.color.superficieElevada : 'transparent',
+        overflow: 'hidden'
+      }}
+    >
+      {activa ? (
+        <View style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: 3, backgroundColor: tema.color.acento
+        }} />
+      ) : null}
+
+      <Vehiculo tipo={tipo} ancho={76} atenuado={!activa} />
+
+      <View style={{ flex: 1, gap: 2 }}>
+        <Txt nivel="encabezado" tono={activa ? 'primario' : 'secundario'}>{nombre}</Txt>
+        <Txt nivel="pie" tono="tenue">
+          {plazas} {plazas === 1 ? 'persona' : 'personas'} · {minutos} min
+        </Txt>
+      </View>
+
+      <View style={{ alignItems: 'flex-end', gap: 1 }}>
+        <Txt nivel="encabezado" tono={activa ? 'acento' : 'secundario'}>$0,00</Txt>
+        <Txt nivel="pie" tono="tenue">Bs. 0,00</Txt>
+      </View>
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 6 y 7 · Inicio del conductor
 // ---------------------------------------------------------------------------
 
@@ -440,12 +806,8 @@ export function C2ElegirPuntoPasajera() {
  * La jornada del conductor. El mapa manda todavía más que en la pasajera:
  * quien conduce necesita ver la calle, no un tablero.
  *
- * Fuera de línea, la hoja explica qué falta para empezar y el control central
- * está apagado. En línea, la hoja se reduce a lo mínimo —zona, estado, cifras
- * de la jornada— y el control late en verde.
- *
  * No hay tablero financiero. La cartera está apagada en el servidor, y el
- * resumen del día se muestra vacío con su nota, igual que en C.
+ * resumen del día se muestra vacío con su nota.
  */
 export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: boolean }) {
   const tema = useTema();
@@ -458,7 +820,6 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <LienzoDeMapa vehiculos={conectado ? [mio, ...MOTOS_CERCA.slice(0, 2)] : [mio]}>
-        {/* Estado, flotando. Es lo único que hace falta ver sobre el mapa. */}
         <View style={{
           position: 'absolute',
           left: tema.ritmo.margenPantalla,
@@ -469,7 +830,8 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
           gap: 10,
           paddingHorizontal: 14, paddingVertical: 10,
           borderRadius: 999,
-          backgroundColor: tema.color.superficie
+          backgroundColor: tema.color.superficieElevada,
+          ...SOBRE_EL_MAPA
         }}>
           <View style={{
             width: 8, height: 8, borderRadius: 4,
@@ -557,9 +919,6 @@ export function C2ConductorEnLinea() {
 /**
  * El viaje. La jerarquía buena de C —estado, tiempo, persona, recorrido,
  * acciones— pero sobre el mapa y dentro de una sola superficie.
- *
- * La moto amarilla avanza por la ruta: es el único elemento que se mueve, y es
- * exactamente el que la persona está mirando.
  */
 export function C2Viaje() {
   const tema = useTema();

@@ -32,7 +32,8 @@ export const NOMBRES_DE_ICONO = [
   'moto',
   'escudo',
   'reloj',
-  'rayo'
+  'rayo',
+  'maletin'
 ] as const;
 export type NombreDeIcono = (typeof NOMBRES_DE_ICONO)[number];
 
@@ -80,6 +81,27 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
             borderRadius: t.trazo * 1.5,
             backgroundColor: t.activo ? t.color : 'transparent',
             position: 'absolute', bottom: t.tamano * 0.08
+          }} />
+        </>
+      );
+
+    // Un asa sobre un cuerpo: maletín reducido a lo mínimo. Hace pareja con la
+    // casa de `inicio` en los sitios guardados, así que comparte proporciones.
+    case 'maletin':
+      return (
+        <>
+          <View style={{
+            width: t.tamano * 0.34, height: t.tamano * 0.18,
+            borderWidth: t.trazo, borderBottomWidth: 0, borderColor: t.color,
+            borderTopLeftRadius: t.trazo * 2, borderTopRightRadius: t.trazo * 2,
+            position: 'absolute', top: t.tamano * 0.14
+          }} />
+          <View style={{
+            width: t.tamano * 0.78, height: t.tamano * 0.5,
+            borderWidth: t.trazo, borderColor: t.color,
+            borderRadius: t.trazo * 2,
+            backgroundColor: t.activo ? t.color : 'transparent',
+            position: 'absolute', bottom: t.tamano * 0.14
           }} />
         </>
       );

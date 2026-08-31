@@ -29,13 +29,43 @@ export const CONDUCTOR_DEMO = {
   zona: 'Zona demo · Maracaibo'
 } as const;
 
+/**
+ * La tasa del BCV.
+ *
+ * El dato es REAL en la aplicación: el servidor la guarda en su configuración
+ * de precios (`bcvRate`) y la devuelve con las tarifas, así que enseñarla en la
+ * cabecera no es inventar una funcionalidad. Esta cifra concreta sí es de
+ * demostración, y por eso vive aquí y no en ningún sitio del que pueda salir a
+ * la aplicación real.
+ */
+export const TASA_DEMO = {
+  etiqueta: 'Tasa BCV',
+  valor: 'Bs. 000,00',
+  nota: 'Cifra de ejemplo'
+} as const;
+
+/**
+ * Los sitios de siempre.
+ *
+ * «Trabajo» va sin dirección a propósito: hace falta ver cómo se muestra un
+ * atajo que existe pero está sin configurar, que es el estado en el que va a
+ * estar la mayoría de la gente el primer día.
+ */
+export const LUGARES_DEMO = [
+  { clave: 'casa', icono: 'inicio' as const, nombre: 'Casa', direccion: 'Dirección de ejemplo' },
+  { clave: 'trabajo', icono: 'maletin' as const, nombre: 'Trabajo' }
+] as const;
+
 export const SERVICIOS_DEMO = [
   {
     clave: 'mototaxi',
     icono: 'moto' as const,
     titulo: 'Mototaxi',
     detalle: 'Lo más rápido en ciudad',
-    precio: '$1,50',
+    // A cero a propósito: la tarifa la calcula el servidor con su
+    // configuración y la tasa del BCV. Una cifra creíble aquí acabaría citada
+    // como si fuera el precio real.
+    precio: '$0,00',
     disponible: true
   },
   {
@@ -63,7 +93,7 @@ export const VIAJE_DEMO = {
   valoracion: '4,9',
   origen: 'Punto de recogida de ejemplo',
   destino: 'Destino de ejemplo 1',
-  precio: '$1,50'
+  precio: '$0,00'
 } as const;
 
 /**

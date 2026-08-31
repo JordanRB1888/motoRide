@@ -252,6 +252,73 @@ test('el filo amarillo se usa con disciplina', () => {
   assert.ok(destacadas.length <= 2, `hay ${destacadas.length} superficies con filo: son demasiadas`);
 });
 
+// ---------------------------------------------------------------------------
+// El disco central
+// ---------------------------------------------------------------------------
+
+test('el disco central es la MISMA pieza en los dos roles', () => {
+  // Es la decisión de identidad: una forma que sirve en las dos pantallas. Si
+  // cada rol dibujara la suya, dejarían de ser la misma aplicación y habría que
+  // aprender dos cosas donde basta una.
+  const fuente = leer('ui/Navegacion.tsx');
+  assert.match(fuente, /function Disco\(/, 'hay un único disco');
+  assert.match(fuente, /export function ControlDeDisponibilidad/);
+  assert.match(fuente, /export function ControlDePedido/);
+  // Las dos lo usan.
+  assert.equal((fuente.match(/<Disco/g) ?? []).length, 2, 'los dos controles pintan el mismo disco');
+});
+
+test('el disco de la pasajera se cierra desde donde se abrió', () => {
+  const fuente = leer('ui/Navegacion.tsx');
+  assert.match(fuente, /abierto/, 'el disco conoce su estado abierto');
+  assert.match(fuente, /Aspa/, 'abierto se convierte en aspa de cerrar');
+  assert.match(fuente, /accessibilityState=\{\{ expanded: abierto \}\}/);
+});
+
+// ---------------------------------------------------------------------------
+// No prometer lo que no existe
+// ---------------------------------------------------------------------------
+
+test('la navegación no ofrece servicios que la aplicación no tiene', () => {
+  // +58express es mototaxi. Una rejilla con comida, tienda o paquetería se ve
+  // muy bien en una maqueta y es una promesa que nadie puede cumplir: los
+  // destinos reales de la pasajera son inicio, viajes, seguridad y perfil.
+  const fuente = sinComentarios('ui/Navegacion.tsx');
+  for (const inventado of ['marketplace', 'comida', 'supermercado', 'gift', 'delivery', 'envío', 'envio']) {
+    assert.doesNotMatch(fuente, new RegExp(inventado, 'i'), `la barra ofrece «${inventado}»`);
+  }
+});
+
+test('pedir por otra persona se anuncia como NO conectado', () => {
+  // El selector funciona en la interfaz, pero el backend no tiene campo de
+  // beneficiario ni forma de avisar a quien se monta. Enseñarlo sin decirlo
+  // sería prometer una función que no existe.
+  const pantallas = leer('preview/pantallasC2.tsx');
+  assert.match(pantallas, /todavía no está conectado al servidor/);
+
+  const trayecto = leer('ui/Trayecto.tsx');
+  assert.match(trayecto, /backend todavía no sabe[\s*]+pedir un viaje para un tercero/i);
+});
+
+test('la maqueta no enseña precios verosímiles', () => {
+  // La tarifa la calcula el servidor con su configuración y la tasa del BCV.
+  // Una cifra creíble en una maqueta es la forma más fácil de que alguien la
+  // tome por real; los ceros no engañan a nadie.
+  for (const fichero of ['preview/pantallasC2.tsx', 'preview/fixtures.ts']) {
+    const fuente = leer(fichero);
+    const precios = fuente.match(/\$\d+[.,]\d{2}/g) ?? [];
+    for (const precio of precios) {
+      assert.match(precio, /^\$0[.,]00$/, `${fichero} enseña ${precio} como si fuera una tarifa`);
+    }
+  }
+});
+
+test('la tasa del BCV que se enseña es de ejemplo', () => {
+  const fixtures = leer('preview/fixtures.ts');
+  assert.match(fixtures, /Cifra de ejemplo/);
+  assert.match(fixtures, /Bs\. 000,00/, 'el valor es obviamente ficticio');
+});
+
 test('la barra inferior respeta la franja del sistema', () => {
   const fuente = leer('ui/Navegacion.tsx');
   assert.match(fuente, /useSafeAreaInsets/, 'sin esto los iconos quedan bajo la barra de gestos');
