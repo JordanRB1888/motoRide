@@ -42,6 +42,68 @@ Cinco problemas, todos reales:
 Esta fase **no modifica nada de eso**: construye la fundación correcta al lado.
 Migrar el flujo antiguo es una fase con su propia autorización.
 
+## La compuerta del flujo antiguo
+
+La fundación nueva está apagada, pero el retiro antiguo **seguía siendo
+alcanzable**. Construir lo correcto al lado no reduce el riesgo de lo que ya
+está enchufado, así que WALLET-PAYOUTS-1A lo apaga.
+
+```
+LEGACY_PAYOUTS_ENABLED    apagada por defecto · sólo el literal '1' la enciende
+error                     403 { "error": "LEGACY_PAYOUTS_DISABLED" }
+```
+
+Dos puntos, y sólo dos:
+
+```
+POST  /api/wallet/payouts              bloqueado entero
+PATCH /api/admin/transactions/:id      bloqueado SÓLO para PAYOUT + APPROVED
+```
+
+**403 y no 503:** no es una indisponibilidad temporal que se resuelva
+reintentando, es una decisión de configuración. Un 503 invitaría a reintentar en
+bucle.
+
+**La compuerta administrativa es estrecha a propósito.** Sólo `PAYOUT`, y sólo
+`APPROVED` —la única rama que resta del saldo—. Las recargas (`TOP_UP`) y todo
+lo demás siguen exactamente igual: apagar el retiro no puede bloquear una
+recarga.
+
+**Rechazar sí se permite.** No mueve dinero, y es lo que deja una salida segura
+para los retiros que queden pendientes; bloquearlo también los dejaría atascados
+sin más remedio que tocar la base a mano.
+
+### Lo que la compuerta no es
+
+No es autenticación ni autorización. Va **después** de `requireAuth` y
+`requireRole`, así que una petición sin token sigue muriendo en el 401 y no
+revela que la funcionalidad existe pero está apagada. Encender la bandera no
+convierte a nadie en conductor aprobado ni en administrador.
+
+### Y no hay puente automático
+
+Con el flujo antiguo apagado, una petición **no** se redirige a la fundación
+nueva, no se convierte y no se intenta «hacer que funcione». Se rechaza. Un
+puente automático entre dos sistemas de dinero, montado sin que nadie lo pida,
+es peor que la ruta que se estaba apagando.
+
+### Un retiro pendiente no se paga solo
+
+Si queda un `PAYOUT` en `PENDING` de antes, con el flujo apagado **no puede
+aprobarse**. Requiere una resolución explícita: encender la bandera a
+conciencia, o rechazarlo. No hay migración automática al sistema nuevo.
+
+### El código está listo; producción todavía no
+
+```
+CODE_GUARD_READY: YES
+CURRENT_PRODUCTION_CONFIRMED_PROTECTED: NO
+```
+
+La compuerta existe en el código y está apagada por defecto, pero **nada de esto
+protege producción hasta que se despliegue**. Mientras el servicio siga
+ejecutando el código anterior, la ruta antigua sigue abierta allí.
+
 ## La cartera
 
 ```sql
