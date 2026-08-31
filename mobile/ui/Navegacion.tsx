@@ -372,8 +372,12 @@ function Destino({ destino, activo, onPress }: {
  */
 export const DESTINOS_DE_PASAJERA: readonly DestinoDeNavegacion[] = Object.freeze([
   { clave: 'inicio', icono: 'inicio', etiqueta: 'Inicio' },
-  { clave: 'viajes', icono: 'viajes', etiqueta: 'Viajes' },
-  { clave: 'seguridad', icono: 'escudo', etiqueta: 'Seguridad' },
+  // «Historial», no «Viajes»: lo que hay ahí son los que YA hiciste. «Viajes»
+  // en una aplicación de viajes no distingue nada — podría ser cualquier cosa.
+  { clave: 'historial', icono: 'reloj', etiqueta: 'Historial' },
+  // «Viaje seguro», no «Seguridad»: dice de qué va, y coincide con el nombre
+  // que la marca ya usa. «Seguridad» a secas suena a ajustes de contraseña.
+  { clave: 'viaje-seguro', icono: 'escudo', etiqueta: 'Viaje seguro' },
   { clave: 'perfil', icono: 'perfil', etiqueta: 'Perfil' }
 ]);
 
@@ -386,6 +390,6 @@ export const DESTINOS_DE_PASAJERA: readonly DestinoDeNavegacion[] = Object.freez
 export const DESTINOS_DE_CONDUCTOR: readonly DestinoDeNavegacion[] = Object.freeze([
   { clave: 'mapa', icono: 'inicio', etiqueta: 'Mapa' },
   { clave: 'jornada', icono: 'reloj', etiqueta: 'Jornada' },
-  { clave: 'viajes', icono: 'viajes', etiqueta: 'Viajes' },
+  { clave: 'historial', icono: 'viajes', etiqueta: 'Historial' },
   { clave: 'perfil', icono: 'perfil', etiqueta: 'Perfil' }
 ]);

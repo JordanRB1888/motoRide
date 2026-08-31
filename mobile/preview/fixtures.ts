@@ -133,6 +133,18 @@ export const PERFIL_DEMO = {
 } as const;
 
 /**
+ * El contexto de ubicación del conductor.
+ *
+ * No hay GPS todavía: estos valores llegan de aquí. Lo que existe en el código
+ * es el hueco con la forma que tendrá cuando haya ubicación real.
+ */
+export const CONTEXTO_DEMO = {
+  zona: 'Zona demo · Maracaibo',
+  cerca: 'un punto de ejemplo',
+  via: 'Vía de ejemplo'
+} as const;
+
+/**
  * Cifras de la jornada del conductor.
  *
  * Son PREVIEW y no salen de ninguna API. La cartera y los retiros están

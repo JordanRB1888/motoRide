@@ -22,9 +22,13 @@
  * LO QUE CAMBIA DE MEDIO
  *
  * El fondo de la web es un `radial-gradient`. React Native no tiene degradados
- * sin añadir una biblioteca, así que el resplandor se compone con tres discos
- * concéntricos de opacidad decreciente. Se ve equivalente y no añade nada al
- * paquete.
+ * sin añadir una biblioteca, así que se compone por capas.
+ *
+ * La primera versión usaba TRES discos, y era peor que no poner nada: con tan
+ * pocos pasos cada borde se veía, y el arranque quedaba con tres círculos
+ * dibujados donde la web tiene una transición continua. Ahora son doce capas
+ * con opacidad muy baja: el escalón entre una y la siguiente cae por debajo de
+ * lo que el ojo distingue y se lee como un resplandor, que es lo que es.
  *
  * MOVIMIENTO
  *
@@ -39,6 +43,14 @@ import { AccessibilityInfo, Animated, Easing, View } from 'react-native';
 import { Emblema } from './Marca';
 import { useTema } from '../theme/ThemeContext';
 import { AMARILLO, GRAFITO, TEXTO } from '../theme/primitives';
+
+/**
+ * Los radios del resplandor, del más ancho al más estrecho.
+ *
+ * Superpuestas, cada capa suma su opacidad donde solapa con las de dentro, y
+ * eso produce la curva: muy tenue en el borde exterior y clara en el centro.
+ */
+const CAPAS_DEL_RESPLANDOR = [560, 510, 465, 420, 380, 340, 300, 262, 224, 188, 152, 116];
 
 /** Un valor que da vueltas eternamente. Devuelve la cadena de grados ya lista. */
 function useGiro(duracion: number, activo: boolean, invertido = false) {
@@ -82,20 +94,19 @@ export function Arranque({ mensaje = 'Preparando tu viaje' }: { readonly mensaje
       justifyContent: 'center',
       backgroundColor: GRAFITO.abismo
     }}>
-      {/* El resplandor: tres discos, del más tenue al más claro. */}
-      {[
-        { tamano: 520, color: GRAFITO.fondo },
-        { tamano: 360, color: GRAFITO.superficie },
-        { tamano: 230, color: GRAFITO.elevada }
-      ].map(disco => (
+      {/* El resplandor, por capas. Doce pasos de opacidad baja: el borde de
+          cada uno queda por debajo de lo que se distingue, y el conjunto se lee
+          como el degradado continuo que tiene la web. */}
+      {CAPAS_DEL_RESPLANDOR.map(capa => (
         <View
-          key={disco.tamano}
+          key={capa}
           pointerEvents="none"
           style={{
             position: 'absolute',
-            width: disco.tamano, height: disco.tamano,
-            borderRadius: disco.tamano / 2,
-            backgroundColor: disco.color,
+            width: capa, height: capa,
+            borderRadius: capa / 2,
+            backgroundColor: GRAFITO.elevada,
+            opacity: 0.055,
             // Algo por encima del centro, como en la web.
             marginBottom: 90
           }}

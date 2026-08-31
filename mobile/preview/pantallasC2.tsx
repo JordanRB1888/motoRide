@@ -47,8 +47,14 @@ import {
   DESTINOS_DE_CONDUCTOR,
   DESTINOS_DE_PASAJERA
 } from '../ui/Navegacion';
-import { LogoHorizontal, MarcadorDeVehiculo, Vehiculo } from '../ui/Marca';
+import { LogoQueEntra, MarcadorDeVehiculo, Vehiculo } from '../ui/Marca';
 import { EntradaDeTransporteSeguro } from '../ui/Servicio';
+import {
+  BuscandoVehiculo,
+  FranjaDeContexto,
+  PanelDeJornada,
+  PulsoDeBusqueda
+} from '../ui/Estados';
 import {
   ChipDeBeneficiario,
   LugaresGuardados,
@@ -58,8 +64,11 @@ import {
 } from '../ui/Trayecto';
 import { useTema } from '../theme/ThemeContext';
 import type { TipoDeVehiculo } from '../theme/marca';
+import { Campana } from './pantallasC2Secciones';
 import {
+  AVISOS_DEMO,
   CONDUCTOR_DEMO,
+  CONTEXTO_DEMO,
   DESTINOS_RECIENTES_DEMO,
   JORNADA_DEMO,
   LUGARES_DEMO,
@@ -154,6 +163,16 @@ function CabeceraDePasajera() {
       </View>
 
       <View style={{ flex: 1 }} />
+
+      {/* La campana, junto a la tasa. Los avisos eran una pantalla a la que no
+          llevaba nada, y existir sin puerta es no existir. */}
+      <View style={{
+        borderRadius: 999,
+        backgroundColor: tema.color.superficieElevada,
+        ...SOBRE_EL_MAPA
+      }}>
+        <Campana sinLeer={AVISOS_DEMO.filter(aviso => aviso.sinLeer).length} />
+      </View>
 
       <Pressable
         accessibilityRole="button"
@@ -284,7 +303,7 @@ export function C2SelectorDeRol() {
         alignItems: 'center',
         gap: 18
       }}>
-        <LogoHorizontal ancho={210} />
+        <LogoQueEntra ancho={210} />
         <View style={{ alignItems: 'center', gap: 6 }}>
           <Txt nivel="titulo" centrado>¿Cómo quieres continuar?</Txt>
           <Txt nivel="pie" tono="secundario" centrado>
@@ -446,7 +465,7 @@ export function C2Acceso() {
       paddingBottom: 30
     }}>
       <View style={{ alignItems: 'center', gap: 22 }}>
-        <LogoHorizontal ancho={232} />
+        <LogoQueEntra ancho={232} />
         <View style={{ alignItems: 'center', gap: 6 }}>
           <Txt nivel="titulo">Entra a tu cuenta</Txt>
           <Txt nivel="cuerpo" tono="secundario" centrado>
@@ -508,7 +527,7 @@ export function C2InicioPasajera() {
           <CampoDeDestino />
 
           <View style={{ height: tema.ritmo.entreElementos }} />
-          <LugaresGuardados lugares={LUGARES_DEMO} />
+          <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
 
           <View style={{ height: tema.ritmo.entreElementos }} />
           <Separador />
@@ -565,7 +584,7 @@ export function C2PedirViaje() {
           <Trayecto origen={ORIGEN_DEMO} destino={DESTINO_DEMO} />
 
           <View style={{ height: tema.ritmo.entreElementos }} />
-          <LugaresGuardados lugares={LUGARES_DEMO} />
+          <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
 
           {/* Lo último a donde fuiste, aquí mismo. Es lo que se busca al abrir
               esto: la mayoría de los viajes repiten sitio, y obligarlos a
@@ -799,6 +818,59 @@ function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
 }
 
 // ---------------------------------------------------------------------------
+// Buscando
+// ---------------------------------------------------------------------------
+
+/**
+ * El momento entre pedir y que alguien acepte.
+ *
+ * Es el rato más largo de la aplicación y donde se decide si va bien o «se
+ * quedó pegada». El pulso sale de tu posición y se expande, como un sonar:
+ * dice que se busca ALREDEDOR de ti, que es lo que pasa. Un círculo girando
+ * diría «cargando» y podría ser cualquier aplicación.
+ *
+ * El mapa se atenúa para que el pulso mande, y la hoja se queda en lo mínimo:
+ * qué se busca y cómo salir.
+ */
+export function C2BuscandoVehiculo({ tipo = 'MOTO' }: { readonly tipo?: TipoDeVehiculo }) {
+  const tema = useTema();
+
+  return (
+    <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
+      <LienzoDeMapa vehiculos={MOTOS_CERCA.slice(0, 3)} conControles={false}>
+        {/* Atenuar el mapa: mientras se busca no hay nada que consultar ahí, y
+            el contraste que sobra le quita fuerza al pulso. */}
+        <View
+          pointerEvents="none"
+          style={{ position: 'absolute', inset: 0, backgroundColor: tema.color.fondo, opacity: 0.42 }}
+        />
+
+        <View
+          pointerEvents="none"
+          style={{ position: 'absolute', left: 0, right: 0, top: '6%', alignItems: 'center' }}
+        >
+          <PulsoDeBusqueda tipo={tipo} />
+        </View>
+
+        <HojaInferior estado="baja" conAsa={false} alturaAutomatica>
+          <BuscandoVehiculo tipo={tipo} />
+        </HojaInferior>
+      </LienzoDeMapa>
+
+      <BarraDeNavegacion
+        destinos={DESTINOS_DE_PASAJERA}
+        activo="inicio"
+        control={<ControlDePedido abierto />}
+      />
+    </View>
+  );
+}
+
+export function C2BuscandoAuto() {
+  return <C2BuscandoVehiculo tipo="AUTO" />;
+}
+
+// ---------------------------------------------------------------------------
 // 6 y 7 · Inicio del conductor
 // ---------------------------------------------------------------------------
 
@@ -820,38 +892,33 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <LienzoDeMapa vehiculos={conectado ? [mio, ...MOTOS_CERCA.slice(0, 2)] : [mio]}>
+        {/* Dónde está y si le llegan viajes, en una línea. Conectado enseña
+            el punto conocido más cercano; desconectado, sólo la zona: sin
+            aceptar viajes, la calle exacta no le sirve para nada. */}
         <View style={{
           position: 'absolute',
           left: tema.ritmo.margenPantalla,
           right: tema.ritmo.margenPantalla,
           top: 18,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 10,
-          paddingHorizontal: 14, paddingVertical: 10,
-          borderRadius: 999,
-          backgroundColor: tema.color.superficieElevada,
-          ...SOBRE_EL_MAPA
+          alignItems: 'flex-start'
         }}>
-          <View style={{
-            width: 8, height: 8, borderRadius: 4,
-            backgroundColor: conectado ? tema.color.exito : tema.color.textoTenue
-          }} />
-          <Txt nivel="etiqueta" tono={conectado ? 'exito' : 'tenue'}>
-            {conectado ? 'En línea · GPS activo' : 'Fuera de línea'}
-          </Txt>
-          <View style={{ flex: 1 }} />
-          <Txt nivel="etiqueta" tono="secundario">{CONDUCTOR_DEMO.zona}</Txt>
+          <FranjaDeContexto
+            contexto={{
+              enLinea: conectado,
+              zona: CONTEXTO_DEMO.zona,
+              cerca: conectado ? CONTEXTO_DEMO.cerca : undefined,
+              via: conectado ? CONTEXTO_DEMO.via : undefined
+            }}
+          />
         </View>
 
         {/* Conectado, la hoja se encoge a lo que ocupan las tres cifras: el
             conductor necesita calle, no panel. Desconectado crece, porque ahí
             sí hay algo que leer. */}
-        <HojaInferior
-          estado={conectado ? 'baja' : 'media'}
-          conAsa={!conectado}
-          alturaAutomatica={conectado}
-        >
+        {/* Compacta en los dos estados. Antes, fuera de línea ocupaba media
+            pantalla para decir una frase: el conductor necesita calle, no
+            panel, también mientras espera a conectarse. */}
+        <HojaInferior estado="baja" conAsa={false} alturaAutomatica>
           {conectado ? (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               {[
@@ -871,20 +938,13 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
               ))}
             </View>
           ) : (
-            <View style={{ gap: tema.ritmo.entreElementos }}>
-              <View style={{ gap: 5 }}>
-                <Txt nivel="titulo">Listo para salir</Txt>
-                <Txt nivel="cuerpo" tono="secundario">
-                  Conéctate con el botón de abajo y empieza a recibir viajes.
-                </Txt>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Icono nombre="moto" color={tema.color.textoSecundario} tamano={20} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt nivel="cuerpo">Listo para salir</Txt>
+                <Txt nivel="pie" tono="tenue">{CONDUCTOR_DEMO.vehiculo}</Txt>
               </View>
-              <Separador />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Icono nombre="moto" color={tema.color.textoSecundario} tamano={19} />
-                <Txt nivel="pie" tono="secundario">{CONDUCTOR_DEMO.vehiculo}</Txt>
-                <View style={{ flex: 1 }} />
-                <Insignia texto="Verificado" tono="exito" />
-              </View>
+              <Insignia texto="Verificado" tono="exito" />
             </View>
           )}
         </HojaInferior>
@@ -899,6 +959,65 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
             onAlternar={() => setConectado(valor => !valor)}
           />
         }
+      />
+    </View>
+  );
+}
+
+/**
+ * El panel de jornada, al tocar el disco del conductor.
+ *
+ * Una ventana pequeña, no una pantalla. Se abre en un semáforo: se mira, se
+ * comprueba y se cierra. Todo lo que no quepa en ese tiempo sobra, así que los
+ * datos van en dos columnas —la mitad de alto que seis filas para lo mismo— y
+ * el mapa sigue viéndose por encima.
+ */
+export function C2PanelDeJornada() {
+  const tema = useTema();
+
+  const mio: VehiculoEnMapa = {
+    clave: 'yo', tipo: 'MOTO', en: { x: 48, y: 26 }, rumbo: 12, destacado: true
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
+      <LienzoDeMapa vehiculos={[mio, ...MOTOS_CERCA.slice(0, 2)]} conControles={false}>
+        <View style={{
+          position: 'absolute',
+          left: tema.ritmo.margenPantalla,
+          right: tema.ritmo.margenPantalla,
+          top: 18,
+          alignItems: 'flex-start'
+        }}>
+          <FranjaDeContexto
+            contexto={{
+              enLinea: true,
+              zona: CONTEXTO_DEMO.zona,
+              cerca: CONTEXTO_DEMO.cerca,
+              via: CONTEXTO_DEMO.via
+            }}
+          />
+        </View>
+
+        <HojaInferior estado="media" alturaAutomatica>
+          <PanelDeJornada
+            jornada={{
+              enLinea: true,
+              gpsActivo: true,
+              vehiculo: CONDUCTOR_DEMO.vehiculo,
+              zona: CONTEXTO_DEMO.zona,
+              viajes: JORNADA_DEMO.viajes,
+              tiempoEnLinea: JORNADA_DEMO.horas,
+              resumen: JORNADA_DEMO.resumen
+            }}
+          />
+        </HojaInferior>
+      </LienzoDeMapa>
+
+      <BarraDeNavegacion
+        destinos={DESTINOS_DE_CONDUCTOR}
+        activo="mapa"
+        control={<ControlDeDisponibilidad enLinea />}
       />
     </View>
   );

@@ -22,7 +22,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { AtajoAlLaboratorio } from '../components/AtajoAlLaboratorio';
 import { Pantalla } from '../components/Pantalla';
 import { Boton, Txt } from '../ui/componentes';
-import { LogoHorizontal } from '../ui/Marca';
+import { LogoQueEntra } from '../ui/Marca';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { esRolMovil, type RolMovil } from '../services/session';
@@ -91,7 +91,7 @@ export default function Acceso() {
           sobre fondo vacío: correcta y de nadie. Lo que hay que reconocer al
           abrir la aplicación es el logotipo, no un encabezado. */}
       <View style={{ paddingTop: tema.ritmo.entreBloques, alignItems: 'center' }}>
-        <LogoHorizontal ancho={232} />
+        <LogoQueEntra ancho={232} />
       </View>
 
       <View style={{ paddingTop: tema.ritmo.entreBloques, gap: 6 }}>

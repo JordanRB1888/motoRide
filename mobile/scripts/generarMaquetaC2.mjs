@@ -82,7 +82,10 @@ const TRAZOS = {
   rayo: '<path d="M13.5 2.5 5 13.5h5.5L9.5 21.5 19 10.5h-5.7z"/>',
   maletin: '<rect x="3" y="7.5" width="18" height="12.5" rx="2.5"/><path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5"/>',
   mas: '<path d="M12 5v14M5 12h14"/>',
-  galon: '<path d="M6 9.5 12 15l6-5.5"/>'
+  galon: '<path d="M6 9.5 12 15l6-5.5"/>',
+  campana: '<path d="M6 10a6 6 0 0 1 12 0c0 4 1.4 5.6 2 6.2H4c.6-.6 2-2.2 2-6.2z"/><path d="M10 19.5a2.2 2.2 0 0 0 4 0"/>',
+  ajustes: '<path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="17" r="2"/>',
+  flecha: '<path d="M9 6l6 6-6 6"/>'
 };
 
 const icono = (nombre, color = 'currentColor', tamano = 23) =>
@@ -193,7 +196,10 @@ const BASE = `
   .aspa i:first-child{transform:rotate(45deg)} .aspa i:last-child{transform:rotate(-45deg)}
 
   .flotante{position:absolute;display:flex;align-items:center;border-radius:999px;
-    background:var(--elevada);box-shadow:0 5px 14px rgba(0,0,0,.4)}
+    background:var(--elevada);box-shadow:0 5px 14px rgba(0,0,0,.4);white-space:nowrap;
+    max-width:calc(100% - var(--margen) * 2);overflow:hidden}
+  /* El lugar se recorta; el estado, nunca: es lo primero que se lee. */
+  .flotante .recorta{overflow:hidden;text-overflow:ellipsis}
   .punto{width:8px;height:8px;border-radius:50%}
 `;
 
@@ -251,10 +257,18 @@ const CABECERA_PASAJERA = `
       <span class="etq">Demo Pasajera</span>
       <span class="pie t3">Zona demo · Maracaibo</span></span>
   </div>
-  <div class="flotante" style="right:var(--margen);top:16px;flex-direction:column;align-items:flex-end;
-    gap:1px;padding:7px 13px">
-    <span class="pie t3">Tasa BCV</span>
-    <span class="etq ac">Bs. 000,00</span>
+  <div style="position:absolute;right:var(--margen);top:16px;display:flex;align-items:center;gap:8px">
+    <span class="flotante" style="position:relative;width:40px;height:40px;border-radius:50%;
+      display:grid;place-items:center">
+      ${icono('campana', 'var(--texto-2)', 22)}
+      <span style="position:absolute;top:7px;right:9px;width:9px;height:9px;border-radius:50%;
+        background:var(--acento);border:2px solid var(--fondo)"></span>
+    </span>
+    <span class="flotante" style="position:relative;flex-direction:column;align-items:flex-end;
+      gap:1px;padding:7px 13px">
+      <span class="pie t3">Tasa BCV</span>
+      <span class="etq ac">Bs. 000,00</span>
+    </span>
   </div>`;
 
 const LUGARES = `
@@ -262,6 +276,8 @@ const LUGARES = `
     <span class="pastilla">${icono('inicio', 'var(--acento)', 16)}<span class="etq">Casa</span></span>
     <span class="pastilla" style="opacity:.72">${icono('maletin', 'var(--texto-3)', 16)}
       <span class="etq t3">Trabajo</span>${icono('mas', 'var(--texto-3)', 14)}</span>
+    <span class="pastilla" style="background:transparent;border:1px solid var(--borde);gap:7px">
+      ${icono('mas', 'var(--acento)', 16)}<span class="etq t2">Añadir</span></span>
   </div>`;
 
 const TRAYECTO = `
@@ -325,16 +341,16 @@ const disco = modo => {
   </span>`;
 };
 
-const barraPasajera = (modo = 'pedir') => `
+const barraPasajera = (modo = 'pedir', activo = 'inicio') => `
   <div class="barra">
-    ${[['Inicio', 'inicio'], ['Viajes', 'viajes']].map(([n, ic], i) => `
-      <div class="dest-nav">${icono(ic, i === 0 ? 'var(--acento)' : 'var(--texto-3)')}
-        <span class="etq ${i === 0 ? '' : 't3'}">${n}</span></div>`).join('')}
+    ${[['Inicio', 'inicio'], ['Historial', 'reloj']].map(([n, ic], i) => `
+      <div class="dest-nav">${icono(ic, i === 0 && activo === 'inicio' ? 'var(--acento)' : 'var(--texto-3)')}
+        <span class="etq ${i === 0 && activo === 'inicio' ? '' : 't3'}">${n}</span></div>`).join('')}
     <div class="disco-zona">
       ${disco(modo)}
       <span class="etq ${modo === 'abierto' ? 't3' : 'ac'}">${modo === 'abierto' ? 'Cerrar' : 'Pedir'}</span>
     </div>
-    ${[['Seguridad', 'escudo'], ['Perfil', 'perfil']].map(([n, ic]) => `
+    ${[['Viaje seguro', 'escudo'], ['Perfil', 'perfil']].map(([n, ic]) => `
       <div class="dest-nav">${icono(ic, 'var(--texto-3)')}
         <span class="etq t3">${n}</span></div>`).join('')}
   </div>`;
@@ -348,13 +364,24 @@ const barraConductor = enLinea => `
       ${disco(enLinea ? 'online' : 'offline')}
       <span class="etq ${enLinea ? 'ok' : 't3'}">${enLinea ? 'En línea' : 'Conectar'}</span>
     </div>
-    ${[['Viajes', 'viajes'], ['Perfil', 'perfil']].map(([n, ic]) => `
+    ${[['Historial', 'viajes'], ['Perfil', 'perfil']].map(([n, ic]) => `
       <div class="dest-nav">${icono(ic, 'var(--texto-3)')}
         <span class="etq t3">${n}</span></div>`).join('')}
   </div>`;
 
 const hojaAlta = `height:${Math.round(ALTO * FRACCION_POR_ESTADO.alta)}px`;
 const hojaMedia = `height:${Math.round(ALTO * FRACCION_POR_ESTADO.media)}px`;
+
+/** El sonar: tres anillos saliendo de tu posición. */
+const pulso = tipo => `
+  <span style="position:absolute;left:50%;top:22%;transform:translate(-50%,-50%);
+    width:186px;height:186px;display:grid;place-items:center">
+    ${[1, 0.68, 0.4].map((escala, i) => `
+      <span style="position:absolute;width:${186 * escala}px;height:${186 * escala}px;border-radius:50%;
+        border:2px solid var(--acento);opacity:${0.12 + i * 0.14}"></span>`).join('')}
+    <img src="marca/${tipo === 'MOTO' ? 'moto-mapa.png' : 'auto-mapa.png'}"
+      width="62" height="62" style="position:relative" alt="">
+  </span>`;
 
 // ---------------------------------------------------------------------------
 // Las pantallas
@@ -573,24 +600,19 @@ const PANTALLAS = {
   'conductor-offline': () => `
     <div class="tel">
       <div class="mapa">${CALLES}${vehiculo('MOTO', 48, 30, 12, true)}${CTRL}</div>
-      <div class="flotante" style="left:var(--margen);right:var(--margen);top:18px;gap:10px;padding:10px 14px">
+      <div class="flotante" style="left:var(--margen);top:18px;gap:10px;padding:9px 14px">
         <span class="punto" style="background:var(--texto-3)"></span>
-        <span class="etq t3">Fuera de línea</span><span class="crece"></span>
+        <span class="etq t3">Fuera de línea</span>
+        <span style="width:1px;height:13px;background:var(--borde)"></span>
         <span class="etq t2">Zona demo · Maracaibo</span>
       </div>
-      <div class="hoja" style="${hojaMedia};bottom:76px">
-        <span class="asa"></span>
-        <div style="display:grid;gap:var(--gap)">
-          <div style="display:grid;gap:5px">
-            <span class="titulo">Listo para salir</span>
-            <span class="cuerpo t2">Conéctate con el botón de abajo y empieza a recibir viajes.</span>
-          </div>
-          <span class="sep"></span>
-          <div style="display:flex;align-items:center;gap:10px">
-            ${icono('moto', 'var(--texto-2)', 19)}
-            <span class="pie t2">Moto demo · Placa DEMO-000</span><span class="crece"></span>
-            <span class="etq ok insignia">Verificado</span>
-          </div>
+      <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
+        <div style="display:flex;align-items:center;gap:12px;padding-bottom:var(--pad)">
+          ${icono('moto', 'var(--texto-2)', 20)}
+          <span style="flex:1;display:grid;gap:2px">
+            <span class="cuerpo">Listo para salir</span>
+            <span class="pie t3">Moto demo · Placa DEMO-000</span></span>
+          <span class="etq ok insignia">Verificado</span>
         </div>
       </div>
       ${barraConductor(false)}
@@ -599,10 +621,11 @@ const PANTALLAS = {
   'conductor-online': () => `
     <div class="tel">
       <div class="mapa">${CALLES}${vehiculo('MOTO', 48, 30, 12, true)}${MOTOS_POCAS}${CTRL}</div>
-      <div class="flotante" style="left:var(--margen);right:var(--margen);top:18px;gap:10px;padding:10px 14px">
+      <div class="flotante" style="left:var(--margen);top:18px;gap:10px;padding:9px 14px">
         <span class="punto" style="background:var(--exito)"></span>
-        <span class="etq ok">En línea · GPS activo</span><span class="crece"></span>
-        <span class="etq t2">Zona demo · Maracaibo</span>
+        <span class="etq ok">En línea</span>
+        <span style="width:1px;height:13px;background:var(--borde)"></span>
+        <span class="etq t2 recorta">Cerca de un punto de ejemplo · Vía de ejemplo</span>
       </div>
       <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
         <div style="display:flex;padding-bottom:var(--pad)">
@@ -647,6 +670,60 @@ const PANTALLAS = {
       </div>
     </div>`,
 
+  'buscando-moto': () => `
+    <div class="tel">
+      <div class="mapa">${CALLES}${MOTOS_TRES}
+        <span style="position:absolute;inset:0;background:var(--fondo);opacity:.42"></span>
+        ${pulso('MOTO')}
+      </div>
+      <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
+        <div style="display:grid;gap:var(--gap);padding-bottom:var(--pad)">
+          <div style="display:grid;gap:4px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="titulo">Buscando tu moto</span>
+              ${[1, .55, .3].map(o => `<span style="width:5px;height:5px;border-radius:50%;
+                background:var(--acento);opacity:${o}"></span>`).join('')}
+            </div>
+            <span class="cuerpo t2">Avisando a los conductores que están cerca de ti.</span>
+          </div>
+          <div class="boton sec" style="border:1px solid var(--borde)">Cancelar</div>
+        </div>
+      </div>
+      ${barraPasajera('abierto')}
+    </div>`,
+
+  'panel-jornada': () => `
+    <div class="tel">
+      <div class="mapa">${CALLES}${vehiculo('MOTO', 48, 26, 12, true)}${MOTOS_POCAS}</div>
+      <div class="flotante" style="left:var(--margen);top:18px;gap:10px;padding:9px 14px">
+        <span class="punto" style="background:var(--exito)"></span>
+        <span class="etq ok">En línea</span>
+        <span style="width:1px;height:13px;background:var(--borde)"></span>
+        <span class="etq t2 recorta">Cerca de un punto de ejemplo · Vía de ejemplo</span>
+      </div>
+      <div class="hoja" style="bottom:76px;padding-top:0">
+        <span class="asa"></span>
+        <div style="display:grid;gap:var(--gap);padding-bottom:var(--pad)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="punto" style="background:var(--exito)"></span>
+            <span class="enc">En línea</span><span class="crece"></span>
+            ${icono('destino', 'var(--exito)', 14)}<span class="etq ok">GPS activo</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap">
+            ${[['Vehículo', 'Moto demo · DEMO-000'], ['Zona', 'Zona demo · Maracaibo'],
+               ['Viajes de hoy', '8'], ['En línea', '5 h 20 m'], ['Resumen', '—']].map(([e, v]) => `
+              <span style="width:50%;padding:7px 12px 7px 0;display:grid;gap:2px;min-width:0">
+                <span class="pie t3">${e}</span>
+                <span class="cuerpo" style="overflow:hidden;text-overflow:ellipsis;
+                  white-space:nowrap">${v}</span></span>`).join('')}
+          </div>
+          <div class="boton sec" style="border:1px solid var(--borde)">Salir de línea</div>
+          <div style="text-align:center"><span class="etq t3">Cerrar</span></div>
+        </div>
+      </div>
+      ${barraConductor(true)}
+    </div>`,
+
   'punto-en-mapa': () => `
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS}
@@ -681,6 +758,8 @@ const NOMBRES = {
   pedir: 'Pedir viaje · disco abierto',
   'para-quien': '¿Para quién es el viaje?',
   confirmar: 'Confirmar el viaje',
+  'buscando-moto': 'Buscando tu moto',
+  'panel-jornada': 'Panel de jornada',
   'punto-en-mapa': 'Elegir punto en el mapa',
   'conductor-offline': 'Conductor · fuera de línea',
   'conductor-online': 'Conductor · en línea',
@@ -759,8 +838,9 @@ mismo disco la cierra convertido en aspa: no hay que buscar dónde se cierra lo 
 const ORDEN = [
   ['El arranque y la entrada', ['splash', 'rol', 'acceso']],
   ['La pasajera: del reposo a pedir', ['pasajera', 'pedir', 'confirmar']],
+  ['Esperando', ['buscando-moto']],
   ['Decisiones sobre el mapa', ['para-quien', 'punto-en-mapa']],
-  ['El conductor', ['conductor-offline', 'conductor-online']],
+  ['El conductor', ['conductor-offline', 'conductor-online', 'panel-jornada']],
   ['El viaje', ['viaje']]
 ];
 

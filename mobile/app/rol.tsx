@@ -19,7 +19,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AtajoAlLaboratorio } from '../components/AtajoAlLaboratorio';
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
-import { LogoHorizontal } from '../ui/Marca';
+import { LogoQueEntra } from '../ui/Marca';
 import { colores, espaciado, tipografia } from '../theme/tokens';
 import { guardarUltimoRol, type RolMovil } from '../services/session';
 
@@ -46,7 +46,7 @@ export default function SelectorDeRol() {
           verdad eso era quedarse corto justo en la pantalla que abre la
           aplicación. */}
       <View style={estilos.cabecera}>
-        <LogoHorizontal ancho={214} />
+        <LogoQueEntra ancho={214} />
         <Text style={estilos.lema}>Mototaxi en Maracaibo</Text>
       </View>
 

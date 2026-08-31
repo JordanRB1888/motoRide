@@ -1,5 +1,5 @@
 /**
- * Las secciones de C2: perfil, saldo, historial, seguridad, avisos y ayuda.
+ * Las secciones de C2: perfil, saldo, historial, viaje seguro, avisos y ayuda.
  *
  * TODAS EXISTEN EN LA APLICACIÓN DE VERDAD
  *
@@ -14,6 +14,17 @@
  * quién viene, por dónde vas. Consultar un historial o leer un aviso no pasa en
  * ningún sitio, así que un mapa detrás sería decoración que le roba espacio al
  * contenido. Mapa donde hay movimiento; lista donde hay que leer.
+ *
+ * DÓNDE VIVE CADA COSA
+ *
+ * «Viaje seguro» es lo que protege un trayecto: el aviso de emergencia,
+ * compartir por dónde vas, a quién llamar, comprobar a quién te subes. Todo
+ * eso pasa *durante* un viaje y por eso tiene pestaña propia.
+ *
+ * Los ajustes de la cuenta —contraseña, avisos, preferencias— viven dentro del
+ * perfil. No son urgentes y no se buscan con prisa; ocupar una pestaña con
+ * ellos sería gastar uno de los cinco sitios de la barra en algo que se visita
+ * dos veces al año.
  *
  * EL SALDO ES EL CASO DELICADO
  *
@@ -41,27 +52,76 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
+ * La campana de avisos.
+ *
+ * Va en la cabecera de las secciones y en el inicio, que son las pantallas
+ * donde uno está mirando y no conduciendo. Con algo sin leer lleva un punto
+ * amarillo; sin nada, sólo la campana.
+ *
+ * Antes los avisos eran una pantalla suelta a la que no llevaba nada: existir
+ * sin puerta es no existir.
+ */
+export function Campana({ sinLeer = 0, onPress }: {
+  readonly sinLeer?: number;
+  readonly onPress?: () => void;
+}) {
+  const tema = useTema();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={sinLeer > 0 ? `Avisos: ${sinLeer} sin leer` : 'Avisos'}
+      style={({ pressed }) => ({
+        width: 40, height: 40, borderRadius: 20,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: pressed ? tema.color.superficieElevada : 'transparent'
+      })}
+    >
+      <Icono nombre="campana" color={tema.color.textoSecundario} tamano={22} />
+      {sinLeer > 0 ? (
+        <View style={{
+          position: 'absolute', top: 7, right: 9,
+          width: 9, height: 9, borderRadius: 5,
+          backgroundColor: tema.color.acento,
+          // El aro del color del fondo separa el punto de la campana; sin él
+          // se leen como una sola forma.
+          borderWidth: 2, borderColor: tema.color.fondo
+        }} />
+      ) : null}
+    </Pressable>
+  );
+}
+
+/**
  * Una sección: título, contenido que se desplaza y la barra de siempre.
  *
  * La barra se queda porque estas pantallas son destinos de la navegación, no
  * pantallas apiladas encima: quitarla dejaría a la persona sin saber cómo
  * volver a donde estaba.
  */
-function Seccion({ titulo, activo, children }: {
+function Seccion({ titulo, activo, conCampana = true, children }: {
   readonly titulo: string;
   readonly activo: string;
+  readonly conCampana?: boolean;
   readonly children: ReactNode;
 }) {
   const tema = useTema();
+  const sinLeer = AVISOS_DEMO.filter(aviso => aviso.sinLeer).length;
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <View style={{
-        paddingTop: 22,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingTop: 18,
         paddingBottom: tema.ritmo.entreElementos,
-        paddingHorizontal: tema.ritmo.margenPantalla
+        paddingLeft: tema.ritmo.margenPantalla,
+        paddingRight: conCampana ? tema.ritmo.margenPantalla - 8 : tema.ritmo.margenPantalla
       }}>
         <Txt nivel="titulo" accessibilityRole="header">{titulo}</Txt>
+        <View style={{ flex: 1 }} />
+        {conCampana ? <Campana sinLeer={sinLeer} /> : null}
       </View>
 
       <ScrollView
@@ -85,14 +145,17 @@ function Seccion({ titulo, activo, children }: {
 }
 
 /** Una fila con icono, texto y —si hace falta— algo a la derecha. */
-function Fila({ icono, titulo, detalle, derecha, onPress }: {
+function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
   readonly icono: NombreDeIcono;
   readonly titulo: string;
   readonly detalle?: string;
   readonly derecha?: ReactNode;
+  /** `peligro` para lo que no tiene vuelta atrás. */
+  readonly tono?: 'normal' | 'peligro';
   readonly onPress?: () => void;
 }) {
   const tema = useTema();
+  const color = tono === 'peligro' ? tema.color.peligro : tema.color.textoSecundario;
 
   return (
     <Pressable
@@ -110,16 +173,35 @@ function Fila({ icono, titulo, detalle, derecha, onPress }: {
       <View style={{
         width: 36, height: 36, borderRadius: 18,
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: tema.color.superficieElevada
+        backgroundColor: tono === 'peligro' ? `${tema.color.peligro}1f` : tema.color.superficieElevada
       }}>
-        <Icono nombre={icono} color={tema.color.textoSecundario} tamano={18} />
+        <Icono nombre={icono} color={color} tamano={18} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Txt nivel="cuerpo">{titulo}</Txt>
+        <Txt nivel="cuerpo" tono={tono === 'peligro' ? 'secundario' : 'primario'}>{titulo}</Txt>
         {detalle ? <Txt nivel="pie" tono="tenue">{detalle}</Txt> : null}
       </View>
       {derecha}
+      <Galon />
     </Pressable>
+  );
+}
+
+/** La punta que dice «esto lleva a algún sitio». */
+function Galon() {
+  const tema = useTema();
+
+  return (
+    <View style={{ width: 9, height: 14, justifyContent: 'center' }}>
+      {[38, -38].map((giro, indice) => (
+        <View key={giro} style={{
+          position: 'absolute',
+          width: 8, height: 1.7, borderRadius: 1,
+          backgroundColor: tema.color.textoTenue,
+          transform: [{ rotate: `${giro}deg` }, { translateY: indice === 0 ? -2.4 : 2.4 }]
+        }} />
+      ))}
+    </View>
   );
 }
 
@@ -139,6 +221,17 @@ function Grupo({ titulo, children }: { readonly titulo: string; readonly childre
 // Perfil
 // ---------------------------------------------------------------------------
 
+/**
+ * El perfil, y todo lo que no urge.
+ *
+ * Aquí viven los ajustes de cuenta, los avisos y la configuración. Ninguna de
+ * esas tres se busca con prisa, y ninguna merece uno de los cinco sitios de la
+ * barra: se visitan dos veces al año, y la barra es para lo de todos los días.
+ *
+ * Lo irreversible va al final y separado. «Eliminar cuenta» junto a «Cerrar
+ * sesión» en la misma lista es un accidente esperando: se parecen, están
+ * juntas, y una de las dos no tiene vuelta.
+ */
 export function C2Perfil() {
   const tema = useTema();
 
@@ -167,22 +260,41 @@ export function C2Perfil() {
         </View>
       </View>
 
-      <Grupo titulo="Tus datos">
-        <Fila icono="perfil" titulo="Teléfono" detalle={PERFIL_DEMO.telefono} />
-        <Separador />
-        <Fila icono="perfil" titulo="Correo" detalle={PERFIL_DEMO.correo} />
-      </Grupo>
-
       <Grupo titulo="Tu cuenta">
+        <Fila icono="perfil" titulo="Tus datos" detalle="Nombre, teléfono y correo" />
+        <Separador />
         <Fila icono="inicio" titulo="Direcciones guardadas" detalle="Casa, trabajo y las que añadas" />
         <Separador />
-        <Fila icono="escudo" titulo="Seguridad" detalle="Contactos y ajustes de protección" />
-        <Separador />
-        <Fila icono="reloj" titulo="Cambiar de modo" detalle="Pasar a conductor" />
+        <Fila icono="escudo" titulo="Seguridad de la cuenta" detalle="Contraseña y sesiones abiertas" />
       </Grupo>
 
-      <View style={{ marginTop: tema.ritmo.entreBloques }}>
+      <Grupo titulo="Preferencias">
+        <Fila icono="campana" titulo="Notificaciones" detalle="Qué avisos quieres recibir" />
+        <Separador />
+        <Fila icono="ajustes" titulo="Configuración" detalle="Idioma, mapa y apariencia" />
+        <Separador />
+        <Fila icono="moto" titulo="Cambiar de modo" detalle="Pasar a conductor" />
+      </Grupo>
+
+      <Grupo titulo="Dinero">
+        <Fila icono="rayo" titulo="Tu saldo" detalle="Todavía no está activo" />
+      </Grupo>
+
+      <Grupo titulo="Ayuda">
+        <Fila icono="viajes" titulo="Soporte" detalle="Escríbenos si algo no cuadra" />
+      </Grupo>
+
+      <View style={{ marginTop: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
         <Boton titulo="Cerrar sesión" variante="secundario" onPress={() => undefined} />
+
+        {/* Lo que no tiene vuelta atrás, separado y en rojo. */}
+        <Separador />
+        <Fila
+          icono="perfil"
+          titulo="Eliminar cuenta"
+          detalle="Esta acción no se puede deshacer"
+          tono="peligro"
+        />
       </View>
     </Seccion>
   );
@@ -248,7 +360,7 @@ export function C2Historial() {
   const tema = useTema();
 
   return (
-    <Seccion titulo="Tus viajes" activo="viajes">
+    <Seccion titulo="Tu historial" activo="historial">
       {HISTORIAL_DEMO.map((viaje, indice) => (
         <View key={viaje.clave}>
           {indice > 0 ? <Separador /> : null}
@@ -293,24 +405,28 @@ export function C2Historial() {
 }
 
 // ---------------------------------------------------------------------------
-// Seguridad
+// Viaje seguro
 // ---------------------------------------------------------------------------
 
 /**
- * Seguridad.
+ * Viaje seguro.
  *
- * El botón de emergencia va arriba, grande y separado del resto. Es lo único de
+ * Se llamaba «Seguridad», que en una aplicación suena a contraseñas y sesiones.
+ * Esto es otra cosa: lo que protege un trayecto mientras ocurre. El nombre nuevo
+ * lo dice, y además es el que la marca ya usa con Transporte Seguro.
+ *
+ * El aviso de emergencia va arriba, grande y separado del resto. Es lo único de
  * toda la aplicación que se busca con prisa y quizá sin mirar bien, así que no
  * puede estar al final de una lista ni parecerse a los demás elementos.
  *
  * Va en rojo y no en amarillo: el amarillo es la marca y aquí significaría
  * «esto es de +58express», no «esto es urgente».
  */
-export function C2Seguridad() {
+export function C2ViajeSeguro() {
   const tema = useTema();
 
   return (
-    <Seccion titulo="Seguridad" activo="seguridad">
+    <Seccion titulo="Viaje seguro" activo="viaje-seguro">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Emergencia. Pedir ayuda ahora"
@@ -342,16 +458,18 @@ export function C2Seguridad() {
         <EntradaDeTransporteSeguro />
       </View>
 
-      <Grupo titulo="Durante el viaje">
+      <Grupo titulo="Mientras vas de camino">
         <Fila icono="viajes" titulo="Compartir mi viaje" detalle="Que alguien vea por dónde vas" />
         <Separador />
         <Fila icono="perfil" titulo="Contactos de confianza" detalle="A quién avisar si pasa algo" />
         <Separador />
         <Fila icono="escudo" titulo="Verificar a tu conductor" detalle="Comprobar placa y foto antes de subir" />
+        <Separador />
+        <Fila icono="rayo" titulo="Ayuda durante el viaje" detalle="Hablar con soporte sin salir del viaje" />
       </Grupo>
 
-      <Grupo titulo="Ayuda">
-        <Fila icono="rayo" titulo="Centro de seguridad" detalle="Consejos y qué hacer en cada caso" />
+      <Grupo titulo="Aprender">
+        <Fila icono="inicio" titulo="Centro de seguridad" detalle="Consejos y qué hacer en cada caso" />
       </Grupo>
     </Seccion>
   );
@@ -361,19 +479,27 @@ export function C2Seguridad() {
 // Avisos
 // ---------------------------------------------------------------------------
 
+/**
+ * Los avisos.
+ *
+ * Cada uno lleva a donde pasó la cosa: el de un viaje abre ese viaje, el de
+ * Transporte Seguro abre su traslado. Un aviso que no lleva a ningún sitio
+ * obliga a buscar a mano lo que acaba de anunciar.
+ */
 export function C2Avisos() {
   const tema = useTema();
 
   return (
-    <Seccion titulo="Avisos" activo="perfil">
+    <Seccion titulo="Avisos" activo="perfil" conCampana={false}>
       {AVISOS_DEMO.map((aviso, indice) => (
         <View key={aviso.clave}>
           {indice > 0 ? <Separador /> : null}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${aviso.titulo}. ${aviso.detalle}. ${aviso.cuando}`}
+            accessibilityLabel={`${aviso.titulo}. ${aviso.detalle}. ${aviso.cuando}${aviso.sinLeer ? '. Sin leer' : ''}`}
             style={({ pressed }) => ({
               flexDirection: 'row',
+              alignItems: 'center',
               gap: 13,
               paddingVertical: 14,
               opacity: pressed ? 0.65 : 1
@@ -381,7 +507,7 @@ export function C2Avisos() {
           >
             {/* Sin leer: un punto amarillo. Es la única marca que hace falta;
                 un fondo distinto por fila convertiría la lista en un damero. */}
-            <View style={{ width: 8, paddingTop: 7 }}>
+            <View style={{ width: 8 }}>
               {aviso.sinLeer ? (
                 <View style={{
                   width: 8, height: 8, borderRadius: 4,
@@ -396,9 +522,14 @@ export function C2Avisos() {
               <Txt nivel="pie" tono="tenue">{aviso.detalle}</Txt>
               <Txt nivel="pie" tono="tenue">{aviso.cuando}</Txt>
             </View>
+            <Galon />
           </Pressable>
         </View>
       ))}
+
+      <View style={{ marginTop: tema.ritmo.entreBloques, alignItems: 'center' }}>
+        <Txt nivel="pie" tono="tenue">Cada aviso te lleva a donde pasó.</Txt>
+      </View>
     </Seccion>
   );
 }
@@ -431,7 +562,7 @@ export function C2Ayuda() {
         <Separador />
         <Fila icono="escudo" titulo="¿Qué es Transporte Seguro?" />
         <Separador />
-        <Fila icono="perfil" titulo="¿Cómo me hago conductor?" />
+        <Fila icono="moto" titulo="¿Cómo me hago conductor?" />
       </Grupo>
 
       <Grupo titulo="Sobre un viaje">

@@ -182,7 +182,9 @@ test('el logotipo se usa donde toca y no en todas partes', () => {
   // Una marca repetida en cada pantalla deja de significar nada, y dentro de la
   // aplicación la persona ya sabe dónde está.
   const pantallas = leer('preview/pantallasC2.tsx');
-  const apariciones = pantallas.match(/<LogoHorizontal/g) ?? [];
+  // `LogoQueEntra` envuelve a `LogoHorizontal` con la animacion de entrada de
+  // la web: los dos cuentan como «el logotipo esta ahí».
+  const apariciones = pantallas.match(/<Logo(Horizontal|QueEntra)/g) ?? [];
   assert.ok(apariciones.length >= 2, 'el logotipo va en el arranque y en la entrada');
   assert.ok(apariciones.length <= 3, `el logotipo aparece ${apariciones.length} veces: son demasiadas`);
 });
@@ -192,7 +194,7 @@ test('las pantallas REALES llevan el logotipo, no la marca escrita a mano', () =
   // acceso abria con un titulo. Existiendo el logotipo oficial con la moto,
   // eso era quedarse corto justo donde se abre la aplicacion.
   for (const pantalla of ['app/rol.tsx', 'app/acceso.tsx']) {
-    assert.match(leer(pantalla), /<LogoHorizontal/, pantalla);
+    assert.match(leer(pantalla), /<Logo(Horizontal|QueEntra)/, pantalla);
   }
 });
 
@@ -337,6 +339,93 @@ test('el script de cuenta de prueba SÓLO acepta servidores privados', () => {
     fuente.indexOf('esServidorLocal(destino.hostname)') < fuente.indexOf('await fetch('),
     'el destino se comprueba antes de la petición'
   );
+});
+
+// ---------------------------------------------------------------------------
+// Nombres y estructura
+// ---------------------------------------------------------------------------
+
+test('la barra de la pasajera usa los nombres acordados', () => {
+  // «Historial» y no «Viajes»: lo que hay ahí son los que YA hiciste, y
+  // «Viajes» en una aplicación de viajes no distingue nada.
+  //
+  // «Viaje seguro» y no «Seguridad»: dice de qué va y coincide con el nombre
+  // que la marca ya usa. «Seguridad» a secas suena a ajustes de contraseña.
+  const fuente = leer('ui/Navegacion.tsx');
+  const barra = fuente.slice(fuente.indexOf('DESTINOS_DE_PASAJERA'));
+
+  assert.match(barra, /etiqueta: 'Historial'/);
+  assert.match(barra, /etiqueta: 'Viaje seguro'/);
+  assert.doesNotMatch(barra.slice(0, barra.indexOf('DESTINOS_DE_CONDUCTOR')), /etiqueta: 'Seguridad'/);
+});
+
+test('los ajustes de cuenta viven en el perfil, no en la barra', () => {
+  // La barra tiene cinco sitios y son para lo de todos los días. Contraseña,
+  // avisos y preferencias se visitan dos veces al año.
+  const secciones = leer('preview/pantallasC2Secciones.tsx');
+  const perfil = secciones.slice(secciones.indexOf('export function C2Perfil'), secciones.indexOf('// Saldo'));
+  for (const entrada of ['Seguridad de la cuenta', 'Notificaciones', 'Configuración', 'Cambiar de modo']) {
+    assert.ok(perfil.includes(entrada), `el perfil no lleva «${entrada}»`);
+  }
+
+  const navegacion = sinComentarios('ui/Navegacion.tsx');
+  assert.doesNotMatch(navegacion, /etiqueta: 'Configuración'/, 'configuración no es una pestaña');
+});
+
+test('lo irreversible va separado de lo reversible', () => {
+  // «Eliminar cuenta» junto a «Cerrar sesión» en la misma lista es un accidente
+  // esperando: se parecen, están juntas, y una de las dos no tiene vuelta.
+  const secciones = leer('preview/pantallasC2Secciones.tsx');
+  const perfil = secciones.slice(secciones.indexOf('export function C2Perfil'), secciones.indexOf('// Saldo'));
+  assert.match(perfil, /Eliminar cuenta/);
+  assert.match(perfil, /tono="peligro"/, 'va marcada como destructiva');
+  assert.ok(
+    perfil.indexOf('Cerrar sesión') < perfil.indexOf('Eliminar cuenta'),
+    'eliminar va después de cerrar sesión, y separada'
+  );
+});
+
+test('los avisos tienen puerta desde las pantallas de uso', () => {
+  // Antes eran una pantalla suelta a la que no llevaba nada. Existir sin puerta
+  // es no existir.
+  const secciones = leer('preview/pantallasC2Secciones.tsx');
+  assert.match(secciones, /export function Campana/);
+  assert.match(secciones, /sinLeer > 0/, 'marca lo que está sin leer');
+
+  const pantallas = leer('preview/pantallasC2.tsx');
+  assert.match(pantallas, /<Campana/, 'el inicio de la pasajera lleva campana');
+});
+
+test('el panel del conductor cabe en un vistazo', () => {
+  // Se abre en un semáforo. Los datos van en dos columnas —la mitad de alto que
+  // seis filas para lo mismo— y la hoja se ajusta a su contenido.
+  const estados = leer('ui/Estados.tsx');
+  assert.match(estados, /width: '50%'/, 'los datos van en dos columnas');
+
+  const pantallas = leer('preview/pantallasC2.tsx');
+  const conductor = pantallas.slice(pantallas.indexOf('export function C2InicioConductor'));
+  assert.match(conductor, /alturaAutomatica/, 'la hoja se ajusta a lo que ocupa');
+});
+
+test('la entrada del logotipo es la de la web', () => {
+  // `passengerBrandRideIn`: llega desde fuera por la izquierda, se pasa de
+  // largo, rebota y asienta. Copiada, no reinterpretada: ese gesto es de las
+  // pocas cosas de +58express que ya se reconocen.
+  const marca = leer('ui/Marca.tsx');
+  assert.match(marca, /export function LogoQueEntra/);
+  assert.match(marca, /Easing\.bezier\(0\.16, 0\.82, 0\.24, 1\)/, 'la misma curva');
+  assert.match(marca, /duration: 900/, 'la misma duración');
+  assert.match(marca, /-ancho \* 1\.9/, 'entra desde fuera por la izquierda');
+});
+
+test('el arranque no dibuja círculos', () => {
+  // La web tiene un degradado continuo. Con tres discos se veía cada borde y
+  // quedaban tres círculos donde no hay ninguno.
+  const arranque = leer('ui/Arranque.tsx');
+  const capas = arranque.match(/CAPAS_DEL_RESPLANDOR = \[([^\]]+)\]/);
+  assert.ok(capas, 'el resplandor declara sus capas');
+  assert.ok(capas[1].split(',').length >= 10, 'con menos de diez capas se ven los bordes');
+  assert.match(arranque, /opacity: 0\.0\d/, 'y cada una es muy tenue');
 });
 
 // ---------------------------------------------------------------------------

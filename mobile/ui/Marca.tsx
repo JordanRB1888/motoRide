@@ -10,7 +10,8 @@
  * oficiales, y valen precisamente porque son reconocibles.
  */
 
-import { Image, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, Image, View } from 'react-native';
 import {
   EMBLEMA,
   LOGO_HORIZONTAL,
@@ -35,6 +36,85 @@ export function LogoHorizontal({ ancho = 220 }: { readonly ancho?: number }) {
       resizeMode="contain"
       style={{ width: ancho, height: ancho / PROPORCION_DEL_LOGO }}
     />
+  );
+}
+
+/**
+ * El logotipo entrando desde la izquierda.
+ *
+ * NO ES UNA ANIMACIÓN NUEVA
+ *
+ * Es la que ya tiene la web, `passengerBrandRideIn`, con sus mismos cuatro
+ * pasos: el logotipo llega desde fuera por la izquierda, se pasa un poco de
+ * largo, rebota hacia atrás y asienta. 0,9 segundos y la misma curva.
+ *
+ * Está copiada y no reinterpretada porque ese gesto —la moto entrando en
+ * escena— es de las pocas cosas de +58express que ya se reconocen. Hacer «algo
+ * parecido pero mío» habría sido cambiar identidad por gusto personal.
+ *
+ * Lo único que se pierde es el `drop-shadow` amarillo que la acompaña: React
+ * Native no tiene sombras de color sobre el contorno de una imagen, sólo
+ * rectangulares. Se omite en vez de sustituirlo por una caja amarilla detrás,
+ * que es lo que quedaría.
+ */
+export function LogoQueEntra({ ancho = 232, alDetenerse }: {
+  readonly ancho?: number;
+  /** Se avisa al terminar, por si algo tiene que esperar a que asiente. */
+  readonly alDetenerse?: () => void;
+}) {
+  const avance = useRef(new Animated.Value(0)).current;
+  const [quieto, setQuieto] = useState(false);
+
+  useEffect(() => {
+    let vigente = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(activo => { if (vigente) setQuieto(activo); })
+      .catch(() => { /* si no se puede consultar, se anima */ });
+    const suscripcion = AccessibilityInfo.addEventListener('reduceMotionChanged', setQuieto);
+    return () => { vigente = false; suscripcion.remove(); };
+  }, []);
+
+  useEffect(() => {
+    if (quieto) {
+      avance.setValue(1);
+      alDetenerse?.();
+      return;
+    }
+    const animacion = Animated.timing(avance, {
+      toValue: 1,
+      duration: 900,
+      // La misma curva de la web: cubic-bezier(.16, .82, .24, 1).
+      easing: Easing.bezier(0.16, 0.82, 0.24, 1),
+      useNativeDriver: true
+    });
+    animacion.start(({ finished }) => { if (finished) alDetenerse?.(); });
+    return () => animacion.stop();
+  }, [avance, quieto, alDetenerse]);
+
+  // Los cuatro pasos del original: fuera, pasado de largo, rebote y asiento.
+  const pasos = [0, 0.52, 0.72, 1];
+
+  return (
+    <Animated.View style={{
+      opacity: avance.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0, 1, 1] }),
+      transform: [
+        {
+          translateX: avance.interpolate({
+            inputRange: pasos,
+            outputRange: [-ancho * 1.9, ancho * 0.1, -ancho * 0.04, 0]
+          })
+        },
+        { scale: avance.interpolate({ inputRange: pasos, outputRange: [0.86, 1.035, 0.99, 1] }) },
+        {
+          rotate: avance.interpolate({
+            inputRange: pasos,
+            outputRange: ['-3deg', '0.8deg', '-0.35deg', '0deg']
+          })
+        }
+      ]
+    }}>
+      <LogoHorizontal ancho={ancho} />
+    </Animated.View>
   );
 }
 

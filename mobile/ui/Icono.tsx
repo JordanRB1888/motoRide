@@ -33,7 +33,9 @@ export const NOMBRES_DE_ICONO = [
   'escudo',
   'reloj',
   'rayo',
-  'maletin'
+  'maletin',
+  'campana',
+  'ajustes'
 ] as const;
 export type NombreDeIcono = (typeof NOMBRES_DE_ICONO)[number];
 
@@ -82,6 +84,62 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
             backgroundColor: t.activo ? t.color : 'transparent',
             position: 'absolute', bottom: t.tamano * 0.08
           }} />
+        </>
+      );
+
+    // Campana: cuerpo acampanado y badajo. Es el icono de los avisos, y va a
+    // vivir en la cabecera con un punto amarillo encima cuando haya algo sin
+    // leer.
+    case 'campana':
+      return (
+        <>
+          <View style={{
+            width: t.tamano * 0.62, height: t.tamano * 0.52,
+            borderWidth: t.trazo, borderColor: t.color,
+            borderTopLeftRadius: t.tamano * 0.31,
+            borderTopRightRadius: t.tamano * 0.31,
+            borderBottomWidth: 0,
+            backgroundColor: t.activo ? t.color : 'transparent',
+            position: 'absolute', top: t.tamano * 0.16
+          }} />
+          <View style={{
+            width: t.tamano * 0.76, height: t.trazo,
+            borderRadius: t.trazo, backgroundColor: t.color,
+            position: 'absolute', top: t.tamano * 0.66
+          }} />
+          <View style={{
+            width: t.tamano * 0.2, height: t.tamano * 0.13,
+            borderWidth: t.trazo, borderTopWidth: 0, borderColor: t.color,
+            borderBottomLeftRadius: t.tamano * 0.1,
+            borderBottomRightRadius: t.tamano * 0.1,
+            position: 'absolute', top: t.tamano * 0.7
+          }} />
+        </>
+      );
+
+    // Ajustes: tres carriles con su mando. Deslizadores, no un engranaje: un
+    // engranaje dibujado a trazo con vistas se convierte en una mancha.
+    case 'ajustes':
+      return (
+        <>
+          {[0.26, 0.5, 0.74].map((alto, indice) => (
+            <View key={alto}>
+              <View style={{
+                width: t.tamano * 0.74, height: t.trazo,
+                borderRadius: t.trazo, backgroundColor: t.color,
+                position: 'absolute', top: t.tamano * alto, left: t.tamano * 0.13
+              }} />
+              <View style={{
+                width: t.trazo * 2.6, height: t.trazo * 2.6,
+                borderRadius: t.trazo * 1.3,
+                borderWidth: t.trazo, borderColor: t.color,
+                backgroundColor: t.activo ? t.color : '#00000000',
+                position: 'absolute',
+                top: t.tamano * alto - t.trazo * 0.8,
+                left: t.tamano * (indice === 1 ? 0.6 : 0.28)
+              }} />
+            </View>
+          ))}
         </>
       );
 

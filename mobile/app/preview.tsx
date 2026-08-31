@@ -41,10 +41,13 @@ import {
   C2Arranque,
   C2ConductorEnLinea,
   C2ConductorFueraDeLinea,
+  C2BuscandoAuto,
+  C2BuscandoVehiculo,
   C2ConfirmarViaje,
   C2ElegirPuntoPasajera,
   C2InicioPasajera,
   C2ParaQuienEsElViaje,
+  C2PanelDeJornada,
   C2PedirViaje,
   C2SelectorDeRol,
   C2Viaje
@@ -55,7 +58,7 @@ import {
   C2Historial,
   C2Perfil,
   C2Saldo,
-  C2Seguridad
+  C2ViajeSeguro
 } from '../preview/pantallasC2Secciones';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
@@ -109,13 +112,16 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'para-quien', nombre: '¿Para quién?', Componente: C2ParaQuienEsElViaje },
   { clave: 'punto', nombre: 'Elegir punto', Componente: C2ElegirPuntoPasajera },
   { clave: 'confirmar', nombre: 'Confirmar', Componente: C2ConfirmarViaje },
+  { clave: 'buscando-moto', nombre: 'Buscando moto', Componente: C2BuscandoVehiculo },
+  { clave: 'buscando-auto', nombre: 'Buscando auto', Componente: C2BuscandoAuto },
   { clave: 'conductor', nombre: 'Conductor', Componente: C2ConductorFueraDeLinea },
   { clave: 'conductor-online', nombre: 'Conductor en línea', Componente: C2ConductorEnLinea },
+  { clave: 'jornada', nombre: 'Panel de jornada', Componente: C2PanelDeJornada },
   { clave: 'viaje', nombre: 'Viaje', Componente: C2Viaje },
   // Las secciones: sin mapa, porque consultar un historial o leer un aviso no
   // pasa en ningún sitio. Mapa donde hay movimiento; lista donde hay que leer.
   { clave: 'historial', nombre: 'Historial', Componente: C2Historial },
-  { clave: 'seguridad', nombre: 'Seguridad', Componente: C2Seguridad },
+  { clave: 'viaje-seguro', nombre: 'Viaje seguro', Componente: C2ViajeSeguro },
   { clave: 'perfil', nombre: 'Perfil', Componente: C2Perfil },
   { clave: 'saldo', nombre: 'Saldo', Componente: C2Saldo },
   { clave: 'avisos', nombre: 'Avisos', Componente: C2Avisos },

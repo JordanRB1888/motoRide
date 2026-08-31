@@ -315,15 +315,17 @@ export interface LugarGuardado {
  * leer. Los que aún no tienen dirección se ven a medias, con un más, para que
  * se entienda que están por configurar y no que están rotos.
  */
-export function LugaresGuardados({ lugares, onElegir, onAnadir }: {
+export function LugaresGuardados({ lugares, onElegir, onAnadir, onNuevo }: {
   readonly lugares: readonly LugarGuardado[];
   readonly onElegir?: (clave: string) => void;
   readonly onAnadir?: (clave: string) => void;
+  /** Guardar un sitio nuevo. Sin esto sólo se puede tener casa y trabajo. */
+  readonly onNuevo?: () => void;
 }) {
   const tema = useTema();
 
   return (
-    <View style={{ flexDirection: 'row', gap: 8 }}>
+    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
       {lugares.map(lugar => {
         const configurado = Boolean(lugar.direccion);
         return (
@@ -356,6 +358,31 @@ export function LugaresGuardados({ lugares, onElegir, onAnadir }: {
           </Pressable>
         );
       })}
+
+      {/* Guardar un sitio nuevo. Casa y trabajo son los dos de siempre, pero
+          casi nadie se mueve sólo entre esos dos: la universidad, la casa de
+          la madre, el taller. Sin esto habría que escribir la dirección
+          entera cada vez. */}
+      {onNuevo ? (
+        <Pressable
+          onPress={onNuevo}
+          accessibilityRole="button"
+          accessibilityLabel="Guardar un lugar nuevo"
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 7,
+            paddingLeft: 11, paddingRight: 13, paddingVertical: 9,
+            borderRadius: 999,
+            backgroundColor: pressed ? tema.color.superficieElevada : 'transparent',
+            borderWidth: 1,
+            borderColor: tema.color.borde
+          })}
+        >
+          <Mas color={tema.color.acento} />
+          <Txt nivel="etiqueta" tono="secundario">Añadir</Txt>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
