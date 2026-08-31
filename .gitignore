@@ -15,6 +15,13 @@ server/data/private-uploads/
 !.env.example
 *.pem
 *.key
+# Excepcion NOMINAL, no por carpeta: este .pem es el certificado PUBLICO de una
+# CA intermedia de Sectigo, no una clave privada. Es material publico -lo
+# distribuye la propia Sectigo por HTTP- y tiene que viajar con el repositorio
+# porque sin el no se puede verificar la cadena TLS del BCV, que omite ese
+# eslabon. Se nombra el fichero exacto a proposito: una regla mas ancha
+# (server/certs/*.pem) dejaria colar una clave privada por descuido.
+!server/certs/sectigo-public-server-authentication-ca-dv-r36.pem
 coverage/
 
 # Playwright: informes, trazas, capturas y videos son artefactos de ejecucion.
