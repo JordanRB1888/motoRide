@@ -32,33 +32,15 @@ function pagina(titulo, cuerpo) {
   body{margin:0;padding:26px;background:#111;display:flex;flex-wrap:wrap;gap:26px;
     justify-content:center;font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
   .marco{border-radius:34px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6)}
-  .col{text-align:center}
-  .col span{display:block;color:#888;font-size:12px;margin-top:9px;
-    font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
   ${BASE}
 </style>
-${cuerpo}`;
+<div style="${variables(C2)}">${cuerpo}</div>`;
 }
-
-/**
- * Cada pantalla sale DOS veces, una por esquema.
- *
- * Antes salia solo en noche, que es donde se diseno. Casi todo lo que fallaba
- * fallaba de dia —superficies que se juntan, amarillos que dejan de leerse— y
- * una evidencia que solo ensena la mitad no sirve para revisar la otra.
- */
-const ESQUEMAS = [['claro', 'Modo día'], ['oscuro', 'Modo noche']];
-
-const parDeEsquemas = (clave, construir) => ESQUEMAS.map(([esquema, etiqueta]) => `
-  <div class="col">
-    <div class="marco" style="${variables(C2, esquema)}">${construir(esquema)}</div>
-    <span>${etiqueta}</span>
-  </div>`).join('');
 
 for (const [clave, construir] of Object.entries(PANTALLAS)) {
   fs.writeFileSync(
     path.join(salida, `c2-${clave}.html`),
-    pagina(NOMBRES[clave], parDeEsquemas(clave, construir))
+    pagina(NOMBRES[clave], `<div class="marco">${construir()}</div>`)
   );
 }
 
@@ -119,11 +101,7 @@ export const ORDEN = [
   ['Esperando', ['buscando-moto']],
   ['Decisiones sobre el mapa', ['para-quien', 'punto-en-mapa']],
   ['El conductor', ['conductor-offline', 'conductor-online', 'panel-jornada', 'saldo-conductor']],
-  ['El viaje', ['viaje']],
-  ['Las secciones sin mapa', [
-    'historial', 'viaje-seguro', 'perfil', 'saldo-pasajera',
-    'avisos', 'ayuda', 'configuracion'
-  ]]
+  ['El viaje', ['viaje']]
 ];
 
 fs.writeFileSync(path.join(salida, 'comparacion.html'), `<!doctype html><meta charset="utf-8">
@@ -158,7 +136,7 @@ ${ORDEN.map(([titulo, claves]) => `
 <div class="par">
   ${claves.map(clave => `
     <div class="col">
-      <div class="marco" style="${variables(C2, 'oscuro')}">${PANTALLAS[clave]('oscuro')}</div>
+      <div class="marco" style="${variables(C2)}">${PANTALLAS[clave]()}</div>
       <span>${NOMBRES[clave]}</span>
     </div>`).join('')}
 </div>`).join('')}`);

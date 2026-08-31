@@ -33,16 +33,6 @@ import { fileURLToPath } from 'node:url';
 
 import { CATALOGO } from '../theme/directions.ts';
 import { FRACCION_POR_ESTADO } from '../theme/hoja.ts';
-// Los textos y los destinos salen de los mismos ficheros que consume el
-// teléfono. Si se repitieran aquí, renombrar una pestaña o cambiar una frase
-// dejaría el navegador enseñando lo de antes.
-import {
-  AVISOS_DEMO,
-  HISTORIAL_DEMO,
-  MOVIMIENTOS_DEMO,
-  PERFIL_DEMO
-} from '../preview/fixtures.ts';
-import { DESTINOS_DE_CONDUCTOR, DESTINOS_DE_PASAJERA } from '../theme/navegacion.ts';
 import {
   ESQUEMA_CLARO,
   ESQUEMA_OSCURO,
@@ -234,10 +224,6 @@ export const BASE = `
   .insignia{border:1px solid var(--exito);border-radius:10px;padding:3px 9px}
 
   /* Barra inferior con el disco central. */
-  /* Lo que en el telefono es un ScrollView. Sin esto, una pantalla mas larga
-     que la pantalla se corta y no hay forma de auditarla entera. */
-  .hoja{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain}
-  .hoja::-webkit-scrollbar{width:0}
   .barra{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:flex-start;
     background:var(--superficie);border-top:1px solid var(--borde);padding:10px 6px 22px}
   .dest-nav{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
@@ -395,33 +381,30 @@ export const disco = modo => {
 
 const barraPasajera = (modo = 'pedir', activo = 'inicio') => `
   <div class="barra">
-    ${DESTINOS_DE_PASAJERA.slice(0, 2).map(destino => `
-      <div class="dest-nav">
-        ${icono(destino.icono, destino.clave === activo ? 'var(--acento-texto)' : 'var(--texto-3)')}
-        <span class="etq ${destino.clave === activo ? '' : 't3'}">${destino.etiqueta}</span></div>`).join('')}
+    ${[['Inicio', 'inicio'], ['Historial', 'reloj']].map(([n, ic], i) => `
+      <div class="dest-nav">${icono(ic, i === 0 && activo === 'inicio' ? 'var(--acento)' : 'var(--texto-3)')}
+        <span class="etq ${i === 0 && activo === 'inicio' ? '' : 't3'}">${n}</span></div>`).join('')}
     <div class="disco-zona">
       ${disco(modo)}
       <span class="etq ${modo === 'abierto' ? 't3' : 'ac'}">${modo === 'abierto' ? 'Cerrar' : 'Pedir'}</span>
     </div>
-    ${DESTINOS_DE_PASAJERA.slice(2).map(destino => `
-      <div class="dest-nav">
-        ${icono(destino.icono, destino.clave === activo ? 'var(--acento-texto)' : 'var(--texto-3)')}
-        <span class="etq ${destino.clave === activo ? '' : 't3'}">${destino.etiqueta}</span></div>`).join('')}
+    ${[['Viaje seguro', 'escudo'], ['Perfil', 'perfil']].map(([n, ic]) => `
+      <div class="dest-nav">${icono(ic, 'var(--texto-3)')}
+        <span class="etq t3">${n}</span></div>`).join('')}
   </div>`;
-
-const destinoConductor = activo => destino => `
-  <div class="dest-nav">
-    ${icono(destino.icono, destino.clave === activo ? 'var(--acento-texto)' : 'var(--texto-3)')}
-    <span class="etq ${destino.clave === activo ? '' : 't3'}">${destino.etiqueta}</span></div>`;
 
 const barraConductor = (enLinea, activo = 'mapa') => `
   <div class="barra">
-    ${DESTINOS_DE_CONDUCTOR.slice(0, 2).map(destinoConductor(activo)).join('')}
+    ${[['Mapa', 'inicio'], ['Saldo', 'dolar']].map(([n, ic], i) => `
+      <div class="dest-nav">${icono(ic, i === 0 && activo === 'mapa' ? 'var(--acento)' : 'var(--texto-3)')}
+        <span class="etq ${i === 0 && activo === 'mapa' ? '' : 't3'}">${n}</span></div>`).join('')}
     <div class="disco-zona">
       ${disco(enLinea ? 'online' : 'offline')}
       <span class="etq ${enLinea ? 'ok' : 't3'}">${enLinea ? 'En línea' : 'Conectar'}</span>
     </div>
-    ${DESTINOS_DE_CONDUCTOR.slice(2).map(destinoConductor(activo)).join('')}
+    ${[['Historial', 'viajes'], ['Perfil', 'perfil']].map(([n, ic]) => `
+      <div class="dest-nav">${icono(ic, 'var(--texto-3)')}
+        <span class="etq t3">${n}</span></div>`).join('')}
   </div>`;
 
 const hojaAlta = `height:${Math.round(ALTO * FRACCION_POR_ESTADO.alta)}px`;
@@ -437,82 +420,6 @@ const pulso = tipo => `
     <img src="marca/${tipo === 'MOTO' ? 'moto-mapa.png' : 'auto-mapa.png'}"
       width="62" height="62" style="position:relative" alt="">
   </span>`;
-
-// ---------------------------------------------------------------------------
-// Las secciones: perfil, historial, avisos y demas
-// ---------------------------------------------------------------------------
-
-/**
- * Estas pantallas NO llevan mapa, y es deliberado.
- *
- * El mapa es el suelo de lo que pasa ahora: donde estas, quien viene, por donde
- * vas. Consultar un historial o leer un aviso no pasa en ningun sitio, asi que
- * un mapa detras seria decoracion robandole espacio al contenido.
- */
-const seccion = (titulo, contenido, activo, extra = '') => `
-  <div class="tel crece">
-    <div class="hoja">
-      <div style="display:flex;align-items:center;padding:18px var(--margen) var(--gap)">
-        <span class="titulo">${titulo}</span><span class="crece"></span>
-        ${extra}
-      </div>
-      <div style="padding:0 var(--margen) 120px">${contenido}</div>
-    </div>
-    ${barraPasajera('pedir', activo)}
-  </div>`;
-
-/** La campana, con su punto cuando hay algo sin leer. */
-const campana = () => `
-  <span style="position:relative;width:40px;height:40px;display:grid;place-items:center">
-    ${icono('campana', 'var(--texto-2)', 22)}
-    ${AVISOS_DEMO.some(aviso => aviso.sinLeer) ? `
-      <span style="position:absolute;top:7px;right:9px;width:9px;height:9px;border-radius:50%;
-        background:var(--acento-texto);border:2px solid var(--fondo)"></span>` : ''}
-  </span>`;
-
-/** Un rotulo de grupo. Sustituye a envolver cada grupo en su propia tarjeta. */
-const grupo = (titulo, contenido) => `
-  <div style="margin-top:var(--bloques)">
-    <span class="etq t2">${titulo.toUpperCase()}</span>
-    <div style="margin-top:6px">${contenido}</div>
-  </div>`;
-
-/** La punta que dice «esto lleva a algun sitio». */
-const galon = `<span style="width:9px;height:14px;position:relative;flex:0 0 9px">
-  <span style="position:absolute;top:4px;width:8px;height:1.7px;border-radius:1px;
-    background:var(--texto-3);transform:rotate(38deg)"></span>
-  <span style="position:absolute;top:9px;width:8px;height:1.7px;border-radius:1px;
-    background:var(--texto-3);transform:rotate(-38deg)"></span>
-</span>`;
-
-/**
- * El disco que ensenia el esquema en vez de nombrarlo.
- *
- * Los colores son literales y no tokens a proposito: son los DOS esquemas a la
- * vez, y los tokens de la pagina valen solo para el que esta puesto. Salen de
- * `ESQUEMA_CLARO.fondo` y `ESQUEMA_OSCURO.fondo`, y una prueba lo comprueba.
- */
-const muestraDeEsquema = cual => `
-  <span style="width:38px;height:38px;border-radius:50%;flex:0 0 38px;overflow:hidden;
-    border:1px solid var(--borde);display:flex">
-    <span style="flex:1;background:${cual === 'oscuro' ? ESQUEMA_OSCURO.fondo : ESQUEMA_CLARO.fondo}"></span>
-    ${cual === 'auto'
-      ? `<span style="flex:1;background:${ESQUEMA_OSCURO.fondo}"></span>`
-      : ''}
-  </span>`;
-
-const fila = (ic, titulo, detalle = '', peligro = false) => `
-  <div style="display:flex;align-items:center;gap:13px;padding:13px 0">
-    <span style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
-      flex:0 0 36px;background:${peligro
-        ? 'color-mix(in srgb,var(--peligro) 12%,transparent)'
-        : 'var(--elevada)'}">
-      ${icono(ic, peligro ? 'var(--peligro)' : 'var(--texto-2)', 18)}</span>
-    <span style="flex:1;display:grid;gap:2px;min-width:0">
-      <span class="cuerpo ${peligro ? 't2' : ''}">${titulo}</span>
-      ${detalle ? `<span class="pie t3">${detalle}</span>` : ''}</span>
-    ${galon}
-  </div>`;
 
 // ---------------------------------------------------------------------------
 // Las pantallas
@@ -844,12 +751,11 @@ export const PANTALLAS = {
 
   'saldo-conductor': () => `
     <div class="tel crece">
-      <div class="hoja">
       <div style="display:flex;align-items:center;padding:18px var(--margen) var(--gap)">
         <span class="titulo">Tu saldo</span><span class="crece"></span>
         <span class="pie t3">Tasa BCV · Bs. 000,00</span>
       </div>
-      <div style="padding:0 var(--margen) 120px;display:grid;gap:var(--bloques)">
+      <div style="padding:0 var(--margen) 96px;display:grid;gap:var(--bloques)">
         <div style="position:relative;overflow:hidden;border-radius:var(--r-tarjeta);
           background:var(--superficie);padding:var(--pad);display:grid;gap:var(--gap)">
           <span class="filo"></span>
@@ -881,7 +787,7 @@ export const PANTALLAS = {
         <div>
           <div style="display:flex;align-items:center;gap:10px">
             <span class="enc">Movimientos</span><span class="crece"></span>
-            <span class="pie t3">${MOVIMIENTOS_DEMO.length} registros</span>
+            <span class="pie t3">4 registros</span>
           </div>
           <div style="display:flex;gap:8px;margin-top:var(--gap)">
             ${[['Todos', true], ['Comisiones', false], ['Recargas', false]].map(([n, on]) => `
@@ -891,10 +797,11 @@ export const PANTALLAS = {
                 <span class="etq ${on ? 'ac' : 't3'}">${n}</span></span>`).join('')}
           </div>
           <div style="margin-top:4px">
-            ${MOVIMIENTOS_DEMO.map((mov, i) => {
-              const comision = mov.tipo === 'COMISION';
-              const { titulo: t, detalle: d, cuando: c, importe: imp, estado: est } = mov;
-              return `
+            ${[['Ganancia acreditada', 'Efectivo · Viaje de ejemplo', 'Hoy · 08:20', '+$0,00', 'Confirmado', false],
+               ['Comisión +58Express', 'Viaje de ejemplo', 'Hoy · 08:20', '−$0,00', 'Aplicada', true],
+               ['Recarga', 'Pago Móvil · Ref. de ejemplo', 'Ayer · 17:05', '+$0,00', 'Verificada', false],
+               ['Liquidación', 'Transferencia de ejemplo', 'Hace 3 días', '−$0,00', 'Pagada', false]
+              ].map(([t, d, c, imp, est, comision], i) => `
               ${i > 0 ? '<span class="sep"></span>' : ''}
               <div style="display:flex;align-items:center;gap:13px;padding:13px 0">
                 <span style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
@@ -907,215 +814,12 @@ export const PANTALLAS = {
                 <span style="display:grid;gap:2px;text-align:right">
                   <span class="cuerpo" style="color:${imp.startsWith('−') ? 'var(--texto-2)' : 'var(--exito)'}">${imp}</span>
                   <span class="pie t3">${est}</span></span>
-              </div>`;
-            }).join('')}
+              </div>`).join('')}
           </div>
         </div>
       </div>
-      </div>
       ${barraConductor(true, 'saldo')}
     </div>`,
-
-  historial: () => seccion('Tu historial', `
-    ${HISTORIAL_DEMO.map((viaje, i) => `
-      ${i > 0 ? '<span class="sep"></span>' : ''}
-      <div style="padding:15px 0;display:grid;gap:9px">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="etq t2">${viaje.fecha}</span><span class="crece"></span>
-          <span class="etq ${viaje.estado === 'Completado' ? 'ok' : 't3'}"
-            style="border:1px solid ${viaje.estado === 'Completado' ? 'var(--exito)' : 'var(--borde)'};
-            border-radius:10px;padding:3px 9px">${viaje.estado}</span>
-        </div>
-        <div style="display:flex;gap:12px">
-          <span style="display:flex;flex-direction:column;align-items:center;padding:4px 0">
-            <span style="width:9px;height:9px;border-radius:50%;background:var(--texto-2)"></span>
-            <span style="width:2px;flex:1;min-height:16px;background:var(--borde)"></span>
-            <span style="width:9px;height:9px;border-radius:2px;background:var(--acento-texto)"></span>
-          </span>
-          <span style="flex:1;display:grid;gap:8px;min-width:0">
-            <span class="cuerpo t2">${viaje.origen}</span>
-            <span class="cuerpo">${viaje.destino}</span></span>
-        </div>
-      </div>`).join('')}
-    <div style="margin-top:var(--bloques);text-align:center">
-      <span class="pie t3">Los importes los calcula el servidor.</span></div>
-  `, 'historial', campana()),
-
-  'viaje-seguro': () => seccion('Viaje seguro', `
-    <div style="display:flex;align-items:center;gap:15px;padding:var(--pad);
-      border-radius:var(--r-tarjeta);border:1px solid var(--peligro);
-      background:color-mix(in srgb,var(--peligro) 12%,transparent)">
-      <span style="width:48px;height:48px;border-radius:50%;flex:0 0 48px;
-        background:var(--peligro);display:grid;place-items:center">
-        ${icono('escudo', 'var(--fondo)', 24)}</span>
-      <span style="flex:1;display:grid;gap:2px">
-        <span class="enc">Emergencia</span>
-        <span class="pie t2">Pedir ayuda ahora mismo</span></span>
-    </div>
-
-    <div style="margin-top:var(--bloques)">${TRANSPORTE_SEGURO}</div>
-
-    ${grupo('Mientras vas de camino', [
-      ['viajes', 'Compartir mi viaje', 'Que alguien vea por dónde vas'],
-      ['perfil', 'Contactos de confianza', 'A quién avisar si pasa algo'],
-      ['escudo', 'Verificar a tu conductor', 'Comprobar placa y foto antes de subir'],
-      ['rayo', 'Ayuda durante el viaje', 'Hablar con soporte sin salir del viaje']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-
-    ${grupo('Aprender', fila('escudo', 'Centro de seguridad', 'Consejos y qué hacer en cada caso'))}
-  `, 'viaje-seguro', campana()),
-
-  perfil: () => seccion('Tu perfil', `
-    <div style="display:flex;align-items:center;gap:15px;padding:var(--pad);
-      border-radius:var(--r-tarjeta);background:var(--superficie)">
-      <span style="width:62px;height:62px;border-radius:50%;flex:0 0 62px;
-        background:var(--elevada);display:grid;place-items:center">
-        <span class="titulo">${PERFIL_DEMO.iniciales}</span></span>
-      <span style="flex:1;display:grid;gap:3px">
-        <span class="enc">${PERFIL_DEMO.nombre}</span>
-        <span class="pie t3">${PERFIL_DEMO.desde}</span>
-        <span style="display:flex;gap:7px;margin-top:3px">
-          <span class="etq ok insignia">Verificada</span>
-          <span class="etq t3" style="border:1px solid var(--borde);border-radius:10px;
-            padding:3px 9px">${PERFIL_DEMO.viajes} viajes</span></span></span>
-    </div>
-
-    ${grupo('Tu cuenta', [
-      ['perfil', 'Tus datos', 'Nombre, teléfono y correo'],
-      ['inicio', 'Direcciones guardadas', 'Casa, trabajo y las que añadas'],
-      ['escudo', 'Seguridad de la cuenta', 'Contraseña y sesiones abiertas']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-
-    ${grupo('Preferencias', [
-      ['campana', 'Notificaciones', 'Qué avisos quieres recibir'],
-      ['ajustes', 'Configuración', 'Apariencia, idioma y mapa'],
-      ['moto', 'Cambiar de modo', 'Pasar a conductor']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-
-    ${grupo('Dinero', fila('dolar', 'Tu saldo', 'Todavía no está activo'))}
-    ${grupo('Ayuda', fila('viajes', 'Soporte', 'Escríbenos si algo no cuadra'))}
-
-    <div style="margin-top:var(--bloques);display:grid;gap:var(--gap)">
-      <div class="boton sec" style="border:1px solid var(--borde)">Cerrar sesión</div>
-      <span class="sep"></span>
-      ${fila('perfil', 'Eliminar cuenta', 'Esta acción no se puede deshacer', true)}
-    </div>
-  `, 'perfil', campana()),
-
-  'saldo-pasajera': () => seccion('Tu saldo', `
-    <div style="padding:var(--pad);border-radius:var(--r-tarjeta);
-      border:1px solid var(--aviso);
-      background:color-mix(in srgb,var(--aviso) 9%,var(--superficie));
-      display:grid;gap:var(--gap)">
-      <div style="display:flex;align-items:center;gap:10px">
-        ${icono('rayo', 'var(--aviso)', 19)}
-        <span class="enc">Todavía no está activa</span></div>
-      <span class="cuerpo t2">La cartera aún no está encendida en el servidor.
-        Cuando lo esté, aquí verás tu saldo, tus movimientos y podrás retirar.</span>
-      <span class="pie t3">No se enseña ninguna cifra a propósito: un número de
-        ejemplo en esta pantalla se lee como dinero de verdad.</span>
-    </div>
-
-    ${grupo('Cuando esté disponible', [
-      ['viajes', 'Movimientos', 'Lo que entra y lo que sale, con su fecha'],
-      ['perfil', 'Métodos de cobro', 'Dónde quieres recibir tu dinero'],
-      ['dolar', 'Retirar', 'Sacar tu saldo a una cuenta tuya']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-  `, 'perfil', campana()),
-
-  avisos: () => seccion('Avisos', `
-    ${AVISOS_DEMO.map((aviso, i) => `
-      ${i > 0 ? '<span class="sep"></span>' : ''}
-      <div style="display:flex;align-items:flex-start;gap:13px;padding:14px 0">
-        <span style="width:8px;flex:0 0 8px;padding-top:7px">
-          ${aviso.sinLeer ? `<span style="display:block;width:8px;height:8px;border-radius:50%;
-            background:var(--acento-texto)"></span>` : ''}</span>
-        <span style="flex:1;display:grid;gap:3px;min-width:0">
-          <span class="cuerpo ${aviso.sinLeer ? '' : 't2'}">${aviso.titulo}</span>
-          <span class="pie t3">${aviso.detalle}</span>
-          <span class="pie t3">${aviso.cuando}</span></span>
-        <span style="align-self:center">${galon}</span>
-      </div>`).join('')}
-    <div style="margin-top:var(--bloques);text-align:center">
-      <span class="pie t3">Cada aviso te lleva a donde pasó.</span></div>
-  `, 'perfil'),
-
-  ayuda: () => seccion('Ayuda', `
-    <div style="position:relative;overflow:hidden;border-radius:var(--r-tarjeta);
-      background:var(--superficie);padding:var(--pad);display:grid;gap:var(--gap)">
-      <span class="filo"></span>
-      <span style="display:grid;gap:4px">
-        <span class="enc">¿Necesitas ayuda?</span>
-        <span class="cuerpo t2">Escríbenos y te respondemos en el mismo chat.</span></span>
-      <div class="boton">Escribir a soporte</div>
-    </div>
-
-    ${grupo('Preguntas frecuentes', [
-      ['destino', '¿Cómo pido un viaje?', ''],
-      ['dolar', '¿Cómo se calcula el precio?', 'Con la tarifa y la tasa del BCV'],
-      ['escudo', '¿Qué es Transporte Seguro?', ''],
-      ['moto', '¿Cómo me hago conductor?', '']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-
-    ${grupo('Sobre un viaje', [
-      ['viajes', 'Reportar un problema', 'Elige el viaje y cuéntanos qué pasó'],
-      ['maletin', 'Objeto olvidado', 'Te ayudamos a contactar con el conductor']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-  `, 'perfil', campana()),
-
-  // Unica pantalla que recibe el esquema: la frase de abajo dice cual esta
-  // puesto, y en el telefono sale del propio tema. Si aqui fuera fija, el
-  // laboratorio ensenaria «modo dia» estando en noche.
-  configuracion: (esquema = 'claro') => seccion('Configuración', `
-    ${grupo('Apariencia', `
-      <div style="display:grid;gap:var(--gap)">
-        ${[['auto', 'Automático', 'Cambia según la hora de Venezuela', true],
-           ['claro', 'Día', 'Siempre claro', false],
-           ['oscuro', 'Noche', 'Siempre oscuro', false]].map(([muestra, t, d, on]) => `
-          <div style="position:relative;overflow:hidden;display:flex;align-items:center;gap:13px;
-            padding:14px;border-radius:var(--r-tarjeta);
-            background:${on ? 'var(--elevada)' : 'var(--superficie)'}">
-            ${on ? '<span class="filo"></span>' : ''}
-            ${muestraDeEsquema(muestra)}
-            <span style="flex:1;display:grid;gap:2px">
-              <span class="cuerpo">${t}</span><span class="pie t3">${d}</span></span>
-            <span style="width:21px;height:21px;border-radius:50%;flex:0 0 21px;display:grid;
-              place-items:center;border:2px solid ${on ? 'var(--acento-texto)' : 'var(--borde)'}">
-              ${on ? '<span style="width:11px;height:11px;border-radius:50%;background:var(--acento-texto)"></span>' : ''}
-            </span>
-          </div>`).join('')}
-      </div>
-      <div style="display:flex;align-items:center;gap:9px;margin-top:var(--gap);padding:12px;
-        border-radius:var(--r-campo);background:var(--superficie)">
-        ${icono('reloj', 'var(--texto-3)', 15)}
-        <span class="pie t3">Ahora se ve en modo ${esquema === 'claro' ? 'día' : 'noche'}.</span>
-      </div>
-    `)}
-
-    ${grupo('Cuenta', [
-      ['escudo', 'Seguridad de la cuenta', 'Contraseña y sesiones abiertas'],
-      ['campana', 'Notificaciones', 'Qué avisos quieres recibir'],
-      ['perfil', 'Privacidad', 'Qué datos compartes y con quién']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-
-    ${grupo('Aplicación', [
-      ['ajustes', 'Idioma', 'Español'],
-      ['destino', 'Vista del mapa', 'Estándar'],
-      ['rayo', 'Ahorro de datos', 'Desactivado']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-
-    ${grupo('Legal', [
-      ['escudo', 'Términos y condiciones', ''],
-      ['escudo', 'Política de privacidad', ''],
-      ['viajes', 'Licencias de terceros', '']
-    ].map(([ic, t, d], i) => `${i > 0 ? '<span class="sep"></span>' : ''}${fila(ic, t, d)}`).join(''))}
-
-    <div style="margin-top:var(--bloques);display:grid;gap:var(--gap)">
-      <div class="boton sec" style="border:1px solid var(--borde)">Cerrar sesión</div>
-      <span class="sep"></span>
-      ${fila('perfil', 'Eliminar cuenta', 'Esta acción no se puede deshacer', true)}
-    </div>
-  `, 'perfil', campana()),
 
   'punto-en-mapa': () => `
     <div class="tel">
@@ -1150,13 +854,6 @@ export const NOMBRES = {
   'buscando-moto': 'Buscando tu moto',
   'panel-jornada': 'Panel del disco',
   'saldo-conductor': 'Saldo del conductor',
-  historial: 'Historial',
-  'viaje-seguro': 'Viaje seguro',
-  perfil: 'Perfil',
-  'saldo-pasajera': 'Saldo de la pasajera',
-  avisos: 'Avisos',
-  ayuda: 'Ayuda',
-  configuracion: 'Configuración',
   'punto-en-mapa': 'Elegir punto en el mapa',
   'conductor-offline': 'Conductor · fuera de línea',
   'conductor-online': 'Conductor · en línea',

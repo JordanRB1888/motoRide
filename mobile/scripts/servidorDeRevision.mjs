@@ -69,22 +69,15 @@ const GRUPOS = [
   {
     nombre: 'Conductor',
     claves: ['conductor-offline', 'conductor-online', 'panel-jornada', 'saldo-conductor']
-  },
-  {
-    // Las secciones sin mapa. Van juntas y no repartidas entre los dos roles
-    // porque se revisan de una tirada: son las que comparten armazón
-    // —cabecera, grupos y filas— y donde una incoherencia de espaciado o de
-    // tono salta comparando una con la siguiente.
-    nombre: 'Secciones',
-    claves: [
-      'historial', 'viaje-seguro', 'perfil', 'saldo-pasajera',
-      'avisos', 'ayuda', 'configuracion'
-    ]
   }
 ];
 
 /** Las que existen en el código pero aún no están dibujadas para navegador. */
-const PENDIENTES = ['Seguridad de cuenta', 'Legal', 'Eliminar cuenta'];
+const PENDIENTES = [
+  'Historial', 'Viaje seguro', 'Perfil', 'Saldo pasajera',
+  'Avisos', 'Ayuda', 'Configuración', 'Seguridad de cuenta',
+  'Legal', 'Eliminar cuenta'
+];
 
 const primera = GRUPOS[0].claves[0];
 
@@ -136,11 +129,7 @@ function pagina(clave, esquemaPedido) {
   .rotulo{font-size:12px;color:#8a8a8a;text-align:center}
   .rotulo b{color:#e8e8e8;font-size:14px;display:block;margin-bottom:3px}
   .marco{border-radius:34px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.65)}
-  /* Se llama nota y no pie porque las pantallas tienen su propia clase .pie, y
-     esta, declarada en el mismo documento, les colaba un centrado de texto y un
-     ancho maximo de 390. Los textos de detalle salian centrados dentro de las
-     filas. Una prueba comprueba que no vuelva a haber nombres compartidos. */
-  .nota{font-size:11px;color:#5f5f5f;text-align:center;max-width:390px;line-height:1.6}
+  .pie{font-size:11px;color:#5f5f5f;text-align:center;max-width:390px;line-height:1.6}
 
   ${BASE}
 </style></head>
@@ -176,9 +165,9 @@ function pagina(clave, esquemaPedido) {
     </div>
     <div class="marco" data-pantalla="${activa}" data-tema="${esquema}"
       style="${variables(C2, esquema)}">
-      ${PANTALLAS[activa](esquema)}
+      ${PANTALLAS[activa]()}
     </div>
-    <p class="nota">
+    <p class="pie">
       Los colores, espacios y activos salen de los mismos ficheros que usa el
       teléfono. El comportamiento nativo —gestos, animaciones, teclado— sólo se
       ve en Expo Go.

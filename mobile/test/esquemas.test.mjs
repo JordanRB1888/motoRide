@@ -17,8 +17,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { contraste, luminancia, medido } from './ayudas.mjs';
-
 import {
   ESQUEMA_CLARO,
   ESQUEMA_OSCURO,
@@ -32,8 +30,37 @@ const raizMovil = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // La fórmula
 // ---------------------------------------------------------------------------
 
-// La fórmula está en `ayudas.mjs`: la comparten esta prueba y la del dibujo de
-// revisión, y con dos copias una podría quedarse atrás sin que nadie lo note.
+/** Un color a sus tres canales, de 0 a 255. */
+function canales(color) {
+  const limpio = color.replace('#', '');
+  const completo = limpio.length === 3
+    ? limpio.split('').map(c => c + c).join('')
+    : limpio;
+  return [0, 2, 4].map(inicio => parseInt(completo.slice(inicio, inicio + 2), 16));
+}
+
+/** Luminancia relativa, según WCAG 2.1. */
+function luminancia(color) {
+  const [r, g, b] = canales(color).map(valor => {
+    const proporcion = valor / 255;
+    return proporcion <= 0.03928
+      ? proporcion / 12.92
+      : ((proporcion + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** La relación de contraste entre dos colores, de 1 a 21. */
+function contraste(uno, otro) {
+  const a = luminancia(uno);
+  const b = luminancia(otro);
+  const claro = Math.max(a, b);
+  const oscuro = Math.min(a, b);
+  return (claro + 0.05) / (oscuro + 0.05);
+}
+
+/** Redondeado a dos decimales, para que los mensajes de error se lean. */
+const medido = (uno, otro) => Math.round(contraste(uno, otro) * 100) / 100;
 
 // ---------------------------------------------------------------------------
 // La fórmula funciona

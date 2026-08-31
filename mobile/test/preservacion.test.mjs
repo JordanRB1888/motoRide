@@ -409,7 +409,7 @@ test('la barra del conductor lleva Saldo y no Jornada', () => {
   // Las cifras de la jornada ya salen al tocar el disco. Una pestaña entera
   // para repetirlas gastaba uno de los cuatro sitios en algo que ya está a un
   // toque; el saldo sí necesita pantalla propia.
-  const fuente = leer('theme/navegacion.ts');
+  const fuente = leer('ui/Navegacion.tsx');
   const barra = fuente.slice(fuente.indexOf('DESTINOS_DE_CONDUCTOR'));
   assert.match(barra, /etiqueta: 'Saldo'/);
   assert.doesNotMatch(barra, /etiqueta: 'Jornada'/);
@@ -421,7 +421,7 @@ test('la barra de la pasajera usa los nombres acordados', () => {
   //
   // «Viaje seguro» y no «Seguridad»: dice de qué va y coincide con el nombre
   // que la marca ya usa. «Seguridad» a secas suena a ajustes de contraseña.
-  const fuente = leer('theme/navegacion.ts');
+  const fuente = leer('ui/Navegacion.tsx');
   const barra = fuente.slice(fuente.indexOf('DESTINOS_DE_PASAJERA'));
 
   assert.match(barra, /etiqueta: 'Historial'/);
