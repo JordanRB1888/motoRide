@@ -345,6 +345,16 @@ test('el script de cuenta de prueba SÓLO acepta servidores privados', () => {
 // Nombres y estructura
 // ---------------------------------------------------------------------------
 
+test('la barra del conductor lleva Saldo y no Jornada', () => {
+  // Las cifras de la jornada ya salen al tocar el disco. Una pestaña entera
+  // para repetirlas gastaba uno de los cuatro sitios en algo que ya está a un
+  // toque; el saldo sí necesita pantalla propia.
+  const fuente = leer('ui/Navegacion.tsx');
+  const barra = fuente.slice(fuente.indexOf('DESTINOS_DE_CONDUCTOR'));
+  assert.match(barra, /etiqueta: 'Saldo'/);
+  assert.doesNotMatch(barra, /etiqueta: 'Jornada'/);
+});
+
 test('la barra de la pasajera usa los nombres acordados', () => {
   // «Historial» y no «Viajes»: lo que hay ahí son los que YA hiciste, y
   // «Viajes» en una aplicación de viajes no distingue nada.
@@ -528,13 +538,52 @@ test('la barra inferior respeta la franja del sistema', () => {
   assert.match(fuente, /Math\.max\(inferior/);
 });
 
-test('el conductor no tiene tablero financiero', () => {
-  // La cartera está apagada en el servidor. Una pestaña de dinero que lleva a
-  // una cifra vacía —o peor, inventada— no es navegación.
-  const fuente = sinComentarios('ui/Navegacion.tsx');
-  for (const palabra of ['aldo', 'anancia', 'artera', 'etiro', 'ingres']) {
-    assert.doesNotMatch(fuente, new RegExp(palabra, 'i'), `la barra menciona «${palabra}»`);
+test('el saldo del conductor NO inventa ninguna cifra', () => {
+  // Esta prueba sustituye a otra que prohibía la pestaña de dinero entera. La
+  // prohibía porque la cartera está apagada en el servidor y una pestaña que
+  // lleva a un número inventado no es navegación.
+  //
+  // El dueño decidió que la pantalla exista, y tiene sentido: recargar, pedir
+  // liquidación y revisar qué te descontaron son el trabajo del conductor, no
+  // un adorno. Lo que había que proteger no era la ausencia de la pantalla,
+  // sino la ausencia de cifras falsas. Eso es lo que se comprueba ahora.
+  const saldo = leer('preview/pantallaSaldoConductor.tsx');
+
+  const importes = saldo.match(/\$\s?\d[\d.,]*/g) ?? [];
+  for (const importe of importes) {
+    assert.match(importe, /^\$0,00$/, `la pantalla de saldo enseña ${importe}`);
   }
+  assert.match(saldo, /todavía no está encendida en el servidor/i,
+    'la pantalla dice que la cartera está apagada');
+
+  const movimientos = leer('preview/fixtures.ts');
+  const enMovimientos = movimientos.slice(movimientos.indexOf('MOVIMIENTOS_DEMO'));
+  const cifras = enMovimientos.slice(0, enMovimientos.indexOf('] as const')).match(/\$\d[\d.,]*/g) ?? [];
+  for (const cifra of cifras) {
+    assert.match(cifra, /^\$0,00$/, `un movimiento enseña ${cifra}`);
+  }
+});
+
+test('el saldo del conductor no promete un porcentaje de comisión', () => {
+  // La comisión sale de la configuración del servidor (`commissionRate`), y su
+  // valor por defecto en el código es 0.15 aunque el modelo de negocio hable de
+  // otro. Escribir un porcentaje en la pantalla lo congela en la aplicación y
+  // deja de coincidir con lo que de verdad se cobra en cuanto se cambie.
+  const saldo = leer('preview/pantallaSaldoConductor.tsx');
+  assert.doesNotMatch(saldo, /\d+\s?%/, 'la pantalla escribe un porcentaje fijo');
+  assert.match(saldo, /lo fija \+58express en su configuración/i,
+    'dice de dónde sale el porcentaje');
+});
+
+test('el saldo deudor no es el mismo estado con un signo menos', () => {
+  // El conductor cobra en efectivo y la plataforma le descuenta su parte, así
+  // que el balance puede quedar en negativo — y entonces deja de recibir
+  // viajes. Quien no puede trabajar hasta recargar necesita LEER eso, no
+  // deducirlo de un signo delante del número.
+  const saldo = leer('preview/pantallaSaldoConductor.tsx');
+  assert.match(saldo, /SALDO DEUDOR CON \+58EXPRESS/);
+  assert.match(saldo, /Recarga para volver a recibir viajes/);
+  assert.match(saldo, /deshabilitado=\{deudor\}/, 'en deuda no se puede pedir liquidación');
 });
 
 test('C2 no eligió proveedor de mapas', () => {

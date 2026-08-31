@@ -133,6 +133,23 @@ export const PERFIL_DEMO = {
 } as const;
 
 /**
+ * Los movimientos de la cuenta operativa del conductor.
+ *
+ * Los cuatro tipos son los que la aplicación ya maneja
+ * (`src/pages/driver/earnings.js`): lo que gana por un viaje, lo que le
+ * descuenta la plataforma, lo que recarga y lo que se le liquida.
+ *
+ * Todos los importes van a cero. La cartera está apagada en el servidor, y una
+ * cifra creíble en un movimiento se lee como dinero de alguien.
+ */
+export const MOVIMIENTOS_DEMO = [
+  { clave: 'v1', tipo: 'GANANCIA' as const, titulo: 'Ganancia acreditada', detalle: 'Efectivo · Viaje de ejemplo', cuando: 'Hoy · 08:20', importe: '+$0,00', estado: 'Confirmado' },
+  { clave: 'v2', tipo: 'COMISION' as const, titulo: 'Comisión +58Express', detalle: 'Viaje de ejemplo', cuando: 'Hoy · 08:20', importe: '−$0,00', estado: 'Aplicada' },
+  { clave: 'v3', tipo: 'RECARGA' as const, titulo: 'Recarga', detalle: 'Pago Móvil · Ref. de ejemplo', cuando: 'Ayer · 17:05', importe: '+$0,00', estado: 'Verificada' },
+  { clave: 'v4', tipo: 'LIQUIDACION' as const, titulo: 'Liquidación', detalle: 'Transferencia de ejemplo', cuando: 'Hace 3 días', importe: '−$0,00', estado: 'Pagada' }
+] as const;
+
+/**
  * El contexto de ubicación del conductor.
  *
  * No hay GPS todavía: estos valores llegan de aquí. Lo que existe en el código

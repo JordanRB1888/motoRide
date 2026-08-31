@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Pressable, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, View } from 'react-native';
 import { Boton, Txt } from './componentes';
 import { Icono } from './Icono';
 import { MarcadorDeVehiculo } from './Marca';
@@ -279,10 +279,14 @@ export interface JornadaDelConductor {
  * Por eso los datos van en pares de dos columnas y no en filas con icono: seis
  * filas serían el doble de alto para la misma información.
  */
-export function PanelDeJornada({ jornada, onAlternar, onCerrar }: {
+/**
+ * El panel se cierra por el mismo disco que lo abrió, así que no lleva botón de
+ * cerrar. Un «Cerrar» debajo de «Salir de línea» son dos salidas juntas que no
+ * hacen lo mismo, y la que no hay que pulsar por error es la de arriba.
+ */
+export function PanelDeJornada({ jornada, onAlternar }: {
   readonly jornada: JornadaDelConductor;
   readonly onAlternar?: () => void;
-  readonly onCerrar?: () => void;
 }) {
   const tema = useTema();
 
@@ -337,14 +341,6 @@ export function PanelDeJornada({ jornada, onAlternar, onCerrar }: {
         </View>
       </View>
 
-      <Pressable
-        onPress={onCerrar}
-        accessibilityRole="button"
-        accessibilityLabel="Cerrar el panel"
-        style={({ pressed }) => ({ alignItems: 'center', paddingVertical: 4, opacity: pressed ? 0.6 : 1 })}
-      >
-        <Txt nivel="etiqueta" tono="tenue">Cerrar</Txt>
-      </Pressable>
     </View>
   );
 }

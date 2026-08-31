@@ -49,7 +49,7 @@ function variables(tema) {
     --fondo:${c.fondo}; --superficie:${c.superficie}; --elevada:${c.superficieElevada};
     --borde:${c.borde}; --acento:${c.acento}; --sobre-acento:${c.sobreAcento};
     --texto:${c.textoPrimario}; --texto-2:${c.textoSecundario}; --texto-3:${c.textoTenue};
-    --exito:${c.exito}; --aviso:${c.aviso};
+    --exito:${c.exito}; --aviso:${c.aviso}; --peligro:${c.peligro};
     --margen:${tema.ritmo.margenPantalla}px; --bloques:${tema.ritmo.entreBloques}px;
     --pad:${tema.ritmo.dentroDeTarjeta}px; --gap:${tema.ritmo.entreElementos}px;
     --r-boton:${tema.radio.boton}px; --r-tarjeta:${tema.radio.tarjeta}px;
@@ -355,11 +355,11 @@ const barraPasajera = (modo = 'pedir', activo = 'inicio') => `
         <span class="etq t3">${n}</span></div>`).join('')}
   </div>`;
 
-const barraConductor = enLinea => `
+const barraConductor = (enLinea, activo = 'mapa') => `
   <div class="barra">
-    ${[['Mapa', 'inicio'], ['Jornada', 'reloj']].map(([n, ic], i) => `
-      <div class="dest-nav">${icono(ic, i === 0 ? 'var(--acento)' : 'var(--texto-3)')}
-        <span class="etq ${i === 0 ? '' : 't3'}">${n}</span></div>`).join('')}
+    ${[['Mapa', 'inicio'], ['Saldo', 'rayo']].map(([n, ic], i) => `
+      <div class="dest-nav">${icono(ic, i === 0 && activo === 'mapa' ? 'var(--acento)' : 'var(--texto-3)')}
+        <span class="etq ${i === 0 && activo === 'mapa' ? '' : 't3'}">${n}</span></div>`).join('')}
     <div class="disco-zona">
       ${disco(enLinea ? 'online' : 'offline')}
       <span class="etq ${enLinea ? 'ok' : 't3'}">${enLinea ? 'En línea' : 'Conectar'}</span>
@@ -718,10 +718,81 @@ const PANTALLAS = {
                   white-space:nowrap">${v}</span></span>`).join('')}
           </div>
           <div class="boton sec" style="border:1px solid var(--borde)">Salir de línea</div>
-          <div style="text-align:center"><span class="etq t3">Cerrar</span></div>
         </div>
       </div>
       ${barraConductor(true)}
+    </div>`,
+
+  'saldo-conductor': () => `
+    <div class="tel">
+      <div style="display:flex;align-items:center;padding:18px var(--margen) var(--gap)">
+        <span class="titulo">Tu saldo</span><span class="crece"></span>
+        <span class="pie t3">Tasa BCV · Bs. 000,00</span>
+      </div>
+      <div style="padding:0 var(--margen);display:grid;gap:var(--bloques)">
+        <div style="position:relative;overflow:hidden;border-radius:var(--r-tarjeta);
+          background:var(--superficie);padding:var(--pad);display:grid;gap:var(--gap)">
+          <span class="filo"></span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="etq t2">BALANCE DISPONIBLE</span><span class="crece"></span>
+            <span class="etq t3" style="border:1px solid var(--borde);border-radius:10px;padding:3px 9px">0 viajes</span>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:6px">
+            <span class="ac" style="font-size:32px;line-height:37px;font-weight:800;
+              letter-spacing:var(--ajuste)">$0,00</span>
+            <span class="cuerpo t3" style="padding-bottom:5px">USD</span>
+          </div>
+          <span class="pie t3">≈ Bs. 000,00 · tasa referencial del BCV</span>
+          <div class="boton">Recargar saldo</div>
+          <div class="boton sec" style="border:1px solid var(--borde)">Solicitar liquidación</div>
+          <span class="pie t3">La cartera todavía no está encendida en el servidor:
+            las cifras se muestran en cero a propósito.</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:14px;
+          border-radius:var(--r-campo);background:var(--superficie)">
+          ${icono('escudo', 'var(--texto-2)', 18)}
+          <span style="flex:1;display:grid;gap:2px">
+            <span class="cuerpo">Cómo se reparte cada viaje</span>
+            <span class="pie t3">Tu parte se acredita y la comisión se descuenta de esta
+              cuenta. El porcentaje lo fija +58express en su configuración.</span></span>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="enc">Movimientos</span><span class="crece"></span>
+            <span class="pie t3">4 registros</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:var(--gap)">
+            ${[['Todos', true], ['Comisiones', false], ['Recargas', false]].map(([n, on]) => `
+              <span style="padding:8px 14px;border-radius:999px;
+                background:${on ? 'var(--elevada)' : 'transparent'};
+                border:1px solid ${on ? 'var(--acento)' : 'var(--borde)'}">
+                <span class="etq ${on ? 'ac' : 't3'}">${n}</span></span>`).join('')}
+          </div>
+          <div style="margin-top:4px">
+            ${[['Ganancia acreditada', 'Efectivo · Viaje de ejemplo', 'Hoy · 08:20', '+$0,00', 'Confirmado', false],
+               ['Comisión +58Express', 'Viaje de ejemplo', 'Hoy · 08:20', '−$0,00', 'Aplicada', true],
+               ['Recarga', 'Pago Móvil · Ref. de ejemplo', 'Ayer · 17:05', '+$0,00', 'Verificada', false],
+               ['Liquidación', 'Transferencia de ejemplo', 'Hace 3 días', '−$0,00', 'Pagada', false]
+              ].map(([t, d, c, imp, est, comision], i) => `
+              ${i > 0 ? '<span class="sep"></span>' : ''}
+              <div style="display:flex;align-items:center;gap:13px;padding:13px 0">
+                <span style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+                  flex:0 0 36px;background:${comision ? 'color-mix(in srgb,var(--peligro) 12%,transparent)' : 'var(--elevada)'}">
+                  ${icono(comision ? 'escudo' : 'rayo', comision ? 'var(--peligro)' : 'var(--texto-2)', 18)}</span>
+                <span style="flex:1;display:grid;gap:2px;min-width:0">
+                  <span class="cuerpo">${t}</span>
+                  <span class="pie t3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d}</span>
+                  <span class="pie t3">${c}</span></span>
+                <span style="display:grid;gap:2px;text-align:right">
+                  <span class="cuerpo" style="color:${imp.startsWith('−') ? 'var(--texto-2)' : 'var(--exito)'}">${imp}</span>
+                  <span class="pie t3">${est}</span></span>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+      ${barraConductor(true, 'saldo')}
     </div>`,
 
   'punto-en-mapa': () => `
@@ -759,7 +830,8 @@ const NOMBRES = {
   'para-quien': '¿Para quién es el viaje?',
   confirmar: 'Confirmar el viaje',
   'buscando-moto': 'Buscando tu moto',
-  'panel-jornada': 'Panel de jornada',
+  'panel-jornada': 'Panel del disco',
+  'saldo-conductor': 'Saldo del conductor',
   'punto-en-mapa': 'Elegir punto en el mapa',
   'conductor-offline': 'Conductor · fuera de línea',
   'conductor-online': 'Conductor · en línea',
@@ -840,7 +912,7 @@ const ORDEN = [
   ['La pasajera: del reposo a pedir', ['pasajera', 'pedir', 'confirmar']],
   ['Esperando', ['buscando-moto']],
   ['Decisiones sobre el mapa', ['para-quien', 'punto-en-mapa']],
-  ['El conductor', ['conductor-offline', 'conductor-online', 'panel-jornada']],
+  ['El conductor', ['conductor-offline', 'conductor-online', 'panel-jornada', 'saldo-conductor']],
   ['El viaje', ['viaje']]
 ];
 

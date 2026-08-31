@@ -52,6 +52,7 @@ import {
   C2SelectorDeRol,
   C2Viaje
 } from '../preview/pantallasC2';
+import { C2SaldoConductor, C2SaldoConductorDeudor } from '../preview/pantallaSaldoConductor';
 import {
   C2Avisos,
   C2Ayuda,
@@ -116,7 +117,9 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'buscando-auto', nombre: 'Buscando auto', Componente: C2BuscandoAuto },
   { clave: 'conductor', nombre: 'Conductor', Componente: C2ConductorFueraDeLinea },
   { clave: 'conductor-online', nombre: 'Conductor en línea', Componente: C2ConductorEnLinea },
-  { clave: 'jornada', nombre: 'Panel de jornada', Componente: C2PanelDeJornada },
+  { clave: 'jornada', nombre: 'Panel del disco', Componente: C2PanelDeJornada },
+  { clave: 'saldo-conductor', nombre: 'Saldo conductor', Componente: C2SaldoConductor },
+  { clave: 'saldo-deuda', nombre: 'Saldo en deuda', Componente: C2SaldoConductorDeudor },
   { clave: 'viaje', nombre: 'Viaje', Componente: C2Viaje },
   // Las secciones: sin mapa, porque consultar un historial o leer un aviso no
   // pasa en ningún sitio. Mapa donde hay movimiento; lista donde hay que leer.

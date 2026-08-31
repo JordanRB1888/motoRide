@@ -387,9 +387,20 @@ export const DESTINOS_DE_PASAJERA: readonly DestinoDeNavegacion[] = Object.freez
  * No hay pestaña de dinero. La cartera está apagada en el servidor, y una
  * pestaña que lleva a una cifra vacía —o peor, inventada— no es navegación.
  */
+/**
+ * Los del conductor. Cuatro, con la disponibilidad en el centro.
+ *
+ * «Saldo» ocupa el sitio que tenía «Jornada». Las cifras de la jornada —viajes
+ * de hoy, tiempo en línea— ya salen al tocar el disco, así que una pestaña
+ * entera para repetirlas era gastar uno de los cuatro sitios en algo que ya
+ * está a un toque.
+ *
+ * Y el saldo sí necesita pantalla: recargar, pedir liquidación y revisar qué te
+ * descontaron no se hace de un vistazo en un semáforo.
+ */
 export const DESTINOS_DE_CONDUCTOR: readonly DestinoDeNavegacion[] = Object.freeze([
   { clave: 'mapa', icono: 'inicio', etiqueta: 'Mapa' },
-  { clave: 'jornada', icono: 'reloj', etiqueta: 'Jornada' },
+  { clave: 'saldo', icono: 'rayo', etiqueta: 'Saldo' },
   { clave: 'historial', icono: 'viajes', etiqueta: 'Historial' },
   { clave: 'perfil', icono: 'perfil', etiqueta: 'Perfil' }
 ]);
