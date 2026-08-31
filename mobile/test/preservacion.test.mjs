@@ -22,21 +22,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { despojarComentarios } from './ayudas.mjs';
+
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const raizMovil = path.resolve(aqui, '..');
 const raizWeb = path.resolve(raizMovil, '..');
 const leer = relativa => fs.readFileSync(path.join(raizMovil, relativa), 'utf8');
 
-/**
- * El código sin sus comentarios.
- *
- * Hace falta siempre que la prueba busque una palabra PROHIBIDA. Explicar por
- * qué algo no está obliga a nombrarlo —«no hay pestaña de cartera porque la
- * cartera está apagada»—, y una búsqueda a secas encuentra esa frase y da por
- * incumplida justo la regla que el comentario está defendiendo.
- */
-const sinComentarios = relativa =>
-  leer(relativa).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+// Ver `test/ayudas.mjs`: las pruebas que buscan algo PROHIBIDO leen el código
+// sin comentarios, porque explicar por qué algo no está obliga a nombrarlo.
+const sinComentarios = relativa => despojarComentarios(leer(relativa));
 
 /** Lee el ancho y el alto de la cabecera de un PNG, sin decodificarlo. */
 function medidasDePng(rutaAbsoluta) {

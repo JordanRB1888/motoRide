@@ -48,6 +48,14 @@ import {
   C2SelectorDeRol,
   C2Viaje
 } from '../preview/pantallasC2';
+import {
+  C2Avisos,
+  C2Ayuda,
+  C2Historial,
+  C2Perfil,
+  C2Saldo,
+  C2Seguridad
+} from '../preview/pantallasC2Secciones';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -102,7 +110,15 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'confirmar', nombre: 'Confirmar', Componente: C2ConfirmarViaje },
   { clave: 'conductor', nombre: 'Conductor', Componente: C2ConductorFueraDeLinea },
   { clave: 'conductor-online', nombre: 'Conductor en línea', Componente: C2ConductorEnLinea },
-  { clave: 'viaje', nombre: 'Viaje', Componente: C2Viaje }
+  { clave: 'viaje', nombre: 'Viaje', Componente: C2Viaje },
+  // Las secciones: sin mapa, porque consultar un historial o leer un aviso no
+  // pasa en ningún sitio. Mapa donde hay movimiento; lista donde hay que leer.
+  { clave: 'historial', nombre: 'Historial', Componente: C2Historial },
+  { clave: 'seguridad', nombre: 'Seguridad', Componente: C2Seguridad },
+  { clave: 'perfil', nombre: 'Perfil', Componente: C2Perfil },
+  { clave: 'saldo', nombre: 'Saldo', Componente: C2Saldo },
+  { clave: 'avisos', nombre: 'Avisos', Componente: C2Avisos },
+  { clave: 'ayuda', nombre: 'Ayuda', Componente: C2Ayuda }
 ];
 
 export function catalogoDePantallas(clave: ClaveDeDireccion): CatalogoDePantallas {

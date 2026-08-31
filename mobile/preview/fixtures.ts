@@ -97,6 +97,42 @@ export const VIAJE_DEMO = {
 } as const;
 
 /**
+ * El historial de viajes.
+ *
+ * Sin importes. La tarifa la calcula el servidor, y un historial con cifras
+ * inventadas es la clase de captura que acaba en una reunión citada como si
+ * fueran las cuentas de alguien.
+ */
+export const HISTORIAL_DEMO = [
+  { clave: 'h1', fecha: 'Hoy · 08:14', origen: 'Punto de ejemplo A', destino: 'Destino de ejemplo 1', estado: 'Completado' },
+  { clave: 'h2', fecha: 'Ayer · 19:02', origen: 'Punto de ejemplo B', destino: 'Destino de ejemplo 2', estado: 'Completado' },
+  { clave: 'h3', fecha: 'Ayer · 07:41', origen: 'Punto de ejemplo A', destino: 'Destino de ejemplo 3', estado: 'Cancelado' }
+] as const;
+
+/**
+ * Avisos del centro de notificaciones.
+ *
+ * La aplicación tiene centro de notificaciones de verdad
+ * (`src/components/notificationCenterModal.js`); estos son ejemplos de las
+ * clases de aviso que caben, no mensajes reales de nadie.
+ */
+export const AVISOS_DEMO = [
+  { clave: 'n1', titulo: 'Viaje completado', detalle: 'Tu viaje de ejemplo terminó bien.', cuando: 'Hace 2 h', sinLeer: true },
+  { clave: 'n2', titulo: 'Transporte Seguro', detalle: 'Tu traslado programado de ejemplo es mañana.', cuando: 'Ayer', sinLeer: true },
+  { clave: 'n3', titulo: 'Cuenta verificada', detalle: 'Ya puedes pedir viajes.', cuando: 'Hace 3 días', sinLeer: false }
+] as const;
+
+/** Lo que se enseña en el perfil. Nada que se parezca a los datos de nadie. */
+export const PERFIL_DEMO = {
+  nombre: 'Demo Pasajera',
+  iniciales: 'DP',
+  telefono: '+58 000 000 0000',
+  correo: 'demo@ejemplo.com',
+  desde: 'Miembro desde el mes de ejemplo',
+  viajes: '12'
+} as const;
+
+/**
  * Cifras de la jornada del conductor.
  *
  * Son PREVIEW y no salen de ninguna API. La cartera y los retiros están

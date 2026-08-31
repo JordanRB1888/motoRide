@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { despojarComentarios, ficherosDelLaboratorio } from './ayudas.mjs';
+
 import { CATALOGO, DIRECCIONES, DIRECCION_RECOMENDADA } from '../theme/directions.ts';
 import { AMARILLO, GRAFITO, AREA_TACTIL_MINIMA } from '../theme/primitives.ts';
 
@@ -20,6 +22,11 @@ import { AMARILLO, GRAFITO, AREA_TACTIL_MINIMA } from '../theme/primitives.ts';
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const raizMovil = path.resolve(aqui, '..');
 const leer = relativa => fs.readFileSync(path.join(raizMovil, relativa), 'utf8');
+
+// Las pruebas que buscan algo PROHIBIDO leen el código sin comentarios: si no,
+// lo encuentran en el propio comentario que explica por qué está prohibido.
+const sinComentarios = relativa => despojarComentarios(leer(relativa));
+const ficheros = () => ficherosDelLaboratorio(raizMovil);
 
 // ---------------------------------------------------------------------------
 // Las tres direcciones
@@ -179,11 +186,21 @@ test('las sombras son contenidas', () => {
 // La preview NO puede llegar a una versión publicada
 // ---------------------------------------------------------------------------
 
-test('el laboratorio está protegido por __DEV__', () => {
+test('las DOS puertas al laboratorio están cerradas en produccion', () => {
+  // Hay dos formas de llegar: la ruta /preview y el atajo de la pantalla de
+  // «falta configurar el servidor». Las dos tienen que comprobar el modo
+  // desarrollo; cerrar sólo una deja la otra abierta en una version publicada.
   const preview = leer('app/preview.tsx');
   assert.match(preview, /__DEV__/, 'la ruta comprueba el modo desarrollo');
   assert.match(preview, /if \(!EN_DESARROLLO\) return/,
     'sale antes de montar cualquier pantalla de preview');
+
+  const raiz = leer('app/_layout.tsx');
+  assert.match(raiz, /__DEV__/, 'el atajo comprueba el modo desarrollo');
+  assert.match(raiz, /verLaboratorio && EN_DESARROLLO/,
+    'el atajo no monta el laboratorio fuera de desarrollo');
+  assert.match(raiz, /EN_DESARROLLO \? \(/,
+    'el boton del atajo tampoco se dibuja fuera de desarrollo');
 });
 
 test('los datos de demostración NO llegan a la aplicación real', () => {
@@ -218,6 +235,17 @@ test('los datos de demostración son OBVIAMENTE ficticios', () => {
   assert.match(fixtures, /Demo/);
 });
 
+test('el laboratorio recorre TODOS sus ficheros en las comprobaciones', () => {
+  // Las comprobaciones de abajo listaban tres ficheros a mano, así que cada
+  // pantalla nueva quedaba sin vigilar hasta que alguien se acordara de
+  // añadirla. Ahora se descubren solas; esta prueba avisa si la carpeta se
+  // queda vacía por un cambio de estructura.
+  const encontrados = ficheros();
+  assert.ok(encontrados.length >= 4, `sólo se encontraron ${encontrados.length} ficheros`);
+  assert.ok(encontrados.includes('preview/pantallasC2.tsx'));
+  assert.ok(encontrados.includes('preview/pantallasC2Secciones.tsx'));
+});
+
 test('la preview no llama a NINGUNA API', () => {
   for (const relativa of ['preview/pantallas.tsx', 'preview/fixtures.ts', 'app/preview.tsx']) {
     const codigo = leer(relativa)
@@ -229,13 +257,37 @@ test('la preview no llama a NINGUNA API', () => {
 });
 
 test('la preview no toca autenticación ni finanzas', () => {
-  for (const relativa of ['preview/pantallas.tsx', 'preview/fixtures.ts', 'app/preview.tsx']) {
-    const codigo = leer(relativa);
-    assert.equal(/AuthContext|useSesion|SecureStore|guardarToken/.test(codigo), false,
+  // El laboratorio NO puede crear autoridad: ni marcar una sesión como
+  // autenticada, ni escribir en el almacén seguro, ni fabricar un token. Lo que
+  // enseña son fixtures, y tienen que quedarse en fixtures.
+  for (const relativa of ficheros()) {
+    const codigo = sinComentarios(relativa);
+    assert.equal(/AuthContext|useSesion|SecureStore|guardarToken|setItemAsync/.test(codigo), false,
       `${relativa} toca la sesión real`);
     assert.equal(/wallet\/payouts|WALLET_PAYOUTS_ENABLED|driverFinance/i.test(codigo), false,
       `${relativa} toca finanzas`);
   }
+});
+
+test('el laboratorio no escribe en el almacén seguro', () => {
+  // Comprobación aparte porque es la que más caro sale equivocarse: una sesión
+  // escrita desde una maqueta sobreviviría al cierre de la aplicación.
+  for (const relativa of ficheros()) {
+    const codigo = sinComentarios(relativa);
+    for (const prohibido of ['expo-secure-store', 'AsyncStorage', 'services/session']) {
+      assert.equal(codigo.includes(prohibido), false, `${relativa} importa ${prohibido}`);
+    }
+  }
+});
+
+test('el saldo no enseña NINGUNA cifra', () => {
+  // La cartera está apagada en el servidor. Incluso «$0,00» afirmaría que la
+  // cuenta existe y está a cero; cualquier otra cosa sería inventar dinero.
+  const saldo = leer('preview/pantallasC2Secciones.tsx');
+  const seccion = saldo.slice(saldo.indexOf('export function C2Saldo'), saldo.indexOf('// Historial'));
+  assert.doesNotMatch(seccion, /\$\s?\d/, 'la pantalla de saldo enseña una cifra');
+  assert.doesNotMatch(seccion, /Bs\.\s?\d/, 'la pantalla de saldo enseña bolívares');
+  assert.match(seccion, /Todavía no está activa/);
 });
 
 test('la cifra de saldo del conductor NO se inventa', () => {
