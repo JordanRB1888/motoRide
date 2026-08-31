@@ -32,7 +32,9 @@ export default function SelectorDeRol() {
       // Si no se puede recordar, la aplicación sigue funcionando: la próxima vez
       // se volverá a preguntar. No es motivo para bloquear la entrada.
     });
-    router.replace(rol === 'passenger' ? '/pasajero' : '/conductor');
+    // Al ACCESO, no directamente a la experiencia: sin sesión no hay nada que
+    // enseñar, y entrar «como conductor» sin autenticarse no significa nada.
+    router.push({ pathname: '/acceso', params: { rol } });
   };
 
   return (

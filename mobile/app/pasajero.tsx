@@ -1,55 +1,68 @@
 /**
- * Entrada de pasajera.
+ * Inicio de pasajera.
  *
- * El armazón de acceso, no el acceso terminado. Wave 1 conecta el inicio de
- * sesión real contra el backend existente, que sigue siendo la única autoridad:
- * aquí no se validará nada por nuestra cuenta ni se creará un sistema de
- * autenticación paralelo.
- *
- * Está montada sobre `Pantalla`, así que el teclado y las áreas seguras ya
- * funcionan cuando lleguen los campos del formulario.
+ * Con guardia de sesión: sin sesión confirmada por el backend, aquí no se
+ * entra. La comprobación mira el ESTADO real, no la ruta ni la preferencia
+ * guardada — un enlace profundo no puede saltársela.
  */
 
-import { router } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Redirect, router } from 'expo-router';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
+import { useSesion } from '../context/AuthContext';
 
-export default function EntradaDePasajera() {
+export default function InicioDePasajera() {
+  const { sesion, salir } = useSesion();
+
+  if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
+    return (
+      <Pantalla>
+        <View style={estilos.centro}>
+          <ActivityIndicator color={colores.acento} size="large" />
+        </View>
+      </Pantalla>
+    );
+  }
+
+  // Sin autoridad fresca no se entra. `SIN_VERIFICAR` incluido: hay token, pero
+  // nadie ha confirmado que valga.
+  if (sesion.estado !== 'AUTENTICADO') return <Redirect href="/" />;
+
+  const { usuario } = sesion;
+
   return (
-    <Pantalla desplazable testID="entrada-pasajera">
+    <Pantalla desplazable testID="inicio-pasajera">
       <View style={estilos.cabecera}>
         <Text style={estilos.saludo} accessibilityRole="header">
-          Bienvenida a bordo
+          Hola, {usuario.firstName || 'bienvenida'}
         </Text>
-        <Text style={estilos.subtitulo}>
-          Entra o crea tu cuenta para pedir tu primera carrera.
-        </Text>
+        <Text style={estilos.subtitulo}>Tu cuenta está lista.</Text>
       </View>
 
       <View style={estilos.cuerpo}>
-        <View style={estilos.marcador}>
-          <Text style={estilos.marcadorTitulo}>Acceso de pasajera</Text>
-          <Text style={estilos.marcadorTexto}>
-            El formulario de acceso llega en la siguiente entrega. La pantalla ya
-            gestiona el teclado y las áreas seguras.
+        <View style={estilos.tarjeta}>
+          <Text style={estilos.tarjetaTitulo}>Pedir una carrera</Text>
+          <Text style={estilos.tarjetaTexto}>
+            El mapa y la solicitud de viaje llegan en la siguiente entrega.
           </Text>
         </View>
       </View>
 
       <Boton
-        titulo="Cambiar de modo"
+        titulo="Cerrar sesión"
         variante="secundario"
-        onPress={() => { router.replace('/rol'); }}
-        etiquetaAccesible="Volver a elegir cómo continuar"
+        onPress={() => { void salir().then(() => { router.replace('/rol'); }); }}
+        testID="boton-cerrar-sesion"
       />
     </Pantalla>
   );
 }
 
 const estilos = StyleSheet.create({
+  centro: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   cabecera: { paddingTop: espaciado.xxl, gap: espaciado.sm },
   saludo: {
     color: colores.textoPrimario,
@@ -63,7 +76,7 @@ const estilos = StyleSheet.create({
     lineHeight: tipografia.cuerpo.alto
   },
   cuerpo: { flex: 1, justifyContent: 'center', paddingVertical: espaciado.xl },
-  marcador: {
+  tarjeta: {
     backgroundColor: colores.superficie,
     borderColor: colores.borde,
     borderWidth: 1,
@@ -71,13 +84,13 @@ const estilos = StyleSheet.create({
     padding: espaciado.xl,
     gap: espaciado.sm
   },
-  marcadorTitulo: {
+  tarjetaTitulo: {
     color: colores.textoPrimario,
     fontSize: tipografia.subtitulo.tamano,
     lineHeight: tipografia.subtitulo.alto,
     fontWeight: '600'
   },
-  marcadorTexto: {
+  tarjetaTexto: {
     color: colores.textoSecundario,
     fontSize: tipografia.cuerpo.tamano,
     lineHeight: tipografia.cuerpo.alto

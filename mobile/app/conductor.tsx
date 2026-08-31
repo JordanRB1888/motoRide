@@ -1,67 +1,111 @@
 /**
- * Entrada de conductor.
+ * Inicio de conductor.
  *
- * ELEGIR «CONDUCTOR» NO ABRE LA INTERFAZ DE CONDUCTOR
+ * LA COMPROBACIÓN QUE DE VERDAD IMPORTA
  *
- * Esta pantalla enseña la SITUACIÓN de la persona respecto a su solicitud, que
- * decide el backend. Sin sesión no hay situación que consultar, así que lo que
- * se muestra es la entrada de acceso; con sesión, Wave 1 traerá el estado real y
- * esta pantalla lo pintará.
+ * Entrar aquí exige TRES cosas, y ninguna la decide el cliente:
  *
- * En ningún caso se deduce el permiso desde el cliente: `puedeConducir` exige la
- * aprobación explícita, y cualquier estado desconocido cae en el más
- * restrictivo.
+ *   1. sesión confirmada por el backend ahora mismo;
+ *   2. que el backend diga que el rol es `driver`;
+ *   3. que el backend lo dé por verificado (`isVerified`).
+ *
+ * Que el JWT lleve `role: 'driver'` no basta. El token se firmó en el pasado y
+ * dura siete días: alguien suspendido ayer sigue teniendo un token con ese
+ * claim. Por eso `requireApprovedDriver` del backend comprueba `isVerified` en
+ * cada petición, y aquí se refleja lo mismo.
+ *
+ * Quien tenga sesión pero no la aprobación ve su SITUACIÓN, no una interfaz de
+ * conductor a medias.
  */
 
-import { router } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Redirect, router } from 'expo-router';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
+import { useSesion } from '../context/AuthContext';
+import { puedeOperarComoConductor } from '../domain/authState';
 import { describirSituacion, SIN_SOLICITUD } from '../domain/driverApplication';
 
-export default function EntradaDeConductor() {
-  // Sin sesión todavía no hay solicitud que consultar. Wave 1 sustituye esto por
-  // la situación real que devuelva el backend.
-  const situacion = describirSituacion(SIN_SOLICITUD);
+export default function InicioDeConductor() {
+  const { sesion, salir } = useSesion();
+
+  if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
+    return (
+      <Pantalla>
+        <View style={estilos.centro}>
+          <ActivityIndicator color={colores.acento} size="large" />
+        </View>
+      </Pantalla>
+    );
+  }
+
+  if (sesion.estado !== 'AUTENTICADO') return <Redirect href="/" />;
+
+  const { usuario } = sesion;
+  const operativo = puedeOperarComoConductor(sesion);
+
+  // Alguien con sesión de pasajera que llega aquí —por un enlace, o volviendo
+  // atrás— no ve nada de conductor. Se le manda a lo suyo.
+  if (usuario.role !== 'driver') return <Redirect href="/pasajero" />;
 
   return (
-    <Pantalla desplazable testID="entrada-conductor">
+    <Pantalla desplazable testID="inicio-conductor">
       <View style={estilos.cabecera}>
         <Text style={estilos.saludo} accessibilityRole="header">
-          Modo conductor
+          Hola, {usuario.firstName || 'conductor'}
         </Text>
         <Text style={estilos.subtitulo}>
-          Entra con tu cuenta para ver el estado de tu solicitud.
+          {operativo ? 'Tu cuenta está aprobada.' : 'Estado de tu cuenta de conductor.'}
         </Text>
       </View>
 
       <View style={estilos.cuerpo}>
-        <View style={estilos.tarjeta}>
-          <Text style={estilos.tarjetaTitulo}>{situacion.titulo}</Text>
-          <Text style={estilos.tarjetaTexto}>{situacion.explicacion}</Text>
-          {situacion.accion !== null && (
-            <Text style={estilos.tarjetaAccion}>{situacion.accion}</Text>
-          )}
-        </View>
-
-        <Text style={estilos.aviso}>
-          Recibir carreras requiere que administración apruebe tus documentos.
-        </Text>
+        {operativo ? (
+          <View style={estilos.tarjeta} testID="conductor-operativo">
+            <Text style={estilos.tarjetaTitulo}>Todo listo</Text>
+            <Text style={estilos.tarjetaTexto}>
+              La disponibilidad y las carreras llegan en la siguiente entrega.
+            </Text>
+          </View>
+        ) : (
+          <SituacionSinAprobar />
+        )}
       </View>
 
       <Boton
-        titulo="Cambiar de modo"
+        titulo="Cerrar sesión"
         variante="secundario"
-        onPress={() => { router.replace('/rol'); }}
-        etiquetaAccesible="Volver a elegir cómo continuar"
+        onPress={() => { void salir().then(() => { router.replace('/rol'); }); }}
+        testID="boton-cerrar-sesion"
       />
     </Pantalla>
   );
 }
 
+/**
+ * Lo que ve quien tiene sesión de conductor sin aprobación.
+ *
+ * El detalle exacto de la solicitud lo trae el backend, y consultarlo es de la
+ * siguiente entrega. Hasta entonces se enseña la situación más restrictiva, que
+ * es la correcta cuando no se sabe.
+ */
+function SituacionSinAprobar() {
+  const situacion = describirSituacion(SIN_SOLICITUD);
+  return (
+    <View style={estilos.tarjeta} testID="conductor-sin-aprobar">
+      <Text style={estilos.tarjetaTitulo}>{situacion.titulo}</Text>
+      <Text style={estilos.tarjetaTexto}>{situacion.explicacion}</Text>
+      <Text style={estilos.aviso}>
+        Recibir carreras requiere que administración apruebe tus documentos.
+      </Text>
+    </View>
+  );
+}
+
 const estilos = StyleSheet.create({
+  centro: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   cabecera: { paddingTop: espaciado.xxl, gap: espaciado.sm },
   saludo: {
     color: colores.textoPrimario,
@@ -74,7 +118,7 @@ const estilos = StyleSheet.create({
     fontSize: tipografia.cuerpo.tamano,
     lineHeight: tipografia.cuerpo.alto
   },
-  cuerpo: { flex: 1, justifyContent: 'center', gap: espaciado.lg, paddingVertical: espaciado.xl },
+  cuerpo: { flex: 1, justifyContent: 'center', paddingVertical: espaciado.xl },
   tarjeta: {
     backgroundColor: colores.superficie,
     borderColor: colores.borde,
@@ -94,17 +138,10 @@ const estilos = StyleSheet.create({
     fontSize: tipografia.cuerpo.tamano,
     lineHeight: tipografia.cuerpo.alto
   },
-  tarjetaAccion: {
-    color: colores.acento,
-    fontSize: tipografia.cuerpoFuerte.tamano,
-    lineHeight: tipografia.cuerpoFuerte.alto,
-    fontWeight: '600',
-    marginTop: espaciado.xs
-  },
   aviso: {
     color: colores.textoTenue,
     fontSize: tipografia.pie.tamano,
     lineHeight: tipografia.pie.alto,
-    textAlign: 'center'
+    marginTop: espaciado.xs
   }
 });

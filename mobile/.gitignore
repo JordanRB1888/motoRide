@@ -43,6 +43,7 @@ yarn-error.*
 # Comprobacion local del bundle (`npm run bundle:check`). Es un artefacto de
 # verificacion, no una fuente.
 .expo-bundle-check/
+.expo-bundle-ios/
 
 # Configuracion local del backend al que apunta la app. NUNCA se sube: cada
 # persona apunta a su propio servidor de desarrollo, y un `.env` compartido

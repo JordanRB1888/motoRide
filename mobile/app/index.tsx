@@ -1,43 +1,36 @@
 /**
  * Arranque.
  *
- * Decide la primera pantalla y no hace nada más. Lee si hay un rol recordado y
- * redirige; si no lo hay, al selector.
+ * NO SE ENTRA POR TENER UNA CADENA GUARDADA
  *
- * LO QUE ESTA PANTALLA NO HACE
+ * Que exista un token en el almacén seguro sólo demuestra que alguien entró
+ * alguna vez. Puede haber caducado —duran siete días—, la cuenta puede estar
+ * deshabilitada o el rol puede haber cambiado. Por eso el proveedor de sesión
+ * PREGUNTA al backend antes de dar a nadie por autenticado.
  *
- * · No pide permisos. Ni ubicación, ni notificaciones, ni cámara. Un permiso
- *   pedido nada más abrir, sin contexto, se deniega — y una vez denegado
- *   volverlo a pedir cuesta mucho más. Cada permiso se pedirá cuando la función
- *   que lo necesita esté a la vista.
- * · No llama al backend. Todavía no hay sesión que validar.
- * · No concede nada. El rol recordado es una preferencia de navegación.
+ * Esta pantalla sólo mira el resultado y decide a dónde ir:
+ *
+ *   ARRANCANDO      esperando la respuesta
+ *   SIN_SESION      al selector de experiencia
+ *   AUTENTICADO     a la experiencia que dice la identidad REAL
+ *   SIN_VERIFICAR   hay token y no se pudo preguntar: se ofrece reintentar
+ *
+ * Lo que NO hace: pedir permisos, y conceder nada por el rol recordado.
  */
 
-import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
+import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
-import { colores } from '../theme/tokens';
-import { leerUltimoRol, type RolMovil } from '../services/session';
-
-type Destino = { readonly listo: false } | { readonly listo: true; readonly rol: RolMovil | null };
+import { colores, espaciado, radios, tipografia } from '../theme/tokens';
+import { useSesion } from '../context/AuthContext';
+import { experienciaDeLaIdentidad } from '../domain/authState';
 
 export default function Arranque() {
-  const [destino, setDestino] = useState<Destino>({ listo: false });
+  const { sesion, revalidar, salir } = useSesion();
 
-  useEffect(() => {
-    let vigente = true;
-    // El almacén seguro es asíncrono; si la pantalla se desmonta antes de que
-    // responda, no se toca el estado.
-    leerUltimoRol()
-      .then(rol => { if (vigente) setDestino({ listo: true, rol }); })
-      .catch(() => { if (vigente) setDestino({ listo: true, rol: null }); });
-    return () => { vigente = false; };
-  }, []);
-
-  if (!destino.listo) {
+  if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (
       <Pantalla testID="arranque">
         <View style={estilos.centro}>
@@ -47,11 +40,68 @@ export default function Arranque() {
     );
   }
 
-  if (destino.rol === 'passenger') return <Redirect href="/pasajero" />;
-  if (destino.rol === 'driver') return <Redirect href="/conductor" />;
+  if (sesion.estado === 'AUTENTICADO') {
+    const destino = experienciaDeLaIdentidad(sesion.usuario);
+    return <Redirect href={destino === 'driver' ? '/conductor' : '/pasajero'} />;
+  }
+
+  if (sesion.estado === 'SIN_VERIFICAR') {
+    // Hay una sesión guardada y no se pudo comprobar. NO se borra —cerrarle la
+    // sesión a alguien porque iba en el metro es un fallo que se nota— y NO se
+    // le deja entrar: nadie ha confirmado que siga valiendo.
+    return (
+      <Pantalla testID="sin-verificar">
+        <View style={estilos.centro}>
+          <View style={estilos.tarjeta}>
+            <Text style={estilos.titulo} accessibilityRole="header">
+              Sin conexión
+            </Text>
+            <Text style={estilos.texto}>
+              Tienes una sesión guardada, pero no pudimos comprobarla con el
+              servidor. No la hemos cerrado.
+            </Text>
+          </View>
+
+          <View style={estilos.acciones}>
+            <Boton
+              titulo="Reintentar"
+              onPress={() => { void revalidar(); }}
+              testID="boton-reintentar"
+            />
+            <Boton
+              titulo="Cerrar sesión"
+              variante="secundario"
+              onPress={() => { void salir(); }}
+            />
+          </View>
+        </View>
+      </Pantalla>
+    );
+  }
+
   return <Redirect href="/rol" />;
 }
 
 const estilos = StyleSheet.create({
-  centro: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  centro: { flex: 1, justifyContent: 'center', gap: espaciado.xl },
+  tarjeta: {
+    backgroundColor: colores.superficie,
+    borderColor: colores.borde,
+    borderWidth: 1,
+    borderRadius: radios.lg,
+    padding: espaciado.xl,
+    gap: espaciado.sm
+  },
+  titulo: {
+    color: colores.aviso,
+    fontSize: tipografia.subtitulo.tamano,
+    lineHeight: tipografia.subtitulo.alto,
+    fontWeight: '600'
+  },
+  texto: {
+    color: colores.textoSecundario,
+    fontSize: tipografia.cuerpo.tamano,
+    lineHeight: tipografia.cuerpo.alto
+  },
+  acciones: { gap: espaciado.md }
 });

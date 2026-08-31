@@ -18,7 +18,7 @@ const raizMovil = path.resolve(aqui, '..');
 
 /** Los ficheros propios del cliente móvil, sin dependencias ni artefactos. */
 function ficherosDelMovil() {
-  const carpetas = ['app', 'components', 'config', 'domain', 'services', 'theme'];
+  const carpetas = ['app', 'components', 'config', 'context', 'domain', 'services', 'theme'];
   const encontrados = [];
   for (const carpeta of carpetas) {
     const ruta = path.join(raizMovil, carpeta);

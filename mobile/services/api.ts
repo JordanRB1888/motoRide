@@ -22,33 +22,17 @@
  */
 
 import type { ApiError } from '../../shared/contracts/api';
+import type { MotivoDeError, Resultado } from '../domain/apiResult';
 import { configuracion } from '../config/environment';
 import { leerToken } from './session';
 
 /** Cuánto se espera antes de dar una petición por perdida. */
 const TIEMPO_MAXIMO_MS = 15_000;
 
-export const MOTIVOS_DE_ERROR = [
-  'SIN_CONFIGURACION',
-  'SIN_RED',
-  'TIEMPO_AGOTADO',
-  'NO_AUTENTICADO',
-  'RESPUESTA_INVALIDA',
-  'ERROR_DEL_SERVIDOR'
-] as const;
-export type MotivoDeError = (typeof MOTIVOS_DE_ERROR)[number];
-
-/**
- * Lo que devuelve cualquier llamada.
- *
- * Un resultado, no una excepción. En una interfaz móvil casi todos los errores
- * son estados que hay que pintar —sin red, sesión caducada, servidor caído— y
- * envolverlos en `try/catch` por toda la aplicación acaba en pantallas que se
- * quedan en blanco porque alguien olvidó uno.
- */
-export type Resultado<T> =
-  | { readonly ok: true; readonly datos: T }
-  | { readonly ok: false; readonly motivo: MotivoDeError; readonly codigo: string | null; readonly mensaje: string };
+// La forma del resultado vive en el dominio, no aqui: una decision que se
+// apoyara en estos tipos quedaria atrapada detras de `expo-secure-store` y no
+// se podria ejecutar fuera de un emulador.
+export { MOTIVOS_DE_ERROR, type MotivoDeError, type Resultado } from '../domain/apiResult';
 
 const fallo = (motivo: MotivoDeError, mensaje: string, codigo: string | null = null): Resultado<never> =>
   ({ ok: false, motivo, codigo, mensaje });

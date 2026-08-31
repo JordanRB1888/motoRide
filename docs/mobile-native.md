@@ -5,9 +5,9 @@
 La fundación de la app nativa: **React Native + Expo + TypeScript**, una sola
 base para Android e iOS.
 
-Establece la plataforma. **No migra la aplicación todavía**: hay una pantalla de
-arranque, el selector de rol y los dos armazones de acceso. Nada más, y a
-propósito.
+Establece la plataforma y, con Wave 1, el **acceso real** contra el backend
+existente: arranque con validación de sesión, selector de experiencia, formulario
+de acceso, restauración de sesión y cierre. No migra el resto de la aplicación.
 
 ```
 mobile/     Expo SDK 57.0.18 · React Native 0.86.3 · React 19.2.3 · TypeScript 6.0.3
@@ -59,10 +59,11 @@ convierte un enlace roto en un error de compilación.
 ```
 app/
   _layout.tsx     raíz: áreas seguras, tema oscuro, guardia de configuración
-  index.tsx       arranque: lee el rol recordado y redirige
+  index.tsx       arranque: valida la sesión con el backend y redirige
   rol.tsx         «¿Cómo quieres continuar?»
-  pasajero.tsx    armazón de acceso de pasajera
-  conductor.tsx   armazón de acceso de conductor
+  acceso.tsx      formulario de acceso real
+  pasajero.tsx    inicio de pasajera, con guardia de sesión
+  conductor.tsx   inicio de conductor, con guardia de sesión y aprobación
 ```
 
 Administración **sigue siendo web**. No hay decisión de llevarla al teléfono, y
@@ -98,6 +99,206 @@ está rechazado»— y cualquier estado desconocido cae en el más restrictivo. 
 backend empieza a devolver algo que esta versión no conoce, lo peor que pasa es
 que se ofrezca empezar una solicitud; nunca que se abra una interfaz de conductor
 por error.
+
+## Autenticación — Wave 1
+
+### La autoridad no se duplica
+
+El backend existente es la única autoridad. La aplicación móvil **no** verifica
+el JWT, no lee sus claims para decidir y no da a nadie por autenticado por tener
+un token guardado.
+
+Eso no es purismo: `requireAuth` del backend **recarga el usuario de la base de
+datos** en cada petición y comprueba su estado. Un token firmado hace seis días
+sigue siendo criptográficamente válido aunque a esa persona la hayan suspendido
+ayer. El claim `role` es un dato histórico, no un permiso.
+
+```
+AUTH_LOGIN_ENDPOINT      POST /api/auth/login
+AUTH_REGISTER_ENDPOINT   POST /api/auth/register        (no usado en Wave 1)
+AUTH_SESSION_ENDPOINT    GET  /api/auth/me
+AUTH_TOKEN_FORMAT        JWT { sub, role }, HS256
+AUTH_TOKEN_EXPIRATION    7 días
+AUTH_ROLE_SOURCE         users.role en la base, recargado en cada petición
+DRIVER_APPROVAL_SOURCE   users.isVerified + requireApprovedDriver
+```
+
+Los contratos salen de leer `server/index.js`, no de suponer nombres.
+
+### Estados de sesión
+
+```
+ARRANCANDO      leyendo el token y preguntando al backend
+SIN_SESION      no hay sesión, o el backend la rechazó
+AUTENTICANDO    login en curso
+AUTENTICADO     el backend confirmó la sesión AHORA
+SIN_VERIFICAR   hay token guardado y NO se pudo preguntar
+```
+
+Una máquina de estados y no cuatro booleanos: `isLoading` + `isLogged` +
+`hasUser` + `maybeToken` admite dieciséis combinaciones, de las que sólo cinco
+tienen sentido. Las otras once son errores que nadie escribió a propósito.
+
+**`AUTENTICADO` y `SIN_VERIFICAR` son cosas distintas**, y confundirlas hace
+daño en las dos direcciones:
+
+- tratar «sin red» como «sesión inválida» cierra la sesión de alguien que la
+  tiene perfectamente válida, sólo porque iba en el metro;
+- tratar «sin red» como «autenticado» deja pasar operaciones con una sesión que
+  quizá el backend ya revocó.
+
+`SIN_VERIFICAR` muestra la identidad conocida y **no autoriza nada**.
+`tieneAutoridadFresca()` es la única función que debe consultarse para permitir
+algo, y da `false` ahí.
+
+### Arranque
+
+```
+1. ¿hay token en el almacén seguro?   no → selector de experiencia
+2. sí → se PREGUNTA a GET /api/auth/me
+3. válida    → identidad cargada, a su experiencia
+4. inválida  → se borra el token, a la entrada
+5. sin red   → SIN_VERIFICAR: el token se CONSERVA, con botón de reintentar
+```
+
+**Sólo el paso 4 borra el token.** Que el backend no conteste no es que la
+sesión sea mala; un 500 tampoco, porque un fallo temporal del servidor no puede
+cerrarle la sesión a todo el mundo a la vez.
+
+### Selección de experiencia frente a autoridad
+
+```
+ROLE_SELECTION_IS_AUTHORITY: NO
+```
+
+El selector decide **qué pantalla de acceso** se enseña. Después del login, a
+dónde se va lo decide la identidad REAL que devolvió el backend
+(`experienciaDeLaIdentidad`), no lo que se eligió antes.
+
+La experiencia elegida viaja al backend como `role` en el login, y el backend
+responde 401 si no coincide con el rol real de la cuenta. Es una comprobación
+más, no una petición de privilegios.
+
+### Conductor: tres condiciones, ninguna del cliente
+
+`puedeOperarComoConductor()` exige a la vez:
+
+1. sesión confirmada por el backend ahora mismo;
+2. que el backend diga que el rol es `driver`;
+3. que el backend lo dé por verificado (`isVerified === true`).
+
+Que el JWT lleve `role: 'driver'` **no basta**. Y `isVerified` sólo cuenta con el
+`true` explícito: `'true'`, `1` o `'yes'` se leen como no verificado, que es el
+lado seguro.
+
+Quien tenga sesión pero no la aprobación ve su **situación**, no una interfaz de
+conductor a medias.
+
+### Cierre de sesión
+
+```
+El backend NO tiene endpoint de logout ni revocación.
+```
+
+Comprobado leyendo `server/index.js`: los JWT son sin estado, duran siete días y
+no hay lista de revocados. Cerrar sesión es una operación **local** — se borra el
+token del dispositivo — y no se inventó `POST /api/auth/logout`, que daría 404 y
+parecería que algo se rompió.
+
+La consecuencia real —un token robado sigue valiendo hasta que caduque— es una
+limitación del backend actual, y corresponde a una fase de servidor. Queda
+anotado, no disimulado.
+
+### Respuestas obsoletas
+
+Cada operación de sesión lleva número, y sólo la última puede escribir estado. Si
+alguien pulsa dos veces, o entra, vuelve y entra con otra cuenta, la respuesta
+vieja llega después y **no pisa** a la nueva. Sin esto el caso es fácil de
+reproducir con red lenta: se acaba con la sesión de la cuenta equivocada.
+
+### Errores del acceso
+
+Cada código real del backend tiene su mensaje: credenciales inválidas, cuenta
+deshabilitada, conductor no aprobado, demasiados intentos (el limitador son 30
+por cuarto de hora), sin conexión, sin configuración.
+
+«Correo o contraseña incorrectos» **no distingue** cuál de los dos falló, y es
+deliberado: decirlo permitiría averiguar qué cuentas existen. Nunca se enseña un
+volcado de JSON, un código interno ni una traza.
+
+### La contraseña
+
+`secureTextEntry`, sin autocorrección ni capitalización, y se limpia del estado
+en cuanto el acceso tiene éxito. No se registra en ningún sitio, y hay una prueba
+que lo comprueba sobre el código.
+
+### Una cuenta, un rol
+
+El modelo actual **no admite** que una cuenta sea pasajera y conductora a la vez:
+el registro público crea `role: 'passenger'`, y los conductores los crea
+administración o salen de una solicitud aprobada. El login filtra por rol exacto.
+
+No se ha inventado soporte multi-rol. Si algún día se quiere —una misma persona
+que conduce y también pide carreras—, es un cambio de backend con su propia
+decisión.
+
+### Estructura de dependencias
+
+Las decisiones de autenticación viven en `domain/`, sin nada de React Native:
+
+```
+domain/apiResult.ts       la forma de un resultado
+domain/authState.ts       estados, identidad, autoridad
+domain/authDecisions.ts   qué significa cada error, cuándo se borra la sesión
+services/api.ts           transporte
+services/auth.ts          llamadas
+context/AuthContext.tsx   estado de la aplicación
+```
+
+La dirección es `services/ → domain/`, nunca al revés. Por eso las 28 pruebas de
+autenticación se ejecutan con `node --test` sin emulador: comprobar que un
+`ACCOUNT_DISABLED` se cuenta distinto de unas credenciales malas no debería
+requerir levantar Android.
+
+### Cuentas de prueba
+
+Las pruebas que necesiten credenciales las leen del entorno, nunca del
+repositorio:
+
+```
+MOBILE_TEST_PASSENGER_EMAIL / _PASSWORD
+MOBILE_TEST_DRIVER_EMAIL / _PASSWORD
+```
+
+Y **sólo contra un backend de Test o local**. La protección de la fundación
+sigue intacta: sin `EXPO_PUBLIC_API_BASE_URL` no hay servidor, y nunca se cae a
+producción.
+
+### Lo que Wave 1 NO trae
+
+```
+✗ registro desde el móvil          (Wave 1B)
+✗ recuperación de contraseña       (Wave 1B)
+✗ OTP por WhatsApp o SMS           (EXPERIENCE-1)
+✗ Google / Apple Sign-In           (EXPERIENCE-1)
+✗ verificación de correo           (EXPERIENCE-1)
+✗ confianza de dispositivo         (EXPERIENCE-1)
+```
+
+El registro existe en el backend y funciona, pero conectarlo bien —validaciones,
+duplicados, confirmación— es su propia entrega. Login y sesión eran la prioridad.
+
+### Pruebas nativas: ahora sí tiene sentido evaluarlas
+
+Con un flujo real de acceso ya hay algo que probar de punta a punta en un
+dispositivo. **Maestro** es la recomendación para evaluar primero: sus flujos son
+YAML, no exige compilar una versión instrumentada de la aplicación y encaja con
+el flujo gestionado de Expo. Detox da más control a cambio de más
+infraestructura, y Appium sólo compensa si hiciera falta compartir pruebas con
+otra plataforma.
+
+No se instaló ninguno todavía: la decisión va con Wave 2, cuando el flujo incluya
+también pantallas con datos.
 
 ## Entornos: la regla que no se negocia
 

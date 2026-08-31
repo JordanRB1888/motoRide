@@ -19,6 +19,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { configuracion } from '../config/environment';
+import { ProveedorDeSesion } from '../context/AuthContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
 
@@ -45,14 +46,19 @@ export default function DisposicionRaiz() {
   return (
     <SafeAreaProvider>
       {configuracion.ok ? (
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colores.fondo },
-            // Transición nativa: la que espera cada plataforma, sin imitarla.
-            animation: 'slide_from_right'
-          }}
-        />
+        // El proveedor va DENTRO de la comprobación de configuración: sin
+        // servidor al que preguntar, arrancar la sesión no tendría sentido y
+        // sólo produciría un fallo de red confuso.
+        <ProveedorDeSesion>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colores.fondo },
+              // Transición nativa: la que espera cada plataforma, sin imitarla.
+              animation: 'slide_from_right'
+            }}
+          />
+        </ProveedorDeSesion>
       ) : (
         <AvisoDeConfiguracion detalle={configuracion.detalle} />
       )}
