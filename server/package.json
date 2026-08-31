@@ -16,7 +16,8 @@
     "db:import": "node scripts/sqlitePostgresMigration.js",
     "db:verify": "node scripts/verifyPostgresMigration.js",
     "db:cutover:preflight": "node scripts/productionCutoverPreflight.js",
-    "db:cutover:snapshot": "node scripts/productionSqliteSnapshot.js"
+    "db:cutover:snapshot": "node scripts/productionSqliteSnapshot.js",
+    "db:migrate:wallet-test": "node scripts/migrateWalletTest.mjs"
   },
   "dependencies": {
     "@nestjs/common": "12.0.1",
