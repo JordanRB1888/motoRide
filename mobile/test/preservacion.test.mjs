@@ -253,6 +253,56 @@ test('el filo amarillo se usa con disciplina', () => {
 });
 
 // ---------------------------------------------------------------------------
+// La guarda de configuración
+// ---------------------------------------------------------------------------
+
+test('sin servidor configurado NO se monta la sesión ni las pantallas reales', () => {
+  // El atajo al laboratorio no puede convertirse en una puerta trasera. Sin
+  // `EXPO_PUBLIC_API_BASE_URL`, el proveedor de sesión y el Stack siguen
+  // dentro de la rama `configuracion.ok`, y sólo ahí.
+  const fuente = leer('app/_layout.tsx');
+  const rama = fuente.slice(fuente.indexOf('configuracion.ok ? ('), fuente.indexOf(') : ('));
+  assert.match(rama, /ProveedorDeSesion/, 'la sesión vive dentro de la rama con configuración');
+  assert.match(rama, /<Stack/, 'las pantallas reales, también');
+
+  const aviso = fuente.slice(fuente.indexOf('function AvisoDeConfiguracion'), fuente.indexOf('export default'));
+  assert.doesNotMatch(aviso, /ProveedorDeSesion/, 'el aviso no monta sesión');
+  assert.doesNotMatch(aviso, /<Stack/, 'el aviso no monta las pantallas reales');
+});
+
+test('el atajo al laboratorio sólo existe en desarrollo', () => {
+  // En una compilación de release el laboratorio no debe ser alcanzable, ni
+  // siquiera desde la pantalla de error.
+  const fuente = leer('app/_layout.tsx');
+  assert.match(fuente, /EN_DESARROLLO/, 'el atajo está condicionado');
+  assert.match(fuente, /verLaboratorio && EN_DESARROLLO/, 'y también su renderizado');
+});
+
+test('hay una plantilla de configuración con el puerto correcto', () => {
+  // Sin plantilla, la única forma de saber qué poner es leer el código. Y el
+  // puerto tiene que ser el que el servidor escucha de verdad: el mensaje de
+  // ayuda decía 8080 cuando `server/index.js` usa 4000.
+  const plantilla = fs.readFileSync(path.join(raizMovil, '.env.example'), 'utf8');
+  assert.match(plantilla, /EXPO_PUBLIC_API_BASE_URL=/);
+  assert.match(plantilla, /:4000/, 'el puerto del servidor');
+  assert.match(plantilla, /localhost/i, 'avisa de que localhost no sirve desde el teléfono');
+
+  const servidor = fs.readFileSync(path.join(raizWeb, 'server/index.js'), 'utf8');
+  assert.match(servidor, /PORT \|\| 4000/, 'el servidor sigue escuchando en 4000');
+});
+
+test('la plantilla no lleva secretos', () => {
+  // Todo lo que empieza por EXPO_PUBLIC_ viaja dentro del paquete y cualquiera
+  // puede leerlo. Ahí sólo van direcciones.
+  const plantilla = fs.readFileSync(path.join(raizMovil, '.env.example'), 'utf8');
+  const variables = plantilla.match(/^[A-Z_]+=.*/gm) ?? [];
+  for (const linea of variables) {
+    assert.match(linea, /^EXPO_PUBLIC_/, `«${linea}» no es una variable pública`);
+    assert.doesNotMatch(linea, /(secret|token|key|password|clave)/i, `«${linea}» parece un secreto`);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // El disco central
 // ---------------------------------------------------------------------------
 

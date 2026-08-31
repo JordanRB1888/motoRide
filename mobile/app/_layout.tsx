@@ -12,18 +12,40 @@
  * mueve saldos de personas reales. Se descubre tarde o no se descubre.
  *
  * Aquí se ve en la primera pantalla, dice qué falta y no llama a ningún sitio.
+ *
+ * EL LABORATORIO VISUAL SÍ SE PUEDE ABRIR SIN SERVIDOR
+ *
+ * Y hay que poder abrirlo: no llama a ninguna API —hay una prueba que lo
+ * comprueba—, así que exigirle un backend configurado era una traba inventada.
+ * Quien quiere ver cómo va quedando el diseño no debería tener que levantar el
+ * servidor primero.
+ *
+ * La guarda no se toca: sin servidor NO se monta el proveedor de sesión, ni las
+ * pantallas reales, ni se llama a nada. Sólo se ofrece la puerta al laboratorio,
+ * y sólo en desarrollo, porque el propio laboratorio se apaga en release.
  */
 
+import { useState } from 'react';
 import { Stack } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { configuracion } from '../config/environment';
 import { ProveedorDeSesion } from '../context/AuthContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
+import LaboratorioVisual from './preview';
+
+/** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
+const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
 
 function AvisoDeConfiguracion({ detalle }: { readonly detalle: string }) {
+  const [verLaboratorio, setVerLaboratorio] = useState(false);
+
+  // El laboratorio se monta tal cual, sin router y sin sesión: no necesita ni
+  // una cosa ni la otra. Su propia guarda `__DEV__` sigue mandando dentro.
+  if (verLaboratorio && EN_DESARROLLO) return <LaboratorioVisual />;
+
   return (
     <Pantalla testID="aviso-configuracion">
       <View style={estilos.centro}>
@@ -37,6 +59,21 @@ function AvisoDeConfiguracion({ detalle }: { readonly detalle: string }) {
             por omisión.
           </Text>
         </View>
+
+        {EN_DESARROLLO ? (
+          <Pressable
+            onPress={() => setVerLaboratorio(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Ver el laboratorio visual, que no necesita servidor"
+            testID="abrir-laboratorio"
+            style={({ pressed }) => [estilos.atajo, pressed && estilos.atajoPulsado]}
+          >
+            <Text style={estilos.atajoTitulo}>Ver el laboratorio visual</Text>
+            <Text style={estilos.atajoNota}>
+              No necesita servidor: son pantallas de muestra, sin datos reales.
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </Pantalla>
   );
@@ -67,7 +104,7 @@ export default function DisposicionRaiz() {
 }
 
 const estilos = StyleSheet.create({
-  centro: { flex: 1, justifyContent: 'center' },
+  centro: { flex: 1, justifyContent: 'center', gap: espaciado.lg },
   tarjeta: {
     backgroundColor: colores.superficie,
     borderRadius: radios.lg,
@@ -88,6 +125,26 @@ const estilos = StyleSheet.create({
     lineHeight: tipografia.cuerpo.alto
   },
   nota: {
+    color: colores.textoTenue,
+    fontSize: tipografia.pie.tamano,
+    lineHeight: tipografia.pie.alto
+  },
+  atajo: {
+    backgroundColor: colores.superficie,
+    borderRadius: radios.lg,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    padding: espaciado.lg,
+    gap: espaciado.xs
+  },
+  atajoPulsado: { borderColor: colores.acento },
+  atajoTitulo: {
+    color: colores.acento,
+    fontSize: tipografia.cuerpo.tamano,
+    lineHeight: tipografia.cuerpo.alto,
+    fontWeight: '600'
+  },
+  atajoNota: {
     color: colores.textoTenue,
     fontSize: tipografia.pie.tamano,
     lineHeight: tipografia.pie.alto

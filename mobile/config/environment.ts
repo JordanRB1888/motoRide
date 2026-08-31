@@ -87,7 +87,8 @@ export function resolverConfiguracion(
       detalle:
         `Falta ${VARIABLE_URL}. La aplicación no elige un backend por su cuenta: ` +
         'defínela en tu .env local apuntando a tu servidor de desarrollo ' +
-        '(por ejemplo http://192.168.1.10:8080). No se usará producción por omisión.'
+        '(por ejemplo http://192.168.1.10:4000, que es el puerto del servidor). ' +
+        'Tienes una plantilla en mobile/.env.example. No se usará producción por omisión.'
     };
   }
 
