@@ -199,6 +199,68 @@ sola tasa por día.
 actualiza en silencio: quien llama recibe `CORREGIDA` y se registra, porque una
 corrección sobre un día con el que ya se cobró es algo que alguien debería ver.
 
+## El historial: por qué `revision + 1` no bastaba
+
+La primera versión incrementaba `revision` y **sobrescribía el valor anterior**.
+Quedaba constancia de que algo cambió, y ninguna forma de saber de qué a qué.
+Con eso no se puede auditar un cobro hecho con la tasa vieja: el número con el
+que se cobró ya no existe en ninguna parte.
+
+```sql
+public.exchange_rate_observations          -- APPEND-ONLY
+  id            text primary key           -- 'USD-VES-BCV-2026-08-31#1'
+  rate          numeric(18,8)              -- la MISMA precisión que la vigente
+  value_date    date
+  source        text
+  fetched_at    timestamptz                -- cuándo lo publicó el BCV
+  recorded_at   timestamptz                -- cuándo lo anotamos nosotros
+  revision      integer
+```
+
+```
+exchange_rates                la verdad de AHORA      una fila por fecha valor
+exchange_rate_observations    la MEMORIA              una fila por observación
+```
+
+**Append-only de verdad, no de palabra.** Un disparador rechaza `UPDATE` y
+`DELETE`. Una tabla de auditoría que se puede editar no es una tabla de
+auditoría, y una promesa en un comentario no impide nada.
+
+Las dos escrituras van **en un solo statement** (CTE): con dos consultas, un
+fallo entre la primera y la segunda dejaría una tasa vigente sin su observación
+—el historial mentiría justo en el caso que más importa—. Los CTE que escriben
+se ejecutan siempre y de una vez.
+
+### Idempotencia y concurrencia
+
+```
+A A A          → una sola observación (revisión 1)
+A → B          → dos observaciones; A NO desaparece, la vigente resuelve a B
+B B B          → sigue habiendo dos
+cuatro A a la vez   → una sola observación
+cuatro B a la vez   → una sola corrección
+```
+
+La fila de `exchange_rates` serializa: la segunda transacción espera, vuelve a
+evaluar el `where` contra la fila ya actualizada y, si el valor coincide, no
+escribe nada. De ahí sale que repetir la misma tasa —en serie o en paralelo—
+produzca exactamente una observación.
+
+### Para una instantánea financiera futura
+
+Un cobro que copie `rate`, `effectiveDate`, `fetchedAt` y `source` queda
+congelado e **independiente** de cualquier corrección posterior del BCV, y
+además es **verificable**: esos cuatro campos se pueden contrastar contra el
+historial para demostrar que esa tasa existió de verdad y no es un número
+inventado en un recibo. Está comprobado con una prueba; no se implementó nada
+de pagos.
+
+### Limitación honesta
+
+Si el BCV corrigió alguna tasa **antes** de esta migración, ese valor anterior
+no se guardó en ninguna parte y no hay forma de recuperarlo. El historial es
+fiel a partir de aquí, no hacia atrás.
+
 ## La tarea diaria
 
 ```
@@ -231,9 +293,42 @@ el certificado guardado sigue completando la cadena y que la portada del BCV
 sigue teniendo la forma que el parser espera. Está apagada por defecto para que
 la suite no dependa de la red ni moleste al BCV en cada ejecución.
 
-Las pruebas contra PostgreSQL requieren `TEST_DATABASE_URL` y **comprueban que
-el destino no es producción antes de escribir una sola fila**. Sin esa variable
-se saltan enteras.
+### El guard de identidad de la base de datos
+
+Las pruebas que escriben exigen **identidad positiva declarada**:
+
+```bash
+FX_TEST_DB_PROJECT_REF=<identificador del proyecto de Test>
+```
+
+Sin ella se saltan enteras y **no se abre ni una conexión**. La comprobación
+ocurre antes de conectar, antes de migrar y antes de escribir.
+
+```
+FX_TEST_DB_PROJECT_REF        cuál es el proyecto de Test. Obligatoria.
+FX_PRODUCTION_DB_PROJECT_REFS identidades de Producción, separadas por comas.
+                              Además se deducen solas de DATABASE_URL y
+                              PRODUCTION_DATABASE_URL si están presentes.
+```
+
+Tres reglas:
+
+1. **Producción se deniega primero**, antes que cualquier otra comprobación. Si
+   el destino coincide con una identidad de Producción se rechaza *aunque*
+   alguien lo haya declarado como Test — esa contradicción es un error de
+   configuración, no un permiso.
+2. **Sin declaración no se escribe.** No hay valor por defecto ni «si no se
+   sabe, será Test».
+3. **No hay puerta trasera.** Ninguna variable salta estas comprobaciones, y hay
+   una prueba que lo verifica llenando el entorno de nombres plausibles.
+
+La versión anterior decidía «esto es Test» mirando el contenido: `users <= 50`.
+Eso no identifica nada — Producción también puede tener pocas filas. El conteo
+sigue existiendo, pero como **señal secundaria** que sólo emite un aviso y nunca
+autoriza por sí misma.
+
+Nada de lo que sale del guard contiene la URI, el usuario ni la contraseña: los
+identificadores se reducen a una huella corta (`qljs…gll`).
 
 ## Lo que esta fase deliberadamente NO hizo
 

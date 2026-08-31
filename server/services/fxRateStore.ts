@@ -5,6 +5,15 @@
  * al backend real y a las pruebas contra PostgreSQL de Test, y no hay forma de
  * que este módulo abra por su cuenta una conexión a producción.
  *
+ * DOS TABLAS, DOS TRABAJOS
+ *
+ *   exchange_rates               la tasa VIGENTE — una fila por fecha valor
+ *   exchange_rate_observations   la MEMORIA — una fila por observación oficial
+ *
+ * La primera se actualiza cuando el BCV corrige; la segunda nunca cambia, y por
+ * eso se puede reconstruir qué tasa regía en cada momento. Auditar un cobro
+ * hecho con la tasa vieja necesita que la tasa vieja siga existiendo.
+ *
  * SOBRE LA PRECISIÓN AL LEER
  *
  * El driver `pg` devuelve `numeric` como CADENA, no como `number`, y eso es
@@ -21,6 +30,7 @@ export interface EjecutorSql {
 }
 
 export const TABLA_DE_TASAS = 'public.exchange_rates';
+export const TABLA_DE_OBSERVACIONES = 'public.exchange_rate_observations';
 /** El nombre sin esquema, que es como hay que referirse a la tabla dentro de un `on conflict`. */
 const TABLA_SIN_ESQUEMA = 'exchange_rates';
 
@@ -34,6 +44,17 @@ export function identidadDeTasa(
   return `${base}-${quote}-${fuente}-${fechaValor}`;
 }
 
+/** La identidad de una observación concreta: la tasa, más su número de revisión. */
+export function identidadDeObservacion(
+  base: string,
+  quote: string,
+  fuente: string,
+  fechaValor: string,
+  revision: number
+): string {
+  return `${identidadDeTasa(base, quote, fuente, fechaValor)}#${revision}`;
+}
+
 /** Qué ocurrió al guardar. Distinguirlo importa para el registro y la auditoría. */
 export const RESULTADOS_DE_GUARDADO = ['INSERTADA', 'CORREGIDA', 'SIN_CAMBIOS'] as const;
 export type ResultadoDeGuardado = (typeof RESULTADOS_DE_GUARDADO)[number];
@@ -44,6 +65,10 @@ interface FilaDeTasa {
   readonly source: string;
   readonly fetched_at: Date | string;
   readonly revision: number;
+}
+
+interface FilaDeObservacion extends FilaDeTasa {
+  readonly recorded_at: Date | string;
 }
 
 /** `date` de PostgreSQL a `YYYY-MM-DD`, sin que el huso local desplace el día. */
@@ -72,17 +97,40 @@ function aFxRate(fila: FilaDeTasa): FxRate {
   };
 }
 
+/** Una observación oficial tal y como quedó anotada, para auditoría. */
+export interface ObservacionDeTasa extends FxRate {
+  readonly revision: number;
+  /** Cuándo la anotamos nosotros. Distinto de `fetchedAt`, y los dos importan. */
+  readonly recordedAt: string;
+}
+
 /**
- * Guarda una tasa. Es IDEMPOTENTE por (moneda, moneda, fuente, fecha valor).
+ * Guarda una tasa y anota la observación, EN UN SOLO STATEMENT.
  *
- * Ejecutar la tarea dos veces el mismo día no duplica nada ni cuenta una
- * revisión de más: el `where` del `do update` hace que una tasa idéntica no
- * escriba absolutamente nada.
+ * Es idempotente por (moneda, moneda, fuente, fecha valor): ejecutar la tarea
+ * dos veces el mismo día no duplica nada ni cuenta una revisión de más, porque
+ * el `where` del `do update` hace que una tasa idéntica no escriba nada.
  *
- * Si el BCV CORRIGE la tasa de una fecha ya guardada, se actualiza y se
- * incrementa `revision`. No se guarda en silencio: quien llama recibe
- * `CORREGIDA` y puede registrarlo, porque una corrección sobre un día con el
- * que ya se cobró es algo que alguien debería mirar.
+ * Si el BCV CORRIGE la tasa de una fecha ya guardada, se actualiza la vigente,
+ * se incrementa `revision` y se anota una observación nueva — el valor anterior
+ * NO desaparece. Quien llama recibe `CORREGIDA` y puede registrarlo, porque una
+ * corrección sobre un día con el que ya se cobró es algo que alguien debería
+ * mirar.
+ *
+ * POR QUÉ UN SOLO STATEMENT Y NO DOS
+ *
+ * Con dos consultas, un fallo entre la primera y la segunda dejaría una tasa
+ * vigente sin su observación: el historial mentiría justo en el caso que más
+ * importa. Los CTE que escriben se ejecutan siempre y de una vez, así que o
+ * pasan las dos cosas o no pasa ninguna.
+ *
+ * CONCURRENCIA
+ *
+ * Dos actualizaciones simultáneas de la misma fecha se serializan en la fila de
+ * `exchange_rates`: la segunda espera, vuelve a evaluar el `where` contra la
+ * fila ya actualizada y, si el valor coincide, no escribe. De ahí sale que
+ * repetir la misma tasa —en serie o en paralelo— produzca exactamente una
+ * observación.
  */
 export async function guardarTasa(
   sql: EjecutorSql,
@@ -94,15 +142,31 @@ export async function guardarTasa(
   // viajara como número de JavaScript ya habría perdido precisión antes de
   // llegar aquí, y la columna `numeric` no podría salvarla.
   const { rows } = await sql.query(
-    `insert into ${TABLA_DE_TASAS}
-       (id, base_currency, quote_currency, rate, value_date, source, fetched_at, revision)
-     values ($1, 'USD', 'VES', $2::numeric, $3::date, 'BCV', $4::timestamptz, 1)
-     on conflict (id) do update
-        set rate = excluded.rate,
-            fetched_at = excluded.fetched_at,
-            revision = ${TABLA_SIN_ESQUEMA}.revision + 1
-      where ${TABLA_SIN_ESQUEMA}.rate is distinct from excluded.rate
-     returning revision, (xmax = 0) as insertada`,
+    `with vigente as (
+       insert into ${TABLA_DE_TASAS}
+         (id, base_currency, quote_currency, rate, value_date, source, fetched_at, revision)
+       values ($1, 'USD', 'VES', $2::numeric, $3::date, 'BCV', $4::timestamptz, 1)
+       on conflict (id) do update
+          set rate = excluded.rate,
+              fetched_at = excluded.fetched_at,
+              revision = ${TABLA_SIN_ESQUEMA}.revision + 1
+        where ${TABLA_SIN_ESQUEMA}.rate is distinct from excluded.rate
+       returning base_currency, quote_currency, rate, value_date, source,
+                 fetched_at, revision, (xmax = 0) as insertada
+     ),
+     anotada as (
+       insert into ${TABLA_DE_OBSERVACIONES}
+         (id, base_currency, quote_currency, rate, value_date, source, fetched_at, revision)
+       select v.base_currency || '-' || v.quote_currency || '-' || v.source || '-'
+                || to_char(v.value_date, 'YYYY-MM-DD') || '#' || v.revision::text,
+              v.base_currency, v.quote_currency, v.rate, v.value_date, v.source,
+              v.fetched_at, v.revision
+         from vigente v
+       on conflict (id) do nothing
+       returning revision
+     )
+     select v.revision, v.insertada, (select count(*) from anotada)::int as anotadas
+       from vigente v`,
     [id, tasa.tasa, tasa.fechaValor, tasa.obtenidaEn]
   );
 
@@ -155,7 +219,7 @@ export async function leerTasaVigente(sql: EjecutorSql): Promise<FxRate | null> 
   return fila ? aFxRate(fila) : null;
 }
 
-/** Historial reciente, de la más nueva a la más vieja. Para el panel y auditoría. */
+/** Historial reciente de tasas vigentes, de la más nueva a la más vieja. */
 export async function leerHistorial(sql: EjecutorSql, limite = 30): Promise<readonly FxRate[]> {
   const tope = Number.isInteger(limite) && limite > 0 ? Math.min(limite, 365) : 30;
   const { rows } = await sql.query(
@@ -167,4 +231,30 @@ export async function leerHistorial(sql: EjecutorSql, limite = 30): Promise<read
     [tope]
   );
   return (rows as FilaDeTasa[]).map(aFxRate);
+}
+
+/**
+ * TODAS las observaciones oficiales de una fecha valor, de la primera a la
+ * última.
+ *
+ * Es la consulta de auditoría: con esto se reconstruye qué publicó el BCV, en
+ * qué orden y cuándo lo supimos. Si sólo hay una, no hubo correcciones.
+ */
+export async function leerObservaciones(
+  sql: EjecutorSql,
+  fechaValor: string
+): Promise<readonly ObservacionDeTasa[]> {
+  const { rows } = await sql.query(
+    `select rate, value_date, source, fetched_at, recorded_at, revision
+       from ${TABLA_DE_OBSERVACIONES}
+      where base_currency = 'USD' and quote_currency = 'VES'
+        and source = 'BCV' and value_date = $1::date
+      order by revision asc`,
+    [fechaValor]
+  );
+  return (rows as FilaDeObservacion[]).map(fila => ({
+    ...aFxRate(fila),
+    revision: fila.revision,
+    recordedAt: aInstanteIso(fila.recorded_at)
+  }));
 }
