@@ -467,10 +467,14 @@ export function C2Acceso() {
 // ---------------------------------------------------------------------------
 
 /**
- * El inicio en reposo: el mapa manda y abajo hay lo justo.
+ * El inicio en reposo: el mapa manda y abajo hay LO JUSTO.
  *
- * A dónde vas, los sitios de siempre y lo último que hiciste. Nada más, porque
- * nada más hace falta hasta que decidas ir a algún sitio.
+ * A dónde vas y los sitios de siempre. Nada más.
+ *
+ * Antes también salían los destinos recientes y la tasa del BCV, y era
+ * repetirse: al tocar el disco central se despliega la petición con esas mismas
+ * dos cosas dentro. Enseñarlas dos veces no ayudaba a decidir nada y le comía
+ * al mapa media pantalla que en reposo no hacía falta gastar.
  */
 export function C2InicioPasajera() {
   const tema = useTema();
@@ -483,24 +487,12 @@ export function C2InicioPasajera() {
       >
         <CabeceraDePasajera />
 
-        <HojaInferior estado="media">
+        {/* Se ajusta a lo que ocupa: dos elementos no necesitan media pantalla,
+            y todo lo que no ocupe la hoja se lo queda el mapa. */}
+        <HojaInferior estado="baja" alturaAutomatica>
           <CampoDeDestino />
-
           <View style={{ height: tema.ritmo.entreElementos }} />
           <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
-
-          <View style={{ height: tema.ritmo.entreElementos }} />
-          <Separador />
-          <View style={{ paddingTop: 4 }}>
-            {DESTINOS_RECIENTES_DEMO.map(destino => (
-              <FilaDeLugar
-                key={destino.clave}
-                titulo={destino.titulo}
-                detalle={destino.detalle}
-                icono="reloj"
-              />
-            ))}
-          </View>
         </HojaInferior>
       </LienzoDeMapa>
 

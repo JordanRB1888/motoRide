@@ -153,10 +153,15 @@ export const BASE = `
 
   .campo{display:flex;align-items:center;gap:11px;height:52px;padding:0 15px;
     border-radius:var(--r-campo);background:var(--fondo)}
+  .campo .cuerpo{line-height:1}
   .lugar-fila{display:flex;align-items:center;gap:13px;padding:11px 0}
   .redondo{width:34px;height:34px;border-radius:50%;background:var(--elevada);display:grid;place-items:center}
+  /* line-height:1 en el texto: la caja de linea de la etiqueta es mas alta
+     que la letra, y sin esto el texto queda un par de píxeles por debajo del
+     icono aunque el contenedor esté centrado. */
   .pastilla{display:inline-flex;align-items:center;gap:8px;border-radius:999px;
-    background:var(--fondo);padding:9px 13px}
+    background:var(--fondo);padding:10px 14px}
+  .pastilla .etq{line-height:1}
 
   /* Trayecto: la línea se pone amarilla cuando el destino está puesto. */
   .trayecto{display:flex;align-items:center;gap:12px}
@@ -489,27 +494,13 @@ export const PANTALLAS = {
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS}${hito(47, 29, 'orig')}${CTRL}</div>
       ${CABECERA_PASAJERA}
-      <div class="hoja" style="${hojaMedia};bottom:76px">
+      <div class="hoja" style="bottom:76px;padding-top:0">
         <span class="asa"></span>
-        <div class="campo">${icono('destino', 'var(--acento)', 19)}
-          <span class="cuerpo t2">¿A dónde vas?</span></div>
-        <div style="height:var(--gap)"></div>
-        ${LUGARES}
-        <div style="height:var(--gap)"></div>
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 13px;
-          border-radius:var(--r-campo);background:var(--fondo)">
-          ${icono('dolar', 'var(--texto-2)', 16)}
-          <span class="etq t3">Tasa BCV</span><span class="crece"></span>
-          <span class="etq ac">Bs. 000,00</span>
-        </div>
-        <div style="height:var(--gap)"></div><span class="sep"></span>
-        <div style="padding-top:4px">
-          ${[['Destino de ejemplo 1', 'Guardado como «Casa»'],
-             ['Destino de ejemplo 2', 'Guardado como «Trabajo»'],
-             ['Destino de ejemplo 3', 'Visitado hace 2 días']].map(([t, d]) => `
-            <div class="lugar-fila"><span class="redondo">${icono('reloj', 'var(--texto-2)', 17)}</span>
-              <span style="flex:1;display:grid;gap:1px"><span class="cuerpo">${t}</span>
-              <span class="pie t3">${d}</span></span></div>`).join('')}
+        <div style="padding-bottom:var(--pad)">
+          <div class="campo">${icono('destino', 'var(--acento)', 19)}
+            <span class="cuerpo t2">¿A dónde vas?</span></div>
+          <div style="height:var(--gap)"></div>
+          ${LUGARES}
         </div>
       </div>
       ${barraPasajera('pedir')}
@@ -527,6 +518,13 @@ export const PANTALLAS = {
         ${TRAYECTO}
         <div style="height:var(--gap)"></div>
         ${LUGARES}
+        <div style="height:var(--gap)"></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 13px;
+          border-radius:var(--r-campo);background:var(--fondo)">
+          ${icono('dolar', 'var(--texto-2)', 16)}
+          <span class="etq t3">Tasa BCV</span><span class="crece"></span>
+          <span class="etq ac">Bs. 000,00</span>
+        </div>
         <div style="height:var(--gap)"></div><span class="sep"></span>
         <div style="padding-top:4px">
           ${[['Destino de ejemplo 1', 'Guardado como «Casa»'], ['Destino de ejemplo 2', 'Guardado como «Trabajo»']].map(([t, d]) => `
