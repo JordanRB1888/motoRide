@@ -32,6 +32,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { configuracion } from '../config/environment';
 import { ProveedorDeSesion } from '../context/AuthContext';
+import { ProveedorDeTema } from '../theme/ThemeContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
 import LaboratorioVisual from './preview';
@@ -85,6 +86,13 @@ function AvisoDeConfiguracion({ detalle }: { readonly detalle: string }) {
 export default function DisposicionRaiz() {
   return (
     <SafeAreaProvider>
+      {/* El tema envuelve TODO, incluida la pantalla de configuración
+          faltante: si un aviso de error se pintara con otros colores que el
+          resto, se leería como si viniera de otra aplicación.
+
+          Y va por FUERA de la sesión: el tema no depende de quién haya
+          entrado, así que cerrar sesión no tiene por qué remontarlo. */}
+      <ProveedorDeTema>
       {configuracion.ok ? (
         // El proveedor va DENTRO de la comprobación de configuración: sin
         // servidor al que preguntar, arrancar la sesión no tendría sentido y
@@ -93,7 +101,10 @@ export default function DisposicionRaiz() {
           <Stack
             screenOptions={{
               headerShown: false,
-              contentStyle: { backgroundColor: colores.fondo },
+              // Sin color aquí: lo pone `Pantalla`, que sí lee el tema. Un
+              // color fijo en el Stack se vería un instante al navegar, con el
+              // tono del tema contrario.
+              contentStyle: undefined,
               // Transición nativa: la que espera cada plataforma, sin imitarla.
               animation: 'slide_from_right'
             }}
@@ -102,6 +113,7 @@ export default function DisposicionRaiz() {
       ) : (
         <AvisoDeConfiguracion detalle={configuracion.detalle} />
       )}
+      </ProveedorDeTema>
     </SafeAreaProvider>
   );
 }

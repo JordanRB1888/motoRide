@@ -25,17 +25,9 @@ import { Pressable, View } from 'react-native';
 import { Txt } from './componentes';
 import { Icono } from './Icono';
 import { MarcadorDeVehiculo } from './Marca';
-import { useTema } from '../theme/ThemeContext';
+import { useEsquema, useTema } from '../theme/ThemeContext';
+import { OPACIDAD_DE_CALLE_POR_ESQUEMA } from '../theme/esquemas';
 import type { TipoDeVehiculo } from '../theme/marca';
-
-/**
- * Cuánto aclaran las calles sobre las manzanas.
- *
- * Sale de mirarlo en pantalla, no de una fórmula: por debajo de 0,15 el mapa se
- * lee como una superficie negra con arañazos, y por encima de 0,3 las calles
- * pesan más que los vehículos, que son lo que hay que mirar.
- */
-const OPACIDAD_DE_CALLE = 0.28;
 
 /** Una posición dentro del lienzo, en porcentaje. Nada de coordenadas reales. */
 export interface PuntoDelLienzo {
@@ -74,6 +66,14 @@ export interface HitoEnMapa {
  */
 function Calles() {
   const tema = useTema();
+  const esquema = useEsquema();
+
+  // En noche las calles ACLARAN sobre manzanas oscuras; en día tienen que
+  // aclarar mucho más, porque van casi blancas sobre marfil. Con el mismo valor
+  // en los dos, el mapa de día salía con rayas grises y parecía roto.
+  const opacidadDeCalle = OPACIDAD_DE_CALLE_POR_ESQUEMA[esquema];
+
+  const colorDeCalle = tema.color.calleDelMapa;
 
   const horizontales = [
     { y: 12, grosor: 2 }, { y: 27, grosor: 7 }, { y: 41, grosor: 2 },
@@ -85,7 +85,7 @@ function Calles() {
   ];
 
   return (
-    <View style={{ position: 'absolute', inset: 0, backgroundColor: tema.color.superficie }} pointerEvents="none">
+    <View style={{ position: 'absolute', inset: 0, backgroundColor: tema.color.fondoDelMapa }} pointerEvents="none">
       {/* Las calles van CLARAS sobre las manzanas, que es como se leen los mapas
           en tema oscuro. Se pintan con el gris de texto a poca opacidad porque
           es el único tono de la paleta que aclara de verdad sobre grafito: con
@@ -96,21 +96,21 @@ function Calles() {
         <View key={`h${calle.y}`} style={{
           position: 'absolute', left: 0, right: 0,
           top: `${calle.y}%`, height: calle.grosor,
-          backgroundColor: tema.color.textoTenue, opacity: OPACIDAD_DE_CALLE
+          backgroundColor: colorDeCalle, opacity: opacidadDeCalle
         }} />
       ))}
       {verticales.map(calle => (
         <View key={`v${calle.x}`} style={{
           position: 'absolute', top: 0, bottom: 0,
           left: `${calle.x}%`, width: calle.grosor,
-          backgroundColor: tema.color.textoTenue, opacity: OPACIDAD_DE_CALLE
+          backgroundColor: colorDeCalle, opacity: opacidadDeCalle
         }} />
       ))}
 
       {/* La diagonal: rompe la cuadrícula y da la sensación de avenida larga. */}
       <View style={{
         position: 'absolute', left: '-30%', right: '-30%', top: '58%',
-        height: 10, backgroundColor: tema.color.textoTenue, opacity: OPACIDAD_DE_CALLE,
+        height: 10, backgroundColor: colorDeCalle, opacity: opacidadDeCalle,
         transform: [{ rotate: '-19deg' }]
       }} />
 

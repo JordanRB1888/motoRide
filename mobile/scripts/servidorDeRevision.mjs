@@ -45,6 +45,7 @@ import { fileURLToPath } from 'node:url';
 // Del modulo de pantallas, no del generador: importar el generador lo
 // EJECUTA, y escribiria las capturas cada vez que arranca el servidor.
 import { ALTO, ANCHO, BASE, C2, NOMBRES, PANTALLAS, variables } from './pantallasWeb.mjs';
+import { esquemaAutomatico } from '../theme/horaVenezuela.ts';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const raizMovil = path.resolve(aqui, '..');
@@ -84,8 +85,15 @@ const primera = GRUPOS[0].claves[0];
 // La página
 // ---------------------------------------------------------------------------
 
-function pagina(clave) {
+function pagina(clave, esquemaPedido) {
   const activa = PANTALLAS[clave] ? clave : primera;
+
+  // `auto` deja mandar la hora de Venezuela, como en la aplicación. Los otros
+  // dos la ignoran, y es lo que hace útil el selector: comparar día y noche a
+  // las cuatro de la tarde sin tocar el reloj del equipo.
+  const modo = ['claro', 'oscuro'].includes(esquemaPedido) ? esquemaPedido : 'auto';
+  const esquema = modo === 'auto' ? esquemaAutomatico(new Date()) : modo;
+  const conModo = ruta => `${ruta}${modo === 'auto' ? '' : `&tema=${modo}`}`;
 
   return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
@@ -110,6 +118,11 @@ function pagina(clave) {
   .panel a.on{background:#242424;color:#ffd21f;font-weight:600;
     box-shadow:inset 3px 0 0 #ffd21f}
   .panel .pendiente{padding:6px 18px;font-size:12px;color:#5a5a5a}
+  .temas{display:flex;gap:6px;padding:0 18px 8px}
+  .tema{padding:5px 11px;border-radius:7px;background:#222;border:1px solid #333;
+    color:#9a9a9a;font-size:11px;font-weight:600;text-decoration:none}
+  .tema:hover{color:#fff}
+  .tema.on{background:#3a3a3a;border-color:#585858;color:#fff}
 
   .escena{flex:1;display:flex;flex-direction:column;align-items:center;
     justify-content:flex-start;padding:34px 24px;gap:16px}
@@ -124,10 +137,21 @@ function pagina(clave) {
   <nav class="panel">
     <h1>Revisión visual · C2</h1>
     <p class="aviso">Sólo local. Se recarga sola al guardar un cambio.</p>
+
+    <div class="temas">
+      ${[['auto', 'Auto'], ['claro', 'Día'], ['oscuro', 'Noche']].map(([valor, etiqueta]) => `
+        <a href="/?p=${activa}${valor === 'auto' ? '' : `&tema=${valor}`}"
+           class="tema ${valor === modo ? 'on' : ''}" data-tema="${valor}">${etiqueta}</a>`).join('')}
+    </div>
+    <p class="aviso" style="padding-top:0">
+      ${modo === 'auto'
+        ? `Ahora en Venezuela: ${esquema === 'claro' ? 'día' : 'noche'}`
+        : 'Forzado sólo para revisar'}
+    </p>
     ${GRUPOS.map(grupo => `
       <h2>${grupo.nombre}</h2>
       ${grupo.claves.filter(clave => PANTALLAS[clave]).map(clave => `
-        <a href="/?p=${clave}" class="${clave === activa ? 'on' : ''}"
+        <a href="${conModo(`/?p=${clave}`)}" class="${clave === activa ? 'on' : ''}"
            data-pantalla="${clave}">${NOMBRES[clave] ?? clave}</a>`).join('')}
     `).join('')}
     <h2>Aún sin dibujar aquí</h2>
@@ -137,9 +161,10 @@ function pagina(clave) {
   <main class="escena">
     <div class="rotulo">
       <b>${NOMBRES[activa] ?? activa}</b>
-      ${ANCHO}×${ALTO}
+      ${ANCHO}×${ALTO} · modo ${esquema === 'claro' ? 'día' : 'noche'}
     </div>
-    <div class="marco" data-pantalla="${activa}" style="${variables(C2)}">
+    <div class="marco" data-pantalla="${activa}" data-tema="${esquema}"
+      style="${variables(C2, esquema)}">
       ${PANTALLAS[activa]()}
     </div>
     <p class="pie">
@@ -242,7 +267,10 @@ const servidor = http.createServer((peticion, respuesta) => {
 
   if (url.pathname === '/') {
     respuesta.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-    respuesta.end(pagina(url.searchParams.get('p') ?? primera));
+    respuesta.end(pagina(
+      url.searchParams.get('p') ?? primera,
+      url.searchParams.get('tema') ?? 'auto'
+    ));
     return;
   }
 

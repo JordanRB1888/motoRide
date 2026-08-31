@@ -28,7 +28,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-import { colores, espaciado } from '../theme/tokens';
+import { useTema } from '../theme/ThemeContext';
+import { espaciado } from '../theme/tokens';
 
 export interface PropiedadesDePantalla {
   readonly children: ReactNode;
@@ -45,6 +46,7 @@ export function Pantalla({
   bordes = ['top', 'bottom'],
   testID
 }: PropiedadesDePantalla) {
+  const tema = useTema();
   const contenido = desplazable ? (
     <ScrollView
       contentContainerStyle={estilos.contenidoDesplazable}
@@ -58,7 +60,9 @@ export function Pantalla({
   );
 
   return (
-    <View style={estilos.raiz} testID={testID}>
+    // El fondo sale del tema, no de una constante: es lo que hace que la
+    // pantalla entera cambie de dia a noche.
+    <View style={[estilos.raiz, { backgroundColor: tema.color.fondo }]} testID={testID}>
       {/* Iconos claros: el fondo siempre es grafito. */}
       <StatusBar style="light" />
       <SafeAreaView style={estilos.segura} edges={bordes}>
@@ -76,7 +80,7 @@ export function Pantalla({
 }
 
 const estilos = StyleSheet.create({
-  raiz: { flex: 1, backgroundColor: colores.fondo },
+  raiz: { flex: 1 },
   segura: { flex: 1 },
   teclado: { flex: 1 },
   contenido: { flex: 1, paddingHorizontal: espaciado.xl },

@@ -810,7 +810,7 @@ export function C2BuscandoVehiculo({ tipo = 'MOTO' }: { readonly tipo?: TipoDeVe
             el contraste que sobra le quita fuerza al pulso. */}
         <View
           pointerEvents="none"
-          style={{ position: 'absolute', inset: 0, backgroundColor: tema.color.fondo, opacity: 0.42 }}
+          style={{ position: 'absolute', inset: 0, backgroundColor: tema.color.veloDelMapa, opacity: 0.42 }}
         />
 
         <View

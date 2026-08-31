@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { ProveedorDeTema, useControlDeTema } from '../theme/ThemeContext';
+import { esquemaAutomatico, type Esquema } from '../theme/horaVenezuela';
 import { CATALOGO, DIRECCIONES, type ClaveDeDireccion } from '../theme/directions';
 import {
   PreviewAcceso,
@@ -52,6 +53,7 @@ import {
   C2SelectorDeRol,
   C2Viaje
 } from '../preview/pantallasC2';
+import { C2Configuracion } from '../preview/pantallaConfiguracion';
 import { C2SaldoConductor, C2SaldoConductorDeudor } from '../preview/pantallaSaldoConductor';
 import {
   C2Avisos,
@@ -128,18 +130,36 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'perfil', nombre: 'Perfil', Componente: C2Perfil },
   { clave: 'saldo', nombre: 'Saldo', Componente: C2Saldo },
   { clave: 'avisos', nombre: 'Avisos', Componente: C2Avisos },
-  { clave: 'ayuda', nombre: 'Ayuda', Componente: C2Ayuda }
+  { clave: 'ayuda', nombre: 'Ayuda', Componente: C2Ayuda },
+  { clave: 'configuracion', nombre: 'Configuración', Componente: C2Configuracion }
 ];
 
 export function catalogoDePantallas(clave: ClaveDeDireccion): CatalogoDePantallas {
   return clave === 'C2' ? PANTALLAS_C2 : PANTALLAS_ORIGINALES;
 }
 
+/**
+ * Qué esquema enseña el laboratorio.
+ *
+ * `auto` deja que mande la hora de Venezuela, como en la aplicación. Los otros
+ * dos la ignoran, y es lo que hace útil este selector: comparar día y noche a
+ * las cuatro de la tarde sin tocar el reloj del teléfono.
+ *
+ * Esto NO toca la preferencia de la persona. Es una herramienta de revisión.
+ */
+type EsquemaDeLaboratorio = 'auto' | Esquema;
+
 export default function LaboratorioVisual() {
+  const [esquemaDePrueba, setEsquemaDePrueba] = useState<EsquemaDeLaboratorio>('auto');
+
   if (!EN_DESARROLLO) return <FueraDeDesarrollo />;
+
   return (
-    <ProveedorDeTema>
-      <Laboratorio />
+    <ProveedorDeTema esquemaForzado={esquemaDePrueba === 'auto' ? undefined : esquemaDePrueba}>
+      <Laboratorio
+        esquemaDePrueba={esquemaDePrueba}
+        onCambiarEsquema={setEsquemaDePrueba}
+      />
     </ProveedorDeTema>
   );
 }
@@ -154,7 +174,10 @@ function FueraDeDesarrollo() {
   );
 }
 
-function Laboratorio() {
+function Laboratorio({ esquemaDePrueba, onCambiarEsquema }: {
+  readonly esquemaDePrueba: EsquemaDeLaboratorio;
+  readonly onCambiarEsquema: (esquema: EsquemaDeLaboratorio) => void;
+}) {
   const { clave, cambiarDireccion } = useControlDeTema();
   const [pantalla, setPantalla] = useState<string>('rol');
 
@@ -221,6 +244,39 @@ function Laboratorio() {
           ) : null}
         </View>
 
+        {/* El selector de esquema. Va junto al de dirección porque son las dos
+            cosas que se comparan, y separado por una línea para que no parezca
+            que la dirección tiene seis letras. */}
+        <View style={estilos.selectorEsquema}>
+          {([
+            ['auto', 'Auto'],
+            ['claro', 'Día'],
+            ['oscuro', 'Noche']
+          ] as const).map(([valor, etiqueta]) => {
+            const activo = valor === esquemaDePrueba;
+            return (
+              <Pressable
+                key={valor}
+                onPress={() => onCambiarEsquema(valor)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: activo }}
+                accessibilityLabel={`Ver en modo ${etiqueta.toLowerCase()}`}
+                style={[estilos.chipEsquema, activo && estilos.chipEsquemaActivo]}
+                testID={`preview-esquema-${valor}`}
+              >
+                <Text style={[estilos.chipEsquemaTexto, activo && estilos.chipEsquemaTextoActivo]}>
+                  {etiqueta}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Text style={estilos.notaEsquema}>
+            {esquemaDePrueba === 'auto'
+              ? `Ahora en Venezuela: ${esquemaAutomatico(new Date()) === 'claro' ? 'día' : 'noche'}`
+              : 'Forzado sólo para revisar'}
+          </Text>
+        </View>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={estilos.pantallas}>
           {pantallas.map(item => {
             const activa = item.clave === pantalla;
@@ -278,6 +334,19 @@ const estilos = StyleSheet.create({
     backgroundColor: '#2a2a2a'
   },
   salirTexto: { color: '#dddddd', fontSize: 12, fontWeight: '600' },
+
+  selectorEsquema: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingTop: 2
+  },
+  chipEsquema: {
+    paddingVertical: 5, paddingHorizontal: 11, borderRadius: 7,
+    backgroundColor: '#222222', borderWidth: 1, borderColor: '#333333'
+  },
+  chipEsquemaActivo: { backgroundColor: '#3a3a3a', borderColor: '#585858' },
+  chipEsquemaTexto: { color: '#9a9a9a', fontSize: 11, fontWeight: '600' },
+  chipEsquemaTextoActivo: { color: '#ffffff' },
+  notaEsquema: { color: '#6e6e6e', fontSize: 10, marginLeft: 4, flex: 1 },
 
   pantallas: { paddingHorizontal: 12 },
   chip: {

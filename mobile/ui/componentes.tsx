@@ -45,7 +45,10 @@ export function Txt({
     primario: tema.color.textoPrimario,
     secundario: tema.color.textoSecundario,
     tenue: tema.color.textoTenue,
-    acento: tema.color.acento,
+    // `acentoTexto` y no `acento`: sobre marfil, el amarillo de marca da 1,27:1
+    // y desaparece. En oscuro los dos valen lo mismo, así que esto sólo cambia
+    // algo en modo día — que es donde hacía falta.
+    acento: tema.color.acentoTexto,
     sobreAcento: tema.color.sobreAcento,
     // El verde de «en linea». Es un tono del sistema, no un color suelto:
     // asi el estado del conductor no se escribe a mano en cada pantalla.

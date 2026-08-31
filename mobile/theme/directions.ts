@@ -40,6 +40,14 @@ export interface Direccion {
     readonly acento: string;
     readonly acentoPresionado: string;
     readonly sobreAcento: string;
+    /**
+     * El amarillo que se puede LEER.
+     *
+     * Sobre grafito es el mismo de marca. Sobre marfil no: el `#ffd21f` como
+     * texto da 1,27:1 y desaparece, así que en claro es un ámbar profundo. Ver
+     * `esquemas.ts`.
+     */
+    readonly acentoTexto: string;
     readonly textoPrimario: string;
     readonly textoSecundario: string;
     readonly textoTenue: string;
@@ -47,6 +55,17 @@ export interface Direccion {
     readonly aviso: string;
     readonly peligro: string;
     readonly informacion: string;
+    /**
+     * El velo sobre el mapa cuando algo tiene que destacar por encima.
+     *
+     * Cambia con el esquema: oscurecer un mapa claro y aclarar uno oscuro son
+     * operaciones distintas, y usar negro en los dos deja el mapa claro sucio.
+     */
+    readonly veloDelMapa: string;
+    /** Las manzanas del mapa. Ver `esquemas.ts`. */
+    readonly fondoDelMapa: string;
+    /** Las calles del mapa. Claras sobre las manzanas en los dos esquemas. */
+    readonly calleDelMapa: string;
   };
 
   /** Cuánto aire respira la interfaz. */
@@ -121,13 +140,17 @@ const PREMIUM_MINIMAL: Direccion = {
     acento: AMARILLO.base,
     acentoPresionado: AMARILLO.intenso,
     sobreAcento: AMARILLO.tinta,
+    acentoTexto: AMARILLO.base,
     textoPrimario: TEXTO.primario,
     textoSecundario: TEXTO.secundario,
     textoTenue: TEXTO.tenue,
     exito: ESTADO.exito,
     aviso: ESTADO.aviso,
     peligro: ESTADO.peligro,
-    informacion: ESTADO.informacion
+    informacion: ESTADO.informacion,
+    veloDelMapa: GRAFITO.fondo,
+    fondoDelMapa: GRAFITO.superficie,
+    calleDelMapa: TEXTO.tenue
   },
   ritmo: {
     margenPantalla: ESPACIO['6'],
@@ -170,13 +193,17 @@ const URBAN_FUNCTIONAL: Direccion = {
     acento: AMARILLO.base,
     acentoPresionado: AMARILLO.intenso,
     sobreAcento: AMARILLO.tinta,
+    acentoTexto: AMARILLO.base,
     textoPrimario: '#ffffff',
     textoSecundario: TEXTO.secundario,
     textoTenue: TEXTO.tenue,
     exito: ESTADO.exito,
     aviso: ESTADO.aviso,
     peligro: ESTADO.peligro,
-    informacion: ESTADO.informacion
+    informacion: ESTADO.informacion,
+    veloDelMapa: GRAFITO.fondo,
+    fondoDelMapa: GRAFITO.superficie,
+    calleDelMapa: TEXTO.tenue
   },
   ritmo: {
     margenPantalla: ESPACIO['4'],
@@ -229,13 +256,17 @@ const SIGNATURE: Direccion = {
     acento: AMARILLO.base,
     acentoPresionado: AMARILLO.vivo,
     sobreAcento: AMARILLO.tinta,
+    acentoTexto: AMARILLO.base,
     textoPrimario: '#faf9f6',
     textoSecundario: '#adaaa2',
     textoTenue: TEXTO.tenue,
     exito: ESTADO.exito,
     aviso: ESTADO.aviso,
     peligro: ESTADO.peligro,
-    informacion: ESTADO.informacion
+    informacion: ESTADO.informacion,
+    veloDelMapa: GRAFITO.fondo,
+    fondoDelMapa: GRAFITO.superficie,
+    calleDelMapa: TEXTO.tenue
   },
   ritmo: {
     margenPantalla: ESPACIO['5'],

@@ -33,6 +33,12 @@ import { fileURLToPath } from 'node:url';
 
 import { CATALOGO } from '../theme/directions.ts';
 import { FRACCION_POR_ESTADO } from '../theme/hoja.ts';
+import {
+  ESQUEMA_CLARO,
+  ESQUEMA_OSCURO,
+  OPACIDAD_DE_CALLE_POR_ESQUEMA,
+  SOMBRA_POR_ESQUEMA
+} from '../theme/esquemas.ts';
 // El grafito mas hundido, el del fondo del arranque. Estaba escrito a mano y
 // no habria seguido un cambio en los primitivos.
 import { GRAFITO } from '../theme/primitives.ts';
@@ -54,14 +60,27 @@ export const ALTO = 844;
 
 export const C2 = CATALOGO.C2;
 
-/** Convierte los tokens de una dirección en variables CSS. */
-export function variables(tema) {
-  const c = tema.color;
+/**
+ * Convierte los tokens en variables CSS.
+ *
+ * El carácter —espacios, radios, tipografía— sale de la dirección; los colores,
+ * del esquema. Es la misma composición que hace `componerTema` en el teléfono,
+ * y por eso el navegador enseña lo mismo.
+ */
+export function variables(tema, esquema = 'oscuro') {
+  const c = esquema === 'claro' ? ESQUEMA_CLARO : ESQUEMA_OSCURO;
+  const sombra = SOMBRA_POR_ESQUEMA[esquema];
   return `
     --fondo:${c.fondo}; --superficie:${c.superficie}; --elevada:${c.superficieElevada};
     --borde:${c.borde}; --acento:${c.acento}; --sobre-acento:${c.sobreAcento};
+    --acento-texto:${c.acentoTexto};
     --texto:${c.textoPrimario}; --texto-2:${c.textoSecundario}; --texto-3:${c.textoTenue};
     --exito:${c.exito}; --aviso:${c.aviso}; --peligro:${c.peligro};
+    --velo-mapa:${c.veloDelMapa}; --mapa:${c.fondoDelMapa};
+    --calle:${c.calleDelMapa};
+    --calle-opacidad:${OPACIDAD_DE_CALLE_POR_ESQUEMA[esquema]};
+    --sombra-flotante:0 ${sombra.shadowOffset.height}px ${sombra.shadowRadius}px
+      rgba(0,0,0,${sombra.shadowOpacity});
     --margen:${tema.ritmo.margenPantalla}px; --bloques:${tema.ritmo.entreBloques}px;
     --pad:${tema.ritmo.dentroDeTarjeta}px; --gap:${tema.ritmo.entreElementos}px;
     --r-boton:${tema.radio.boton}px; --r-tarjeta:${tema.radio.tarjeta}px;
@@ -119,15 +138,18 @@ export const BASE = `
   .cuerpo{font-size:var(--t-cuerpo);line-height:var(--lh-cuerpo)}
   .etq{font-size:var(--t-etq);line-height:var(--lh-etq);font-weight:600}
   .pie{font-size:var(--t-pie);line-height:var(--lh-pie)}
-  .t2{color:var(--texto-2)} .t3{color:var(--texto-3)} .ac{color:var(--acento)} .ok{color:var(--exito)}
+  /* La clase .ac es TEXTO amarillo, asi que usa el que se puede leer: sobre
+     marfil el amarillo de marca da 1,27:1 y desaparece. */
+  .t2{color:var(--texto-2)} .t3{color:var(--texto-3)}
+  .ac{color:var(--acento-texto)} .ok{color:var(--exito)}
   .crece{flex:1}
 
   /* Calles claras sobre manzanas oscuras: es como se leen los mapas en tema
      oscuro, y es lo mismo que hace ui/Mapa.tsx. */
-  .mapa{position:absolute;inset:0;background:var(--superficie);overflow:hidden}
-  .calle{position:absolute;background:var(--texto-3);opacity:.28}
-  .diag{position:absolute;left:-30%;right:-30%;top:58%;height:10px;background:var(--texto-3);
-    opacity:.28;transform:rotate(-19deg)}
+  .mapa{position:absolute;inset:0;background:var(--mapa);overflow:hidden}
+  .calle{position:absolute;background:var(--calle);opacity:var(--calle-opacidad)}
+  .diag{position:absolute;left:-30%;right:-30%;top:58%;height:10px;background:var(--calle);
+    opacity:var(--calle-opacidad);transform:rotate(-19deg)}
   .agua{position:absolute;right:-18%;bottom:-14%;width:58%;height:38%;border-radius:999px;
     background:#63c9ff;opacity:.09;transform:rotate(-12deg)}
 
@@ -142,7 +164,7 @@ export const BASE = `
   .ruta{position:absolute;height:4px;border-radius:2px;background:var(--acento);opacity:.85;
     transform-origin:left center}
   .ctrl-mapa{position:absolute;right:14px;top:92px;width:42px;height:42px;border-radius:50%;
-    background:var(--elevada);display:grid;place-items:center;box-shadow:0 5px 14px rgba(0,0,0,.4)}
+    background:var(--elevada);display:grid;place-items:center;box-shadow:var(--sombra-flotante)}
 
   /* La hoja inferior. */
   .hoja{position:absolute;left:0;right:0;bottom:0;background:var(--superficie);
@@ -218,7 +240,7 @@ export const BASE = `
   .aspa i:first-child{transform:rotate(45deg)} .aspa i:last-child{transform:rotate(-45deg)}
 
   .flotante{position:absolute;display:flex;align-items:center;border-radius:999px;
-    background:var(--elevada);box-shadow:0 5px 14px rgba(0,0,0,.4);white-space:nowrap;
+    background:var(--elevada);box-shadow:var(--sombra-flotante);white-space:nowrap;
     max-width:calc(100% - var(--margen) * 2);overflow:hidden}
   /* El lugar se recorta; el estado, nunca: es lo primero que se lee. */
   .flotante .recorta{overflow:hidden;text-overflow:ellipsis}
@@ -574,7 +596,7 @@ export const PANTALLAS = {
       <div class="mapa">${CALLES}${MOTOS_POCAS}${RUTA}${CTRL}</div>
       <div style="position:absolute;left:var(--margen);right:var(--margen);top:16px;
         display:flex;align-items:center;gap:9px;padding:11px 14px;
-        border-radius:var(--r-campo);background:var(--elevada);box-shadow:0 5px 14px rgba(0,0,0,.4)">
+        border-radius:var(--r-campo);background:var(--elevada);box-shadow:var(--sombra-flotante)">
         <span style="width:9px;height:9px;border-radius:50%;background:var(--texto);flex:0 0 9px"></span>
         <span class="etq t2">Maracaibo</span>
         <span style="width:14px;height:2px;border-radius:1px;background:var(--acento);flex:0 0 14px"></span>
@@ -676,7 +698,7 @@ export const PANTALLAS = {
   'buscando-moto': () => `
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS_TRES}
-        <span style="position:absolute;inset:0;background:var(--fondo);opacity:.42"></span>
+        <span style="position:absolute;inset:0;background:var(--velo-mapa);opacity:.42"></span>
         ${pulso('MOTO')}
       </div>
       <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
@@ -801,7 +823,7 @@ export const PANTALLAS = {
   'punto-en-mapa': () => `
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS}
-        <span style="position:absolute;inset:0;background:var(--fondo);opacity:.25"></span>
+        <span style="position:absolute;inset:0;background:var(--velo-mapa);opacity:.25"></span>
         <span style="position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);text-align:center">
           <span style="display:inline-block;padding:6px 12px;margin-bottom:10px;border-radius:10px;background:var(--elevada)">
             <span class="etq">Mueve el mapa</span></span>
