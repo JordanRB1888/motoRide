@@ -386,6 +386,111 @@ y no pertenece al futuro móvil. Hay una prueba que recorre **todos** los ficher
 del cliente y falla si aparece. Es fácil que se cuele copiando de la web por
 costumbre, y no daría ningún error: recibiría un 403 y nadie sabría por qué.
 
+## Dirección visual — VISUAL-PREVIEW-1
+
+**Pendiente de la decisión del dueño.** Se prepararon tres direcciones para
+comparar; ninguna está congelada. La fase siguiente, DESIGN-SYSTEM-1, convertirá
+la elegida en sistema oficial y retirará las otras dos.
+
+### Las tres
+
+```
+A  Premium Minimal    aire, calma y tipografía. El amarillo sólo donde se decide.
+B  Urban Functional   densa y directa. Todo a mano, alto contraste, para la calle.
+C  +58 Signature      grafito profundo y filo amarillo. RECOMENDADA.
+```
+
+Comparten marca, estructura, contenido y componentes. Lo que cambia es el
+**carácter**: cuánto aire hay, cuánto amarillo se ve, cuán marcadas están las
+superficies, qué tan redondo es todo. Si cada dirección tuviera pantallas
+distintas, comparar sería imposible: se estaría eligiendo entre contenidos.
+
+Hay una prueba que verifica que las tres tienen la misma estructura de tokens, y
+otra que comprueba que no son la misma con otro nombre.
+
+### La firma de C
+
+El **filo amarillo**: una línea vertical fina en el borde izquierdo de lo que
+importa —la tarjeta activa, el estado en curso, la opción elegida—.
+
+Es la decisión de identidad. Ni repartir amarillo por toda la pantalla, ni
+esconderlo en un botón: se reconoce de un vistazo, funciona a pleno sol, no
+cansa de noche y no se parece a ninguna referencia.
+
+> **Un ajuste que salió de mirar el resultado.** La primera versión de C ponía
+> borde amarillo *y* filo en las tarjetas destacadas. En el inicio de pasajera,
+> con dos tarjetas destacadas a la vez, el amarillo competía consigo mismo y
+> dejaba de destacar nada. Ahora el borde amarillo es exclusivo de B; en C la
+> señal es sólo el filo.
+
+### Sobre las referencias
+
+A se inspira en la claridad de Cabify y B en la eficiencia de Yummy Rides, pero
+**ninguna copia nada**: no hay colores suyos, ni sus proporciones, ni sus
+componentes. Lo que se toma es una idea sobre cómo tratar el espacio y la
+densidad, que es lo que se puede aprender de una aplicación buena sin calcarla.
+Una prueba comprueba que sus colores corporativos no aparecen en el código.
+
+### Estructura del sistema
+
+```
+theme/primitives.ts    los valores crudos. Ninguna pantalla los importa.
+theme/directions.ts    las tres direcciones: cada valor asignado a un ROL
+theme/ThemeContext.tsx qué dirección está activa
+ui/componentes.tsx     todo lee el tema; nadie escribe un color a mano
+ui/Icono.tsx           iconografía propia, dibujada con vistas
+```
+
+Separar primitivos de semánticos importa: cuando se diga «el amarillo un punto
+más cálido», se cambia en un sitio y las tres direcciones lo heredan.
+
+### Iconografía propia
+
+Se intentó instalar `@expo/vector-icons`, la solución oficial, y **declara
+incompatibilidad con `react@19.2.3`** — el tercer paquete del propio ecosistema
+de Expo que lo hace, después de AsyncStorage y `react-native-web`.
+
+Y conviene: los sets conocidos se reconocen al instante como «iconos de
+aplicación», y esta fase trata de que +58express no parezca una plantilla. La
+familia propia es geométrica, de trazo uniforme, y no pesa nada — son vistas, no
+fuentes ni SVG.
+
+### Tipografía
+
+La del sistema. La elección de fuente **todavía no está tomada**, y meter una
+familia ahora la daría por decidida. Además es la que mejor rinde en teléfonos
+económicos, que es donde se va a usar esto.
+
+### El laboratorio visual
+
+```
+/preview     sólo en desarrollo · protegido por __DEV__
+```
+
+Permite cambiar entre A, B y C con los mismos datos, y recorrer las ocho
+pantallas. Fuera de desarrollo la ruta no monta nada: enseña datos de
+demostración que no salen de ninguna API, y en manos de alguien que crea estar
+viendo su cuenta eso es información falsa presentada como verdadera.
+
+No llama a ninguna API, no toca la sesión real y no ejecuta operaciones
+financieras. Los datos de demostración viven en `preview/fixtures.ts`, son
+obviamente ficticios, y una prueba comprueba que ningún fichero de la aplicación
+real los importa.
+
+**La cifra de saldo del conductor se muestra vacía**, con una nota que lo
+explica. La cartera está apagada en el backend, y enseñar un número como si
+fuera real sería mentir.
+
+### Mapa
+
+```
+MAP_PROVIDER_FINAL_DECISION: DEFERRED
+```
+
+`MapaSimulado` es una superficie con retícula y punto, pensada para sustituirse
+por el mapa real sin tocar la composición de alrededor. **No se instaló ningún
+proveedor**, y una prueba lo vigila.
+
 ## Diseño
 
 Los tokens salen de la identidad que ya existe (`src/styles/design-system.css`,
