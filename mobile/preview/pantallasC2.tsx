@@ -174,21 +174,6 @@ function CabeceraDePasajera() {
         <Campana sinLeer={AVISOS_DEMO.filter(aviso => aviso.sinLeer).length} />
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${TASA_DEMO.etiqueta}: ${TASA_DEMO.valor}. ${TASA_DEMO.nota}`}
-        style={({ pressed }) => ({
-          alignItems: 'flex-end',
-          gap: 1,
-          paddingHorizontal: 13, paddingVertical: 7,
-          borderRadius: 999,
-          backgroundColor: pressed ? tema.color.borde : tema.color.superficieElevada,
-          ...SOBRE_EL_MAPA
-        })}
-      >
-        <Txt nivel="pie" tono="tenue">{TASA_DEMO.etiqueta}</Txt>
-        <Txt nivel="etiqueta" tono="acento">{TASA_DEMO.valor}</Txt>
-      </Pressable>
     </View>
   );
 }
@@ -600,6 +585,22 @@ export function C2PedirViaje() {
                 icono="reloj"
               />
             ))}
+          </View>
+
+          {/* La tasa, aquí. Es donde se decide un gasto: quien va a pedir un
+              viaje traduce el precio a lo que lleva encima. En la cabecera de
+              todas las pantallas era ruido que se deja de leer. */}
+          <View style={{ height: tema.ritmo.entreElementos }} />
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+            paddingVertical: 10, paddingHorizontal: 13,
+            borderRadius: tema.radio.campo,
+            backgroundColor: tema.color.fondo
+          }}>
+            <Icono nombre="dolar" color={tema.color.textoSecundario} tamano={16} />
+            <Txt nivel="etiqueta" tono="tenue">{TASA_DEMO.etiqueta}</Txt>
+            <View style={{ flex: 1 }} />
+            <Txt nivel="etiqueta" tono="acento">{TASA_DEMO.valor}</Txt>
           </View>
 
           <View style={{ height: tema.ritmo.entreElementos }} />

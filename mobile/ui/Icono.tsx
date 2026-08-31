@@ -1,28 +1,35 @@
 /**
- * Iconografía propia, dibujada con vistas.
+ * La familia de iconos de +58express.
  *
- * POR QUÉ NO SE USA UNA LIBRERÍA
+ * DIBUJADOS CON VISTAS, POR NECESIDAD
  *
- * Se intentó instalar `@expo/vector-icons`, la solución oficial, y **declara
- * incompatibilidad con `react@19.2.3`** — el mismo motivo por el que se descartó
- * AsyncStorage en la fundación. No se fuerza con `--legacy-peer-deps` una
- * dependencia que dice no soportar la versión de React del proyecto.
+ * Lo suyo sería SVG. Se intentó instalar `react-native-svg` y **no se puede**:
+ * el árbol de dependencias tiene `react-dom@19.2.8` exigiendo una versión de
+ * React distinta de la que trae Expo SDK 57, y npm no resuelve. Es el **cuarto**
+ * choque del ecosistema de Expo con `react@19.2.3`, después de AsyncStorage,
+ * `react-native-web` y `@expo/vector-icons`. No se fuerza con
+ * `--legacy-peer-deps`.
  *
- * Y resulta que conviene: los sets conocidos se reconocen al instante como
- * «iconos de aplicación», y esta fase trata precisamente de que +58express no
- * parezca una plantilla. Una familia propia, geométrica y de trazo uniforme, da
- * carácter y no pesa nada — son vistas, no fuentes ni SVG.
+ * Así que se dibujan con vistas. Eso tiene un techo —no hay curvas libres— y
+ * hay que trabajar dentro de él en lugar de fingir que no existe:
  *
- * REGLAS DE LA FAMILIA
+ *   · los triángulos salen del truco de los bordes: una vista de tamaño cero
+ *     con dos bordes transparentes y uno de color
+ *   · los arcos, de esquinas redondeadas con lados sin pintar
+ *   · el símbolo del dólar es TEXTO, porque una «S» con rectángulos no es una
+ *     «S»; el sistema ya sabe dibujarla y se ve bien a cualquier tamaño
  *
- * · un solo grosor de trazo, proporcional al tamaño;
- * · formas geométricas simples: círculo, cuadrado redondeado, línea;
- * · nada de relleno salvo cuando el icono está activo;
- * · `accessibilityElementsHidden`: son decorativos, y quien los rodea ya lleva
- *   la etiqueta. Un lector de pantalla que anuncie «icono» no ayuda a nadie.
+ * QUÉ SE APRENDIÓ DE LA PRIMERA VERSIÓN
+ *
+ * «Inicio» era un cuadrado girado 45° sobre otro cuadrado, y en pantalla se
+ * leía como un rombo. La silueta de una casa no es un rombo encima de una caja:
+ * es un TRIÁNGULO encima de una caja, y con el truco de los bordes sale.
+ *
+ * Todos comparten grosor de trazo relativo al tamaño, así que a 16 o a 24
+ * puntos la familia se sigue viendo igual de pesada.
  */
 
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 export const NOMBRES_DE_ICONO = [
   'inicio',
@@ -35,7 +42,8 @@ export const NOMBRES_DE_ICONO = [
   'rayo',
   'maletin',
   'campana',
-  'ajustes'
+  'ajustes',
+  'dolar'
 ] as const;
 export type NombreDeIcono = (typeof NOMBRES_DE_ICONO)[number];
 
@@ -49,10 +57,13 @@ export interface PropiedadesDeIcono {
 
 export function Icono({ nombre, color, tamano = 24, activo = false }: PropiedadesDeIcono) {
   const trazo = Math.max(1.5, tamano / 12);
-  const comun = { width: tamano, height: tamano };
 
   return (
-    <View style={[estilos.marco, comun]} accessibilityElementsHidden importantForAccessibility="no">
+    <View
+      style={[estilos.marco, { width: tamano, height: tamano }]}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    >
       {dibujar(nombre, { tamano, trazo, color, activo })}
     </View>
   );
@@ -65,235 +76,396 @@ interface Trazado {
   readonly activo: boolean;
 }
 
+/**
+ * Un triángulo apuntando hacia arriba.
+ *
+ * El truco de los bordes: una vista sin tamaño donde los bordes izquierdo y
+ * derecho son transparentes y el de abajo lleva el color. Es la única forma de
+ * conseguir una diagonal sin SVG.
+ */
+function Triangulo({ base, alto, color }: {
+  readonly base: number;
+  readonly alto: number;
+  readonly color: string;
+}) {
+  return (
+    <View style={{
+      width: 0,
+      height: 0,
+      borderLeftWidth: base / 2,
+      borderRightWidth: base / 2,
+      borderBottomWidth: alto,
+      borderLeftColor: 'transparent',
+      borderRightColor: 'transparent',
+      borderBottomColor: color,
+      backgroundColor: 'transparent'
+    }} />
+  );
+}
+
 function dibujar(nombre: NombreDeIcono, t: Trazado) {
   switch (nombre) {
-    // Un tejado sobre una base: casa reducida a lo mínimo reconocible.
+    // Casa: tejado triangular sobre el cuerpo. Antes era un cuadrado girado 45°
+    // y se leía como un rombo — que es exactamente lo que era.
     case 'inicio':
       return (
         <>
+          <View style={{ position: 'absolute', top: t.tamano * 0.11 }}>
+            <Triangulo base={t.tamano * 0.84} alto={t.tamano * 0.4} color={t.color} />
+          </View>
           <View style={{
-            width: t.tamano * 0.62, height: t.tamano * 0.62,
-            borderWidth: t.trazo, borderColor: t.color,
-            borderRadius: t.trazo, transform: [{ rotate: '45deg' }],
-            position: 'absolute', top: -t.tamano * 0.12
-          }} />
-          <View style={{
-            width: t.tamano * 0.66, height: t.tamano * 0.42,
-            borderWidth: t.trazo, borderColor: t.color,
-            borderRadius: t.trazo * 1.5,
+            position: 'absolute',
+            bottom: t.tamano * 0.13,
+            width: t.tamano * 0.6,
+            height: t.tamano * 0.36,
             backgroundColor: t.activo ? t.color : 'transparent',
-            position: 'absolute', bottom: t.tamano * 0.08
+            borderWidth: t.trazo,
+            borderTopWidth: 0,
+            borderColor: t.color
+          }} />
+          {/* La puerta. Sin ella, la casa apagada es un triángulo sobre una
+              caja vacía y podría ser un icono de subir un archivo. */}
+          <View style={{
+            position: 'absolute',
+            bottom: t.tamano * 0.13,
+            width: t.tamano * 0.19,
+            height: t.tamano * 0.18,
+            borderWidth: t.trazo,
+            borderBottomWidth: 0,
+            borderColor: t.activo ? '#00000000' : t.color,
+            backgroundColor: t.activo ? '#00000055' : 'transparent'
           }} />
         </>
       );
 
-    // Campana: cuerpo acampanado y badajo. Es el icono de los avisos, y va a
-    // vivir en la cabecera con un punto amarillo encima cuando haya algo sin
-    // leer.
+    // Gota de mapa: círculo con punta abajo.
+    case 'destino':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.06,
+            width: t.tamano * 0.6,
+            height: t.tamano * 0.6,
+            borderRadius: t.tamano * 0.3,
+            borderWidth: t.trazo,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+          <View style={{
+            position: 'absolute',
+            bottom: t.tamano * 0.09,
+            transform: [{ rotate: '180deg' }]
+          }}>
+            <Triangulo base={t.tamano * 0.32} alto={t.tamano * 0.26} color={t.color} />
+          </View>
+        </>
+      );
+
+    // Historial: tres renglones de distinto largo. Los largos desiguales son lo
+    // que lo distingue de tres rayas iguales, que serían un menú.
+    case 'viajes':
+      return (
+        <>
+          {[
+            { ancho: 0.74, arriba: 0.24 },
+            { ancho: 0.54, arriba: 0.46 },
+            { ancho: 0.66, arriba: 0.68 }
+          ].map(renglon => (
+            <View key={renglon.arriba} style={{
+              position: 'absolute',
+              top: t.tamano * renglon.arriba,
+              left: t.tamano * 0.13,
+              width: t.tamano * renglon.ancho,
+              height: t.trazo,
+              borderRadius: t.trazo,
+              backgroundColor: t.color
+            }} />
+          ))}
+        </>
+      );
+
+    // Persona: cabeza y hombros.
+    case 'perfil':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.11,
+            width: t.tamano * 0.36,
+            height: t.tamano * 0.36,
+            borderRadius: t.tamano * 0.18,
+            borderWidth: t.trazo,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+          <View style={{
+            position: 'absolute',
+            bottom: t.tamano * 0.09,
+            width: t.tamano * 0.68,
+            height: t.tamano * 0.32,
+            borderTopLeftRadius: t.tamano * 0.34,
+            borderTopRightRadius: t.tamano * 0.34,
+            borderWidth: t.trazo,
+            borderBottomWidth: 0,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+        </>
+      );
+
+    // Dinero: el símbolo, en texto.
+    //
+    // Una «S» hecha con rectángulos no es una «S». El sistema ya sabe dibujarla
+    // y se ve bien a cualquier tamaño; usar tipografía aquí no es hacer trampa,
+    // es usar la herramienta que corresponde.
+    case 'dolar':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            width: t.tamano * 0.84,
+            height: t.tamano * 0.84,
+            borderRadius: t.tamano * 0.42,
+            borderWidth: t.trazo,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+          <Text style={{
+            color: t.activo ? '#0b0a09' : t.color,
+            fontSize: t.tamano * 0.52,
+            lineHeight: t.tamano * 0.66,
+            fontWeight: '700',
+            includeFontPadding: false
+          }}>
+            $
+          </Text>
+        </>
+      );
+
+    // Moto: dos ruedas y el cuadro entre ellas.
+    case 'moto':
+      return (
+        <>
+          {[0.21, 0.79].map(x => (
+            <View key={x} style={{
+              position: 'absolute',
+              bottom: t.tamano * 0.11,
+              left: t.tamano * x - t.tamano * 0.15,
+              width: t.tamano * 0.3,
+              height: t.tamano * 0.3,
+              borderRadius: t.tamano * 0.15,
+              borderWidth: t.trazo,
+              borderColor: t.color,
+              backgroundColor: t.activo ? t.color : 'transparent'
+            }} />
+          ))}
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.34,
+            left: t.tamano * 0.22,
+            width: t.tamano * 0.5,
+            height: t.trazo,
+            borderRadius: t.trazo,
+            backgroundColor: t.color,
+            transform: [{ rotate: '-18deg' }]
+          }} />
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.22,
+            right: t.tamano * 0.14,
+            width: t.tamano * 0.26,
+            height: t.trazo,
+            borderRadius: t.trazo,
+            backgroundColor: t.color
+          }} />
+        </>
+      );
+
+    // Escudo: cuerpo recto arriba y redondeado hacia la punta.
+    case 'escudo':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.11,
+            width: t.tamano * 0.64,
+            height: t.tamano * 0.44,
+            borderTopLeftRadius: t.trazo * 2,
+            borderTopRightRadius: t.trazo * 2,
+            borderWidth: t.trazo,
+            borderBottomWidth: 0,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+          <View style={{
+            position: 'absolute',
+            bottom: t.tamano * 0.11,
+            width: t.tamano * 0.64,
+            height: t.tamano * 0.34,
+            borderBottomLeftRadius: t.tamano * 0.32,
+            borderBottomRightRadius: t.tamano * 0.32,
+            borderWidth: t.trazo,
+            borderTopWidth: 0,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+        </>
+      );
+
+    // Reloj: esfera y dos agujas.
+    case 'reloj':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            width: t.tamano * 0.78,
+            height: t.tamano * 0.78,
+            borderRadius: t.tamano * 0.39,
+            borderWidth: t.trazo,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.29,
+            width: t.trazo,
+            height: t.tamano * 0.22,
+            borderRadius: t.trazo,
+            backgroundColor: t.activo ? '#0b0a09' : t.color
+          }} />
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.48,
+            left: t.tamano * 0.5,
+            width: t.tamano * 0.17,
+            height: t.trazo,
+            borderRadius: t.trazo,
+            backgroundColor: t.activo ? '#0b0a09' : t.color
+          }} />
+        </>
+      );
+
+    // Rayo: dos triángulos opuestos y desplazados.
+    case 'rayo':
+      return (
+        <>
+          <View style={{ position: 'absolute', top: t.tamano * 0.08, left: t.tamano * 0.26 }}>
+            <Triangulo base={t.tamano * 0.44} alto={t.tamano * 0.44} color={t.color} />
+          </View>
+          <View style={{
+            position: 'absolute',
+            bottom: t.tamano * 0.08,
+            right: t.tamano * 0.26,
+            transform: [{ rotate: '180deg' }]
+          }}>
+            <Triangulo base={t.tamano * 0.44} alto={t.tamano * 0.44} color={t.color} />
+          </View>
+        </>
+      );
+
+    // Maletín: asa sobre el cuerpo. Hace pareja con la casa en los sitios
+    // guardados, así que comparte proporciones.
+    case 'maletin':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.15,
+            width: t.tamano * 0.32,
+            height: t.tamano * 0.16,
+            borderWidth: t.trazo,
+            borderBottomWidth: 0,
+            borderColor: t.color,
+            borderTopLeftRadius: t.trazo * 2,
+            borderTopRightRadius: t.trazo * 2
+          }} />
+          <View style={{
+            position: 'absolute',
+            bottom: t.tamano * 0.15,
+            width: t.tamano * 0.76,
+            height: t.tamano * 0.48,
+            borderRadius: t.trazo * 2,
+            borderWidth: t.trazo,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+        </>
+      );
+
+    // Campana: cuerpo acampanado, base y badajo.
     case 'campana':
       return (
         <>
           <View style={{
-            width: t.tamano * 0.62, height: t.tamano * 0.52,
-            borderWidth: t.trazo, borderColor: t.color,
-            borderTopLeftRadius: t.tamano * 0.31,
-            borderTopRightRadius: t.tamano * 0.31,
+            position: 'absolute',
+            top: t.tamano * 0.15,
+            width: t.tamano * 0.56,
+            height: t.tamano * 0.46,
+            borderTopLeftRadius: t.tamano * 0.28,
+            borderTopRightRadius: t.tamano * 0.28,
+            borderWidth: t.trazo,
             borderBottomWidth: 0,
-            backgroundColor: t.activo ? t.color : 'transparent',
-            position: 'absolute', top: t.tamano * 0.16
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
           }} />
           <View style={{
-            width: t.tamano * 0.76, height: t.trazo,
-            borderRadius: t.trazo, backgroundColor: t.color,
-            position: 'absolute', top: t.tamano * 0.66
+            position: 'absolute',
+            top: t.tamano * 0.61,
+            width: t.tamano * 0.74,
+            height: t.trazo,
+            borderRadius: t.trazo,
+            backgroundColor: t.color
           }} />
           <View style={{
-            width: t.tamano * 0.2, height: t.tamano * 0.13,
-            borderWidth: t.trazo, borderTopWidth: 0, borderColor: t.color,
+            position: 'absolute',
+            top: t.tamano * 0.68,
+            width: t.tamano * 0.2,
+            height: t.tamano * 0.13,
+            borderWidth: t.trazo,
+            borderTopWidth: 0,
+            borderColor: t.color,
             borderBottomLeftRadius: t.tamano * 0.1,
-            borderBottomRightRadius: t.tamano * 0.1,
-            position: 'absolute', top: t.tamano * 0.7
+            borderBottomRightRadius: t.tamano * 0.1
           }} />
         </>
       );
 
-    // Ajustes: tres carriles con su mando. Deslizadores, no un engranaje: un
-    // engranaje dibujado a trazo con vistas se convierte en una mancha.
+    // Ajustes: tres carriles con su mando. Deslizadores y no un engranaje: un
+    // engranaje a este tamaño y con vistas se convierte en una mancha.
     case 'ajustes':
       return (
         <>
-          {[0.26, 0.5, 0.74].map((alto, indice) => (
-            <View key={alto}>
+          {[
+            { alto: 0.26, mando: 0.6 },
+            { alto: 0.5, mando: 0.26 },
+            { alto: 0.74, mando: 0.64 }
+          ].map(carril => (
+            <View key={carril.alto}>
               <View style={{
-                width: t.tamano * 0.74, height: t.trazo,
-                borderRadius: t.trazo, backgroundColor: t.color,
-                position: 'absolute', top: t.tamano * alto, left: t.tamano * 0.13
+                position: 'absolute',
+                top: t.tamano * carril.alto,
+                left: t.tamano * 0.13,
+                width: t.tamano * 0.74,
+                height: t.trazo,
+                borderRadius: t.trazo,
+                backgroundColor: t.color
               }} />
               <View style={{
-                width: t.trazo * 2.6, height: t.trazo * 2.6,
-                borderRadius: t.trazo * 1.3,
-                borderWidth: t.trazo, borderColor: t.color,
-                backgroundColor: t.activo ? t.color : '#00000000',
                 position: 'absolute',
-                top: t.tamano * alto - t.trazo * 0.8,
-                left: t.tamano * (indice === 1 ? 0.6 : 0.28)
+                top: t.tamano * carril.alto - t.trazo * 1.4,
+                left: t.tamano * carril.mando,
+                width: t.trazo * 3.4,
+                height: t.trazo * 3.4,
+                borderRadius: t.trazo * 1.7,
+                borderWidth: t.trazo,
+                borderColor: t.color,
+                backgroundColor: t.activo ? t.color : '#0b0a09'
               }} />
             </View>
           ))}
         </>
       );
-
-    // Un asa sobre un cuerpo: maletín reducido a lo mínimo. Hace pareja con la
-    // casa de `inicio` en los sitios guardados, así que comparte proporciones.
-    case 'maletin':
-      return (
-        <>
-          <View style={{
-            width: t.tamano * 0.34, height: t.tamano * 0.18,
-            borderWidth: t.trazo, borderBottomWidth: 0, borderColor: t.color,
-            borderTopLeftRadius: t.trazo * 2, borderTopRightRadius: t.trazo * 2,
-            position: 'absolute', top: t.tamano * 0.14
-          }} />
-          <View style={{
-            width: t.tamano * 0.78, height: t.tamano * 0.5,
-            borderWidth: t.trazo, borderColor: t.color,
-            borderRadius: t.trazo * 2,
-            backgroundColor: t.activo ? t.color : 'transparent',
-            position: 'absolute', bottom: t.tamano * 0.14
-          }} />
-        </>
-      );
-
-    // Gota de mapa: círculo con punta.
-    case 'destino':
-      return (
-        <>
-          <View style={{
-            width: t.tamano * 0.6, height: t.tamano * 0.6,
-            borderRadius: t.tamano * 0.3,
-            borderWidth: t.trazo, borderColor: t.color,
-            backgroundColor: t.activo ? t.color : 'transparent',
-            position: 'absolute', top: t.tamano * 0.04
-          }} />
-          <View style={{
-            width: t.trazo * 2, height: t.tamano * 0.26,
-            backgroundColor: t.color, borderRadius: t.trazo,
-            position: 'absolute', bottom: t.tamano * 0.04
-          }} />
-        </>
-      );
-
-    // Tres líneas de distinta longitud: una lista de viajes.
-    case 'viajes':
-      return (
-        <View style={{ width: t.tamano * 0.72, gap: t.tamano * 0.14 }}>
-          {[1, 0.72, 0.86].map((ancho, indice) => (
-            <View key={indice} style={{
-              width: `${ancho * 100}%`, height: t.trazo * 1.4,
-              backgroundColor: t.color, borderRadius: t.trazo,
-              opacity: t.activo ? 1 : 0.85
-            }} />
-          ))}
-        </View>
-      );
-
-    // Cabeza y hombros.
-    case 'perfil':
-      return (
-        <>
-          <View style={{
-            width: t.tamano * 0.36, height: t.tamano * 0.36,
-            borderRadius: t.tamano * 0.18,
-            borderWidth: t.trazo, borderColor: t.color,
-            backgroundColor: t.activo ? t.color : 'transparent',
-            position: 'absolute', top: t.tamano * 0.08
-          }} />
-          <View style={{
-            width: t.tamano * 0.68, height: t.tamano * 0.34,
-            borderTopLeftRadius: t.tamano * 0.34, borderTopRightRadius: t.tamano * 0.34,
-            borderWidth: t.trazo, borderBottomWidth: 0, borderColor: t.color,
-            position: 'absolute', bottom: t.tamano * 0.06
-          }} />
-        </>
-      );
-
-    // Dos ruedas y el manillar: mototaxi, que es de lo que va esto.
-    case 'moto':
-      return (
-        <>
-          <View style={{
-            width: t.tamano * 0.3, height: t.tamano * 0.3,
-            borderRadius: t.tamano * 0.15, borderWidth: t.trazo, borderColor: t.color,
-            position: 'absolute', left: 0, bottom: t.tamano * 0.1
-          }} />
-          <View style={{
-            width: t.tamano * 0.3, height: t.tamano * 0.3,
-            borderRadius: t.tamano * 0.15, borderWidth: t.trazo, borderColor: t.color,
-            position: 'absolute', right: 0, bottom: t.tamano * 0.1
-          }} />
-          <View style={{
-            width: t.tamano * 0.44, height: t.trazo * 1.4,
-            backgroundColor: t.color, borderRadius: t.trazo,
-            position: 'absolute', top: t.tamano * 0.34,
-            transform: [{ rotate: '-16deg' }]
-          }} />
-        </>
-      );
-
-    // Escudo: seguridad, sin cruces ni símbolos.
-    case 'escudo':
-      return (
-        <View style={{
-          width: t.tamano * 0.62, height: t.tamano * 0.72,
-          borderWidth: t.trazo, borderColor: t.color,
-          borderTopLeftRadius: t.trazo * 2, borderTopRightRadius: t.trazo * 2,
-          borderBottomLeftRadius: t.tamano * 0.31, borderBottomRightRadius: t.tamano * 0.31,
-          backgroundColor: t.activo ? t.color : 'transparent'
-        }} />
-      );
-
-    // Reloj: círculo con dos agujas.
-    case 'reloj':
-      return (
-        <View style={{
-          width: t.tamano * 0.72, height: t.tamano * 0.72,
-          borderRadius: t.tamano * 0.36, borderWidth: t.trazo, borderColor: t.color,
-          alignItems: 'center', justifyContent: 'center'
-        }}>
-          <View style={{
-            width: t.trazo, height: t.tamano * 0.2, backgroundColor: t.color,
-            borderRadius: t.trazo, position: 'absolute', top: t.tamano * 0.12
-          }} />
-          <View style={{
-            width: t.tamano * 0.18, height: t.trazo, backgroundColor: t.color,
-            borderRadius: t.trazo, position: 'absolute', right: t.tamano * 0.12
-          }} />
-        </View>
-      );
-
-    // Rayo: velocidad. Dos triángulos enfrentados.
-    case 'rayo':
-      return (
-        <>
-          <View style={{
-            width: 0, height: 0, position: 'absolute', top: 0,
-            borderLeftWidth: t.tamano * 0.2, borderRightWidth: t.tamano * 0.08,
-            borderBottomWidth: t.tamano * 0.42,
-            borderLeftColor: 'transparent', borderRightColor: 'transparent',
-            borderBottomColor: t.color
-          }} />
-          <View style={{
-            width: 0, height: 0, position: 'absolute', bottom: 0,
-            borderLeftWidth: t.tamano * 0.08, borderRightWidth: t.tamano * 0.2,
-            borderTopWidth: t.tamano * 0.42,
-            borderLeftColor: 'transparent', borderRightColor: 'transparent',
-            borderTopColor: t.color
-          }} />
-        </>
-      );
-
-    default:
-      return null;
   }
 }
 

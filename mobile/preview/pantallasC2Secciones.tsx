@@ -52,6 +52,16 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
+ * Lo que se lleva la barra inferior, para que el contenido no acabe debajo.
+ *
+ * 10 de relleno superior + 23 de icono + 4 de hueco + 17 de etiqueta + 22 de
+ * franja del sistema. Antes el relleno era de 24 puntos y las últimas filas de
+ * cada lista quedaban tapadas: ni se leían ni se podían tocar.
+ */
+const ALTO_DE_LA_BARRA = 76;
+
+
+/**
  * La campana de avisos.
  *
  * Va en la cabecera de las secciones y en el inicio, que son las pantallas
@@ -128,7 +138,7 @@ function Seccion({ titulo, activo, conCampana = true, children }: {
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: tema.ritmo.margenPantalla,
-          paddingBottom: tema.ritmo.entreBloques
+          paddingBottom: tema.ritmo.entreBloques + ALTO_DE_LA_BARRA
         }}
         showsVerticalScrollIndicator={false}
       >

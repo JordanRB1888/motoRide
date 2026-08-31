@@ -85,7 +85,8 @@ const TRAZOS = {
   galon: '<path d="M6 9.5 12 15l6-5.5"/>',
   campana: '<path d="M6 10a6 6 0 0 1 12 0c0 4 1.4 5.6 2 6.2H4c.6-.6 2-2.2 2-6.2z"/><path d="M10 19.5a2.2 2.2 0 0 0 4 0"/>',
   ajustes: '<path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="17" r="2"/>',
-  flecha: '<path d="M9 6l6 6-6 6"/>'
+  flecha: '<path d="M9 6l6 6-6 6"/>',
+  dolar: '<circle cx="12" cy="12" r="9"/><path d="M12 6.5v11M14.6 9.4a2.6 2.6 0 0 0-2.6-1.4h-.4a2.2 2.2 0 0 0 0 4.4h.8a2.2 2.2 0 0 1 0 4.4h-.4a2.6 2.6 0 0 1-2.6-1.4"/>'
 };
 
 const icono = (nombre, color = 'currentColor', tamano = 23) =>
@@ -94,6 +95,10 @@ const icono = (nombre, color = 'currentColor', tamano = 23) =>
 
 const BASE = `
   *{margin:0;padding:0;box-sizing:border-box}
+  /* El saldo del conductor es mas largo que una pantalla: en el telefono se
+     hace scroll, y aqui se deja crecer para poder revisarlo entero. Es la
+     unica pantalla que no va a 390x844. */
+  .tel.crece{height:auto;min-height:${ALTO}px}
   .tel{width:${ANCHO}px;height:${ALTO}px;position:relative;overflow:hidden;
     background:var(--fondo);color:var(--texto);
     font-family:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif}
@@ -257,19 +262,12 @@ const CABECERA_PASAJERA = `
       <span class="etq">Demo Pasajera</span>
       <span class="pie t3">Zona demo · Maracaibo</span></span>
   </div>
-  <div style="position:absolute;right:var(--margen);top:16px;display:flex;align-items:center;gap:8px">
-    <span class="flotante" style="position:relative;width:40px;height:40px;border-radius:50%;
-      display:grid;place-items:center">
-      ${icono('campana', 'var(--texto-2)', 22)}
-      <span style="position:absolute;top:7px;right:9px;width:9px;height:9px;border-radius:50%;
-        background:var(--acento);border:2px solid var(--fondo)"></span>
-    </span>
-    <span class="flotante" style="position:relative;flex-direction:column;align-items:flex-end;
-      gap:1px;padding:7px 13px">
-      <span class="pie t3">Tasa BCV</span>
-      <span class="etq ac">Bs. 000,00</span>
-    </span>
-  </div>`;
+  <span class="flotante" style="right:var(--margen);top:16px;width:40px;height:40px;
+    border-radius:50%;display:grid;place-items:center">
+    ${icono('campana', 'var(--texto-2)', 22)}
+    <span style="position:absolute;top:7px;right:9px;width:9px;height:9px;border-radius:50%;
+      background:var(--acento);border:2px solid var(--fondo)"></span>
+  </span>`;
 
 const LUGARES = `
   <div style="display:flex;gap:8px">
@@ -357,7 +355,7 @@ const barraPasajera = (modo = 'pedir', activo = 'inicio') => `
 
 const barraConductor = (enLinea, activo = 'mapa') => `
   <div class="barra">
-    ${[['Mapa', 'inicio'], ['Saldo', 'rayo']].map(([n, ic], i) => `
+    ${[['Mapa', 'inicio'], ['Saldo', 'dolar']].map(([n, ic], i) => `
       <div class="dest-nav">${icono(ic, i === 0 && activo === 'mapa' ? 'var(--acento)' : 'var(--texto-3)')}
         <span class="etq ${i === 0 && activo === 'mapa' ? '' : 't3'}">${n}</span></div>`).join('')}
     <div class="disco-zona">
@@ -497,6 +495,13 @@ const PANTALLAS = {
           <span class="cuerpo t2">¿A dónde vas?</span></div>
         <div style="height:var(--gap)"></div>
         ${LUGARES}
+        <div style="height:var(--gap)"></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 13px;
+          border-radius:var(--r-campo);background:var(--fondo)">
+          ${icono('dolar', 'var(--texto-2)', 16)}
+          <span class="etq t3">Tasa BCV</span><span class="crece"></span>
+          <span class="etq ac">Bs. 000,00</span>
+        </div>
         <div style="height:var(--gap)"></div><span class="sep"></span>
         <div style="padding-top:4px">
           ${[['Destino de ejemplo 1', 'Guardado como «Casa»'],
@@ -724,12 +729,12 @@ const PANTALLAS = {
     </div>`,
 
   'saldo-conductor': () => `
-    <div class="tel">
+    <div class="tel crece">
       <div style="display:flex;align-items:center;padding:18px var(--margen) var(--gap)">
         <span class="titulo">Tu saldo</span><span class="crece"></span>
         <span class="pie t3">Tasa BCV · Bs. 000,00</span>
       </div>
-      <div style="padding:0 var(--margen);display:grid;gap:var(--bloques)">
+      <div style="padding:0 var(--margen) 96px;display:grid;gap:var(--bloques)">
         <div style="position:relative;overflow:hidden;border-radius:var(--r-tarjeta);
           background:var(--superficie);padding:var(--pad);display:grid;gap:var(--gap)">
           <span class="filo"></span>
@@ -780,7 +785,7 @@ const PANTALLAS = {
               <div style="display:flex;align-items:center;gap:13px;padding:13px 0">
                 <span style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
                   flex:0 0 36px;background:${comision ? 'color-mix(in srgb,var(--peligro) 12%,transparent)' : 'var(--elevada)'}">
-                  ${icono(comision ? 'escudo' : 'rayo', comision ? 'var(--peligro)' : 'var(--texto-2)', 18)}</span>
+                  ${icono(comision ? 'dolar' : 'moto', comision ? 'var(--peligro)' : 'var(--texto-2)', 18)}</span>
                 <span style="flex:1;display:grid;gap:2px;min-width:0">
                   <span class="cuerpo">${t}</span>
                   <span class="pie t3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d}</span>

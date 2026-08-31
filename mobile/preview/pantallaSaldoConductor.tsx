@@ -40,6 +40,15 @@ import { BarraDeNavegacion, ControlDeDisponibilidad, DESTINOS_DE_CONDUCTOR } fro
 import { useTema } from '../theme/ThemeContext';
 import { MOVIMIENTOS_DEMO, TASA_DEMO } from './fixtures';
 
+/**
+ * Lo que se lleva la barra inferior, para que el contenido no acabe debajo.
+ *
+ * 10 de relleno superior + 23 de icono + 4 de hueco + 17 de etiqueta + 22 de
+ * franja del sistema. Antes el relleno era de 24 puntos y las últimas filas de
+ * cada lista quedaban tapadas: ni se leían ni se podían tocar.
+ */
+const ALTO_DE_LA_BARRA = 76;
+
 type Filtro = 'todos' | 'comisiones' | 'recargas';
 
 const FILTROS: readonly { readonly clave: Filtro; readonly etiqueta: string }[] = [
@@ -55,10 +64,18 @@ const TIPOS_POR_FILTRO: Readonly<Record<Filtro, readonly string[]>> = {
   recargas: ['RECARGA', 'LIQUIDACION']
 };
 
+/**
+ * Cada movimiento con la forma de lo que lo produjo.
+ *
+ * La ganancia viene de un viaje, asi que lleva la moto. La comision es dinero
+ * que sale, y lleva el simbolo. La recarga entra, y la liquidacion es una
+ * transferencia. Antes el mapeo era arbitrario —la recarga llevaba una casa— y
+ * un icono que no explica nada estorba mas que ayuda.
+ */
 const ICONO_POR_TIPO: Readonly<Record<string, NombreDeIcono>> = {
-  GANANCIA: 'rayo',
-  COMISION: 'escudo',
-  RECARGA: 'inicio',
+  GANANCIA: 'moto',
+  COMISION: 'dolar',
+  RECARGA: 'rayo',
   LIQUIDACION: 'viajes'
 };
 
@@ -87,7 +104,7 @@ export function C2SaldoConductor({ deudor = false }: { readonly deudor?: boolean
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: tema.ritmo.margenPantalla,
-          paddingBottom: tema.ritmo.entreBloques
+          paddingBottom: tema.ritmo.entreBloques + ALTO_DE_LA_BARRA
         }}
         showsVerticalScrollIndicator={false}
       >

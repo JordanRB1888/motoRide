@@ -400,7 +400,7 @@ export const DESTINOS_DE_PASAJERA: readonly DestinoDeNavegacion[] = Object.freez
  */
 export const DESTINOS_DE_CONDUCTOR: readonly DestinoDeNavegacion[] = Object.freeze([
   { clave: 'mapa', icono: 'inicio', etiqueta: 'Mapa' },
-  { clave: 'saldo', icono: 'rayo', etiqueta: 'Saldo' },
+  { clave: 'saldo', icono: 'dolar', etiqueta: 'Saldo' },
   { clave: 'historial', icono: 'viajes', etiqueta: 'Historial' },
   { clave: 'perfil', icono: 'perfil', etiqueta: 'Perfil' }
 ]);
