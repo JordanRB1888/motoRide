@@ -298,6 +298,48 @@ test('la plantilla no lleva secretos', () => {
 });
 
 // ---------------------------------------------------------------------------
+// La herramienta de cuenta de prueba
+// ---------------------------------------------------------------------------
+
+test('el script de cuenta de prueba no lleva contraseña escrita', () => {
+  // Una contraseña fija en el repositorio deja de ser de pruebas el día que
+  // alguien la reutiliza, y queda en el historial de git para siempre.
+  //
+  // La primera versión de esta prueba buscaba «password = "algo"» en todo el
+  // fichero y saltaba con el texto de AYUDA —el que enseña a pasar la
+  // contraseña por el entorno—. Buscar la forma de una contraseña encuentra
+  // también las instrucciones para no escribir ninguna. Así que se comprueba lo
+  // que de verdad importa: de dónde sale el valor que se envía.
+  const fuente = leer('scripts/crearCuentaDePrueba.mjs');
+
+  assert.match(fuente, /const password = process\.env\.PASSWORD/,
+    'la contraseña sale del entorno');
+  assert.doesNotMatch(fuente, /process\.env\.PASSWORD\s*\?\?\s*['"].{3,}['"]/,
+    'no puede haber una contraseña de reserva');
+
+  // Y lo que se manda es esa variable, no un literal.
+  const objeto = fuente.slice(fuente.indexOf('const cuenta = {'), fuente.indexOf('};', fuente.indexOf('const cuenta = {')));
+  assert.match(objeto, /^\s*password,\s*$/m, 'el registro envía la variable, no una cadena');
+});
+
+test('el script de cuenta de prueba SÓLO acepta servidores privados', () => {
+  // Se comprueba lo que está permitido, no lo que está prohibido. Una lista de
+  // dominios prohibidos siempre se queda corta: basta con que producción cambie
+  // de nombre una vez para que deje de proteger.
+  const fuente = leer('scripts/crearCuentaDePrueba.mjs');
+  assert.match(fuente, /function esServidorLocal/);
+  assert.match(fuente, /a === 10\b/, 'acepta 10.0.0.0/8');
+  assert.match(fuente, /192 && b === 168/, 'acepta 192.168.0.0/16');
+  assert.match(fuente, /b >= 16 && b <= 31/, 'acepta 172.16.0.0/12');
+  assert.match(fuente, /return false/, 'y rechaza todo lo demás');
+  // La comprobación va ANTES de enviar nada.
+  assert.ok(
+    fuente.indexOf('esServidorLocal(destino.hostname)') < fuente.indexOf('await fetch('),
+    'el destino se comprueba antes de la petición'
+  );
+});
+
+// ---------------------------------------------------------------------------
 // El disco central
 // ---------------------------------------------------------------------------
 
