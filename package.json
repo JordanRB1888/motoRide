@@ -16,7 +16,13 @@
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json && tsc -p tsconfig.server.json --noEmit",
     "build:nest": "tsc -p tsconfig.server.json",
     "test:nest": "npm run build:nest && node --test server/nest/test/*.test.js",
-    "dev:nest": "npm run build:nest && node server/dist-nest/server/nest/main.js"
+    "dev:nest": "npm run build:nest && node server/dist-nest/server/nest/main.js",
+    "mobile:start": "npm --prefix mobile run start",
+    "mobile:android": "npm --prefix mobile run android",
+    "mobile:ios": "npm --prefix mobile run ios",
+    "mobile:typecheck": "npm --prefix mobile run typecheck",
+    "mobile:test": "npm --prefix mobile run test",
+    "mobile:bundle:check": "npm --prefix mobile run bundle:check"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

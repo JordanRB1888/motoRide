@@ -1,0 +1,31 @@
+{
+  // La base de Expo trae la configuración de React Native (JSX, resolución de
+  // módulos, tipos de la plataforma). Encima se añade el mismo rigor que el
+  // resto del repositorio exige al TypeScript nuevo.
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    // Los contratos compartidos con la web y el backend. Se REFERENCIAN, no se
+    // copian: duplicarlos garantiza que un día se desincronicen.
+    "../shared/contracts/**/*.ts",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".expo",
+    ".expo-bundle-check"
+  ]
+}
