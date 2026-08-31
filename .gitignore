@@ -23,3 +23,6 @@ playwright-report/
 test-results/
 blob-report/
 playwright/.cache/
+
+# Compilacion del backend NestJS. Es un artefacto de ejecucion, no fuente.
+server/dist-nest/
