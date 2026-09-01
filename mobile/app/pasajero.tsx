@@ -6,6 +6,7 @@
  * guardada — un enlace profundo no puede saltársela.
  */
 
+import { useEffect } from 'react';
 import { Redirect, router } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
@@ -13,9 +14,27 @@ import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { useSesion } from '../context/AuthContext';
+import { useViajeActivo } from '../realtime/ViajeActivo';
 
 export default function InicioDePasajera() {
   const { sesion, salir } = useSesion();
+  const { estado: viajeActivo } = useViajeActivo();
+
+  /**
+   * Volver al viaje en marcha.
+   *
+   * Es la aceptación del encargo: si alguien cierra la aplicación con un viaje
+   * en curso y la vuelve a abrir, no puede aparecer en el inicio como si no
+   * pasara nada. La sesión se restaura, el viaje se consulta y la pantalla que
+   * toca vuelve sola.
+   *
+   * Sólo con `CON_VIAJE`: durante `RESINCRONIZANDO` o `ERROR` no se salta,
+   * porque en esos dos casos lo que se sabe puede estar viejo y un salto de
+   * pantalla es lo más brusco que puede hacer una aplicación sola.
+   */
+  useEffect(() => {
+    if (viajeActivo.fase === 'CON_VIAJE') router.replace('/viaje-activo');
+  }, [viajeActivo.fase]);
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (

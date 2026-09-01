@@ -673,7 +673,11 @@ function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
  * El mapa se atenúa para que el pulso mande, y la hoja se queda en lo mínimo:
  * qué se busca y cómo salir.
  */
-export function C2BuscandoVehiculo({ tipo = 'MOTO' }: { readonly tipo?: TipoDeVehiculo }) {
+export function C2BuscandoVehiculo({ tipo = 'MOTO', onCancelar }: {
+  readonly tipo?: TipoDeVehiculo;
+  /** Sin manejador el botón no hace nada, como en el recorrido de diseño. */
+  readonly onCancelar?: () => void;
+}) {
   const tema = useTema();
 
   return (
@@ -694,7 +698,7 @@ export function C2BuscandoVehiculo({ tipo = 'MOTO' }: { readonly tipo?: TipoDeVe
         </View>
 
         <HojaInferior estado="baja" conAsa={false} alturaAutomatica>
-          <BuscandoVehiculo tipo={tipo} />
+          <BuscandoVehiculo tipo={tipo} onCancelar={onCancelar} />
         </HojaInferior>
       </LienzoDeMapa>
 
@@ -886,8 +890,46 @@ export function C2ConductorEnLinea() {
  * El viaje. La jerarquía buena de C —estado, tiempo, persona, recorrido,
  * acciones— pero sobre el mapa y dentro de una sola superficie.
  */
-export function C2Viaje() {
+/**
+ * Lo que esta pantalla necesita para pintarse.
+ *
+ * Textos ya resueltos: aquí no llega ningún estado del backend ni ningún alias
+ * histórico. La traducción vive en `domain/superficieDelViaje.ts`.
+ */
+export interface DatosDelViajeEnCurso {
+  readonly estado: string;
+  /** Lo que va donde el diseño pone «llega en 4 min». `null` si no hay nada. */
+  readonly aclaracion: string | null;
+  readonly conductor: string;
+  readonly iniciales: string;
+  readonly vehiculo: string;
+  readonly valoracion: string | null;
+  readonly origen: string;
+  readonly destino: string;
+}
+
+const VIAJE_DE_EJEMPLO: DatosDelViajeEnCurso = {
+  estado: VIAJE_DEMO.estado,
+  aclaracion: VIAJE_DEMO.eta,
+  conductor: VIAJE_DEMO.conductor,
+  iniciales: VIAJE_DEMO.iniciales,
+  vehiculo: VIAJE_DEMO.vehiculo,
+  valoracion: VIAJE_DEMO.valoracion,
+  origen: VIAJE_DEMO.origen,
+  destino: VIAJE_DEMO.destino
+};
+
+const VIAJE_EN_BLANCO: DatosDelViajeEnCurso = {
+  estado: '', aclaracion: null, conductor: '', iniciales: '',
+  vehiculo: '', valoracion: null, origen: '', destino: ''
+};
+
+/** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
+const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+
+export function C2Viaje({ datos }: { readonly datos?: DatosDelViajeEnCurso } = {}) {
   const tema = useTema();
+  const viaje = datos ?? (EN_DESARROLLO ? VIAJE_DE_EJEMPLO : VIAJE_EN_BLANCO);
 
   const conductorEnRuta: VehiculoEnMapa = {
     clave: 'conductor', tipo: 'MOTO', en: { x: 46, y: 30 }, rumbo: 38, destacado: true
@@ -905,10 +947,17 @@ export function C2Viaje() {
             {/* Estado y llegada en UNA línea. En su tarjeta con filo pesaban lo
                 mismo que todo lo demás junto. */}
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 9 }}>
-              <Txt nivel="encabezado">{VIAJE_DEMO.estado}</Txt>
+              <Txt nivel="encabezado">{viaje.estado}</Txt>
               <View style={{ flex: 1 }} />
-              <Txt nivel="pie" tono="tenue">llega en</Txt>
-              <Txt nivel="titulo" tono="acento">{VIAJE_DEMO.eta}</Txt>
+              {/* El hueco de la derecha.
+                  Con el ejemplo lleva «4 min»; con datos reales lleva la
+                  aclaración del estado —en ARRIVED, que ya llegó— o NADA: el
+                  backend no calcula tiempo de llegada, y poner ahí la duración
+                  estimada del viaje sería un número que no significa lo que
+                  parece. */}
+              {viaje.aclaracion !== null ? (
+                <Txt nivel="pie" tono="tenue" numberOfLines={1}>{viaje.aclaracion}</Txt>
+              ) : null}
             </View>
 
             <Separador />
@@ -919,12 +968,14 @@ export function C2Viaje() {
                 alignItems: 'center', justifyContent: 'center',
                 backgroundColor: tema.color.superficieElevada
               }}>
-                <Txt nivel="etiqueta">{VIAJE_DEMO.iniciales}</Txt>
+                <Txt nivel="etiqueta">{viaje.iniciales}</Txt>
               </View>
               <View style={{ flex: 1, gap: 1 }}>
-                <Txt nivel="cuerpo">{VIAJE_DEMO.conductor}</Txt>
+                <Txt nivel="cuerpo">{viaje.conductor}</Txt>
+                {/* La valoración sólo si existe: un conductor recién aprobado no
+                    tiene, y un «· 0,0» al lado de su nombre lo calumnia. */}
                 <Txt nivel="pie" tono="tenue" numberOfLines={1}>
-                  {VIAJE_DEMO.vehiculo} · {VIAJE_DEMO.valoracion}
+                  {viaje.valoracion === null ? viaje.vehiculo : `${viaje.vehiculo} · ${viaje.valoracion}`}
                 </Txt>
               </View>
               {(['Llamar', 'Mensaje'] as const).map(accion => (
@@ -949,8 +1000,8 @@ export function C2Viaje() {
 
             <View style={{ gap: 7 }}>
               {[
-                { punto: tema.color.textoPrimario, texto: VIAJE_DEMO.origen },
-                { punto: tema.color.acento, texto: VIAJE_DEMO.destino }
+                { punto: tema.color.textoPrimario, texto: viaje.origen },
+                { punto: tema.color.acento, texto: viaje.destino }
               ].map(parada => (
                 <View key={parada.texto} style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: parada.punto }} />

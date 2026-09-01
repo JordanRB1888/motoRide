@@ -122,6 +122,14 @@ export interface ParticipanteDeViaje {
   readonly nombre: string;
   readonly vehiculo: string;
   readonly placa: string;
+  /**
+   * La valoración, ya formateada, o `null` si el servidor no la da.
+   *
+   * `driverPublicProfile` la publica como número. Se formatea aquí —con coma
+   * decimal, como el resto de la aplicación— y un cero se lee como AUSENTE: un
+   * conductor nuevo tiene cero viajes, no una valoración de cero.
+   */
+  readonly valoracion: string | null;
 }
 
 export interface DetalleReal {
@@ -137,6 +145,8 @@ export interface DetalleReal {
   /** En dólares. `null` cuando el viaje no llegó a tener tarifa. */
   readonly importe: number | null;
   readonly metodoDePago: string;
+  /** `MOTO` o `CAR`, tal como lo guarda el servidor. */
+  readonly tipoDeVehiculo: string;
   readonly hitos: readonly HitoReal[];
   readonly cerradoEn: string;
   /** Quién canceló y por qué, si se canceló y el servidor lo apuntó. */
@@ -226,6 +236,7 @@ export function leerDetalle(cuerpo: unknown): DetalleReal | null {
     pasajero: leerNombre(sobre.passenger) || texto(dato.passengerName),
     importe: numero(dato.fareUSD),
     metodoDePago: texto(dato.paymentMethod),
+    tipoDeVehiculo: texto(dato.rideType),
     hitos,
     cerradoEn: texto(dato.closedAt) || texto(dato.cancelledAt),
     cancelacion: leerCancelacion(hitos)
@@ -251,7 +262,14 @@ function leerConductor(persona: unknown, tipoDeVehiculo: string): ParticipanteDe
     || (tipoDeVehiculo === 'CAR' ? 'Carro' : 'Moto');
 
   if (nombre === '' && texto(dato.id) === '') return null;
-  return { nombre, vehiculo, placa: texto(dato.vehiclePlate) };
+
+  // Un cero es ausencia, no una nota: un conductor recién aprobado no tiene
+  // valoración, y enseñarle un 0,0 al pasajero sería calumniarlo.
+  const nota = typeof dato.rating === 'number' && dato.rating > 0
+    ? dato.rating.toFixed(1).replace('.', ',')
+    : null;
+
+  return { nombre, vehiculo, placa: texto(dato.vehiclePlate), valoracion: nota };
 }
 
 // ---------------------------------------------------------------------------
