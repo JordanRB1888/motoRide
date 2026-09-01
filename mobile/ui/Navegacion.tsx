@@ -32,6 +32,28 @@
  * al conectarse, el aro verde con fondo muy diluido para que la fotografía no
  * compita contra un fondo saturado, y el latido lento mientras está disponible.
  *
+ * EL DISCO MUERDE LA BARRA
+ *
+ * El disco no se apoya sobre la barra: le abre un hueco y sale por él. La barra
+ * pinta bajo el disco un círculo del color del FONDO de la pantalla, un poco
+ * mayor que el disco, y el lienzo lo recorta por arriba. Lo que queda es un
+ * mordisco: el filo recto de la barra llega, se interrumpe en un arco, y vuelve
+ * al otro lado.
+ *
+ * Por qué así y no con una biblioteca de gráficos: dibujar la silueta con SVG
+ * daría una curva más suave, pero añadiría una dependencia nativa a un proyecto
+ * que hoy no la tiene, y el binario de Android e iOS tendría que reconstruirse.
+ * Un círculo recortado da el mismo efecto con lo que ya hay.
+ *
+ * El hueco va del color del FONDO, no transparente, porque React Native no sabe
+ * recortar un agujero de verdad sin máscaras. En las pantallas de lista el
+ * fondo coincide y la ilusión es perfecta; sobre el mapa se lee como un anillo
+ * alrededor del disco, que también lo separa y también sirve.
+ *
+ * Y el disco FLOTA: sube y baja tres puntos muy despacio. Con el hueco quieto
+ * debajo, ese vaivén es lo que hace que se vea salir de la barra en vez de
+ * estar pegado a ella. Se apaga con movimiento reducido, como el latido.
+ *
  * LO ÚNICO QUE CAMBIA DE MEDIO
  *
  * En la web la moto se apaga con `filter: grayscale(1)`. React Native no tiene
@@ -72,6 +94,38 @@ function useMovimientoReducido(): boolean {
 
 const DIAMETRO = 56;
 
+/**
+ * Cuánto sube el disco por encima de la fila de iconos.
+ *
+ * A -24 apenas se despegaba y no se leía como el elemento principal, que es
+ * justo lo que tiene que ser. Con la muesca sube un poco más: cuanto más
+ * asoma, menos hondo hay que morder la barra, y el rótulo de debajo cabe sin
+ * que el arco lo cruce.
+ */
+const SALIENTE = 34;
+
+/** El aire entre el disco y el arco que la barra le abre. */
+const HOLGURA_DE_LA_MUESCA = 5;
+const RADIO_DE_LA_MUESCA = DIAMETRO / 2 + HOLGURA_DE_LA_MUESCA;
+
+/** Lo que la barra deja de aire antes de la fila, y el grosor de su filo. */
+const AIRE_SUPERIOR = 10;
+const GROSOR_DEL_FILO = 1;
+
+/**
+ * El aire entre el disco y su rótulo.
+ *
+ * No es estético: es lo que mantiene el rótulo POR DEBAJO del arco. Si se
+ * encoge, el mordisco le pasa por encima. Hay una prueba que lo calcula.
+ */
+const AIRE_DEL_ROTULO = 9;
+
+/** El centro del disco, medido desde el borde superior de la barra. */
+const CENTRO_DEL_DISCO = GROSOR_DEL_FILO + AIRE_SUPERIOR - SALIENTE + DIAMETRO / 2;
+
+/** Lo que el disco sube y baja al flotar. */
+const VUELO = 3;
+
 function Disco({ aro, fondo, moto, latiendo, abierto }: {
   readonly aro: string;
   readonly fondo: string;
@@ -83,7 +137,28 @@ function Disco({ aro, fondo, moto, latiendo, abierto }: {
 }) {
   const tema = useTema();
   const latido = useRef(new Animated.Value(0)).current;
+  const flote = useRef(new Animated.Value(0)).current;
   const quieto = useMovimientoReducido();
+
+  // Abierto el disco es «cerrar», y lo que cierra no se mueve: quieto se toca
+  // mejor y no compite con la hoja que acaba de abrirse.
+  const flotando = !abierto && !quieto;
+
+  useEffect(() => {
+    if (!flotando) {
+      flote.stopAnimation();
+      flote.setValue(0);
+      return;
+    }
+    const ciclo = Animated.loop(
+      Animated.sequence([
+        Animated.timing(flote, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(flote, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
+      ])
+    );
+    ciclo.start();
+    return () => ciclo.stop();
+  }, [flotando, flote]);
 
   useEffect(() => {
     if (!latiendo || quieto) {
@@ -102,7 +177,15 @@ function Disco({ aro, fondo, moto, latiendo, abierto }: {
   }, [latiendo, quieto, latido]);
 
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+    // Flota el conjunto, no sólo el disco: si el aro del latido se quedara
+    // quieto se vería que son dos piezas.
+    <Animated.View
+      style={{
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: [{ translateY: flote.interpolate({ inputRange: [0, 1], outputRange: [0, -VUELO] }) }]
+      }}
+    >
       {/* El latido: un aro que se expande y se desvanece. Va por escala y
           opacidad, que el hilo nativo puede animar sin pasar por JavaScript
           — importante en un teléfono modesto con el mapa moviéndose. */}
@@ -142,7 +225,7 @@ function Disco({ aro, fondo, moto, latiendo, abierto }: {
           />
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -182,11 +265,11 @@ export function ControlDeDisponibilidad({ enLinea, onAlternar }: {
       accessibilityLabel={enLinea ? 'En línea. Tocar para desconectarse' : 'Fuera de línea. Tocar para conectarse'}
       style={({ pressed }) => ({
         alignItems: 'center',
-        gap: 3,
-        // Sobresale por encima de la barra sin hacerla más alta. A -24 apenas
-        // se despegaba de la fila de iconos y no se leía como el elemento
-        // principal, que es justo lo que tiene que ser.
-        marginTop: -30,
+        gap: AIRE_DEL_ROTULO,
+        // Sobresale por encima de la barra sin hacerla más alta: lo que sube
+        // aquí se compensa con el aire del rótulo, y el control acaba midiendo
+        // lo mismo que una pestaña normal.
+        marginTop: -SALIENTE,
         transform: [{ scale: pressed ? 0.94 : 1 }]
       })}
     >
@@ -223,8 +306,8 @@ export function ControlDePedido({ abierto, onAlternar }: {
       accessibilityLabel={abierto ? 'Cerrar la petición de viaje' : 'Pedir un viaje'}
       style={({ pressed }) => ({
         alignItems: 'center',
-        gap: 3,
-        marginTop: -30,
+        gap: AIRE_DEL_ROTULO,
+        marginTop: -SALIENTE,
         transform: [{ scale: pressed ? 0.94 : 1 }]
       })}
     >
@@ -269,7 +352,6 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
   /** El control central, si esta barra lo lleva. */
   readonly control?: React.ReactNode;
 }) {
-  const tema = useTema();
   const inferior = useSafeAreaInsets().bottom;
   const ir = useIr();
 
@@ -287,15 +369,18 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
       flexDirection: 'row',
       alignItems: 'flex-start',
       justifyContent: 'space-between',
-      backgroundColor: tema.color.superficie,
-      paddingTop: 10,
+      paddingTop: GROSOR_DEL_FILO + AIRE_SUPERIOR,
       paddingHorizontal: 6,
       // La franja del sistema: sin esto, en un teléfono con barra de gestos la
       // fila de iconos queda justo debajo del indicador.
-      paddingBottom: Math.max(inferior, 10),
-      borderTopWidth: 1,
-      borderTopColor: tema.color.borde
+      paddingBottom: Math.max(inferior, 10)
     }}>
+      {/* El fondo y el filo van en un lienzo aparte, no en este View, porque el
+          mordisco tiene que recortarse contra el borde de la barra y aquí no se
+          puede poner overflow oculto: recortaría también el disco, que es justo
+          lo que tiene que salir. */}
+      <LienzoDeLaBarra conMuesca={control !== undefined} />
+
       {/* Izquierda, disco, derecha. El orden importa: pintado después de los
           dos grupos, el disco acababa pegado al borde derecho en vez de en el
           centro, que es justo donde tiene que estar para alcanzarlo con el
@@ -314,6 +399,50 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
           activo={activo}
           alTocar={alTocar}
         />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * El fondo de la barra, su filo, y el mordisco que le hace el disco.
+ *
+ * Se dibuja por detrás de todo y no recibe toques: es superficie, no control.
+ *
+ * El mordisco es un círculo del color del fondo de la pantalla, centrado en el
+ * mismo punto que el disco y un poco mayor. Su mitad de arriba queda fuera de
+ * la barra y el recorte de aquí la elimina; la de abajo se come el filo y deja
+ * el hueco. De ahí que el filo se pinte AQUÍ dentro y no como borde de la
+ * barra: un borde no se puede morder.
+ */
+function LienzoDeLaBarra({ conMuesca }: { readonly conMuesca: boolean }) {
+  const tema = useTema();
+
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' }}>
+      <View style={{
+        flex: 1,
+        backgroundColor: tema.color.superficie,
+        borderTopWidth: GROSOR_DEL_FILO,
+        borderTopColor: tema.color.borde
+      }} />
+
+      {conMuesca ? (
+        <View style={{
+          position: 'absolute',
+          left: '50%',
+          marginLeft: -RADIO_DE_LA_MUESCA,
+          top: CENTRO_DEL_DISCO - RADIO_DE_LA_MUESCA,
+          width: RADIO_DE_LA_MUESCA * 2,
+          height: RADIO_DE_LA_MUESCA * 2,
+          borderRadius: RADIO_DE_LA_MUESCA,
+          backgroundColor: tema.color.fondo,
+          // El arco lleva el mismo filo que la barra: sin él el hueco se
+          // deshilacha en modo noche, donde el fondo y la superficie casi no se
+          // distinguen.
+          borderWidth: GROSOR_DEL_FILO,
+          borderColor: tema.color.borde
+        }} />
       ) : null}
     </View>
   );

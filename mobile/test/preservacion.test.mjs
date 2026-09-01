@@ -581,12 +581,81 @@ test('el disco va en el CENTRO de la barra, no a un lado', () => {
 test('el disco sobresale por encima de la barra', () => {
   // Es lo que lo separa de los demás destinos: si se queda a ras, se lee como
   // una pestaña más y deja de ser la acción principal.
+  //
+  // El número pasó a ser una constante con nombre cuando la barra aprendió a
+  // morderse: el hueco tiene que centrarse justo donde cae el disco, y dos
+  // sitios con el mismo número escrito a mano se desincronizan a la primera.
+  const medida = medidasDelDisco();
+  assert.ok(medida.SALIENTE >= 26, `sube sólo ${medida.SALIENTE} puntos: no se despega de los iconos`);
+
+  const usos = (leer('ui/Navegacion.tsx').match(/marginTop: -SALIENTE/g) ?? []).length;
+  assert.equal(usos, 2, 'los dos controles suben');
+});
+
+/** Las medidas del disco y su hueco, leídas del código. */
+function medidasDelDisco() {
   const fuente = leer('ui/Navegacion.tsx');
-  const margenes = [...fuente.matchAll(/marginTop: -(\d+)/g)].map(coincidencia => Number(coincidencia[1]));
-  assert.equal(margenes.length, 2, 'los dos controles suben');
-  for (const margen of margenes) {
-    assert.ok(margen >= 26, `sube sólo ${margen} puntos: no se despega de los iconos`);
+  const medidas = {};
+  for (const nombre of [
+    'DIAMETRO', 'SALIENTE', 'HOLGURA_DE_LA_MUESCA',
+    'AIRE_SUPERIOR', 'GROSOR_DEL_FILO', 'AIRE_DEL_ROTULO', 'VUELO'
+  ]) {
+    const hallada = fuente.match(new RegExp(`const ${nombre} = (\\d+)`));
+    assert.ok(hallada, `ya no se declara ${nombre}`);
+    medidas[nombre] = Number(hallada[1]);
   }
+  return medidas;
+}
+
+test('la barra le abre un HUECO al disco, no lo apoya encima', () => {
+  // El disco no se posa sobre la barra: la muerde y sale por el hueco. Es lo
+  // que lo pone delante de todo lo demás en vez de al lado.
+  const fuente = leer('ui/Navegacion.tsx');
+  assert.match(fuente, /function LienzoDeLaBarra/, 'la barra ya no dibuja su hueco');
+  assert.match(fuente, /RADIO_DE_LA_MUESCA/, 'no hay muesca');
+
+  const lienzo = fuente.slice(fuente.indexOf('function LienzoDeLaBarra'));
+  assert.match(lienzo, /overflow: 'hidden'/, 'sin recorte el hueco se sale de la barra');
+  assert.match(lienzo, /backgroundColor: tema\.color\.fondo/, 'el hueco ha de ser del color de la pantalla');
+  assert.match(lienzo, /borderTopWidth: GROSOR_DEL_FILO/, 'el filo tiene que pintarse DENTRO del lienzo: un borde no se muerde');
+
+  // Y el hueco es mayor que el disco: si midieran lo mismo, el arco quedaría
+  // pegado al aro y se leería como un borde doble, no como un mordisco.
+  const medida = medidasDelDisco();
+  assert.ok(medida.HOLGURA_DE_LA_MUESCA > 0, 'el hueco va ceñido al disco');
+});
+
+test('el mordisco NO le pasa por encima al rótulo', () => {
+  // La cuenta que hay que mantener. El arco baja hasta el centro del disco más
+  // su radio; el rótulo empieza donde acaba el disco más su aire. Si alguien
+  // encoge ese aire o agranda el hueco, la línea del arco cruza «Pedir» y se
+  // ve como un error de pintado, no como un efecto.
+  const medida = medidasDelDisco();
+
+  const arriba = medida.GROSOR_DEL_FILO + medida.AIRE_SUPERIOR - medida.SALIENTE;
+  const centro = arriba + medida.DIAMETRO / 2;
+  const fondoDelArco = centro + medida.DIAMETRO / 2 + medida.HOLGURA_DE_LA_MUESCA;
+  const inicioDelRotulo = arriba + medida.DIAMETRO + medida.AIRE_DEL_ROTULO;
+
+  assert.ok(
+    fondoDelArco < inicioDelRotulo,
+    `el arco baja hasta ${fondoDelArco} y el rótulo empieza en ${inicioDelRotulo}`
+  );
+});
+
+test('el disco FLOTA, y se queda quieto si se pide movimiento reducido', () => {
+  // El vaivén es lo que hace que se vea SALIR del hueco en vez de estar metido
+  // en él. Y es movimiento perpetuo en pantalla, así que respeta la
+  // preferencia del sistema igual que el latido.
+  const fuente = leer('ui/Navegacion.tsx');
+  const disco = fuente.slice(fuente.indexOf('function Disco('), fuente.indexOf('function Aspa('));
+
+  assert.match(disco, /translateY/, 'el disco no se mueve');
+  assert.match(disco, /const flotando = !abierto && !quieto/, 'flota aunque se pida movimiento reducido');
+  assert.match(disco, /flote\.setValue\(0\)/, 'al parar no vuelve a su sitio');
+
+  const medida = medidasDelDisco();
+  assert.ok(medida.VUELO > 0 && medida.VUELO <= 6, `vuela ${medida.VUELO} puntos: o no se nota o marea`);
 });
 
 test('el disco de la pasajera se cierra desde donde se abrió', () => {
