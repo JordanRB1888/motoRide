@@ -63,6 +63,7 @@ import {
   type Beneficiario
 } from '../ui/Trayecto';
 import { useTema } from '../theme/ThemeContext';
+import { AdelantoDeAliados } from './pantallasAliados';
 import type { TipoDeVehiculo } from '../theme/marca';
 import { Campana } from './pantallasC2Secciones';
 import {
@@ -467,14 +468,19 @@ export function C2Acceso() {
 // ---------------------------------------------------------------------------
 
 /**
- * El inicio en reposo: el mapa manda y abajo hay LO JUSTO.
+ * El inicio en reposo: el mapa manda y abajo está lo justo.
  *
- * A dónde vas y los sitios de siempre. Nada más.
+ * A dónde vas, los sitios de siempre y los comercios aliados.
  *
- * Antes también salían los destinos recientes y la tasa del BCV, y era
- * repetirse: al tocar el disco central se despliega la petición con esas mismas
- * dos cosas dentro. Enseñarlas dos veces no ayudaba a decidir nada y le comía
- * al mapa media pantalla que en reposo no hacía falta gastar.
+ * Los destinos recientes y la tasa del BCV NO están, y es deliberado: al tocar
+ * el disco central se despliega la petición con esas mismas dos cosas dentro.
+ * Enseñarlas dos veces no ayudaba a decidir nada y le comía al mapa media
+ * pantalla que en reposo no hace falta gastar.
+ *
+ * Los aliados van DEBAJO de todo eso, no en su lugar. Son tres tarjetas en
+ * horizontal, que es lo que cabe sin empujar el mapa fuera de la pantalla;
+ * quien quiera más, entra en la lista. Y van aquí y no en la barra porque la
+ * barra tiene cuatro sitios y todavía está pendiente de decidir.
  */
 export function C2InicioPasajera() {
   const tema = useTema();
@@ -493,6 +499,7 @@ export function C2InicioPasajera() {
           <CampoDeDestino />
           <View style={{ height: tema.ritmo.entreElementos }} />
           <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
+          <AdelantoDeAliados />
         </HojaInferior>
       </LienzoDeMapa>
 

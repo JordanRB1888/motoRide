@@ -33,6 +33,9 @@ import { fileURLToPath } from 'node:url';
 
 import { CATALOGO } from '../theme/directions.ts';
 import { FRACCION_POR_ESTADO } from '../theme/hoja.ts';
+// Los comercios salen del mismo fichero que consume el telefono. Repetirlos
+// aqui haria que renombrar uno dejase el navegador ensenando el de antes.
+import { ALIADOS_DEMO, CATEGORIAS_DEMO } from '../preview/fixtures.ts';
 import {
   ESQUEMA_CLARO,
   ESQUEMA_OSCURO,
@@ -246,6 +249,17 @@ export const BASE = `
   /* El lugar se recorta; el estado, nunca: es lo primero que se lee. */
   .flotante .recorta{overflow:hidden;text-overflow:ellipsis}
   .punto{width:8px;height:8px;border-radius:50%}
+
+  /* El carrusel de aliados. La barra de desplazamiento se oculta porque en el
+     telefono no existe: ensenarla aqui seria ensenar algo que no va a estar. */
+  .carrusel{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;
+    -ms-overflow-style:none}
+  .carrusel::-webkit-scrollbar{display:none}
+
+  /* Lo que en el telefono es un ScrollView. Sin esto, una pantalla mas larga
+     que la pantalla se corta y no hay forma de mirarla entera. */
+  .hoja2{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none}
+  .hoja2::-webkit-scrollbar{display:none}
 
   /* -----------------------------------------------------------------------
      La espera
@@ -497,6 +511,81 @@ const pulso = () => `
   </span>`;
 
 // ---------------------------------------------------------------------------
+// Los comercios aliados
+// ---------------------------------------------------------------------------
+
+/**
+ * El disco con la inicial.
+ *
+ * Es el hueco del logotipo del comercio. Mientras no lo haya, una inicial dice
+ * la verdad; un icono de categoria prestado de los doce que hay mentiria, que
+ * es lo que ya paso con la casa que en realidad era la pestania de inicio.
+ */
+const sello = (inicial, tam = 46) => `
+  <span style="width:${tam}px;height:${tam}px;flex:0 0 ${tam}px;border-radius:${Math.round(tam * 0.3)}px;
+    display:grid;place-items:center;background:var(--elevada);
+    border:1px solid var(--borde)">
+    <span class="enc ac" style="font-size:${Math.round(tam * 0.4)}px">${inicial}</span>
+  </span>`;
+
+/**
+ * El rotulo de espacio pagado.
+ *
+ * No es un adorno ni una nota al pie: estos sitios se venden, y tanto la ley de
+ * publicidad como las dos tiendas piden que se distingan de lo que la
+ * aplicacion recomienda por su cuenta.
+ */
+const rotuloPagado = `<span class="etq t3" style="border:1px solid var(--borde);
+  border-radius:6px;padding:2px 7px;letter-spacing:.06em">PUBLICIDAD</span>`;
+
+const galonAcento = `<span style="width:8px;height:13px;position:relative;flex:0 0 8px">
+  <span style="position:absolute;top:3px;width:7px;height:1.7px;border-radius:1px;
+    background:var(--acento-texto);transform:rotate(38deg)"></span>
+  <span style="position:absolute;top:8px;width:7px;height:1.7px;border-radius:1px;
+    background:var(--acento-texto);transform:rotate(-38deg)"></span>
+</span>`;
+
+/** La flecha de «esto te saca de la aplicacion». */
+const salida = `<span role="img" aria-label="Abre fuera de la aplicacion"
+  style="position:relative;width:13px;height:13px;flex:0 0 13px">
+  <span style="position:absolute;left:1px;top:4px;width:8px;height:8px;
+    border:1.6px solid var(--texto-3);border-top:0;border-right:0"></span>
+  <span style="position:absolute;right:0;top:0;width:7px;height:7px;
+    border:1.6px solid var(--texto-3);border-bottom:0;border-left:0"></span>
+  <span style="position:absolute;right:1px;top:1px;width:9px;height:1.6px;
+    background:var(--texto-3);transform:rotate(-45deg);transform-origin:right"></span>
+</span>`;
+
+/** Una tarjeta ancha, para el carrusel de Inicio. */
+const aliadoAncho = aliado => `
+  <span style="flex:0 0 228px;padding:13px;border-radius:var(--r-tarjeta);
+    background:var(--superficie);border:1px solid var(--borde);display:grid;gap:9px">
+    <span style="display:flex;align-items:center;gap:10px">
+      ${sello(aliado.inicial, 34)}
+      <span style="flex:1;min-width:0;display:grid;gap:1px">
+        <span class="cuerpo" style="overflow:hidden;text-overflow:ellipsis;
+          white-space:nowrap">${aliado.nombre}</span>
+        <span class="pie t3">${aliado.categoria}</span>
+      </span>
+      ${salida}
+    </span>
+    <span class="pie t2" style="overflow:hidden;text-overflow:ellipsis;
+      white-space:nowrap">${aliado.gancho}</span>
+  </span>`;
+
+/** Una fila, para la lista completa. */
+const aliadoFila = aliado => `
+  <div style="display:flex;align-items:center;gap:13px;padding:13px 0">
+    ${sello(aliado.inicial)}
+    <span style="flex:1;display:grid;gap:2px;min-width:0">
+      <span class="cuerpo">${aliado.nombre}</span>
+      <span class="pie t3">${aliado.categoria} · ${aliado.gancho}</span>
+      <span class="pie t3">${aliado.zona}</span>
+    </span>
+    ${salida}
+  </div>`;
+
+// ---------------------------------------------------------------------------
 // Las pantallas
 // ---------------------------------------------------------------------------
 
@@ -599,6 +688,18 @@ export const PANTALLAS = {
             <span class="cuerpo t2">¿A dónde vas?</span></div>
           <div style="height:var(--gap)"></div>
           ${LUGARES}
+
+          <div style="margin-top:var(--bloques);display:flex;align-items:center;gap:9px">
+            <span class="etq t2">ALIADOS</span>
+            ${rotuloPagado}
+            <span class="crece"></span>
+            <span class="etq ac">Ver todos</span>
+            ${galonAcento}
+          </div>
+          <div class="carrusel" style="margin-top:10px;
+            margin-right:calc(var(--margen) * -1);padding-right:var(--margen)">
+            ${ALIADOS_DEMO.slice(0, 3).map(aliadoAncho).join('')}
+          </div>
         </div>
       </div>
       ${barraPasajera('pedir')}
@@ -896,6 +997,125 @@ export const PANTALLAS = {
       ${barraConductor(true, 'saldo')}
     </div>`,
 
+  aliados: () => `
+    <div class="tel crece">
+      <div class="hoja2">
+        <div style="display:flex;align-items:center;padding:18px var(--margen) var(--gap)">
+          <span class="titulo">Aliados</span><span class="crece"></span>
+          ${rotuloPagado}
+        </div>
+        <div style="padding:0 var(--margen) 110px">
+
+          ${(() => {
+            const estrella = ALIADOS_DEMO.find(aliado => aliado.destacado);
+            return `
+            <div style="position:relative;overflow:hidden;padding:var(--pad);
+              border-radius:var(--r-tarjeta);background:var(--superficie);display:grid;gap:var(--gap)">
+              <span class="filo"></span>
+              <div style="display:flex;align-items:center;gap:13px">
+                ${sello(estrella.inicial, 52)}
+                <span style="flex:1;display:grid;gap:2px;min-width:0">
+                  <span class="enc">${estrella.nombre}</span>
+                  <span class="pie t3">${estrella.categoria} · ${estrella.zona}</span>
+                </span>
+              </div>
+              <span class="cuerpo t2">${estrella.gancho}</span>
+              <div class="boton">Escribir al comercio</div>
+              <div style="display:flex;align-items:center;gap:7px">
+                ${salida}<span class="pie t3">Te lleva fuera de +58express</span>
+              </div>
+            </div>`;
+          })()}
+
+          <div class="carrusel" style="margin-top:var(--bloques);
+            margin-right:calc(var(--margen) * -1);padding-right:var(--margen)">
+            ${CATEGORIAS_DEMO.map((nombre, i) => `
+              <span style="flex:0 0 auto;padding:8px 14px;border-radius:999px;
+                background:${i === 0 ? 'var(--elevada)' : 'transparent'};
+                border:1px solid ${i === 0 ? 'var(--acento)' : 'var(--borde)'}">
+                <span class="etq ${i === 0 ? 'ac' : 't3'}">${nombre}</span></span>`).join('')}
+          </div>
+
+          <div style="margin-top:6px">
+            ${ALIADOS_DEMO.map((aliado, i) => `
+              ${i > 0 ? '<span class="sep"></span>' : ''}${aliadoFila(aliado)}`).join('')}
+          </div>
+
+          <div style="margin-top:var(--bloques);padding:14px;border-radius:var(--r-campo);
+            background:var(--superficie);display:flex;gap:10px">
+            ${icono('escudo', 'var(--texto-3)', 17)}
+            <span class="pie t3" style="text-align:left">Estos comercios pagan por aparecer
+              aquí. +58express no vende sus productos ni gestiona sus pedidos.</span>
+          </div>
+        </div>
+      </div>
+      ${barraPasajera('pedir')}
+    </div>`,
+
+  comercio: () => `
+    <div class="tel crece">
+      <div class="hoja2">
+        ${(() => {
+          const negocio = ALIADOS_DEMO[0];
+          return `
+        <div style="padding:18px var(--margen) var(--gap);display:flex;
+          align-items:center;gap:13px">
+          ${sello(negocio.inicial, 56)}
+          <span style="flex:1;display:grid;gap:3px;min-width:0">
+            <span class="titulo">${negocio.nombre}</span>
+            <span class="pie t3">${negocio.categoria} · ${negocio.zona}</span>
+          </span>
+        </div>
+        <div style="padding:0 var(--margen) 110px;display:grid;gap:var(--bloques)">
+          <div style="display:flex;align-items:center;gap:9px">
+            ${rotuloPagado}
+            <span class="pie t3">Espacio pagado por el comercio</span>
+          </div>
+
+          <div style="display:grid;gap:var(--gap)">
+            <span class="enc">${negocio.gancho}</span>
+            <span class="cuerpo t2">El comercio atiende por su cuenta. Escríbele para
+              preguntar por lo que ofrece, los precios y cómo pagarle.</span>
+          </div>
+
+          <div style="display:grid;gap:var(--gap)">
+            <div class="boton">Escribir por WhatsApp</div>
+            <div style="display:flex;align-items:center;gap:7px;justify-content:center">
+              ${salida}<span class="pie t3">Sales de +58express</span>
+            </div>
+          </div>
+
+          <span class="sep"></span>
+
+          <div style="display:grid;gap:var(--gap)">
+            <span class="etq t2">LO QUE SÍ HACEMOS NOSOTROS</span>
+            <div style="display:flex;align-items:center;gap:13px;padding:14px;
+              border-radius:var(--r-tarjeta);background:var(--superficie)">
+              <span style="width:40px;height:40px;border-radius:50%;flex:0 0 40px;
+                display:grid;place-items:center;
+                background:color-mix(in srgb,var(--acento) 15%,transparent)">
+                ${icono('moto', 'var(--acento-texto)', 20)}</span>
+              <span style="flex:1;display:grid;gap:2px">
+                <span class="cuerpo">Pedir un viaje hasta aquí</span>
+                <span class="pie t3">Te llevamos, o traemos lo que compres</span>
+              </span>
+              ${galonAcento}
+            </div>
+          </div>
+
+          <div style="padding:14px;border-radius:var(--r-campo);background:var(--superficie);
+            display:flex;gap:10px">
+            ${icono('escudo', 'var(--texto-3)', 17)}
+            <span class="pie t3" style="text-align:left">+58express no vende ni entrega los
+              productos de este comercio. Cualquier reclamo por el pedido va directo con
+              ellos.</span>
+          </div>
+        </div>`;
+        })()}
+      </div>
+      ${barraPasajera('pedir')}
+    </div>`,
+
   'punto-en-mapa': () => `
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS}
@@ -929,6 +1149,8 @@ export const NOMBRES = {
   'buscando-moto': 'Buscando tu moto',
   'panel-jornada': 'Panel del disco',
   'saldo-conductor': 'Saldo del conductor',
+  aliados: 'Aliados comerciales',
+  comercio: 'Ficha de un comercio',
   'punto-en-mapa': 'Elegir punto en el mapa',
   'conductor-offline': 'Conductor · fuera de línea',
   'conductor-online': 'Conductor · en línea',

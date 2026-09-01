@@ -78,6 +78,89 @@ export const SERVICIOS_DEMO = [
   }
 ] as const;
 
+/**
+ * Los comercios aliados.
+ *
+ * QUÉ SON Y QUÉ NO SON
+ *
+ * Son ESPACIOS PAGADOS. +58express cobra por aparecer aquí, no por lo que se
+ * venda: no hay catálogo, ni carrito, ni cobro, ni pedido dentro de la
+ * aplicación. El botón del comercio lleva FUERA —a su WhatsApp o a su web— y
+ * lo que pase a partir de ahí es entre la persona y el negocio.
+ *
+ * Eso obliga a dos cosas en la pantalla, y ninguna es opcional:
+ *
+ *   1. que se vea que es publicidad, porque lo es y porque las tiendas lo
+ *      exigen;
+ *   2. que se vea que el pedido NO lo atiende +58express, para que nadie
+ *      reclame aquí un pollo que llegó frío.
+ *
+ * SIN LOGOTIPOS TODAVÍA
+ *
+ * Cada comercio se dibuja con su inicial en un disco. No es un apaño: es el
+ * hueco preparado para el logotipo de verdad, y mientras no lo haya, una
+ * inicial es honesta donde un icono de categoría prestado mentiría —ya pasó
+ * con la casa que resultaba ser la pestaña de inicio—.
+ */
+export const ALIADOS_DEMO = [
+  {
+    clave: 'a1',
+    nombre: 'Sabor de ejemplo',
+    inicial: 'S',
+    categoria: 'Comida',
+    gancho: 'Almuerzos y parrilla',
+    zona: 'Zona demo · Maracaibo',
+    salida: 'whatsapp' as const,
+    destacado: true
+  },
+  {
+    clave: 'a2',
+    nombre: 'Farmacia de ejemplo',
+    inicial: 'F',
+    categoria: 'Salud',
+    gancho: 'Medicinas y cuidado personal',
+    zona: 'Zona demo · Maracaibo',
+    salida: 'whatsapp' as const,
+    destacado: false
+  },
+  {
+    clave: 'a3',
+    nombre: 'Repuestos de ejemplo',
+    inicial: 'R',
+    categoria: 'Moto',
+    gancho: 'Cauchos, aceite y cascos',
+    zona: 'Zona demo · Maracaibo',
+    salida: 'whatsapp' as const,
+    destacado: false
+  },
+  {
+    clave: 'a4',
+    nombre: 'Mercado de ejemplo',
+    inicial: 'M',
+    categoria: 'Mercado',
+    gancho: 'Víveres y verduras',
+    zona: 'Zona demo · Maracaibo',
+    salida: 'web' as const,
+    destacado: false
+  },
+  {
+    clave: 'a5',
+    nombre: 'Panadería de ejemplo',
+    inicial: 'P',
+    categoria: 'Panadería',
+    gancho: 'Pan y pastelería',
+    zona: 'Zona demo · Maracaibo',
+    salida: 'whatsapp' as const,
+    destacado: false
+  }
+] as const;
+
+/** Las categorías que existen, sacadas de los propios comercios. */
+export const CATEGORIAS_DEMO = [
+  'Todos',
+  ...new Set(ALIADOS_DEMO.map(aliado => aliado.categoria))
+] as const;
+
 export const DESTINOS_RECIENTES_DEMO = [
   { clave: 'd1', titulo: 'Destino de ejemplo 1', detalle: 'Guardado como «Casa»' },
   { clave: 'd2', titulo: 'Destino de ejemplo 2', detalle: 'Guardado como «Trabajo»' },

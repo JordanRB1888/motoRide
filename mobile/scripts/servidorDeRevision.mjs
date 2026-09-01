@@ -64,7 +64,8 @@ const GRUPOS = [
   },
   {
     nombre: 'Pasajera',
-    claves: ['pasajera', 'pedir', 'para-quien', 'punto-en-mapa', 'confirmar', 'buscando-moto', 'viaje']
+    claves: ['pasajera', 'pedir', 'para-quien', 'punto-en-mapa', 'confirmar', 'buscando-moto', 'viaje',
+      'aliados', 'comercio']
   },
   {
     nombre: 'Conductor',

@@ -53,6 +53,7 @@ import {
   C2SelectorDeRol,
   C2Viaje
 } from '../preview/pantallasC2';
+import { C2Aliados, C2Comercio } from '../preview/pantallasAliados';
 import { C2Configuracion } from '../preview/pantallaConfiguracion';
 import { C2SaldoConductor, C2SaldoConductorDeudor } from '../preview/pantallaSaldoConductor';
 import {
@@ -123,6 +124,8 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'saldo-conductor', nombre: 'Saldo conductor', Componente: C2SaldoConductor },
   { clave: 'saldo-deuda', nombre: 'Saldo en deuda', Componente: C2SaldoConductorDeudor },
   { clave: 'viaje', nombre: 'Viaje', Componente: C2Viaje },
+  { clave: 'aliados', nombre: 'Aliados', Componente: C2Aliados },
+  { clave: 'comercio', nombre: 'Ficha de comercio', Componente: C2Comercio },
   // Las secciones: sin mapa, porque consultar un historial o leer un aviso no
   // pasa en ningún sitio. Mapa donde hay movimiento; lista donde hay que leer.
   { clave: 'historial', nombre: 'Historial', Componente: C2Historial },
