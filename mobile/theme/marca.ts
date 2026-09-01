@@ -112,6 +112,27 @@ export const AVATARES_DE_ROL = Object.freeze({
   conductor: require('../assets/marca/rol-conductor.png') as ImageSourcePropType
 });
 
+/**
+ * Dónde cae la cara de la pasajera dentro de su avatar.
+ *
+ * En fracciones del lado y no en píxeles: el activo está guardado a 288 y
+ * podría volver a exportarse a otro tamaño sin que el encuadre se mueva.
+ *
+ * La ilustración es apaisada de contenido —la persona a la izquierda, la moto y
+ * la ruta a la derecha—, así que recortarla por el centro daría mapa y nada de
+ * persona. Estos dos números son el punto que hay que dejar en el centro para
+ * que se vea cabeza y hombros.
+ */
+export const ENCUADRE_DE_LA_PASAJERA = Object.freeze({ x: 135 / 320, y: 118 / 320 });
+
+/**
+ * Cuánto se agranda el avatar respecto al diámetro del disco.
+ *
+ * Con 1 se vería la ilustración entera y la persona quedaría minúscula; con 3
+ * se vería un ojo. 1,85 deja el plano medio corto que se lee a 64 puntos.
+ */
+export const ACERCAMIENTO_DE_LA_PASAJERA = 1.85;
+
 /** Resuelve la imagen de un vehículo. Equivale a `getVehicleAsset` de la web. */
 export function imagenDeVehiculo(
   tipo: TipoDeVehiculo,

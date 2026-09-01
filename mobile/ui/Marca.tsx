@@ -13,8 +13,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Image, View } from 'react-native';
 import {
+  ACERCAMIENTO_DE_LA_PASAJERA,
   AVATARES_DE_ROL,
   EMBLEMA,
+  ENCUADRE_DE_LA_PASAJERA,
   LOGO_HORIZONTAL,
   PROPORCION_DEL_LOGO,
   VEHICULOS,
@@ -187,6 +189,70 @@ export function Vehiculo({ tipo, ancho = 116, atenuado = false }: {
         opacity: atenuado ? 0.55 : 1
       }}
     />
+  );
+}
+
+/**
+ * Quién espera, sobre el mapa.
+ *
+ * NO ES UN VEHÍCULO, Y ESA ES LA GRACIA
+ *
+ * Mientras se busca, la pasajera está de pie en la acera con el teléfono en la
+ * mano. Poner ahí la toma cenital de la moto decía que ya iba montada, que es
+ * justo lo que todavía no ha pasado. Las motos del mapa son las OTRAS, las que
+ * están siendo avisadas.
+ *
+ * Y no es un pictograma de persona: es el avatar que el dueño encargó para el
+ * selector de rol —la misma ilustración de tres cuartos, negro y amarillo—,
+ * encuadrada a cabeza y hombros. Un muñeco genérico al lado de una moto
+ * fotográfica canta, y ya pasó una vez en la web con el icono que «se leía como
+ * bicicleta».
+ *
+ * El vehículo va cenital porque gira con el rumbo; una persona parada no gira,
+ * así que el retrato es lo correcto y no una inconsistencia.
+ */
+export function MarcadorDePersona({ tamano = 64 }: { readonly tamano?: number }) {
+  const tema = useTema();
+  const lado = tamano * ACERCAMIENTO_DE_LA_PASAJERA;
+
+  return (
+    <View
+      accessibilityLabel="Tú, esperando"
+      accessibilityRole="image"
+      // Dos capas y no una: en Android una sombra no sobrevive a
+      // `overflow: hidden` en el mismo View —se recorta con el contenido—.
+      // Fuera la sombra, dentro el recorte.
+      style={{
+        width: tamano,
+        height: tamano,
+        borderRadius: tamano / 2,
+        backgroundColor: tema.color.superficieElevada,
+        ...tema.superficie.sombra
+      }}
+    >
+      <View
+        style={{
+          width: tamano,
+          height: tamano,
+          borderRadius: tamano / 2,
+          overflow: 'hidden',
+          borderWidth: 2,
+          borderColor: tema.color.acento
+        }}
+      >
+        <Image
+          source={AVATARES_DE_ROL.pasajero}
+          resizeMode="cover"
+          style={{
+            width: lado,
+            height: lado,
+            position: 'absolute',
+            left: tamano / 2 - ENCUADRE_DE_LA_PASAJERA.x * lado,
+            top: tamano / 2 - ENCUADRE_DE_LA_PASAJERA.y * lado
+          }}
+        />
+      </View>
+    </View>
   );
 }
 

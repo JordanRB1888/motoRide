@@ -817,7 +817,7 @@ export function C2BuscandoVehiculo({ tipo = 'MOTO' }: { readonly tipo?: TipoDeVe
           pointerEvents="none"
           style={{ position: 'absolute', left: 0, right: 0, top: '6%', alignItems: 'center' }}
         >
-          <PulsoDeBusqueda tipo={tipo} />
+          <PulsoDeBusqueda />
         </View>
 
         <HojaInferior estado="baja" conAsa={false} alturaAutomatica>

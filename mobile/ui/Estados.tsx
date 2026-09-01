@@ -13,15 +13,17 @@
  * exactamente lo que ocurre. Un círculo girando diría «cargando», que es más
  * pobre y podría ser cualquier aplicación.
  *
- * Y lo que gira dentro es la moto de la marca, no un aro. Es el mismo criterio
- * que en el resto: donde puede ir el vehículo real, va el vehículo real.
+ * Y en el centro va QUIEN espera, no la moto. La pasajera está de pie en la
+ * acera con el teléfono en la mano; la toma cenital de la moto ahí decía que ya
+ * iba montada, que es justo lo que todavía no ha pasado. Las motos del mapa son
+ * las otras, las que están siendo avisadas.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, View } from 'react-native';
 import { Boton, Txt } from './componentes';
 import { Icono } from './Icono';
-import { MarcadorDeVehiculo } from './Marca';
+import { MarcadorDePersona } from './Marca';
 import { useTema } from '../theme/ThemeContext';
 import type { TipoDeVehiculo } from '../theme/marca';
 
@@ -51,10 +53,7 @@ function useMovimientoReducido(): boolean {
  * Tres anillos desfasados: cuando el primero va por la mitad, el segundo
  * empieza. Con uno solo el efecto se corta cada ciclo y se nota el salto.
  */
-export function PulsoDeBusqueda({ tipo, tamano = 62 }: {
-  readonly tipo: TipoDeVehiculo;
-  readonly tamano?: number;
-}) {
+export function PulsoDeBusqueda({ tamano = 64 }: { readonly tamano?: number }) {
   const tema = useTema();
   const quieto = useMovimientoReducido();
 
@@ -63,7 +62,7 @@ export function PulsoDeBusqueda({ tipo, tamano = 62 }: {
       {quieto ? null : [0, 1, 2].map(indice => (
         <Anillo key={indice} retraso={indice * 900} diametro={tamano * 3} color={tema.color.acento} />
       ))}
-      <MarcadorDeVehiculo tipo={tipo} tamano={tamano} rumbo={0} halo={false} />
+      <MarcadorDePersona tamano={tamano} />
     </View>
   );
 }
@@ -120,16 +119,12 @@ export function BuscandoVehiculo({ tipo, onCancelar }: {
 
   return (
     <View style={{ gap: tema.ritmo.entreElementos }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{ flex: 1, gap: 4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Txt nivel="titulo">Buscando tu {nombre}</Txt>
-            <PuntosSuspensivos />
-          </View>
-          <Txt nivel="cuerpo" tono="secundario">
-            Avisando a los conductores que están cerca de ti.
-          </Txt>
-        </View>
+      <View style={{ gap: 9 }}>
+        <TituloQueBusca>Buscando tu {nombre}</TituloQueBusca>
+        <CarrilDeBarrido />
+        <Txt nivel="cuerpo" tono="secundario">
+          Avisando a los conductores que están cerca de ti.
+        </Txt>
       </View>
 
       <Boton titulo="Cancelar" variante="secundario" onPress={onCancelar ?? (() => undefined)} />
@@ -137,47 +132,150 @@ export function BuscandoVehiculo({ tipo, onCancelar }: {
   );
 }
 
-/** Tres puntos que aparecen uno a uno. El mismo gesto que el arranque. */
-function PuntosSuspensivos() {
+// ---------------------------------------------------------------------------
+// Que se note que está pasando algo
+// ---------------------------------------------------------------------------
+
+/**
+ * POR QUÉ NO TRES PUNTOS SUSPENSIVOS
+ *
+ * Tres puntos que se encienden dicen «cargando», que es lo que dice cualquier
+ * aplicación mientras hace cualquier cosa. Aquí no se está cargando: se está
+ * MIRANDO AHÍ FUERA, y hay motos concretas recibiendo el aviso.
+ *
+ * Los dos movimientos que lo sustituyen son el gesto del sonar del mapa
+ * contado en horizontal, para que la hoja y el mapa hablen del mismo hecho:
+ *
+ *   el rastro   un resaltado que recorre la frase por detrás
+ *   el carril   un tramo que va y vuelve sobre un raíl tenue
+ *
+ * El carril dice además CUÁNTO recorre, no sólo que algo se mueve. Es la
+ * diferencia entre una espera con forma y una espera indefinida.
+ */
+
+/** Cuánto tarda un barrido de ida y vuelta. El mismo compás en los dos. */
+const COMPAS = 2600;
+
+function TituloQueBusca({ children }: { readonly children: React.ReactNode }) {
   const tema = useTema();
   const quieto = useMovimientoReducido();
-
-  return (
-    <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center', height: 8 }}>
-      {[0, 200, 400].map(retraso => (
-        <PuntoQueLate key={retraso} retraso={retraso} quieto={quieto} color={tema.color.acento} />
-      ))}
-    </View>
-  );
-}
-
-function PuntoQueLate({ retraso, quieto, color }: {
-  readonly retraso: number;
-  readonly quieto: boolean;
-  readonly color: string;
-}) {
+  const [ancho, setAncho] = useState(0);
   const valor = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (quieto) { valor.setValue(1); return; }
+    if (quieto || ancho === 0) return;
     const ciclo = Animated.loop(
       Animated.sequence([
-        Animated.delay(retraso),
-        Animated.timing(valor, { toValue: 1, duration: 420, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-        Animated.timing(valor, { toValue: 0, duration: 420, easing: Easing.in(Easing.ease), useNativeDriver: true }),
-        Animated.delay(600 - retraso)
+        Animated.timing(valor, { toValue: 1, duration: COMPAS / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(valor, { toValue: 0, duration: COMPAS / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
       ])
     );
     ciclo.start();
     return () => ciclo.stop();
-  }, [valor, retraso, quieto]);
+  }, [valor, quieto, ancho]);
 
   return (
-    <Animated.View style={{
-      width: 5, height: 5, borderRadius: 3,
-      backgroundColor: color,
-      opacity: valor.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] })
-    }} />
+    <View onLayout={evento => setAncho(evento.nativeEvent.layout.width)} style={{ overflow: 'hidden' }}>
+      {/* Por DETRÁS del texto, no por encima: en modo día el título es casi
+          negro y una banda amarilla encima lo ensuciaría. */}
+      {quieto || ancho === 0 ? null : (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: -3,
+            bottom: -3,
+            width: ancho * 0.52,
+            flexDirection: 'row',
+            transform: [{
+              translateX: valor.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-ancho * 0.3, ancho * 0.78]
+              })
+            }]
+          }}
+        >
+          <Difuminado color={tema.color.acento} />
+        </Animated.View>
+      )}
+      <Txt nivel="titulo">{children}</Txt>
+    </View>
+  );
+}
+
+/**
+ * Un degradado hecho a mano.
+ *
+ * React Native no tiene degradados sin una dependencia más, y meter una para
+ * esto no sale a cuenta. Siete tramos con la opacidad en campana se leen igual
+ * a este tamaño: lo que se ve es una luz que pasa, no siete rectángulos.
+ */
+function Difuminado({ color }: { readonly color: string }) {
+  const campana = [0, 0.06, 0.15, 0.26, 0.15, 0.06, 0];
+  return (
+    <>
+      {campana.map((opacidad, indice) => (
+        <View key={indice} style={{ flex: 1, backgroundColor: color, opacity: opacidad }} />
+      ))}
+    </>
+  );
+}
+
+function CarrilDeBarrido() {
+  const tema = useTema();
+  const quieto = useMovimientoReducido();
+  const [ancho, setAncho] = useState(0);
+  const valor = useRef(new Animated.Value(0)).current;
+  const tramo = Math.max(ancho * 0.24, 48);
+
+  useEffect(() => {
+    if (quieto || ancho === 0) return;
+    const ciclo = Animated.loop(
+      Animated.sequence([
+        Animated.timing(valor, { toValue: 1, duration: COMPAS / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(valor, { toValue: 0, duration: COMPAS / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
+      ])
+    );
+    ciclo.start();
+    return () => ciclo.stop();
+  }, [valor, quieto, ancho]);
+
+  return (
+    <View
+      onLayout={evento => setAncho(evento.nativeEvent.layout.width)}
+      accessibilityRole="progressbar"
+      accessibilityLabel="Buscando"
+      style={{
+        height: 3,
+        borderRadius: 3,
+        overflow: 'hidden',
+        backgroundColor: tema.color.superficieHundida
+      }}
+    >
+      {ancho === 0 ? null : (
+        <Animated.View
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            width: tramo,
+            flexDirection: 'row',
+            // Quieto, el tramo se queda a la vista: sigue diciendo que hay algo
+            // en marcha sin que nada se mueva.
+            transform: quieto
+              ? [{ translateX: (ancho - tramo) / 2 }]
+              : [{
+                translateX: valor.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, ancho - tramo]
+                })
+              }]
+          }}
+        >
+          <Difuminado color={tema.color.acento} />
+        </Animated.View>
+      )}
+    </View>
   );
 }
 

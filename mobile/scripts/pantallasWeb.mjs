@@ -246,6 +246,53 @@ export const BASE = `
   /* El lugar se recorta; el estado, nunca: es lo primero que se lee. */
   .flotante .recorta{overflow:hidden;text-overflow:ellipsis}
   .punto{width:8px;height:8px;border-radius:50%}
+
+  /* -----------------------------------------------------------------------
+     La espera
+     -----------------------------------------------------------------------
+     Buscar es lo mas largo que hace esta aplicacion y donde se decide si va
+     bien o «se quedo pegada». Tres puntos suspensivos dicen «cargando», que es
+     lo que dice cualquier aplicacion. Estos dos movimientos dicen «estoy
+     mirando ahi fuera», que es lo que de verdad esta pasando.
+
+     Los dos son el mismo gesto del sonar del mapa, contado en horizontal. */
+
+  /* El resaltado que recorre la frase por DETRAS. Por detras y no por encima:
+     una banda amarilla sobre texto oscuro lo ensucia, y en modo dia el titulo
+     es casi negro. */
+  @keyframes rastrea{
+    0%{transform:translateX(-58%)}
+    50%{transform:translateX(58%)}
+    100%{transform:translateX(-58%)}
+  }
+  .rastro{position:absolute;top:-3px;bottom:-3px;width:52%;border-radius:8px;
+    background:linear-gradient(90deg,transparent,
+      color-mix(in srgb,var(--acento) 26%,transparent),transparent);
+    animation:rastrea 2.6s ease-in-out infinite}
+
+  /* La linea de barrido. El segmento amarillo va y vuelve sobre un carril
+     tenue: se ve CUANTO recorre, no solo que algo se mueve. */
+  /* El recorrido va en porcentaje del propio tramo, no en pixeles: el tramo
+     mide el 24 % del carril, asi que 316,67 % de si mismo son justo los 76 %
+     que le quedan por recorrer. En el telefono la cuenta es la misma —el ancho
+     del carril menos el tramo— y asi los dos barren lo mismo. */
+  @keyframes barre{
+    0%{transform:translateX(0)}
+    50%{transform:translateX(316.67%)}
+    100%{transform:translateX(0)}
+  }
+  .carril{position:relative;height:3px;border-radius:3px;overflow:hidden;
+    background:var(--hundida)}
+  .carril span{position:absolute;inset:0 auto 0 0;width:24%;border-radius:3px;
+    background:linear-gradient(90deg,transparent,var(--acento),transparent);
+    animation:barre 2.6s ease-in-out infinite}
+
+  /* Quien pide no mirar movimiento no lo mira: se queda el carril con su
+     tramo, que sigue diciendo que hay algo en marcha. */
+  @media (prefers-reduced-motion:reduce){
+    .rastro{display:none}
+    .carril span{animation:none;transform:translateX(158.33%)}
+  }
 `;
 
 // ---------------------------------------------------------------------------
@@ -411,14 +458,42 @@ const hojaAlta = `height:${Math.round(ALTO * FRACCION_POR_ESTADO.alta)}px`;
 const hojaMedia = `height:${Math.round(ALTO * FRACCION_POR_ESTADO.media)}px`;
 
 /** El sonar: tres anillos saliendo de tu posición. */
-const pulso = tipo => `
+/**
+ * Quien espera, encuadrada en el disco.
+ *
+ * El encuadre esta calculado, no tanteado: el activo mide 320 puntos de lado y
+ * la cabeza cae en (125, 95). Para que ese punto quede en el centro del disco,
+ * la imagen se pinta a `escala` veces el diametro y se corre lo que haga falta.
+ * Cambiar el tamanio del disco no descuadra la cara.
+ */
+const CARA = { x: 135 / 320, y: 118 / 320 };
+
+const persona = (diametro = 64) => {
+  const alto = diametro * 1.85;
+  return `<span style="position:relative;width:${diametro}px;height:${diametro}px;
+    border-radius:50%;overflow:hidden;border:2px solid var(--acento);
+    background:var(--elevada);box-shadow:0 6px 16px rgba(0,0,0,.45);display:block">
+    <img src="marca/rol-pasajero.png" width="${alto}" height="${alto}" alt=""
+      style="position:absolute;left:${diametro / 2 - CARA.x * alto}px;
+        top:${diametro / 2 - CARA.y * alto}px;max-width:none">
+  </span>`;
+};
+
+/**
+ * El sonar.
+ *
+ * En el centro va QUIEN espera, no la moto. La pasajera esta de pie en la
+ * acera con el telefono en la mano; poner ahi la toma cenital de la moto dice
+ * que ya va montada, que es justo lo que todavia no ha pasado. Las motos que
+ * se ven alrededor son las que estan siendo avisadas.
+ */
+const pulso = () => `
   <span style="position:absolute;left:50%;top:22%;transform:translate(-50%,-50%);
     width:186px;height:186px;display:grid;place-items:center">
     ${[1, 0.68, 0.4].map((escala, i) => `
       <span style="position:absolute;width:${186 * escala}px;height:${186 * escala}px;border-radius:50%;
         border:2px solid var(--acento);opacity:${0.12 + i * 0.14}"></span>`).join('')}
-    <img src="marca/${tipo === 'MOTO' ? 'moto-mapa.png' : 'auto-mapa.png'}"
-      width="62" height="62" style="position:relative" alt="">
+    <span style="position:relative">${persona(64)}</span>
   </span>`;
 
 // ---------------------------------------------------------------------------
@@ -700,16 +775,16 @@ export const PANTALLAS = {
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS_TRES}
         <span style="position:absolute;inset:0;background:var(--velo-mapa);opacity:.42"></span>
-        ${pulso('MOTO')}
+        ${pulso()}
       </div>
       <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
         <div style="display:grid;gap:var(--gap);padding-bottom:var(--pad)">
-          <div style="display:grid;gap:4px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="titulo">Buscando tu moto</span>
-              ${[1, .55, .3].map(o => `<span style="width:5px;height:5px;border-radius:50%;
-                background:var(--acento);opacity:${o}"></span>`).join('')}
-            </div>
+          <div style="display:grid;gap:9px">
+            <span style="position:relative;overflow:hidden;display:block">
+              <span class="rastro"></span>
+              <span class="titulo" style="position:relative">Buscando tu moto</span>
+            </span>
+            <span class="carril"><span></span></span>
             <span class="cuerpo t2">Avisando a los conductores que están cerca de ti.</span>
           </div>
           <div class="boton sec" style="border:1px solid var(--borde)">Cancelar</div>
