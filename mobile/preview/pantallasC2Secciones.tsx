@@ -41,6 +41,7 @@ import { Separador } from '../ui/HojaInferior';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { EntradaDeTransporteSeguro } from '../ui/Servicio';
 import { useTema } from '../theme/ThemeContext';
+import { CabeceraAmarilla } from './pantallasSaldo';
 import {
   AVISOS_DEMO,
   HISTORIAL_DEMO,
@@ -71,9 +72,10 @@ const ALTO_DE_LA_BARRA = 76;
  * Antes los avisos eran una pantalla suelta a la que no llevaba nada: existir
  * sin puerta es no existir.
  */
-export function Campana({ sinLeer = 0, onPress }: {
+export function Campana({ sinLeer = 0, onPress, sobreElAmarillo = false }: {
   readonly sinLeer?: number;
   readonly onPress?: () => void;
+  readonly sobreElAmarillo?: boolean;
 }) {
   const tema = useTema();
 
@@ -88,15 +90,22 @@ export function Campana({ sinLeer = 0, onPress }: {
         backgroundColor: pressed ? tema.color.superficieElevada : 'transparent'
       })}
     >
-      <Icono nombre="campana" color={tema.color.textoSecundario} tamano={22} />
+      <Icono
+        nombre="campana"
+        color={sobreElAmarillo ? tema.color.sobreAcento : tema.color.textoSecundario}
+        tamano={22}
+      />
       {sinLeer > 0 ? (
         <View style={{
           position: 'absolute', top: 7, right: 9,
           width: 9, height: 9, borderRadius: 5,
-          backgroundColor: tema.color.acento,
+          // Sobre el amarillo, el punto va en grafito: el amarillo sobre
+          // amarillo no marca nada.
+          backgroundColor: sobreElAmarillo ? tema.color.sobreAcento : tema.color.acento,
           // El aro del color del fondo separa el punto de la campana; sin él
           // se leen como una sola forma.
-          borderWidth: 2, borderColor: tema.color.fondo
+          borderWidth: 2,
+          borderColor: sobreElAmarillo ? tema.color.acento : tema.color.fondo
         }} />
       ) : null}
     </Pressable>
@@ -242,71 +251,129 @@ function Grupo({ titulo, children }: { readonly titulo: string; readonly childre
  * sesión» en la misma lista es un accidente esperando: se parecen, están
  * juntas, y una de las dos no tiene vuelta.
  */
+/**
+ * El perfil.
+ *
+ * ABRE CON LA BANDA AMARILLA, como el saldo y la ficha de un comercio.
+ *
+ * El criterio es el mismo de siempre: la banda va donde hay un SUJETO que
+ * presentar. En el saldo es tu dinero, en la ficha es un comercio concreto, y
+ * aquí eres tú. Donde no hay sujeto —el historial, los avisos, que son listas—
+ * no la lleva, y por eso sigue significando algo.
+ *
+ * Esta pantalla no usa el armazón de `Seccion` como las demás: ese armazón pinta
+ * el título con márgenes laterales, y la banda tiene que ir de borde a borde.
+ * Se escribe suelta, que son cuatro líneas más y queda más claro que doblar el
+ * armazón para que admita las dos formas.
+ */
 export function C2Perfil() {
+  const tema = useTema();
+  const sinLeer = AVISOS_DEMO.filter(aviso => aviso.sinLeer).length;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: tema.ritmo.entreBloques + ALTO_DE_LA_BARRA }}
+      >
+        <CabeceraAmarilla>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Txt nivel="titulo" tono="sobreAcento" accessibilityRole="header">Tu perfil</Txt>
+            <View style={{ flex: 1 }} />
+            <Campana sinLeer={sinLeer} sobreElAmarillo />
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+            {/* El disco del avatar va en grafito sobre el amarillo: uno claro
+                encima del amarillo desaparecería. Es la misma inversión que el
+                sello de los comercios. */}
+            <View style={{
+              width: 62,
+              height: 62,
+              borderRadius: 31,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: tema.color.sobreAcento
+            }}>
+              <Txt nivel="titulo" tono="marca">{PERFIL_DEMO.iniciales}</Txt>
+            </View>
+
+            <View style={{ flex: 1, gap: 3 }}>
+              <Txt nivel="encabezado" tono="sobreAcento">{PERFIL_DEMO.nombre}</Txt>
+              <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
+                {PERFIL_DEMO.desde}
+              </Txt>
+              <View style={{ flexDirection: 'row', gap: 7, marginTop: 3 }}>
+                <SelloSobreAmarillo texto="Verificada" />
+                <SelloSobreAmarillo texto={`${PERFIL_DEMO.viajes} viajes`} />
+              </View>
+            </View>
+          </View>
+        </CabeceraAmarilla>
+
+        <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
+          <Grupo titulo="Tu cuenta">
+            <Fila icono="perfil" titulo="Tus datos" detalle="Nombre, teléfono y correo" />
+            <Separador />
+            <Fila icono="inicio" titulo="Direcciones guardadas" detalle="Casa, trabajo y las que añadas" />
+            <Separador />
+            <Fila icono="escudo" titulo="Seguridad de la cuenta" detalle="Contraseña y sesiones abiertas" />
+          </Grupo>
+
+          <Grupo titulo="Preferencias">
+            <Fila icono="campana" titulo="Notificaciones" detalle="Qué avisos quieres recibir" />
+            <Separador />
+            <Fila icono="ajustes" titulo="Configuración" detalle="Idioma, mapa y apariencia" />
+            <Separador />
+            <Fila icono="moto" titulo="Cambiar de modo" detalle="Pasar a conductor" />
+          </Grupo>
+
+          <Grupo titulo="Dinero">
+            <Fila icono="rayo" titulo="Tu saldo" detalle="Todavía no está activo" />
+          </Grupo>
+
+          <Grupo titulo="Ayuda">
+            <Fila icono="viajes" titulo="Soporte" detalle="Escríbenos si algo no cuadra" />
+          </Grupo>
+
+          <View style={{ marginTop: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
+            <Boton titulo="Cerrar sesión" variante="secundario" onPress={() => undefined} />
+
+            {/* Lo que no tiene vuelta atrás, separado y en rojo. */}
+            <Separador />
+            <Fila
+              icono="perfil"
+              titulo="Eliminar cuenta"
+              detalle="Esta acción no se puede deshacer"
+              tono="peligro"
+            />
+          </View>
+        </View>
+      </ScrollView>
+
+      <BarraDeNavegacion
+        destinos={DESTINOS_DE_PASAJERA}
+        activo="perfil"
+        control={<ControlDePedido abierto={false} />}
+      />
+    </View>
+  );
+}
+
+/** Una insignia para la banda amarilla: perfilada en grafito, no rellena. */
+function SelloSobreAmarillo({ texto }: { readonly texto: string }) {
   const tema = useTema();
 
   return (
-    <Seccion titulo="Tu perfil" activo="perfil">
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', gap: 15,
-        padding: tema.ritmo.dentroDeTarjeta,
-        borderRadius: tema.radio.tarjeta,
-        backgroundColor: tema.color.superficie
-      }}>
-        <View style={{
-          width: 62, height: 62, borderRadius: 31,
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: tema.color.superficieElevada
-        }}>
-          <Txt nivel="titulo">{PERFIL_DEMO.iniciales}</Txt>
-        </View>
-        <View style={{ flex: 1, gap: 3 }}>
-          <Txt nivel="encabezado">{PERFIL_DEMO.nombre}</Txt>
-          <Txt nivel="pie" tono="tenue">{PERFIL_DEMO.desde}</Txt>
-          <View style={{ flexDirection: 'row', gap: 7, marginTop: 3 }}>
-            <Insignia texto="Verificada" tono="exito" />
-            <Insignia texto={`${PERFIL_DEMO.viajes} viajes`} />
-          </View>
-        </View>
-      </View>
-
-      <Grupo titulo="Tu cuenta">
-        <Fila icono="perfil" titulo="Tus datos" detalle="Nombre, teléfono y correo" />
-        <Separador />
-        <Fila icono="inicio" titulo="Direcciones guardadas" detalle="Casa, trabajo y las que añadas" />
-        <Separador />
-        <Fila icono="escudo" titulo="Seguridad de la cuenta" detalle="Contraseña y sesiones abiertas" />
-      </Grupo>
-
-      <Grupo titulo="Preferencias">
-        <Fila icono="campana" titulo="Notificaciones" detalle="Qué avisos quieres recibir" />
-        <Separador />
-        <Fila icono="ajustes" titulo="Configuración" detalle="Idioma, mapa y apariencia" />
-        <Separador />
-        <Fila icono="moto" titulo="Cambiar de modo" detalle="Pasar a conductor" />
-      </Grupo>
-
-      <Grupo titulo="Dinero">
-        <Fila icono="rayo" titulo="Tu saldo" detalle="Todavía no está activo" />
-      </Grupo>
-
-      <Grupo titulo="Ayuda">
-        <Fila icono="viajes" titulo="Soporte" detalle="Escríbenos si algo no cuadra" />
-      </Grupo>
-
-      <View style={{ marginTop: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
-        <Boton titulo="Cerrar sesión" variante="secundario" onPress={() => undefined} />
-
-        {/* Lo que no tiene vuelta atrás, separado y en rojo. */}
-        <Separador />
-        <Fila
-          icono="perfil"
-          titulo="Eliminar cuenta"
-          detalle="Esta acción no se puede deshacer"
-          tono="peligro"
-        />
-      </View>
-    </Seccion>
+    <View style={{
+      borderWidth: 1,
+      borderColor: tema.color.sobreAcento,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 3
+    }}>
+      <Txt nivel="etiqueta" tono="sobreAcento">{texto}</Txt>
+    </View>
   );
 }
 
