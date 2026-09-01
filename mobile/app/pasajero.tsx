@@ -51,6 +51,17 @@ export default function InicioDePasajera() {
         </View>
       </View>
 
+      {/* La puerta al perfil NUEVO, ya conectado a datos reales. Sin ella la
+          pantalla existe y no se puede alcanzar.
+
+          Cerrar sesión se queda también aquí: es la salida de emergencia
+          mientras el resto de la aplicación sigue sin conectar. */}
+      <Boton
+        titulo="Tu perfil"
+        onPress={() => { router.push('/perfil'); }}
+        testID="boton-perfil"
+      />
+
       <Boton
         titulo="Cerrar sesión"
         variante="secundario"

@@ -26,6 +26,18 @@ export interface FalloDeApi {
   /** El código del backend (`{ error: CÓDIGO }`), si vino. */
   readonly codigo: string | null;
   readonly mensaje: string;
+  /**
+   * El cuerpo del error, tal cual.
+   *
+   * Hace falta porque algunos errores traen DETALLE que el código solo no
+   * lleva: `VALIDATION_FAILED` viene con `fields` diciendo qué campo falla y
+   * por qué, y sin eso un formulario sólo puede decir «algo está mal».
+   *
+   * Se deja sin tipar a propósito: es la respuesta cruda de otro sistema, y
+   * quien la lea tiene que comprobar su forma. Opcional, así que nada de lo
+   * que ya existía cambia.
+   */
+  readonly detalle?: unknown;
 }
 
 /**

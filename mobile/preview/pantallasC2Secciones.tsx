@@ -34,7 +34,7 @@
  */
 
 import { type ReactNode } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { Boton, Insignia, Superficie, Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
 import { Separador } from '../ui/HojaInferior';
@@ -302,9 +302,70 @@ function Grupo({ titulo, children }: { readonly titulo: string; readonly childre
  * Se escribe suelta, que son cuatro líneas más y queda más claro que doblar el
  * armazón para que admita las dos formas.
  */
-export function C2Perfil() {
+/**
+ * Lo que la cabecera del perfil necesita para pintarse.
+ *
+ * Deliberadamente PLANO y sin nada de `services/`: así esta pantalla se puede
+ * montar en el recorrido de diseño —sin sesión, sin red— y dentro de la ruta
+ * protegida —con la persona de verdad— sin cambiar una línea.
+ *
+ * `viajes` y `verificada` pueden faltar, y faltar significa NO PINTARLOS. El
+ * backend no dice cuántos viajes lleva alguien en `GET /api/auth/me`, y un
+ * número inventado en el perfil de una persona real es peor que un hueco.
+ */
+export interface DatosDelPerfil {
+  readonly iniciales: string;
+  readonly nombre: string;
+  readonly desde: string | null;
+  readonly verificada: boolean;
+  readonly viajes: string | null;
+  readonly foto: { readonly uri: string; readonly headers?: Record<string, string> } | null;
+}
+
+/** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
+const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+
+/**
+ * El respaldo cuando nadie pasa datos, y por qué depende del modo.
+ *
+ * En desarrollo se pinta el ejemplo: es lo que hace que el recorrido de diseño
+ * y el laboratorio se puedan mirar sin sesión.
+ *
+ * En RELEASE se pinta vacío. Unos datos de demostración que acaban como
+ * respaldo en tiempo de ejecución son la forma más silenciosa de enseñar
+ * información falsa como verdadera, y «Demo Pasajera» en el perfil de una
+ * persona real sería exactamente eso. Un perfil en blanco se ve como un fallo
+ * —que lo es— en vez de como el nombre de otra persona.
+ */
+const PERFIL_VACIO: DatosDelPerfil = {
+  iniciales: '',
+  nombre: '',
+  desde: null,
+  verificada: false,
+  viajes: null,
+  foto: null
+};
+
+/** Los del fixture, para el recorrido de diseño. */
+const PERFIL_DE_EJEMPLO: DatosDelPerfil = {
+  iniciales: PERFIL_DEMO.iniciales,
+  nombre: PERFIL_DEMO.nombre,
+  desde: PERFIL_DEMO.desde,
+  verificada: true,
+  viajes: PERFIL_DEMO.viajes,
+  foto: null
+};
+
+export function C2Perfil({ datos, onFila, onCerrarSesion, cerrando = false }: {
+  /** Sin esto se pinta el ejemplo. Con esto, la persona de verdad. */
+  readonly datos?: DatosDelPerfil;
+  readonly onFila?: (clave: string) => void;
+  readonly onCerrarSesion?: () => void;
+  readonly cerrando?: boolean;
+} = {}) {
   const tema = useTema();
   const sinLeer = AVISOS_DEMO.filter(aviso => aviso.sinLeer).length;
+  const perfil = datos ?? (EN_DESARROLLO ? PERFIL_DE_EJEMPLO : PERFIL_VACIO);
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
@@ -329,19 +390,42 @@ export function C2Perfil() {
               borderRadius: 31,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: tema.color.sobreAcento
+              backgroundColor: tema.color.sobreAcento,
+              overflow: 'hidden'
             }}>
-              <Txt nivel="titulo" tono="marca">{PERFIL_DEMO.iniciales}</Txt>
+              {perfil.foto === null ? (
+                <Txt nivel="titulo" tono="marca">{perfil.iniciales}</Txt>
+              ) : (
+                // El MISMO disco, con la fotografía dentro. La fotografía es
+                // privada y viaja con su cabecera de sesión: sin ella el
+                // servidor responde 403 igual que si la persona no existiera.
+                <Image
+                  source={perfil.foto}
+                  resizeMode="cover"
+                  accessibilityIgnoresInvertColors
+                  style={{ width: '100%', height: '100%' }}
+                />
+              )}
             </View>
 
             <View style={{ flex: 1, gap: 3 }}>
-              <Txt nivel="encabezado" tono="sobreAcento">{PERFIL_DEMO.nombre}</Txt>
-              <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
-                {PERFIL_DEMO.desde}
-              </Txt>
+              <Txt nivel="encabezado" tono="sobreAcento">{perfil.nombre}</Txt>
+              {/* Sin fecha legible, la línea desaparece en vez de enseñar
+                  «Invalid Date». */}
+              {perfil.desde !== null ? (
+                <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
+                  {perfil.desde}
+                </Txt>
+              ) : null}
               <View style={{ flexDirection: 'row', gap: 7, marginTop: 3 }}>
-                <SelloSobreAmarillo texto="Verificada" />
-                <SelloSobreAmarillo texto={`${PERFIL_DEMO.viajes} viajes`} />
+                {/* Cada sello aparece SOLO si el dato existe. Con la persona de
+                    verdad, «N viajes» no se pinta: `GET /api/auth/me` no lo
+                    devuelve, y un número inventado en un perfil real es peor
+                    que un hueco. */}
+                {perfil.verificada ? <SelloSobreAmarillo texto="Verificada" /> : null}
+                {perfil.viajes !== null ? (
+                  <SelloSobreAmarillo texto={`${perfil.viajes} viajes`} />
+                ) : null}
               </View>
             </View>
           </View>
@@ -349,7 +433,12 @@ export function C2Perfil() {
 
         <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
           <Grupo titulo="Tu cuenta">
-            <Fila icono="perfil" titulo="Tus datos" detalle="Nombre, teléfono y correo" />
+            <Fila
+              icono="perfil"
+              titulo="Tus datos"
+              detalle="Nombre, teléfono y correo"
+              onPress={onFila === undefined ? undefined : () => onFila('datos')}
+            />
             <Separador />
             <Fila icono="inicio" titulo="Direcciones guardadas" detalle="Casa, trabajo y las que añadas" />
             <Separador />
@@ -373,7 +462,18 @@ export function C2Perfil() {
           </Grupo>
 
           <View style={{ marginTop: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
-            <Boton titulo="Cerrar sesión" variante="secundario" onPress={() => undefined} />
+            {/* Sin manejador —en el recorrido de diseño— no hace nada. En la
+                ruta protegida cierra la sesión de verdad.
+
+                `cargando` es lo que impide el doble toque: cerrar sesión dos
+                veces no rompe nada, pero deja ver el botón vivo mientras ya se
+                está saliendo, y eso se lee como que no funcionó. */}
+            <Boton
+              titulo="Cerrar sesión"
+              variante="secundario"
+              cargando={cerrando}
+              onPress={onCerrarSesion ?? (() => undefined)}
+            />
 
             {/* Lo que no tiene vuelta atrás, separado y en rojo. */}
             <Separador />

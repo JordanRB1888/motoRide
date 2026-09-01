@@ -34,11 +34,22 @@ const TIEMPO_MAXIMO_MS = 15_000;
 // se podria ejecutar fuera de un emulador.
 export { MOTIVOS_DE_ERROR, type MotivoDeError, type Resultado } from '../domain/apiResult';
 
-const fallo = (motivo: MotivoDeError, mensaje: string, codigo: string | null = null): Resultado<never> =>
-  ({ ok: false, motivo, codigo, mensaje });
+const fallo = (
+  motivo: MotivoDeError,
+  mensaje: string,
+  codigo: string | null = null,
+  detalle?: unknown
+): Resultado<never> => ({ ok: false, motivo, codigo, mensaje, detalle });
 
 export interface OpcionesDePeticion {
   readonly metodo?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  /**
+   * El cuerpo. Un objeto viaja como JSON; un `FormData` viaja tal cual.
+   *
+   * La subida de la fotografía es multipart y no JSON, y no vale serializarla:
+   * hay que dejar que la plataforma ponga su propio `content-type` con el
+   * límite que ella genera. Escribirlo a mano lo rompe.
+   */
   readonly cuerpo?: unknown;
   /** Adjunta el token de sesión. Por defecto sí, salvo en login y registro. */
   readonly conSesion?: boolean;
@@ -57,8 +68,10 @@ export async function llamar<T>(ruta: string, opciones: OpcionesDePeticion = {})
     return fallo('SIN_CONFIGURACION', configuracion.detalle, configuracion.motivo);
   }
 
+  const esFormulario = typeof FormData !== 'undefined' && opciones.cuerpo instanceof FormData;
+
   const cabeceras: Record<string, string> = { accept: 'application/json' };
-  if (opciones.cuerpo !== undefined) cabeceras['content-type'] = 'application/json';
+  if (opciones.cuerpo !== undefined && !esFormulario) cabeceras['content-type'] = 'application/json';
 
   if (opciones.conSesion !== false) {
     const token = await leerToken();
@@ -73,7 +86,9 @@ export async function llamar<T>(ruta: string, opciones: OpcionesDePeticion = {})
     respuesta = await fetch(`${configuracion.urlBase}${ruta}`, {
       method: opciones.metodo ?? 'GET',
       headers: cabeceras,
-      body: opciones.cuerpo === undefined ? undefined : JSON.stringify(opciones.cuerpo),
+      body: opciones.cuerpo === undefined
+        ? undefined
+        : (esFormulario ? (opciones.cuerpo as FormData) : JSON.stringify(opciones.cuerpo)),
       signal: cancelador.signal
     });
   } catch (error) {
@@ -103,9 +118,9 @@ export async function llamar<T>(ruta: string, opciones: OpcionesDePeticion = {})
   const codigo = leerCodigoDeError(cuerpo);
 
   if (respuesta.status === 401) {
-    return fallo('NO_AUTENTICADO', 'La sesión no es válida o caducó.', codigo);
+    return fallo('NO_AUTENTICADO', 'La sesión no es válida o caducó.', codigo, cuerpo);
   }
-  return fallo('ERROR_DEL_SERVIDOR', codigo ?? `El servidor respondió ${respuesta.status}.`, codigo);
+  return fallo('ERROR_DEL_SERVIDOR', codigo ?? `El servidor respondió ${respuesta.status}.`, codigo, cuerpo);
 }
 
 /** Saca el código del cuerpo de error sin asumir que venga bien formado. */
