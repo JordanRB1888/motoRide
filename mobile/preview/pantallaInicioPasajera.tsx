@@ -35,7 +35,7 @@ import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
-import { ARTE_DE_SERVICIO } from '../theme/marca';
+import { ARTE_DE_CAMPANA, ARTE_DE_SERVICIO } from '../theme/marca';
 import {
   AVISOS_DEMO,
   CAMPANAS_DEMO,
@@ -308,6 +308,32 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
 function TarjetaDeCampana({ dato }: { readonly dato: Campana }) {
   const tema = useTema();
   const destacada = dato.tono === 'acento';
+  const banner = dato.banner === undefined ? undefined : ARTE_DE_CAMPANA[dato.banner];
+
+  // Con banner, la campaña ES la imagen: el anunciante entrega su arte con su
+  // texto dentro y nosotros sólo la enmarcamos.
+  if (banner !== undefined) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={dato.titulo}
+        style={{
+          width: 300,
+          borderRadius: tema.radio.tarjeta,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: tema.color.borde
+        }}
+      >
+        <Image
+          source={banner}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+          style={{ width: 300, height: 169 }}
+        />
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable

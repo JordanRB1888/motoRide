@@ -177,6 +177,18 @@ export const SERVICIOS_DE_INICIO = [
  * solidaria. Van con texto de ejemplo y SIN CIFRAS: una recaudación inventada
  * en una captura se lee como dinero recaudado de verdad, y eso con una causa
  * real sería grave.
+ *
+ * DOS FORMAS, Y LAS DOS HACEN FALTA
+ *
+ * Con `banner`, la campaña ES una imagen: el anunciante entrega su arte con su
+ * texto dentro y la aplicación sólo lo enmarca. Es lo que quiere un comercio
+ * que paga, y lo que va a llegar del panel administrativo.
+ *
+ * Sin `banner`, se compone con los tokens —rótulo, título, detalle—. Es lo que
+ * usa +58express para lo suyo, donde una imagen sería un estorbo.
+ *
+ * Que las dos convivan no es indecisión: son dos dueños distintos del mismo
+ * hueco.
  */
 export const CAMPANAS_DEMO = [
   {
@@ -185,7 +197,10 @@ export const CAMPANAS_DEMO = [
     titulo: 'Espacio de campaña',
     detalle: 'Aquí va una promoción, un aviso de la ciudad o una causa.',
     accion: 'Ver más',
-    tono: 'acento' as const
+    tono: 'acento' as const,
+    // El nombre del fichero en `assets/marca/`, sin extensión. Mientras no
+    // exista, la campaña se compone con texto y no se rompe nada.
+    banner: 'campana-repuestos'
   },
   {
     clave: 'c2',
@@ -193,7 +208,8 @@ export const CAMPANAS_DEMO = [
     titulo: 'Espacio de aviso',
     detalle: 'Para lo que +58express necesite contar ese día.',
     accion: 'Leer',
-    tono: 'neutro' as const
+    tono: 'neutro' as const,
+    banner: undefined
   }
 ] as const;
 

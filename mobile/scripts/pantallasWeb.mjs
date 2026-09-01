@@ -596,10 +596,22 @@ const botonDeSaldo = (texto, ic, principal = false) => `
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${texto}</span>
   </span>`;
 
-/** Una tarjeta de las de debajo. Estas SI son tarjetas, y se nota. */
-const tarjeta = (titulo, detalle, ic, contenido) => `
-  <div style="border-radius:var(--r-tarjeta);background:var(--superficie);
-    border:1px solid var(--borde);padding:var(--pad);display:grid;gap:var(--gap)">
+/**
+ * Una BANDA, no una tarjeta.
+ *
+ * Van de borde a borde, como la cabecera amarilla. Una tarjeta con margenes a
+ * los lados flota, y tres tarjetas flotando en una pantalla estrecha se leen
+ * como tres islas: mucho borde, mucha esquina, y el contenido encogido en el
+ * medio.
+ *
+ * A sangre, cada seccion ocupa el ancho entero y lo que las separa es el fondo
+ * de la pantalla asomando entre ellas. Se gana el ancho de dos margenes para
+ * el contenido, que en un grafico de siete barras se nota.
+ */
+const banda = (titulo, detalle, ic, contenido) => `
+  <div style="background:var(--superficie);border-top:1px solid var(--borde);
+    border-bottom:1px solid var(--borde);
+    padding:var(--pad) var(--margen);display:grid;gap:var(--gap)">
     <div style="display:flex;align-items:flex-start;gap:11px">
       <span style="width:34px;height:34px;flex:0 0 34px;border-radius:10px;
         display:grid;place-items:center;
@@ -780,8 +792,20 @@ const servicio = dato => {
   </span>`;
 };
 
-/** Una campania: el hueco para promociones, avisos y causas. */
-const campana = dato => `
+/**
+ * Una campania.
+ *
+ * Con banner en disco, la campania ES la imagen: el anunciante entrega su arte
+ * con su texto dentro y nosotros solo la enmarcamos. Sin banner, se compone con
+ * los tokens, que es lo que usa +58express para lo suyo.
+ */
+const campana = dato => ARTE_EN_DISCO.has(dato.banner)
+  ? `<span style="flex:0 0 300px;border-radius:var(--r-tarjeta);overflow:hidden;
+      border:1px solid var(--borde);display:block;line-height:0">
+      <img src="marca/${dato.banner}.png" width="300" height="169" alt="${dato.titulo}"
+        style="object-fit:cover">
+    </span>`
+  : `
   <span style="flex:0 0 268px;padding:var(--pad);border-radius:var(--r-tarjeta);
     position:relative;overflow:hidden;display:grid;gap:11px;
     background:${dato.tono === 'acento'
@@ -1299,14 +1323,14 @@ export const PANTALLAS = {
           botonDeSaldo('Recargar saldo', 'rayo', true)
         ].join(''))}
 
-        <div style="padding:var(--bloques) var(--margen) 110px;display:grid;gap:var(--bloques)">
-          ${tarjeta(GANANCIAS_DEMO.titulo, GANANCIAS_DEMO.detalle, 'viajes', grafico)}
+        <div style="padding:0 0 110px;display:grid;gap:var(--gap)">
+          ${banda(GANANCIAS_DEMO.titulo, GANANCIAS_DEMO.detalle, 'viajes', grafico)}
 
-          ${tarjeta('Cómo se reparte cada viaje', '', 'escudo', `
+          ${banda('Cómo se reparte cada viaje', '', 'escudo', `
             <span class="cuerpo t2">Tu parte se acredita y la comisión se descuenta de
               esta cuenta. El porcentaje lo fija +58express en su configuración.</span>`)}
 
-          ${tarjeta('Movimientos de la cuenta', `${MOVIMIENTOS_DEMO.length} registros`, 'reloj', `
+          ${banda('Movimientos de la cuenta', `${MOVIMIENTOS_DEMO.length} registros`, 'reloj', `
             <div style="display:flex;gap:8px">
               ${[['Todos', true], ['Comisiones', false], ['Recargas', false]].map(([n, on]) => `
                 <span style="padding:8px 14px;border-radius:999px;
@@ -1328,16 +1352,15 @@ export const PANTALLAS = {
           botonDeSaldo('Registrar recarga', 'rayo', true)
         ].join(''))}
 
-        <div style="padding:var(--bloques) var(--margen) 110px;display:grid;gap:var(--bloques)">
-          ${tarjeta('Movimientos', `${MOVIMIENTOS_PASAJERA_DEMO.length} registros`, 'reloj',
+        <div style="padding:0 0 110px;display:grid;gap:var(--gap)">
+          ${banda('Movimientos', `${MOVIMIENTOS_PASAJERA_DEMO.length} registros`, 'reloj',
             `<div>${MOVIMIENTOS_PASAJERA_DEMO.map(movimiento).join('')}</div>`)}
 
-          ${tarjeta('Cómo se paga un viaje', '', 'escudo', `
+          ${banda('Cómo se paga un viaje', '', 'escudo', `
             <span class="cuerpo t2">Puedes pagar en efectivo al conductor o con tu saldo.
               Recargas por Pago Móvil y el importe queda disponible al verificarse.</span>`)}
 
-          <div style="padding:14px;border-radius:var(--r-campo);background:var(--superficie);
-            display:flex;gap:10px">
+          <div style="padding:14px var(--margen);display:flex;gap:10px">
             ${icono('rayo', 'var(--aviso)', 17)}
             <span class="pie t3" style="text-align:left">${SALDO_DEMO.pasajera.nota}</span>
           </div>

@@ -178,6 +178,24 @@ test('la rejilla se ve entera aunque falte todo el arte', () => {
   }
 });
 
+test('una campaña sin banner NO se rompe', () => {
+  // El arte de los anunciantes llega por partes y cambia cada semana. Mientras
+  // falta, la campaña se compone con texto; lo que no puede pasar es un hueco.
+  const inicio = leer(INICIO);
+  assert.ok(inicio.includes('banner !== undefined'), 'el teléfono no tiene reserva sin banner');
+  assert.ok(
+    leer(DIBUJO).includes('ARTE_EN_DISCO.has(dato.banner)'),
+    'el dibujo no comprueba si el banner existe'
+  );
+
+  // Y con o sin arte, la sección sigue enseñando las campañas que hay.
+  const dibujo = PANTALLAS.pasajera();
+  for (const campana of CAMPANAS_DEMO) {
+    const visible = campana.banner === undefined ? campana.titulo : campana.titulo;
+    assert.ok(dibujo.includes(visible), `falta la campaña «${campana.titulo}»`);
+  }
+});
+
 test('la tasa del BCV está en el inicio, que es lo que se pidió', () => {
   // Antes vivía sólo en la pantalla de pedir, con el argumento de que es donde
   // se decide un gasto. Manda el otro: en Venezuela la tasa se consulta a todas

@@ -182,7 +182,18 @@ export function BotonDeSaldo({ accion }: { readonly accion: Accion }) {
 // Lo de debajo
 // ---------------------------------------------------------------------------
 
-function Tarjeta({ titulo, detalle, icono, children }: {
+/**
+ * Una BANDA, no una tarjeta.
+ *
+ * Va de borde a borde, como la cabecera amarilla. Una tarjeta con márgenes a
+ * los lados flota, y tres tarjetas flotando en una pantalla estrecha se leen
+ * como tres islas: mucho borde, mucha esquina y el contenido encogido en medio.
+ *
+ * A sangre, cada sección ocupa el ancho entero y lo que las separa es el fondo
+ * de la pantalla asomando entre ellas. Se ganan dos márgenes de contenido, que
+ * en un gráfico de siete barras se nota.
+ */
+function Banda({ titulo, detalle, icono, children }: {
   readonly titulo: string;
   readonly detalle?: string;
   readonly icono: NombreDeIcono;
@@ -192,11 +203,12 @@ function Tarjeta({ titulo, detalle, icono, children }: {
 
   return (
     <View style={{
-      borderRadius: tema.radio.tarjeta,
       backgroundColor: tema.color.superficie,
-      borderWidth: 1,
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
       borderColor: tema.color.borde,
-      padding: tema.ritmo.dentroDeTarjeta,
+      paddingVertical: tema.ritmo.dentroDeTarjeta,
+      paddingHorizontal: tema.ritmo.margenPantalla,
       gap: tema.ritmo.entreElementos
     }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 11 }}>
@@ -330,12 +342,8 @@ export function C2SaldoPasajera() {
           ]}
         />
 
-        <View style={{
-          padding: tema.ritmo.margenPantalla,
-          paddingTop: tema.ritmo.entreBloques,
-          gap: tema.ritmo.entreBloques
-        }}>
-          <Tarjeta
+        <View style={{ paddingBottom: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
+          <Banda
             titulo="Movimientos"
             detalle={`${MOVIMIENTOS_PASAJERA_DEMO.length} registros`}
             icono="reloj"
@@ -345,21 +353,20 @@ export function C2SaldoPasajera() {
                 <FilaDeMovimiento key={mov.clave} mov={mov} primero={indice === 0} />
               ))}
             </View>
-          </Tarjeta>
+          </Banda>
 
-          <Tarjeta titulo="Cómo se paga un viaje" icono="escudo">
+          <Banda titulo="Cómo se paga un viaje" icono="escudo">
             <Txt nivel="cuerpo" tono="secundario">
               Puedes pagar en efectivo al conductor o con tu saldo. Recargas por Pago
               Móvil y el importe queda disponible al verificarse.
             </Txt>
-          </Tarjeta>
+          </Banda>
 
           <View style={{
             flexDirection: 'row',
             gap: 10,
-            padding: 14,
-            borderRadius: tema.radio.campo,
-            backgroundColor: tema.color.superficie
+            paddingVertical: 14,
+            paddingHorizontal: tema.ritmo.margenPantalla
           }}>
             <Icono nombre="rayo" color={tema.color.aviso} tamano={17} />
             <View style={{ flex: 1 }}>
@@ -392,27 +399,23 @@ export function C2SaldoConductor() {
           ]}
         />
 
-        <View style={{
-          padding: tema.ritmo.margenPantalla,
-          paddingTop: tema.ritmo.entreBloques,
-          gap: tema.ritmo.entreBloques
-        }}>
-          <Tarjeta
+        <View style={{ paddingBottom: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
+          <Banda
             titulo={GANANCIAS_DEMO.titulo}
             detalle={GANANCIAS_DEMO.detalle}
             icono="viajes"
           >
             <GraficoDeGanancias />
-          </Tarjeta>
+          </Banda>
 
-          <Tarjeta titulo="Cómo se reparte cada viaje" icono="escudo">
+          <Banda titulo="Cómo se reparte cada viaje" icono="escudo">
             <Txt nivel="cuerpo" tono="secundario">
               Tu parte se acredita y la comisión se descuenta de esta cuenta. El
               porcentaje lo fija +58express en su configuración.
             </Txt>
-          </Tarjeta>
+          </Banda>
 
-          <Tarjeta
+          <Banda
             titulo="Movimientos de la cuenta"
             detalle={`${MOVIMIENTOS_DEMO.length} registros`}
             icono="reloj"
@@ -422,7 +425,7 @@ export function C2SaldoConductor() {
                 <FilaDeMovimiento key={mov.clave} mov={mov} primero={indice === 0} />
               ))}
             </View>
-          </Tarjeta>
+          </Banda>
         </View>
       </ScrollView>
 

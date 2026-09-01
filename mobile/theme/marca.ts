@@ -167,6 +167,22 @@ export const ARTE_DE_SERVICIO: Readonly<Partial<Record<string, ImageSourcePropTy
     'servicio-compra-vende': require('../assets/marca/servicio-compra-vende.png') as ImageSourcePropType
   });
 
+/**
+ * El arte de las campañas.
+ *
+ * Separado del de los servicios porque tienen dueños distintos: las casillas
+ * son de +58express y cambian poco; los banners los entrega quien paga y
+ * cambian cada semana.
+ *
+ * PENDIENTE: cuando el panel administrativo exista, esto deja de ser un
+ * `require` local y pasa a ser una dirección del servidor. Un banner que cambia
+ * cada semana no puede obligar a publicar en las tiendas.
+ */
+export const ARTE_DE_CAMPANA: Readonly<Partial<Record<string, ImageSourcePropType>>> =
+  Object.freeze({
+    // PENDIENTE: falta `assets/marca/campana-repuestos.png`.
+  });
+
 /** Resuelve la imagen de un vehículo. Equivale a `getVehicleAsset` de la web. */
 export function imagenDeVehiculo(
   tipo: TipoDeVehiculo,
