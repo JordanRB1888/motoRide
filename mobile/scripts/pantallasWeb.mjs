@@ -1277,12 +1277,14 @@ export const PANTALLAS = {
           </div>
           <div style="display:flex;flex-wrap:wrap">
             ${[['Vehículo', 'Moto demo · DEMO-000'], ['Zona', 'Zona demo · Maracaibo'],
-               ['Viajes de hoy', '8'], ['En línea', '5 h 20 m'], ['Resumen', '—']].map(([e, v]) => `
+               ['Viajes de hoy', '8'], ['En línea', '5 h 20 m']].map(([e, v]) => `
               <span style="width:50%;padding:7px 12px 7px 0;display:grid;gap:2px;min-width:0">
-                <span class="pie t3">${e}</span>
+                <span class="pie t3" style="text-align:left">${e}</span>
                 <span class="cuerpo" style="overflow:hidden;text-overflow:ellipsis;
                   white-space:nowrap">${v}</span></span>`).join('')}
           </div>
+          <span class="pie t3" style="text-align:left">El resumen de la jornada llega
+            cuando se encienda la cartera.</span>
           <div class="boton sec" style="border:1px solid var(--borde)">Salir de línea</div>
         </div>
       </div>

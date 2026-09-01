@@ -388,12 +388,21 @@ export function PanelDeJornada({ jornada, onAlternar }: {
 }) {
   const tema = useTema();
 
+  /**
+   * CUATRO datos, no cinco.
+   *
+   * «Resumen» salía como quinto en una rejilla de dos columnas y se quedaba
+   * solo en la última fila, con un guión por valor. Un dato vacío ocupando el
+   * sitio de un dato no es un dato: es un hueco con nombre.
+   *
+   * Baja a nota al pie, donde puede explicar POR QUÉ está vacío en lugar de
+   * fingir que es una cifra que aún no ha llegado.
+   */
   const datos = [
     { etiqueta: 'Vehículo', valor: jornada.vehiculo },
     { etiqueta: 'Zona', valor: jornada.zona },
     { etiqueta: 'Viajes de hoy', valor: jornada.viajes },
-    { etiqueta: 'En línea', valor: jornada.tiempoEnLinea },
-    { etiqueta: 'Resumen', valor: jornada.resumen }
+    { etiqueta: 'En línea', valor: jornada.tiempoEnLinea }
   ];
 
   return (
