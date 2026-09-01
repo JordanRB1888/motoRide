@@ -36,6 +36,7 @@ import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
+import { Carrusel } from '../ui/Carrusel';
 import { useAireDeArriba } from '../ui/seguro';
 import { useIr } from '../ui/navegar';
 import { ARTE_DE_CAMPANA, ARTE_DE_SERVICIO } from '../theme/marca';
@@ -476,19 +477,11 @@ export function C2InicioPasajera() {
             </View>
           </View>
 
-          <View style={{ marginTop: tema.ritmo.entreBloques }}>
-            <Txt nivel="encabezado" accessibilityRole="header">Lo que está pasando</Txt>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginTop: 11, marginRight: -tema.ritmo.margenPantalla }}
-              contentContainerStyle={{ gap: 10, paddingRight: tema.ritmo.margenPantalla }}
-            >
-              {CAMPANAS_DEMO.map(dato => (
-                <TarjetaDeCampana key={dato.clave} dato={dato} />
-              ))}
-            </ScrollView>
-          </View>
+          <Carrusel titulo="Lo que está pasando" paso={310}>
+            {CAMPANAS_DEMO.map(dato => (
+              <TarjetaDeCampana key={dato.clave} dato={dato} />
+            ))}
+          </Carrusel>
 
           <AdelantoDeAliados
             onVerTodos={() => ir('comercios')}

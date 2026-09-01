@@ -277,3 +277,51 @@ test('quien no tiene imagen conserva su sello', () => {
   const sello = pantalla.slice(pantalla.indexOf('export function SelloOPortada'));
   assert.match(sello.slice(0, 700), /<SelloDeComercio/, 'no hay respaldo sin imagen');
 });
+
+// ---------------------------------------------------------------------------
+// Las filas que se deslizan
+// ---------------------------------------------------------------------------
+
+test('las dos filas deslizantes son la MISMA pieza', () => {
+  // Se escribían a mano por separado y se notaba: títulos de tamaños distintos,
+  // sangrados distintos, y ninguna de las dos decía que se podía deslizar.
+  for (const fichero of ['preview/pantallaInicioPasajera.tsx', 'preview/pantallasAliados.tsx']) {
+    assert.match(leer(fichero), /<Carrusel/, `${fichero} no usa la pieza común`);
+  }
+
+  // Y ya no queda ningún ScrollView horizontal suelto en el inicio: si vuelve
+  // uno, vuelve el desorden que esto arregló.
+  const inicio = despojarComentarios(leer('preview/pantallaInicioPasajera.tsx'));
+  assert.doesNotMatch(inicio, /<ScrollView\s+horizontal/, 'hay una fila deslizante escrita a mano');
+});
+
+test('la flecha DICE que hay más, y deja de decirlo al final', () => {
+  // Una tarjeta cortada por el borde, sin nada que lo explique, se lee como un
+  // fallo de maquetación y no como «hay más».
+  //
+  // Y desaparece al llegar al final: una flecha que no lleva a ninguna parte
+  // enseña a no hacer caso de las flechas.
+  const carrusel = leer('ui/Carrusel.tsx');
+
+  assert.match(carrusel, /\{hayMas \? \(/, 'la flecha se pinta siempre');
+  assert.match(
+    carrusel,
+    /donde\.current \+ visible\.current < total\.current/,
+    'no se comprueba si queda algo a la derecha'
+  );
+
+  // No es sólo un cartel: se toca y avanza, que es lo que espera quien la ve.
+  assert.match(carrusel, /scrollTo\(\{ x: donde\.current \+ paso/, 'la flecha no desplaza nada');
+  assert.match(carrusel, /accessibilityLabel=\{`Ver más de/, 'la flecha no se anuncia');
+});
+
+test('el rótulo de PUBLICIDAD sobrevive al cambio de título', () => {
+  // El título de los aliados pasó de etiqueta en mayúsculas a encabezado, para
+  // que las dos filas se lean como hermanas. Lo que NO puede perderse en ese
+  // cambio es el rótulo: es publicidad, y las tiendas exigen que se distinga.
+  const pantalla = leer('preview/pantallasAliados.tsx');
+  const adelanto = pantalla.slice(pantalla.indexOf('export function AdelantoDeAliados'));
+
+  assert.match(adelanto.slice(0, 900), /rotulo=\{<RotuloPagado \/>\}/, 'el rótulo de publicidad se perdió');
+  assert.match(adelanto.slice(0, 900), /titulo="Aliados"/);
+});

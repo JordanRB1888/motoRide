@@ -34,11 +34,22 @@
  */
 
 import { useState } from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+// `Image` con alias, y conviene decir por qué con precisión.
+//
+// Con el nombre a secas, tras varias recargas EN CALIENTE el navegador acabó
+// llamando al constructor `Image` del DOM en vez de al de React Native
+// —«Failed to construct Image»— y esta sección entera dejaba de pintarse. En
+// una pestaña limpia no se reproduce, así que la causa exacta se queda sin
+// cerrar: puede ser cosa del recargado en caliente y no del código.
+//
+// El alias no arregla lo que no se entiende; quita el nombre de en medio para
+// que el choque no pueda ocurrir. Cuesta una palabra.
+import { Image as Imagen, Pressable, ScrollView, View } from 'react-native';
 import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
+import { Carrusel } from '../ui/Carrusel';
 import { ARTE_DE_ALIADO } from '../theme/marca';
 import { ALIADOS_DEMO, CATEGORIAS_DEMO } from './fixtures';
 import { BotonDeSaldo, CabeceraAmarilla } from './pantallasSaldo';
@@ -188,7 +199,7 @@ export function PortadaDeAliado({ aliado, alto, radio }: {
       overflow: 'hidden',
       backgroundColor: tema.color.superficieHundida
     }}>
-      <Image
+      <Imagen
         source={arte}
         resizeMode="cover"
         accessibilityIgnoresInvertColors
@@ -240,26 +251,19 @@ export function AdelantoDeAliados({ onVerTodos, onAbrir }: {
   const tema = useTema();
 
   return (
-    <View style={{ marginTop: tema.ritmo.entreBloques }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-        <Txt nivel="etiqueta" tono="secundario">ALIADOS</Txt>
-        <RotuloPagado />
-        <View style={{ flex: 1 }} />
-        <Pressable
-          onPress={onVerTodos ?? (() => undefined)}
-          accessibilityRole="button"
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
-        >
-          <Txt nivel="etiqueta" tono="acento">Ver todos</Txt>
-        </Pressable>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginTop: 10, marginRight: -tema.ritmo.margenPantalla }}
-        contentContainerStyle={{ gap: 10, paddingRight: tema.ritmo.margenPantalla }}
-      >
+    // El título va al mismo nivel que el de las campañas —encabezado, no
+    // etiqueta en mayúsculas— porque son dos filas hermanas y con jerarquías
+    // distintas se leían como dos secciones que no tienen nada que ver.
+    //
+    // El rótulo de PUBLICIDAD no se pierde en el cambio: sigue al lado del
+    // título, que es donde tiene que estar.
+    <Carrusel
+      titulo="Aliados"
+      rotulo={<RotuloPagado />}
+      accion="Ver todos"
+      onAccion={onVerTodos}
+      paso={238}
+    >
         {ALIADOS_DEMO.slice(0, 3).map(aliado => (
           <Pressable
             key={aliado.clave}
@@ -289,8 +293,7 @@ export function AdelantoDeAliados({ onVerTodos, onAbrir }: {
             <Txt nivel="pie" tono="secundario" numberOfLines={1}>{aliado.gancho}</Txt>
           </Pressable>
         ))}
-      </ScrollView>
-    </View>
+    </Carrusel>
   );
 }
 
