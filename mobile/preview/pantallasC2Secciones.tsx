@@ -41,6 +41,7 @@ import { Separador } from '../ui/HojaInferior';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { EntradaDeTransporteSeguro } from '../ui/Servicio';
 import { useTema } from '../theme/ThemeContext';
+import { useAireDeArriba } from '../ui/seguro';
 import { useIr } from '../ui/navegar';
 import { CabeceraAmarilla } from './pantallasSaldo';
 import {
@@ -120,39 +121,66 @@ export function Campana({ sinLeer = 0, onPress, sobreElAmarillo = false }: {
  * pantallas apiladas encima: quitarla dejaría a la persona sin saber cómo
  * volver a donde estaba.
  */
-function Seccion({ titulo, activo, conCampana = true, children }: {
+function Seccion({ titulo, activo, conCampana = true, resumen, children }: {
   readonly titulo: string;
   readonly activo: string;
   readonly conCampana?: boolean;
+  /**
+   * Lo que va bajo el título DENTRO de la banda amarilla.
+   *
+   * Con resumen, la pantalla abre con la banda a todo el ancho; sin él, con el
+   * título suelto sobre el fondo, que es como abren las de segundo nivel.
+   */
+  readonly resumen?: ReactNode;
   readonly children: ReactNode;
 }) {
   const tema = useTema();
   const sinLeer = AVISOS_DEMO.filter(aviso => aviso.sinLeer).length;
+  const conBanda = resumen !== undefined;
+  // Con banda lo pide `CabeceraAmarilla`; sin ella lo pide el título suelto.
+  const arriba = useAireDeArriba();
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingTop: 18,
-        paddingBottom: tema.ritmo.entreElementos,
-        paddingLeft: tema.ritmo.margenPantalla,
-        paddingRight: conCampana ? tema.ritmo.margenPantalla - 8 : tema.ritmo.margenPantalla
-      }}>
-        <Txt nivel="titulo" accessibilityRole="header">{titulo}</Txt>
-        <View style={{ flex: 1 }} />
-        {conCampana ? <Campana sinLeer={sinLeer} /> : null}
-      </View>
+      {conBanda ? null : (
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingTop: 18 + arriba,
+          paddingBottom: tema.ritmo.entreElementos,
+          paddingLeft: tema.ritmo.margenPantalla,
+          paddingRight: conCampana ? tema.ritmo.margenPantalla - 8 : tema.ritmo.margenPantalla
+        }}>
+          <Txt nivel="titulo" accessibilityRole="header">{titulo}</Txt>
+          <View style={{ flex: 1 }} />
+          {conCampana ? <Campana sinLeer={sinLeer} /> : null}
+        </View>
+      )}
 
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingHorizontal: tema.ritmo.margenPantalla,
+          // Con banda, el margen lateral baja al contenido: la banda tiene que
+          // ir de borde a borde y este padding se lo comería por los lados.
+          paddingHorizontal: conBanda ? 0 : tema.ritmo.margenPantalla,
           paddingBottom: tema.ritmo.entreBloques + ALTO_DE_LA_BARRA
         }}
         showsVerticalScrollIndicator={false}
       >
-        {children}
+        {conBanda ? (
+          <CabeceraAmarilla>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Txt nivel="titulo" tono="sobreAcento" accessibilityRole="header">{titulo}</Txt>
+              <View style={{ flex: 1 }} />
+              {conCampana ? <Campana sinLeer={sinLeer} sobreElAmarillo /> : null}
+            </View>
+            {resumen}
+          </CabeceraAmarilla>
+        ) : null}
+
+        <View style={{ paddingHorizontal: conBanda ? tema.ritmo.margenPantalla : 0 }}>
+          {children}
+        </View>
       </ScrollView>
 
       <BarraDeNavegacion
@@ -257,10 +285,17 @@ function Grupo({ titulo, children }: { readonly titulo: string; readonly childre
  *
  * ABRE CON LA BANDA AMARILLA, como el saldo y la ficha de un comercio.
  *
- * El criterio es el mismo de siempre: la banda va donde hay un SUJETO que
- * presentar. En el saldo es tu dinero, en la ficha es un comercio concreto, y
- * aquí eres tú. Donde no hay sujeto —el historial, los avisos, que son listas—
- * no la lleva, y por eso sigue significando algo.
+ * EL CRITERIO, DESPUÉS DE QUE EL DUEÑO LO CERRARA
+ *
+ * La banda marca las secciones PRINCIPALES: las cuatro que se alcanzan desde
+ * la barra de abajo. Inicio, Historial, Saldo y Perfil abren con ella; las de
+ * segundo nivel —ayuda, configuración, avisos, viaje seguro, a las que se
+ * llega desde dentro— abren con el título suelto.
+ *
+ * Antes el criterio era «donde hay un sujeto que presentar», y por eso el
+ * historial se quedó sin banda: es una lista. El dueño pidió ponérsela, y el
+ * criterio que queda es mejor: se puede mirar la barra y saber cuáles la
+ * llevan, sin discutir si una lista de TUS viajes tiene sujeto o no.
  *
  * Esta pantalla no usa el armazón de `Seccion` como las demás: ese armazón pinta
  * el título con márgenes laterales, y la banda tiene que ir de borde a borde.
@@ -438,8 +473,26 @@ export function C2Historial() {
   const tema = useTema();
   const ir = useIr();
 
+  // Contados de lo que hay, no escritos a mano: una cifra a mano se queda
+  // vieja en cuanto cambia la lista, y aquí lo que se cuenta está justo debajo.
+  const completados = HISTORIAL_DEMO.filter(viaje => viaje.estado === 'Completado').length;
+
   return (
-    <Seccion titulo="Tu historial" activo="historial">
+    <Seccion
+      titulo="Tu historial"
+      activo="historial"
+      resumen={
+        <View style={{ gap: 9 }}>
+          <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
+            Todo lo que has pedido, con su registro
+          </Txt>
+          <View style={{ flexDirection: 'row', gap: 7 }}>
+            <SelloSobreAmarillo texto={`${HISTORIAL_DEMO.length} viajes`} />
+            <SelloSobreAmarillo texto={`${completados} completados`} />
+          </View>
+        </View>
+      }
+    >
       {HISTORIAL_DEMO.map((viaje, indice) => (
         <View key={viaje.clave}>
           {indice > 0 ? <Separador /> : null}

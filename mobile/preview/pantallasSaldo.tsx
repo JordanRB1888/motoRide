@@ -36,6 +36,7 @@ import {
   DESTINOS_DE_PASAJERA
 } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
+import { useAireDeArriba } from '../ui/seguro';
 import {
   GANANCIAS_DEMO,
   MOVIMIENTOS_DEMO,
@@ -72,12 +73,15 @@ export interface Accion {
  */
 export function CabeceraAmarilla({ children }: { readonly children: React.ReactNode }) {
   const tema = useTema();
+  const arriba = useAireDeArriba();
 
   return (
     <View style={{
       backgroundColor: tema.color.acento,
       paddingHorizontal: tema.ritmo.margenPantalla,
-      paddingTop: 22,
+      // El aire del sistema va DENTRO del amarillo, no encima: una franja del
+      // color del fondo sobre la banda la parte en dos.
+      paddingTop: 22 + arriba,
       paddingBottom: 26,
       overflow: 'hidden'
     }}>

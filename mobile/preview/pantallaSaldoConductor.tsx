@@ -38,6 +38,7 @@ import { Icono, type NombreDeIcono } from '../ui/Icono';
 import { Separador } from '../ui/HojaInferior';
 import { BarraDeNavegacion, ControlDeDisponibilidad, DESTINOS_DE_CONDUCTOR } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
+import { useAireDeArriba } from '../ui/seguro';
 import { MOVIMIENTOS_DEMO, TASA_DEMO } from './fixtures';
 
 /**
@@ -81,6 +82,7 @@ const ICONO_POR_TIPO: Readonly<Record<string, NombreDeIcono>> = {
 
 export function C2SaldoConductor({ deudor = false }: { readonly deudor?: boolean }) {
   const tema = useTema();
+  const arriba = useAireDeArriba();
   const [filtro, setFiltro] = useState<Filtro>('todos');
 
   const permitidos = TIPOS_POR_FILTRO[filtro];
@@ -91,7 +93,7 @@ export function C2SaldoConductor({ deudor = false }: { readonly deudor?: boolean
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
-        paddingTop: 18,
+        paddingTop: 18 + arriba,
         paddingBottom: tema.ritmo.entreElementos,
         paddingHorizontal: tema.ritmo.margenPantalla
       }}>

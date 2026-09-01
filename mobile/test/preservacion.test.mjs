@@ -732,6 +732,53 @@ test('la tasa del BCV que se enseña es de ejemplo', () => {
   assert.match(fixtures, /Bs\. 000,00/, 'el valor es obviamente ficticio');
 });
 
+test('NINGUNA cabecera se mete bajo la hora y la batería', () => {
+  // La aplicación dibuja de borde a borde —Android lo impone desde Expo 54— y
+  // eso incluye el sitio donde el teléfono pinta la hora, el wifi y la
+  // batería. Sin dejarles su aire, la cabecera se mete debajo y no se ve ni
+  // una cosa ni la otra.
+  //
+  // Esta prueba existe porque el fallo NO SE VE EN EL NAVEGADOR: ahí el inset
+  // vale cero, la pantalla se ve perfecta y el problema sólo aparece en el
+  // teléfono. Sin prueba, vuelve a colarse a la primera pantalla nueva.
+  const cabeceras = [
+    ['preview/pantallasSaldo.tsx', 'la banda amarilla'],
+    ['preview/pantallasC2Secciones.tsx', 'el armazón de las secciones'],
+    ['preview/pantallaInicioPasajera.tsx', 'el saludo del inicio'],
+    ['preview/pantallaConfiguracion.tsx', 'configuración'],
+    ['preview/pantallaSaldoConductor.tsx', 'el saldo del conductor'],
+    ['preview/pantallasC2.tsx', 'lo que flota sobre el mapa'],
+    ['ui/Mapa.tsx', 'los botones del mapa']
+  ];
+
+  for (const [fichero, nombre] of cabeceras) {
+    const fuente = leer(fichero);
+    assert.match(fuente, /useAireDeArriba\(\)/, `${nombre} no pide el aire de arriba`);
+    assert.match(fuente, /\+ arriba/, `${nombre} lo pide y no lo usa`);
+  }
+
+  // Y la medida sale del sistema, no de un número escrito a mano: 24 puntos
+  // sobran en un teléfono y se quedan cortos en otro con isla dinámica.
+  assert.match(leer('ui/seguro.tsx'), /useSafeAreaInsets\(\)\.top/);
+});
+
+test('el historial abre con la banda amarilla, como saldo y perfil', () => {
+  // El dueño cerró el criterio: la banda marca las secciones PRINCIPALES, las
+  // cuatro que se alcanzan desde la barra de abajo. Antes el criterio era
+  // «donde hay un sujeto que presentar» y dejaba fuera al historial por ser una
+  // lista; el nuevo se puede mirar en la barra y saber cuáles la llevan.
+  const secciones = leer('preview/pantallasC2Secciones.tsx');
+  const historial = secciones.slice(secciones.indexOf('export function C2Historial'));
+
+  assert.match(historial.slice(0, 1200), /resumen=\{/, 'el historial no abre con banda');
+  assert.match(secciones, /<CabeceraAmarilla>/, 'el armazón no sabe pintarla');
+
+  // El resumen se CUENTA de la lista: una cifra escrita a mano se queda vieja
+  // en cuanto cambia lo que hay justo debajo.
+  assert.match(historial.slice(0, 1200), /HISTORIAL_DEMO\.length/);
+  assert.match(historial.slice(0, 1200), /filter\(viaje => viaje\.estado === 'Completado'\)/);
+});
+
 test('la barra inferior respeta la franja del sistema', () => {
   const fuente = leer('ui/Navegacion.tsx');
   assert.match(fuente, /useSafeAreaInsets/, 'sin esto los iconos quedan bajo la barra de gestos');

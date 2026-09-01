@@ -21,6 +21,7 @@ import { Icono, type NombreDeIcono } from '../ui/Icono';
 import { Separador } from '../ui/HojaInferior';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useApariencia, useTema } from '../theme/ThemeContext';
+import { useAireDeArriba } from '../ui/seguro';
 import type { Apariencia } from '../theme/horaVenezuela';
 
 const ALTO_DE_LA_BARRA = 76;
@@ -44,11 +45,13 @@ const OPCIONES: readonly {
 export function C2Configuracion() {
   const tema = useTema();
   const { apariencia, esquema, cambiarApariencia } = useApariencia();
+  const arriba = useAireDeArriba();
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <View style={{
-        paddingTop: 18,
+        // Sin este aire, el título se mete bajo la hora y la batería.
+        paddingTop: 18 + arriba,
         paddingBottom: tema.ritmo.entreElementos,
         paddingHorizontal: tema.ritmo.margenPantalla
       }}>

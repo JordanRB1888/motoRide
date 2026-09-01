@@ -63,6 +63,7 @@ import {
   type Beneficiario
 } from '../ui/Trayecto';
 import { useTema } from '../theme/ThemeContext';
+import { useAireDeArriba } from '../ui/seguro';
 import type { TipoDeVehiculo } from '../theme/marca';
 import {
   CONDUCTOR_DEMO,
@@ -533,6 +534,7 @@ export function C2ElegirPuntoPasajera() {
  */
 export function C2ConfirmarViaje() {
   const tema = useTema();
+  const arriba = useAireDeArriba();
   const [vehiculo, setVehiculo] = useState<TipoDeVehiculo>('MOTO');
 
   return (
@@ -544,7 +546,9 @@ export function C2ConfirmarViaje() {
           position: 'absolute',
           left: tema.ritmo.margenPantalla,
           right: tema.ritmo.margenPantalla,
-          top: 16,
+          // Flota sobre el mapa, y el mapa empieza en el borde de la
+          // pantalla: sin el aire del sistema, esta franja tapa la hora.
+          top: 16 + arriba,
           flexDirection: 'row',
           alignItems: 'center',
           gap: 9,
@@ -720,6 +724,7 @@ export function C2BuscandoAuto() {
  */
 export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: boolean }) {
   const tema = useTema();
+  const arriba = useAireDeArriba();
   const [conectado, setConectado] = useState(enLinea);
 
   const mio: VehiculoEnMapa = {
@@ -736,7 +741,7 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
           position: 'absolute',
           left: tema.ritmo.margenPantalla,
           right: tema.ritmo.margenPantalla,
-          top: 18,
+          top: 18 + arriba,
           alignItems: 'flex-start'
         }}>
           <FranjaDeContexto
@@ -815,6 +820,7 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
  */
 export function C2PanelDeJornada() {
   const tema = useTema();
+  const arriba = useAireDeArriba();
 
   const mio: VehiculoEnMapa = {
     clave: 'yo', tipo: 'MOTO', en: { x: 48, y: 26 }, rumbo: 12, destacado: true
@@ -827,7 +833,7 @@ export function C2PanelDeJornada() {
           position: 'absolute',
           left: tema.ritmo.margenPantalla,
           right: tema.ritmo.margenPantalla,
-          top: 18,
+          top: 18 + arriba,
           alignItems: 'flex-start'
         }}>
           <FranjaDeContexto

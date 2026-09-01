@@ -36,6 +36,7 @@ import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
+import { useAireDeArriba } from '../ui/seguro';
 import { useIr } from '../ui/navegar';
 import { ARTE_DE_CAMPANA, ARTE_DE_SERVICIO } from '../theme/marca';
 import {
@@ -87,6 +88,7 @@ type Campana = (typeof CAMPANAS_DEMO)[number];
  * pantalla que más se abre.
  */
 function Cabecera() {
+  const arriba = useAireDeArriba();
   const tema = useTema();
   const ir = useIr();
 
@@ -96,7 +98,8 @@ function Cabecera() {
       alignItems: 'center',
       gap: 12,
       paddingHorizontal: tema.ritmo.margenPantalla,
-      paddingTop: 18,
+      // Sin este aire, el saludo se mete bajo la hora y la batería.
+      paddingTop: 18 + arriba,
       paddingBottom: tema.ritmo.entreElementos
     }}>
       <View style={{

@@ -129,10 +129,11 @@ export function C2DetalleDeViaje({ clave = 'h1' }: { readonly clave?: string }) 
 // ---------------------------------------------------------------------------
 
 /**
- * Lleva la banda amarilla porque hay un SUJETO: este viaje y no otro.
+ * Lleva la banda amarilla, como el historial del que se abre.
  *
- * Es el mismo criterio del saldo y de la ficha de un comercio. En el historial
- * —que es una lista— no la lleva, y por eso aquí significa algo.
+ * Aquí no es por ser sección principal —no lo es, se llega desde dentro— sino
+ * porque hay un sujeto que presentar: este viaje y no otro. Es lo mismo que
+ * hace la ficha de un comercio.
  */
 function Cabecera({ dato, onVolver }: {
   readonly dato: DetalleDeViaje;

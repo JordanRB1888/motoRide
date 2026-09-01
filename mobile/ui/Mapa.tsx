@@ -26,6 +26,7 @@ import { Txt } from './componentes';
 import { Icono } from './Icono';
 import { MarcadorDeVehiculo } from './Marca';
 import { useEsquema, useTema } from '../theme/ThemeContext';
+import { useAireDeArriba } from './seguro';
 import { OPACIDAD_DE_CALLE_POR_ESQUEMA } from '../theme/esquemas';
 import type { TipoDeVehiculo } from '../theme/marca';
 
@@ -226,6 +227,7 @@ export function LienzoDeMapa({
   children
 }: PropiedadesDelLienzo) {
   const tema = useTema();
+  const arriba = useAireDeArriba();
   const origen = hitos.find(hito => hito.tipo === 'origen');
   const destino = hitos.find(hito => hito.tipo === 'destino');
 
@@ -287,7 +289,7 @@ export function LienzoDeMapa({
       {/* El control va por debajo de la cabecera flotante: a 14 puntos se
           solapaba con la pastilla de la tasa, que ocupa la esquina derecha. */}
       {conControles ? (
-        <View style={{ position: 'absolute', right: 14, top: 92, gap: 10 }}>
+        <View style={{ position: 'absolute', right: 14, top: 92 + arriba, gap: 10 }}>
           <BotonDeMapa icono="destino" etiqueta="Centrar en mi ubicación" />
         </View>
       ) : null}
