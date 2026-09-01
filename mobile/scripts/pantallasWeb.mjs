@@ -609,7 +609,7 @@ const botonDeSaldo = (texto, ic, principal = false) => `
  * el contenido, que en un grafico de siete barras se nota.
  */
 const banda = (titulo, detalle, ic, contenido) => `
-  <div style="background:var(--superficie);border-top:1px solid var(--borde);
+  <div style="background:var(--elevada);border-top:1px solid var(--borde);
     border-bottom:1px solid var(--borde);
     padding:var(--pad) var(--margen);display:grid;gap:var(--gap)">
     <div style="display:flex;align-items:flex-start;gap:11px">
@@ -705,10 +705,10 @@ const rotuloPronto = `<span class="etq t3" style="border:1px solid var(--borde);
  * dibujo ensena exactamente lo que hay, y una casilla sin arte cae al icono en
  * los dos sitios por igual.
  */
-const ARTE_EN_DISCO = new Set(
+const ARTE_EN_DISCO = new Map(
   fs.readdirSync(path.join(raizMovil, 'assets/marca'))
-    .filter(nombre => nombre.endsWith('.png'))
-    .map(nombre => nombre.replace(/\.png$/, ''))
+    .filter(nombre => /\.(png|jpg)$/.test(nombre))
+    .map(nombre => [nombre.replace(/\.(png|jpg)$/, ''), nombre])
 );
 
 /**
@@ -764,7 +764,7 @@ const servicio = dato => {
   // las esquinas hechas, y meterlo en un circulo amarillo seria enmarcar lo que
   // ya esta enmarcado.
   const disco = ARTE_EN_DISCO.has(dato.arte)
-    ? `<img src="marca/${dato.arte}.png" width="${lado}" height="${lado}" alt=""
+    ? `<img src="marca/${ARTE_EN_DISCO.get(dato.arte)}" width="${lado}" height="${lado}" alt=""
         style="border-radius:13px;object-fit:cover">`
     : `
     <span style="width:${lado - 8}px;height:${lado - 8}px;
@@ -801,9 +801,9 @@ const servicio = dato => {
  */
 const campana = dato => ARTE_EN_DISCO.has(dato.banner)
   ? `<span style="flex:0 0 300px;border-radius:var(--r-tarjeta);overflow:hidden;
-      border:1px solid var(--borde);display:block;line-height:0">
-      <img src="marca/${dato.banner}.png" width="300" height="169" alt="${dato.titulo}"
-        style="object-fit:cover">
+      display:block;line-height:0">
+      <img src="marca/${ARTE_EN_DISCO.get(dato.banner)}" width="300" height="179"
+        alt="${dato.titulo}" style="object-fit:cover">
     </span>`
   : `
   <span style="flex:0 0 268px;padding:var(--pad);border-radius:var(--r-tarjeta);
@@ -1401,23 +1401,25 @@ export const PANTALLAS = {
             </div>`);
         })()}
 
-        <div style="padding:var(--bloques) var(--margen) 110px">
-          <div class="carrusel" style="margin-right:calc(var(--margen) * -1);
-            padding-right:var(--margen)">
-            ${CATEGORIAS_DEMO.map((nombre, i) => `
-              <span style="flex:0 0 auto;padding:8px 14px;border-radius:999px;
-                background:${i === 0 ? 'var(--elevada)' : 'transparent'};
-                border:1px solid ${i === 0 ? 'var(--acento)' : 'var(--borde)'}">
-                <span class="etq ${i === 0 ? 'ac' : 't3'}">${nombre}</span></span>`).join('')}
+        <div style="padding:0 0 110px;display:grid;gap:var(--gap)">
+          <div style="padding:var(--gap) var(--margen) 0">
+            <div class="carrusel" style="margin-right:calc(var(--margen) * -1);
+              padding-right:var(--margen)">
+              ${CATEGORIAS_DEMO.map((nombre, i) => `
+                <span style="flex:0 0 auto;padding:8px 14px;border-radius:999px;
+                  background:${i === 0 ? 'var(--elevada)' : 'transparent'};
+                  border:1px solid ${i === 0 ? 'var(--acento)' : 'var(--borde)'}">
+                  <span class="etq ${i === 0 ? 'ac' : 't3'}">${nombre}</span></span>`).join('')}
+            </div>
           </div>
 
-          <div style="margin-top:6px">
-            ${ALIADOS_DEMO.map((aliado, i) => `
-              ${i > 0 ? '<span class="sep"></span>' : ''}${aliadoFila(aliado)}`).join('')}
-          </div>
+          ${banda(`${ALIADOS_DEMO.length} comercios`, 'Cerca de tu zona', 'maletin', `
+            <div>
+              ${ALIADOS_DEMO.map((aliado, i) => `
+                ${i > 0 ? '<span class="sep"></span>' : ''}${aliadoFila(aliado)}`).join('')}
+            </div>`)}
 
-          <div style="margin-top:var(--bloques);padding:14px;border-radius:var(--r-campo);
-            background:var(--superficie);display:flex;gap:10px">
+          <div style="padding:14px var(--margen);display:flex;gap:10px">
             ${icono('escudo', 'var(--texto-3)', 17)}
             <span class="pie t3" style="text-align:left">Estos comercios pagan por aparecer
               aquí. +58express no vende sus productos ni gestiona sus pedidos.</span>
@@ -1458,14 +1460,13 @@ export const PANTALLAS = {
             </div>`);
         })()}
 
-        <div style="padding:var(--bloques) var(--margen) 110px;display:grid;gap:var(--bloques)">
-          <span class="cuerpo t2">El comercio atiende por su cuenta. Escríbele para
-            preguntar por lo que ofrece, los precios y cómo pagarle.</span>
+        <div style="padding:0 0 110px;display:grid;gap:var(--gap)">
+          ${banda('Qué ofrece', '', 'maletin', `
+            <span class="cuerpo t2">El comercio atiende por su cuenta. Escríbele para
+              preguntar por lo que ofrece, los precios y cómo pagarle.</span>`)}
 
-          <div style="display:grid;gap:var(--gap)">
-            <span class="etq t2">LO QUE SÍ HACEMOS NOSOTROS</span>
-            <div style="display:flex;align-items:center;gap:13px;padding:14px;
-              border-radius:var(--r-tarjeta);background:var(--superficie)">
+          ${banda('Lo que sí hacemos nosotros', '', 'moto', `
+            <div style="display:flex;align-items:center;gap:13px">
               <span style="width:40px;height:40px;border-radius:50%;flex:0 0 40px;
                 display:grid;place-items:center;
                 background:color-mix(in srgb,var(--acento) 15%,transparent)">
@@ -1476,11 +1477,9 @@ export const PANTALLAS = {
                   compres</span>
               </span>
               ${galonAcento}
-            </div>
-          </div>
+            </div>`)}
 
-          <div style="padding:14px;border-radius:var(--r-campo);background:var(--superficie);
-            display:flex;gap:10px">
+          <div style="padding:14px var(--margen);display:flex;gap:10px">
             ${icono('escudo', 'var(--texto-3)', 17)}
             <span class="pie t3" style="text-align:left">+58express no vende ni entrega los
               productos de este comercio. Cualquier reclamo por el pedido va directo con

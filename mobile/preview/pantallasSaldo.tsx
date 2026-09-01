@@ -203,7 +203,12 @@ function Banda({ titulo, detalle, icono, children }: {
 
   return (
     <View style={{
-      backgroundColor: tema.color.superficie,
+      // `superficieElevada` y no `superficie`: en noche los dos se distinguen
+      // del fondo, pero en día fondo y superficie están a SEIS puntos de
+      // luminancia y las bandas desaparecían. Elevada es blanco puro en día
+      // —que sí destaca sobre el gris del fondo— y un grafito más alto en
+      // noche, donde además define mejor cada sección.
+      backgroundColor: tema.color.superficieElevada,
       borderTopWidth: 1,
       borderBottomWidth: 1,
       borderColor: tema.color.borde,

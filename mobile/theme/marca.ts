@@ -180,7 +180,11 @@ export const ARTE_DE_SERVICIO: Readonly<Partial<Record<string, ImageSourcePropTy
  */
 export const ARTE_DE_CAMPANA: Readonly<Partial<Record<string, ImageSourcePropType>>> =
   Object.freeze({
-    // PENDIENTE: falta `assets/marca/campana-repuestos.png`.
+    // En JPEG y no en PNG: es una fotografía sin transparencia, y en PNG pesaba
+    // 1,8 MB. Recortada a su propio marco —el arte traía un borde amarillo
+    // dentro de un fondo negro, y pintarlo en una tarjeta con borde daba doble
+    // marco— y guardada a 900 de ancho: 88 KB.
+    'campana-repuestos': require('../assets/marca/campana-repuestos.jpg') as ImageSourcePropType
   });
 
 /** Resuelve la imagen de un vehículo. Equivale a `getVehicleAsset` de la web. */
