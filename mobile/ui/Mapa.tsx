@@ -27,6 +27,8 @@ import { Icono } from './Icono';
 import { MarcadorDeVehiculo } from './Marca';
 import { useEsquema, useTema } from '../theme/ThemeContext';
 import { useAireDeArriba } from './seguro';
+import { MapaDeMovilidad } from '../mapa/MapaDeMovilidad';
+import type { ModeloDelMapa } from '../mapa/modelo';
 import { OPACIDAD_DE_CALLE_POR_ESQUEMA } from '../theme/esquemas';
 import type { TipoDeVehiculo } from '../theme/marca';
 
@@ -214,6 +216,20 @@ export interface PropiedadesDelLienzo {
   readonly eligiendoPunto?: boolean;
   /** Controles flotantes sobre el mapa (recentrar, capas). */
   readonly conControles?: boolean;
+  /**
+   * El mapa REAL.
+   *
+   * Con modelo se pinta Google Maps; sin él, el lienzo dibujado de siempre.
+   *
+   * No es un interruptor de conveniencia: el dibujo coloca las cosas en
+   * PORCENTAJES de la pantalla y un mapa de verdad necesita COORDENADAS. El
+   * recorrido de diseño no tiene ninguna —sus vehiculos están en «x: 26 %»— y
+   * seguirá sin tenerlas: es una maqueta, no habla con ningún servidor y no
+   * debe abrir Google.
+   *
+   * La aplicación autenticada sí las tiene, y pasa el modelo.
+   */
+  readonly modelo?: ModeloDelMapa;
   /** Lo que flota encima: hojas, barras, avisos. */
   readonly children?: ReactNode;
 }
@@ -224,6 +240,7 @@ export function LienzoDeMapa({
   conRuta = false,
   eligiendoPunto = false,
   conControles = true,
+  modelo,
   children
 }: PropiedadesDelLienzo) {
   const tema = useTema();
@@ -233,13 +250,21 @@ export function LienzoDeMapa({
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo, overflow: 'hidden' }}>
-      <Calles />
+      {/* El suelo: Google si hay coordenadas, el dibujo si no. Todo lo demás
+          —controles, hoja, barra, retículo— se pinta igual encima de los dos. */}
+      {modelo === undefined ? <Calles /> : (
+        <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}>
+          <MapaDeMovilidad modelo={modelo} />
+        </View>
+      )}
 
-      {conRuta && origen && destino ? <Ruta desde={origen.en} hasta={destino.en} /> : null}
+      {modelo === undefined && conRuta && origen && destino
+        ? <Ruta desde={origen.en} hasta={destino.en} />
+        : null}
 
-      {hitos.map(hito => <Hito key={hito.clave} hito={hito} />)}
+      {modelo === undefined ? hitos.map(hito => <Hito key={hito.clave} hito={hito} />) : null}
 
-      {vehiculos.map(vehiculo => (
+      {(modelo === undefined ? vehiculos : []).map(vehiculo => (
         <View
           key={vehiculo.clave}
           style={{
@@ -259,8 +284,9 @@ export function LienzoDeMapa({
         </View>
       ))}
 
-      {/* Elegir un punto en el mapa. */}
-      {eligiendoPunto ? (
+      {/* Elegir un punto. Con mapa real lo pinta el propio adaptador, que sabe
+          dónde está el centro de verdad. */}
+      {modelo === undefined && eligiendoPunto ? (
         <View pointerEvents="none" style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center' }}>
           <View style={{ position: 'absolute', inset: 0, backgroundColor: tema.color.fondo, opacity: 0.25 }} />
           <View style={{ alignItems: 'center' }}>

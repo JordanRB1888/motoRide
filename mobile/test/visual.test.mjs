@@ -392,16 +392,17 @@ test('la pantalla de acceso REAL conserva su lógica', () => {
   assert.equal(/preview\/fixtures/.test(acceso), false);
 });
 
-test('no se eligió proveedor de mapas', () => {
-  // Google Navigation SDK frente a Mapbox sigue sin decidirse.
-  const paquete = JSON.parse(leer('package.json'));
-  const todas = Object.keys({ ...paquete.dependencies, ...paquete.devDependencies });
-  for (const nombre of todas) {
-    assert.equal(/mapbox|react-native-maps|google-maps/i.test(nombre), false,
-      `proveedor de mapas instalado: ${nombre}`);
-  }
-  // Y el mapa de la preview es una superficie sustituible, no un proveedor.
+test('el mapa del recorrido de diseño sigue siendo una superficie sustituible', () => {
+  // Lo que esta prueba protegía —que nadie eligiera proveedor a escondidas— ya
+  // no aplica: el dueño eligió Google. Lo que sigue importándo es que el
+  // recorrido de diseño NO dependa de él: es una maqueta, no habla con ningún
+  // servidor y no debe abrir Google ni pedir una clave para poder mirarse.
   assert.match(leer('ui/componentes.tsx'), /MapaSimulado/);
+
+  // El lienzo pinta Google sólo cuando alguien le pasa un modelo con
+  // coordenadas, y el recorrido no tiene ninguna: sus vehículos están en
+  // porcentajes de pantalla.
+  assert.match(leer('ui/Mapa.tsx'), /modelo === undefined \? <Calles \/>/);
 });
 
 // ---------------------------------------------------------------------------

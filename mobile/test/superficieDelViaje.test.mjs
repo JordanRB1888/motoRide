@@ -277,12 +277,18 @@ test('sigue sin emitirse nada de negocio', () => {
   }
 });
 
-test('el mapa sigue siendo el dibujo, sin nada nativo', () => {
+test('no entra un segundo proveedor de mapas', () => {
   const dependencias = Object.keys(JSON.parse(leer('package.json')).dependencies ?? {});
-  for (const prohibida of ['react-native-maps', 'expo-maps', 'expo-location']) {
+  // `react-native-maps` sale de la lista en MAP-INTEGRATION-1: el dueño
+  // eligió Google y lo autorizó. El resto sigue prohibido.
+  for (const prohibida of [
+    'expo-location', 'expo-maps', '@react-native-community/netinfo',
+    'expo-notifications', 'expo-image-picker'
+  ]) {
     assert.equal(dependencias.includes(prohibida), false, `se instaló ${prohibida}`);
   }
-  // La pantalla sigue usando el lienzo dibujado.
+  // La pantalla sigue usando el MISMO lienzo: lo que cambió es lo que él
+  // pinta debajo, no la pantalla.
   assert.match(leer('preview/pantallasC2.tsx'), /<LienzoDeMapa/);
 });
 

@@ -342,9 +342,11 @@ test('sigue sin emitirse nada de negocio', () => {
 
 test('esta fase tampoco instala nada nativo', () => {
   const dependencias = Object.keys(JSON.parse(leer('package.json')).dependencies ?? {});
+  // `react-native-maps` sale de la lista en MAP-INTEGRATION-1: el dueño
+  // eligió Google y lo autorizó. El resto sigue prohibido.
   for (const prohibida of [
-    'react-native-maps', 'expo-maps', 'expo-location',
-    '@react-native-community/netinfo', 'expo-notifications'
+    'expo-location', 'expo-maps', '@react-native-community/netinfo',
+    'expo-notifications', 'expo-image-picker'
   ]) {
     assert.equal(dependencias.includes(prohibida), false, `se instaló ${prohibida}`);
   }

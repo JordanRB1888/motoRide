@@ -67,8 +67,10 @@ test('socket.io-client NO es una dependencia nativa', () => {
 
 test('esta fase NO instala nada nativo', () => {
   const dependencias = Object.keys(JSON.parse(leer('package.json')).dependencies ?? {});
+  // `react-native-maps` sale de la lista en MAP-INTEGRATION-1: el dueño
+  // eligió Google y lo autorizó. El resto sigue prohibido.
   for (const prohibida of [
-    'expo-location', 'react-native-maps', '@react-native-community/netinfo',
+    'expo-location', 'expo-maps', '@react-native-community/netinfo',
     'expo-notifications', 'expo-image-picker'
   ]) {
     assert.equal(dependencias.includes(prohibida), false, `se instaló ${prohibida}`);

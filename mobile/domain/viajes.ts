@@ -24,6 +24,7 @@
  */
 
 import { TRIP_STATUSES, TRIP_STATUS_ALIASES, type TripStatus } from '../../shared/contracts/domain';
+import { leerCoordenada, type Coordenada } from '../mapa/modelo';
 
 const texto = (valor: unknown): string => (typeof valor === 'string' ? valor : '');
 const numero = (valor: unknown): number | null =>
@@ -138,6 +139,16 @@ export interface DetalleReal {
   readonly cuando: string;
   readonly origen: string;
   readonly destino: string;
+  /**
+   * Dónde caen el origen y el destino, o `null`.
+   *
+   * `tripLocation` los guarda con `lat` y `lng` cuando quien pidió el viaje los
+   * aportó. Pueden faltar —un viaje escrito a mano no los tiene— y entonces el
+   * mapa se queda sin ese marcador. NO se geocodifica la dirección desde el
+   * teléfono para rellenarlos: eso sería inventar una posición.
+   */
+  readonly origenEn: Coordenada | null;
+  readonly destinoEn: Coordenada | null;
   /** Quién iba al volante, o `null` si el viaje se cerró sin conductor. */
   readonly conductor: ParticipanteDeViaje | null;
   /** Para la vista del conductor: a quién llevó. */
@@ -232,6 +243,8 @@ export function leerDetalle(cuerpo: unknown): DetalleReal | null {
     cuando: texto(dato.createdAt),
     origen: direccion(dato.pickup),
     destino: direccion(dato.destination),
+    origenEn: leerCoordenada(dato.pickup),
+    destinoEn: leerCoordenada(dato.destination),
     conductor: leerConductor(fuenteDelConductor, texto(dato.rideType)),
     pasajero: leerNombre(sobre.passenger) || texto(dato.passengerName),
     importe: numero(dato.fareUSD),

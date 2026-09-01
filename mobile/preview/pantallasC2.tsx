@@ -39,6 +39,7 @@ import { Boton, Insignia, Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { Arranque } from '../ui/Arranque';
 import { LienzoDeMapa, type HitoEnMapa, type VehiculoEnMapa } from '../ui/Mapa';
+import type { ModeloDelMapa } from '../mapa/modelo';
 import { HojaInferior, Separador } from '../ui/HojaInferior';
 import {
   BarraDeNavegacion,
@@ -117,48 +118,6 @@ const SOBRE_EL_MAPA = {
 const ORIGEN_DEMO = 'Maracaibo · punto de ejemplo';
 const DESTINO_DEMO = DESTINOS_RECIENTES_DEMO[0]?.titulo ?? 'Destino de ejemplo';
 
-/**
- * La fila de un lugar: un icono, un nombre y un detalle.
- *
- * Deliberadamente NO es una tarjeta. Tres destinos recientes como tres
- * rectángulos son tres bloques compitiendo; como tres filas con un separador,
- * son una lista, que es lo que son.
- */
-function FilaDeLugar({ titulo, detalle, icono = 'destino', onPress }: {
-  readonly titulo: string;
-  readonly detalle: string;
-  readonly icono?: 'destino' | 'inicio' | 'reloj';
-  readonly onPress?: () => void;
-}) {
-  const tema = useTema();
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${titulo}. ${detalle}`}
-      style={({ pressed }) => ({
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 13,
-        paddingVertical: 11,
-        opacity: pressed ? 0.65 : 1
-      })}
-    >
-      <View style={{
-        width: 34, height: 34, borderRadius: 17,
-        alignItems: 'center', justifyContent: 'center',
-        backgroundColor: tema.color.superficieElevada
-      }}>
-        <Icono nombre={icono} color={tema.color.textoSecundario} tamano={17} />
-      </View>
-      <View style={{ flex: 1, gap: 1 }}>
-        <Txt nivel="cuerpo">{titulo}</Txt>
-        <Txt nivel="pie" tono="tenue">{detalle}</Txt>
-      </View>
-    </Pressable>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // 1 · Arranque
@@ -404,6 +363,8 @@ export function C2Acceso() {
  */
 export function C2PedirViaje() {
   const tema = useTema();
+  // Cuál está elegido. La moto por defecto: es lo que la gente pide.
+  const [vehiculo, setVehiculo] = useState<TipoDeVehiculo>('MOTO');
   const [beneficiario, setBeneficiario] = useState<Beneficiario>('mi');
 
   return (
@@ -430,25 +391,30 @@ export function C2PedirViaje() {
           <View style={{ height: tema.ritmo.entreElementos }} />
           <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
 
-          {/* Lo último a donde fuiste, aquí mismo. Es lo que se busca al abrir
-              esto: la mayoría de los viajes repiten sitio, y obligarlos a
-              escribir la dirección otra vez es trabajo inventado.
+          {/* ELEGIR EL VEHÍCULO, AQUÍ MISMO
+              Este sitio lo ocupaban los destinos recientes. El dueño pidió
+              cambiarlos por la elección de moto o carro, y tiene sentido: a
+              dónde vas ya se pregunta arriba, y en qué quieres ir es la otra
+              mitad de la decisión. Verlo antes de «Ver opciones» evita entrar
+              a la pantalla siguiente sólo para descubrir que hay carro.
 
-              Con su rótulo y sin separador suelto: un rótulo dice QUÉ es lo que
-              viene, y una raya sola sólo dice que algo cambia. */}
+              Son las MISMAS tarjetas que la pantalla de confirmar: no se
+              estrena una forma nueva de enseñar lo mismo. */}
           <View style={{ height: tema.ritmo.entreBloques }} />
-          <Txt nivel="etiqueta" tono="secundario">RECIENTES</Txt>
-          <View style={{ paddingTop: 4 }}>
-            {DESTINOS_RECIENTES_DEMO.slice(0, 2).map((destino, indice) => (
-              <View key={destino.clave}>
-                {indice > 0 ? <Separador /> : null}
-                <FilaDeLugar
-                  titulo={destino.titulo}
-                  detalle={destino.detalle}
-                  icono="reloj"
-                />
-              </View>
-            ))}
+          <Txt nivel="etiqueta" tono="secundario">CÓMO QUIERES IR</Txt>
+          <View style={{ paddingTop: 4, gap: 8 }}>
+            <FilaDeVehiculo
+              tipo="MOTO"
+              minutos={4}
+              activa={vehiculo === 'MOTO'}
+              onPress={() => setVehiculo('MOTO')}
+            />
+            <FilaDeVehiculo
+              tipo="AUTO"
+              minutos={7}
+              activa={vehiculo === 'AUTO'}
+              onPress={() => setVehiculo('AUTO')}
+            />
           </View>
 
           <View style={{ height: tema.ritmo.entreBloques }} />
@@ -673,16 +639,17 @@ function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
  * El mapa se atenúa para que el pulso mande, y la hoja se queda en lo mínimo:
  * qué se busca y cómo salir.
  */
-export function C2BuscandoVehiculo({ tipo = 'MOTO', onCancelar }: {
+export function C2BuscandoVehiculo({ tipo = 'MOTO', onCancelar, mapa }: {
   readonly tipo?: TipoDeVehiculo;
   /** Sin manejador el botón no hace nada, como en el recorrido de diseño. */
   readonly onCancelar?: () => void;
+  readonly mapa?: ModeloDelMapa;
 }) {
   const tema = useTema();
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
-      <LienzoDeMapa vehiculos={MOTOS_CERCA.slice(0, 3)} conControles={false}>
+      <LienzoDeMapa vehiculos={MOTOS_CERCA.slice(0, 3)} conControles={false} modelo={mapa}>
         {/* Atenuar el mapa: mientras se busca no hay nada que consultar ahí, y
             el contraste que sobra le quita fuerza al pulso. */}
         <View
@@ -927,7 +894,11 @@ const VIAJE_EN_BLANCO: DatosDelViajeEnCurso = {
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
 
-export function C2Viaje({ datos }: { readonly datos?: DatosDelViajeEnCurso } = {}) {
+export function C2Viaje({ datos, mapa }: {
+  readonly datos?: DatosDelViajeEnCurso;
+  /** Con modelo se pinta Google; sin él, el lienzo dibujado del recorrido. */
+  readonly mapa?: ModeloDelMapa;
+} = {}) {
   const tema = useTema();
   const viaje = datos ?? (EN_DESARROLLO ? VIAJE_DE_EJEMPLO : VIAJE_EN_BLANCO);
 
@@ -937,7 +908,12 @@ export function C2Viaje({ datos }: { readonly datos?: DatosDelViajeEnCurso } = {
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
-      <LienzoDeMapa vehiculos={[conductorEnRuta]} hitos={HITOS_DE_VIAJE} conRuta>
+      <LienzoDeMapa
+        vehiculos={[conductorEnRuta]}
+        hitos={HITOS_DE_VIAJE}
+        conRuta
+        modelo={mapa}
+      >
         {/* La hoja se ajusta a lo que ocupa.
             Estaba en «media» con cada bloque separado por dieciséis puntos, y en
             un viaje se mira UNA cosa —cuánto falta— y de refilón quién viene.

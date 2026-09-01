@@ -27,6 +27,7 @@ import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { useViajeActivo } from '../realtime/ViajeActivo';
+import { mapaDelViaje } from '../domain/mapaDelViaje';
 import {
   datosDelViaje,
   tipoQueSeBusca,
@@ -57,13 +58,17 @@ export default function PantallaDelViajeActivo() {
     return <Centro><ActivityIndicator color={tema.color.acento} size="large" /></Centro>;
   }
 
+  // El mapa REAL, con las coordenadas que traiga el viaje. Sin conductor
+  // todavía: su posición no viaja en `/api/trips/active/me`.
+  const mapa = mapaDelViaje(viaje);
+
   if (viaje.estado === 'SEARCHING') {
     return (
       <ProveedorDeNavegacion ir={irA}>
         {/* Cancelar todavía no está conectado: emitir `rideCancelled` es
             despacho, y esta fase sólo consume estado. Sin manejador, el botón
             se queda como en el recorrido de diseño. */}
-        <C2BuscandoVehiculo tipo={tipoQueSeBusca(viaje)} />
+        <C2BuscandoVehiculo tipo={tipoQueSeBusca(viaje)} mapa={mapa} />
       </ProveedorDeNavegacion>
     );
   }
@@ -77,7 +82,7 @@ export default function PantallaDelViajeActivo() {
 
   return (
     <ProveedorDeNavegacion ir={irA}>
-      <C2Viaje datos={datos} />
+      <C2Viaje datos={datos} mapa={mapa} />
     </ProveedorDeNavegacion>
   );
 }
