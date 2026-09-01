@@ -11,9 +11,11 @@
     "expo-secure-store": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "~4.26.0"
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "^0.21.2"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
@@ -26,6 +28,7 @@
     "typecheck": "tsc --noEmit",
     "revisar": "node --watch --watch-path=theme --watch-path=preview --watch-path=scripts --watch-path=ui --import ./test/resolver.mjs scripts/servidorDeRevision.mjs",
     "test": "node --import ./test/resolver.mjs --test test/*.test.mjs",
-    "bundle:check": "expo export --platform android --output-dir .expo-bundle-check"
+    "bundle:check": "expo export --platform android --output-dir .expo-bundle-check",
+    "navegar": "expo start --web"
   }
 }

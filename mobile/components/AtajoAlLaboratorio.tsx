@@ -35,17 +35,45 @@ export function AtajoAlLaboratorio() {
   if (!EN_DESARROLLO) return null;
 
   return (
+    <>
+      {/* El recorrido va PRIMERO: es la forma de mirar el diseño desde que la
+          aplicación se puede recorrer de verdad. El laboratorio se queda debajo
+          como herramienta —enseña las pantallas sueltas, sin navegación, que
+          sigue siendo cómodo para comparar dos estados de la misma—. */}
+      <Puerta
+        a="/diseno"
+        titulo="Recorrer la aplicación"
+        nota="Navegación real con datos de ejemplo · sólo en desarrollo"
+        testID="atajo-diseno"
+      />
+      <Puerta
+        a="/preview"
+        titulo="Laboratorio visual"
+        nota="Las pantallas sueltas, sin navegación · sólo en desarrollo"
+        testID="atajo-laboratorio"
+      />
+    </>
+  );
+}
+
+function Puerta({ a, titulo, nota, testID }: {
+  readonly a: string;
+  readonly titulo: string;
+  readonly nota: string;
+  readonly testID: string;
+}) {
+  return (
     <Pressable
-      onPress={() => { router.push('/preview'); }}
+      onPress={() => { router.push(a as never); }}
       accessibilityRole="button"
-      accessibilityLabel="Abrir el laboratorio visual. Sólo disponible en desarrollo"
-      testID="atajo-laboratorio"
+      accessibilityLabel={`${titulo}. Sólo disponible en desarrollo`}
+      testID={testID}
       style={({ pressed }) => [estilos.atajo, pressed && estilos.pulsado]}
     >
       <View style={estilos.punto} />
       <View style={estilos.textos}>
-        <Text style={estilos.titulo}>Laboratorio visual</Text>
-        <Text style={estilos.nota}>Ver las pantallas del diseño · sólo en desarrollo</Text>
+        <Text style={estilos.titulo}>{titulo}</Text>
+        <Text style={estilos.nota}>{nota}</Text>
       </View>
     </Pressable>
   );

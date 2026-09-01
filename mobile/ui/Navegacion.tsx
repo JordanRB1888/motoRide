@@ -48,6 +48,7 @@ import { Icono, type NombreDeIcono } from './Icono';
 import { Txt } from './componentes';
 import { VEHICULOS } from '../theme/marca';
 import { useTema } from '../theme/ThemeContext';
+import { useIr } from './navegar';
 
 /** Lee la preferencia de movimiento reducido del sistema y se mantiene al día. */
 function useMovimientoReducido(): boolean {
@@ -270,6 +271,13 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
 }) {
   const tema = useTema();
   const inferior = useSafeAreaInsets().bottom;
+  const ir = useIr();
+
+  // `onSeleccionar` manda si viene; si no, se navega al destino por su clave.
+  // Asi la barra funciona igual montada dentro del router y suelta en el
+  // laboratorio, sin que ninguna pantalla tenga que enterarse.
+  const alTocar = onSeleccionar ?? ((clave: string) => ir(clave));
+
   const mitad = Math.ceil(destinos.length / 2);
   const izquierda = control ? destinos.slice(0, mitad) : destinos;
   const derecha = control ? destinos.slice(mitad) : [];
@@ -295,7 +303,7 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
       <Grupo
         destinos={izquierda}
         activo={activo}
-        onSeleccionar={onSeleccionar}
+        alTocar={alTocar}
       />
 
       {control ? <View style={{ width: 76, alignItems: 'center' }}>{control}</View> : null}
@@ -304,7 +312,7 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
         <Grupo
           destinos={derecha}
           activo={activo}
-          onSeleccionar={onSeleccionar}
+          alTocar={alTocar}
         />
       ) : null}
     </View>
@@ -312,10 +320,10 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
 }
 
 /** Una mitad de la barra. Los dos lados reparten su ancho por igual. */
-function Grupo({ destinos, activo, onSeleccionar }: {
+function Grupo({ destinos, activo, alTocar }: {
   readonly destinos: readonly DestinoDeNavegacion[];
   readonly activo: string;
-  readonly onSeleccionar?: (clave: string) => void;
+  readonly alTocar: (clave: string) => void;
 }) {
   return (
     <View style={{ flexDirection: 'row', flex: 1 }}>
@@ -324,7 +332,7 @@ function Grupo({ destinos, activo, onSeleccionar }: {
           key={destino.clave}
           destino={destino}
           activo={destino.clave === activo}
-          onPress={() => onSeleccionar?.(destino.clave)}
+          onPress={() => alTocar(destino.clave)}
         />
       ))}
     </View>

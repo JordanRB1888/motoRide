@@ -354,7 +354,13 @@ export function CampoDeDestino({ onPress }: { readonly onPress?: () => void }) {
         paddingHorizontal: 15,
         height: 52,
         borderRadius: tema.radio.campo,
-        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida
+        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida,
+        // El borde no es decoracion: en modo noche `superficieHundida` vale lo
+        // mismo que `fondo` —#0b0a09 los dos— y el campo desaparecia al montarlo
+        // sobre el fondo, que es donde vive en el inicio nuevo. Dentro de una
+        // hoja no se notaba. El borde lo hace visible se monte donde se monte.
+        borderWidth: 1,
+        borderColor: tema.color.borde
       })}
     >
       <Icono nombre="destino" color={tema.color.acento} tamano={19} />

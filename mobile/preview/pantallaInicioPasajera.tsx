@@ -36,6 +36,7 @@ import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
+import { useIr } from '../ui/navegar';
 import { ARTE_DE_CAMPANA, ARTE_DE_SERVICIO } from '../theme/marca';
 import {
   AVISOS_DEMO,
@@ -87,6 +88,7 @@ type Campana = (typeof CAMPANAS_DEMO)[number];
  */
 function Cabecera() {
   const tema = useTema();
+  const ir = useIr();
 
   return (
     <View style={{
@@ -116,6 +118,7 @@ function Cabecera() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${TASA_DEMO.etiqueta}, ${TASA_DEMO.valor}`}
+        onPress={() => ir('saldo')}
         style={{ alignItems: 'flex-end', gap: 1 }}
       >
         <Txt nivel="pie" tono="tenue">{TASA_DEMO.etiqueta}</Txt>
@@ -125,7 +128,10 @@ function Cabecera() {
       {/* El componente compartido, no un dibujo repetido: el punto de «sin
           leer» sale de los avisos de verdad, y redibujarlo aquí dejaría un
           punto encendido para siempre. */}
-      <Campana sinLeer={AVISOS_DEMO.filter(aviso => aviso.sinLeer).length} />
+      <Campana
+        sinLeer={AVISOS_DEMO.filter(aviso => aviso.sinLeer).length}
+        onPress={() => ir('avisos')}
+      />
     </View>
   );
 }
@@ -232,11 +238,13 @@ function Voluta({ retraso, tamano, opacidad, color }: {
  */
 function CasillaAncha({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
+  const ir = useIr();
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={dato.titulo}
+      onPress={() => ir('servicio', { servicio: dato.clave })}
       style={{
         width: '100%',
         minHeight: 96,
@@ -282,6 +290,7 @@ function CasillaAncha({ dato }: { readonly dato: Servicio }) {
  */
 function Casilla({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
+  const ir = useIr();
   const arte = ARTE_DE_SERVICIO[dato.arte];
 
   // 68 y no 46. Estas ilustraciones están dibujadas como iconos de aplicación
@@ -332,7 +341,10 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
       accessibilityRole="button"
       accessibilityState={{ disabled: !dato.listo }}
       accessibilityLabel={dato.listo ? dato.titulo : `${dato.titulo}. Pronto`}
-      disabled={!dato.listo}
+      // Las que no están listas TAMBIÉN navegan, a una pantalla que explica qué
+      // falta. Antes estaban bloqueadas: la casilla decía PRONTO y aun así
+      // invitaba a tocarla, y quien la tocaba no sabía si había fallado algo.
+      onPress={() => ir('servicio', { servicio: dato.clave })}
       style={{
         width: '48.5%',
         alignItems: 'center',
@@ -347,14 +359,18 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
         overflow: 'hidden'
       }}
     >
+      {emblema}
+      {texto}
+
+      {/* DESPUES del arte, no antes.
+          El rotulo va en la esquina y la ilustracion esta centrada: se solapan.
+          Pintado antes, la imagen le comia la mitad izquierda y se leia
+          «ONTO». No cambia de sitio; cambia quien queda arriba. */}
       {dato.listo ? null : (
         <View style={{ position: 'absolute', top: 10, right: 10 }}>
           <RotuloPronto />
         </View>
       )}
-
-      {emblema}
-      {texto}
     </Pressable>
   );
 }
@@ -429,6 +445,7 @@ function TarjetaDeCampana({ dato }: { readonly dato: Campana }) {
 
 export function C2InicioPasajera() {
   const tema = useTema();
+  const ir = useIr();
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
@@ -436,7 +453,7 @@ export function C2InicioPasajera() {
         <Cabecera />
 
         <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
-          <CampoDeDestino />
+          <CampoDeDestino onPress={() => ir('pedir')} />
           <View style={{ height: tema.ritmo.entreElementos }} />
           <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
 
@@ -470,7 +487,10 @@ export function C2InicioPasajera() {
             </ScrollView>
           </View>
 
-          <AdelantoDeAliados />
+          <AdelantoDeAliados
+            onVerTodos={() => ir('comercios')}
+            onAbrir={() => ir('comercio')}
+          />
         </View>
       </ScrollView>
 

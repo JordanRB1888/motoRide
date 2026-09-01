@@ -83,17 +83,29 @@ test('los servicios que no existen lo dicen', () => {
   );
 });
 
-test('los servicios que no existen tampoco se pueden pulsar', () => {
-  // El rótulo sin el bloqueo sería peor que nada: dice «pronto» y aun así te
-  // deja tocarlo para no llevarte a ningún sitio.
+test('los servicios que no existen llevan a una pantalla que lo explica', () => {
+  // ANTES estaban bloqueadas, y era peor: la casilla decía PRONTO y aun así
+  // invitaba a tocarla, y quien la tocaba no sabía si había fallado algo.
+  //
+  // Ahora navegan a «pronto», que dice qué falta y ofrece lo único que sí
+  // existe. Se siguen anunciando como no disponibles para quien navega
+  // escuchando: eso no cambia.
+  const inicio = leer(INICIO);
+  assert.ok(inicio.includes("ir('servicio'"), 'las casillas no navegan');
   assert.ok(
-    leer(INICIO).includes('disabled={!dato.listo}'),
-    'las casillas pendientes siguen siendo pulsables'
+    inicio.includes('accessibilityState={{ disabled: !dato.listo }}'),
+    'las casillas pendientes no se anuncian como no disponibles'
   );
-  assert.ok(
-    leer(INICIO).includes('accessibilityState={{ disabled: !dato.listo }}'),
-    'las casillas pendientes no se anuncian como desactivadas'
-  );
+
+  // Y el destino existe de verdad, con su pantalla.
+  const rutas = leer('navegacion/rutas.ts');
+  for (const dato of SERVICIOS_DE_INICIO.filter(uno => !uno.listo)) {
+    assert.match(
+      rutas,
+      new RegExp(`${dato.clave}: 'pronto'`),
+      `«${dato.titulo}» no lleva a la pantalla de pronto`
+    );
+  }
 });
 
 test('los servicios listos son los que la aplicación hace de verdad', () => {

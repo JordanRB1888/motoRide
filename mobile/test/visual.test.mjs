@@ -194,8 +194,13 @@ test('el laboratorio es alcanzable desde la aplicacion', () => {
   for (const pantalla of ['app/rol.tsx', 'app/acceso.tsx']) {
     assert.match(leer(pantalla), /<AtajoAlLaboratorio \/>/, `${pantalla} no enlaza el laboratorio`);
   }
+  // Dos puertas: el recorrido de la aplicacion navegable y el laboratorio de
+  // pantallas sueltas. La primera es la forma normal de mirar el diseno desde
+  // que la aplicacion se puede recorrer; la segunda sigue siendo comoda para
+  // comparar dos estados de la misma pantalla.
   const atajo = leer('components/AtajoAlLaboratorio.tsx');
-  assert.match(atajo, /router\.push\('\/preview'\)/, 'lleva a la ruta del laboratorio');
+  assert.match(atajo, /a="\/diseno"/, 'no enlaza el recorrido de la aplicacion');
+  assert.match(atajo, /a="\/preview"/, 'no enlaza el laboratorio');
 });
 
 test('se puede SALIR del laboratorio', () => {
@@ -240,13 +245,62 @@ test('los datos de demostración NO llegan a la aplicación real', () => {
       const completa = path.join(ruta, String(nombre));
       if (!fs.statSync(completa).isFile() || !/\.(ts|tsx)$/.test(completa)) continue;
       const relativa = path.relative(raizMovil, completa).replace(/\\/g, '/');
-      // La ruta del laboratorio SÍ puede importarlos: es su único consumidor.
+      // El laboratorio y el recorrido de diseño SÍ pueden importarlos: son sus
+      // únicos consumidores, los dos se apagan en release y ninguno llama a
+      // ninguna API. Las rutas REALES siguen sin poder tocarlos, que es de lo
+      // que trata esta prueba.
       if (relativa === 'app/preview.tsx') continue;
+      if (relativa.startsWith('app/diseno/')) continue;
       assert.equal(
         /from ['"][^'"]*preview\/fixtures/.test(fs.readFileSync(completa, 'utf8')), false,
         `${relativa} importa datos de demostración`
       );
     }
+  }
+});
+
+test('el recorrido de diseño está CERRADO en release', () => {
+  // Es la condición que hace aceptable la excepción de arriba. Un recorrido
+  // que enseña saldos, viajes y comercios de ejemplo no puede quedar
+  // alcanzable en una aplicación publicada: quien llegue por un enlace no
+  // tiene forma de saber que lo que ve es mentira.
+  const layout = leer('app/diseno/_layout.tsx');
+  assert.match(layout, /__DEV__/, 'el recorrido no comprueba que esté en desarrollo');
+  assert.match(layout, /Redirect href="\/"/, 'en release no redirige fuera');
+});
+
+test('el recorrido de diseño no llama a NINGUNA API', () => {
+  // Por la misma razón que el laboratorio: se abre sin servidor, y si llamara
+  // a algo lo haría contra la base que tuviera configurada quien lo abriera.
+  const carpeta = path.join(raizMovil, 'app/diseno');
+  for (const nombre of fs.readdirSync(carpeta, { recursive: true })) {
+    const completa = path.join(carpeta, String(nombre));
+    if (!fs.statSync(completa).isFile() || !/\.(ts|tsx)$/.test(completa)) continue;
+    const codigo = despojarComentarios(fs.readFileSync(completa, 'utf8'));
+    for (const prohibido of ['fetch(', 'XMLHttpRequest', 'services/', 'SecureStore']) {
+      assert.ok(
+        !codigo.includes(prohibido),
+        `app/diseno/${nombre} usa ${prohibido}`
+      );
+    }
+  }
+});
+
+test('cada destino de la barra tiene una ruta a la que ir', () => {
+  // Una pestaña que no lleva a ninguna parte se toca una vez y no se vuelve a
+  // tocar. Esto comprueba que las cuatro de cada rol estén mapeadas.
+  const rutas = leer('navegacion/rutas.ts');
+  const navegacion = leer('ui/Navegacion.tsx');
+
+  const claves = [...navegacion.matchAll(/clave: '([a-z-]+)'/g)].map(coincidencia => coincidencia[1]);
+  assert.ok(claves.length >= 8, `sólo se encontraron ${claves.length} destinos`);
+
+  for (const clave of claves) {
+    // El mapa nombra los del conductor con prefijo para no chocar con los de
+    // la pasajera: «historial» es de ella, «conductor-saldo» es de él.
+    const mapeada = rutas.includes(`${clave}:`) || rutas.includes(`'${clave}'`)
+      || rutas.includes(`conductor-${clave}`) || clave === 'mapa';
+    assert.ok(mapeada, `el destino «${clave}» no tiene ruta`);
   }
 });
 
