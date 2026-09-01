@@ -133,6 +133,33 @@ export const ENCUADRE_DE_LA_PASAJERA = Object.freeze({ x: 135 / 320, y: 118 / 32
  */
 export const ACERCAMIENTO_DE_LA_PASAJERA = 1.85;
 
+/**
+ * El arte de las casillas del inicio.
+ *
+ * Son las ilustraciones que encargó el dueño: mismo lenguaje que los avatares
+ * de rol —render 3D, grafito y amarillo, sobre fondo oscuro y en formato
+ * cuadrado—. Cada una dice de qué va su casilla mejor de lo que puede decirlo
+ * ninguno de los doce glifos que tenemos.
+ *
+ * EL REGISTRO ES PARCIAL A PROPÓSITO
+ *
+ * Una casilla sin arte no se rompe: cae al icono de siempre. Así el arte puede
+ * ir llegando por partes sin dejar la pantalla a medias, y el día que se
+ * sustituya una ilustración sólo cambia esta línea.
+ *
+ * Las rutas van literales dentro de `require` porque Metro las resuelve en
+ * tiempo de compilación: una ruta construida con variables no la puede seguir.
+ *
+ * PENDIENTE: faltan los seis ficheros en `assets/marca/`. En cuanto estén, se
+ * añade aquí su `require` y aparecen solos.
+ */
+export const ARTE_DE_SERVICIO: Readonly<Partial<Record<string, ImageSourcePropType>>> =
+  Object.freeze({
+    // Viajes usa la moto de marca, que ya la tenemos: es la misma toma en tres
+    // cuartos del selector de servicio.
+    viajes: VEHICULOS.MOTO.tarjeta
+  });
+
 /** Resuelve la imagen de un vehículo. Equivale a `getVehicleAsset` de la web. */
 export function imagenDeVehiculo(
   tipo: TipoDeVehiculo,

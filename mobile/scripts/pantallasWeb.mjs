@@ -671,13 +671,35 @@ const rotuloPronto = `<span class="etq t3" style="border:1px solid var(--borde);
  * rejilla completa dice a donde va +58express, y esconder la mitad la dejaria
  * coja. Pero tampoco se disfrazan de disponibles.
  */
+/**
+ * Que ilustraciones estan de verdad en disco.
+ *
+ * Aqui SI se puede mirar la carpeta, cosa que en el telefono no: alli Metro
+ * resuelve los `require` al compilar y hay que nombrarlos uno a uno. Asi el
+ * dibujo ensena exactamente lo que hay, y una casilla sin arte cae al icono en
+ * los dos sitios por igual.
+ */
+const ARTE_EN_DISCO = new Set(
+  fs.readdirSync(path.join(raizMovil, 'assets/marca'))
+    .filter(nombre => nombre.endsWith('.png'))
+    .map(nombre => nombre.replace(/\.png$/, ''))
+);
+
 const servicio = dato => {
   // Ancha: el icono al lado del texto, que hay sitio de sobra.
   // Estrecha: el icono ENCIMA. En media columna, ponerlo al lado deja al titulo
   // unos noventa puntos y «Transporte Seguro» se queda en «Transporte...».
-  const disco = `
-    <span style="width:${dato.ancho ? 46 : 38}px;height:${dato.ancho ? 46 : 38}px;
-      flex:0 0 ${dato.ancho ? 46 : 38}px;border-radius:50%;display:grid;place-items:center;
+  const lado = dato.ancho ? 54 : 46;
+
+  // Con ilustracion no hay disco detras: el arte ya viene sobre grafito y con
+  // las esquinas hechas, y meterlo en un circulo amarillo seria enmarcar lo que
+  // ya esta enmarcado.
+  const disco = ARTE_EN_DISCO.has(dato.arte)
+    ? `<img src="marca/${dato.arte}.png" width="${lado}" height="${lado}" alt=""
+        style="flex:0 0 ${lado}px;border-radius:13px;object-fit:cover">`
+    : `
+    <span style="width:${lado - 8}px;height:${lado - 8}px;
+      flex:0 0 ${lado - 8}px;border-radius:50%;display:grid;place-items:center;
       background:${dato.listo
         ? 'color-mix(in srgb,var(--acento) 15%,transparent)'
         : 'var(--hundida)'}">

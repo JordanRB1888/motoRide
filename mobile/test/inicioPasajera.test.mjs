@@ -148,6 +148,36 @@ test('la rejilla sale del mismo sitio en los dos', () => {
   }
 });
 
+test('una casilla sin ilustración NO se rompe', () => {
+  // El arte llega por partes. Mientras falta el de una casilla, esa cae al
+  // icono de siempre; lo que no puede pasar es que quede un hueco.
+  const inicio = leer(INICIO);
+  assert.ok(
+    inicio.includes('arte === undefined'),
+    'la casilla no tiene reserva cuando falta la ilustración'
+  );
+
+  const dibujo = leer(DIBUJO);
+  assert.ok(
+    dibujo.includes('ARTE_EN_DISCO.has(dato.arte)'),
+    'el dibujo no comprueba si la ilustración existe'
+  );
+
+  // Y ninguna casilla se queda sin nombre de fichero al que aspirar.
+  for (const dato of SERVICIOS_DE_INICIO) {
+    assert.ok(dato.arte, `«${dato.titulo}» no dice qué ilustración le toca`);
+  }
+});
+
+test('la rejilla se ve entera aunque falte todo el arte', () => {
+  // La prueba de verdad del mecanismo: pintar y comprobar que los siete siguen
+  // ahí, con su título, tengan o no ilustración en disco.
+  const dibujo = PANTALLAS.pasajera();
+  for (const dato of SERVICIOS_DE_INICIO) {
+    assert.ok(dibujo.includes(dato.titulo), `falta «${dato.titulo}»`);
+  }
+});
+
 test('la tasa del BCV está en el inicio, que es lo que se pidió', () => {
   // Antes vivía sólo en la pantalla de pedir, con el argumento de que es donde
   // se decide un gasto. Manda el otro: en Venezuela la tasa se consulta a todas

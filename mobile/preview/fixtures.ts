@@ -97,6 +97,12 @@ export const SERVICIOS_DEMO = [
  * No es una casualidad de maquetación. Es lo único que la aplicación hace hoy,
  * y una rejilla de seis casillas iguales diría que +58express es seis cosas a
  * medias en vez de una cosa bien.
+ *
+ * CADA UNA LLEVA SU ILUSTRACIÓN
+ *
+ * `arte` nombra el fichero de `assets/marca/`, sin extensión. Las ilustraciones
+ * las encargó el dueño y hablan el mismo idioma que los avatares de rol. Si
+ * una falta, la casilla cae al icono y no se rompe nada.
  */
 export const SERVICIOS_DE_INICIO = [
   {
@@ -104,6 +110,7 @@ export const SERVICIOS_DE_INICIO = [
     titulo: 'Viajes',
     detalle: 'Tu moto, a un toque',
     icono: 'moto' as const,
+    arte: 'moto',
     listo: true,
     ancho: true
   },
@@ -112,6 +119,7 @@ export const SERVICIOS_DE_INICIO = [
     titulo: 'Comercios',
     detalle: 'Aliados cerca de ti',
     icono: 'maletin' as const,
+    arte: 'servicio-comercios',
     listo: true,
     ancho: false
   },
@@ -120,6 +128,7 @@ export const SERVICIOS_DE_INICIO = [
     titulo: 'Transporte Seguro',
     detalle: 'Traslados programados',
     icono: 'escudo' as const,
+    arte: 'servicio-transporte-seguro',
     listo: true,
     ancho: false
   },
@@ -128,6 +137,7 @@ export const SERVICIOS_DE_INICIO = [
     titulo: 'Envíos',
     detalle: 'Manda un paquete',
     icono: 'maletin' as const,
+    arte: 'servicio-envios',
     listo: false,
     ancho: false
   },
@@ -136,6 +146,7 @@ export const SERVICIOS_DE_INICIO = [
     titulo: 'Comida',
     detalle: 'Pide y te lo llevamos',
     icono: 'inicio' as const,
+    arte: 'servicio-comida',
     listo: false,
     ancho: false
   },
@@ -144,6 +155,7 @@ export const SERVICIOS_DE_INICIO = [
     titulo: 'Mercado',
     detalle: 'Sin salir de casa',
     icono: 'viajes' as const,
+    arte: 'servicio-mercado',
     listo: false,
     ancho: false
   },
@@ -152,6 +164,7 @@ export const SERVICIOS_DE_INICIO = [
     titulo: 'Compra y vende',
     detalle: 'Entre vecinos',
     icono: 'dolar' as const,
+    arte: 'servicio-compra-vende',
     listo: false,
     ancho: false
   }

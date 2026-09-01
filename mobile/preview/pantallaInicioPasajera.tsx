@@ -30,11 +30,12 @@
  * iguales dirían que +58express es seis cosas a medias en vez de una bien.
  */
 
-import { Pressable, ScrollView, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
+import { ARTE_DE_SERVICIO } from '../theme/marca';
 import {
   AVISOS_DEMO,
   CAMPANAS_DEMO,
@@ -137,13 +138,19 @@ function RotuloPronto() {
  */
 function Casilla({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
-  const tamanoDisco = dato.ancho ? 46 : 38;
+  const arte = ARTE_DE_SERVICIO[dato.arte];
+  const lado = dato.ancho ? 54 : 46;
 
-  const disco = (
+  /**
+   * Con ilustración, no hay disco detrás: el arte ya viene sobre grafito y con
+   * las esquinas hechas, y meterlo en un círculo amarillo le pondría un marco a
+   * algo que ya está enmarcado. Sin ella, el disco de siempre.
+   */
+  const emblema = arte === undefined ? (
     <View style={{
-      width: tamanoDisco,
-      height: tamanoDisco,
-      borderRadius: tamanoDisco / 2,
+      width: lado - 8,
+      height: lado - 8,
+      borderRadius: (lado - 8) / 2,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: dato.listo ? `${tema.color.acento}26` : tema.color.superficieHundida
@@ -154,6 +161,13 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
         tamano={dato.ancho ? 23 : 19}
       />
     </View>
+  ) : (
+    <Image
+      source={arte}
+      resizeMode="cover"
+      accessibilityIgnoresInvertColors
+      style={{ width: lado, height: lado, borderRadius: 13 }}
+    />
   );
 
   const texto = (
@@ -200,7 +214,7 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
         </View>
       )}
 
-      {disco}
+      {emblema}
       {texto}
     </Pressable>
   );
