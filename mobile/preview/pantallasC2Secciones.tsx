@@ -34,7 +34,7 @@
  */
 
 import { type ReactNode } from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import { Boton, Insignia, Superficie, Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
 import { Separador } from '../ui/HojaInferior';
@@ -356,15 +356,17 @@ const PERFIL_DE_EJEMPLO: DatosDelPerfil = {
   foto: null
 };
 
-export function C2Perfil({ datos, onFila, onCerrarSesion, cerrando = false }: {
+export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, cerrando = false }: {
   /** Sin esto se pinta el ejemplo. Con esto, la persona de verdad. */
   readonly datos?: DatosDelPerfil;
+  /** Cuántos avisos sin leer. Sin esto se cuenta el fixture. */
+  readonly sinLeer?: number;
   readonly onFila?: (clave: string) => void;
   readonly onCerrarSesion?: () => void;
   readonly cerrando?: boolean;
 } = {}) {
   const tema = useTema();
-  const sinLeer = AVISOS_DEMO.filter(aviso => aviso.sinLeer).length;
+  const sinLeer = sinLeerReal ?? AVISOS_DEMO.filter(aviso => aviso.sinLeer).length;
   const perfil = datos ?? (EN_DESARROLLO ? PERFIL_DE_EJEMPLO : PERFIL_VACIO);
 
   return (
@@ -377,7 +379,11 @@ export function C2Perfil({ datos, onFila, onCerrarSesion, cerrando = false }: {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Txt nivel="titulo" tono="sobreAcento" accessibilityRole="header">Tu perfil</Txt>
             <View style={{ flex: 1 }} />
-            <Campana sinLeer={sinLeer} sobreElAmarillo />
+            <Campana
+              sinLeer={sinLeer}
+              sobreElAmarillo
+              onPress={onFila === undefined ? undefined : () => onFila('avisos')}
+            />
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
@@ -446,9 +452,19 @@ export function C2Perfil({ datos, onFila, onCerrarSesion, cerrando = false }: {
           </Grupo>
 
           <Grupo titulo="Preferencias">
-            <Fila icono="campana" titulo="Notificaciones" detalle="Qué avisos quieres recibir" />
+            <Fila
+              icono="campana"
+              titulo="Notificaciones"
+              detalle="Qué avisos quieres recibir"
+              onPress={onFila === undefined ? undefined : () => onFila('avisos')}
+            />
             <Separador />
-            <Fila icono="ajustes" titulo="Configuración" detalle="Idioma, mapa y apariencia" />
+            <Fila
+              icono="ajustes"
+              titulo="Configuración"
+              detalle="Idioma, mapa y apariencia"
+              onPress={onFila === undefined ? undefined : () => onFila('configuracion')}
+            />
             <Separador />
             <Fila icono="moto" titulo="Cambiar de modo" detalle="Pasar a conductor" />
           </Grupo>
@@ -731,15 +747,100 @@ export function C2ViajeSeguro() {
  * Transporte Seguro abre su traslado. Un aviso que no lleva a ningún sitio
  * obliga a buscar a mano lo que acaba de anunciar.
  */
-export function C2Avisos() {
+/**
+ * Un aviso, tal como lo pinta la lista.
+ *
+ * Plano y sin nada de `services/`, igual que los datos del perfil: la misma
+ * pantalla sirve para el recorrido de diseño —con el fixture— y para la
+ * aplicación real —con la bandeja de verdad—.
+ */
+export interface AvisoEnPantalla {
+  readonly clave: string;
+  readonly titulo: string;
+  readonly detalle: string;
+  readonly cuando: string;
+  readonly sinLeer: boolean;
+  /** `false` cuando el aviso no lleva a ninguna parte. */
+  readonly navegable: boolean;
+}
+
+const AVISOS_DE_EJEMPLO: readonly AvisoEnPantalla[] = AVISOS_DEMO.map(aviso => ({
+  clave: aviso.clave,
+  titulo: aviso.titulo,
+  detalle: aviso.detalle,
+  cuando: aviso.cuando,
+  sinLeer: aviso.sinLeer,
+  navegable: true
+}));
+
+export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, onReintentar }: {
+  readonly avisos?: readonly AvisoEnPantalla[];
+  readonly estado?: 'cargando' | 'listo' | 'error';
+  /** El texto del final. Cambia según si los avisos llevan a alguna parte. */
+  readonly pie?: string;
+  readonly onAviso?: (clave: string) => void;
+  readonly onLeerTodos?: () => void;
+  readonly onReintentar?: () => void;
+} = {}) {
   const tema = useTema();
+  const lista = avisos ?? (EN_DESARROLLO ? AVISOS_DE_EJEMPLO : []);
+  const sinLeer = lista.filter(aviso => aviso.sinLeer).length;
+
+  if (estado === 'cargando') {
+    return (
+      <Seccion titulo="Avisos" activo="perfil" conCampana={false}>
+        <View style={{ paddingVertical: tema.ritmo.entreBloques * 2, alignItems: 'center' }}>
+          <ActivityIndicator color={tema.color.acento} />
+        </View>
+      </Seccion>
+    );
+  }
+
+  if (estado === 'error') {
+    return (
+      <Seccion titulo="Avisos" activo="perfil" conCampana={false}>
+        <View style={{ paddingVertical: tema.ritmo.entreBloques, alignItems: 'center', gap: tema.ritmo.entreElementos }}>
+          <Txt nivel="cuerpo" centrado>No se pudieron cargar tus avisos.</Txt>
+          <Boton titulo="Reintentar" variante="secundario" onPress={onReintentar ?? (() => undefined)} />
+        </View>
+      </Seccion>
+    );
+  }
 
   return (
     <Seccion titulo="Avisos" activo="perfil" conCampana={false}>
-      {AVISOS_DEMO.map((aviso, indice) => (
+      {/* «Marcar todos» aparece con DOS condiciones: que haya algo que marcar y
+          que alguien sepa marcarlo.
+          Lo segundo deja el recorrido de diseño exactamente como estaba —ahí
+          nadie pasa manejador— y evita lo peor de todo: un botón que se pulsa
+          y no cambia nada, que enseña a no fiarse de los botones. */}
+      {sinLeer > 0 && onLeerTodos !== undefined ? (
+        <View style={{ alignItems: 'flex-end', paddingBottom: 4 }}>
+          <Pressable
+            onPress={onLeerTodos}
+            accessibilityRole="button"
+            accessibilityLabel={`Marcar como leídos los ${sinLeer} avisos sin leer`}
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingVertical: 6 })}
+          >
+            <Txt nivel="etiqueta" tono="acento">Marcar todos como leídos</Txt>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {lista.length === 0 ? (
+        <View style={{ paddingVertical: tema.ritmo.entreBloques * 2, alignItems: 'center', gap: 6 }}>
+          <Txt nivel="cuerpo" tono="secundario" centrado>Todavía no tienes avisos.</Txt>
+          <Txt nivel="pie" tono="tenue" centrado>
+            Aquí aparecerá lo que necesitemos contarte.
+          </Txt>
+        </View>
+      ) : null}
+
+      {lista.map((aviso, indice) => (
         <View key={aviso.clave}>
           {indice > 0 ? <Separador /> : null}
           <Pressable
+            onPress={onAviso === undefined ? undefined : () => onAviso(aviso.clave)}
             accessibilityRole="button"
             accessibilityLabel={`${aviso.titulo}. ${aviso.detalle}. ${aviso.cuando}${aviso.sinLeer ? '. Sin leer' : ''}`}
             style={({ pressed }) => ({
@@ -765,16 +866,26 @@ export function C2Avisos() {
                 {aviso.titulo}
               </Txt>
               <Txt nivel="pie" tono="tenue">{aviso.detalle}</Txt>
-              <Txt nivel="pie" tono="tenue">{aviso.cuando}</Txt>
+              {aviso.cuando !== '' ? (
+                <Txt nivel="pie" tono="tenue">{aviso.cuando}</Txt>
+              ) : null}
             </View>
-            <Galon />
+            {/* El galón dice «esto lleva a alguna parte». Cuando el aviso no
+                lleva —que hoy es siempre, porque el servidor no manda
+                destino— no se pinta: una flecha que no va a ningún sitio
+                enseña a no hacer caso de las flechas. */}
+            {aviso.navegable ? <Galon /> : null}
           </Pressable>
         </View>
       ))}
 
-      <View style={{ marginTop: tema.ritmo.entreBloques, alignItems: 'center' }}>
-        <Txt nivel="pie" tono="tenue">Cada aviso te lleva a donde pasó.</Txt>
-      </View>
+      {lista.length > 0 ? (
+        <View style={{ marginTop: tema.ritmo.entreBloques, alignItems: 'center' }}>
+          <Txt nivel="pie" tono="tenue" centrado>
+            {pie ?? 'Cada aviso te lleva a donde pasó.'}
+          </Txt>
+        </View>
+      ) : null}
     </Seccion>
   );
 }

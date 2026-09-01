@@ -42,10 +42,27 @@ const OPCIONES: readonly {
   { clave: 'oscuro', titulo: 'Noche', detalle: 'Siempre oscuro', icono: 'inicio' }
 ];
 
-export function C2Configuracion() {
+export function C2Configuracion({ real = false }: {
+  /**
+   * `true` dentro de la aplicación autenticada.
+   *
+   * Cambia UNA cosa: las filas que hoy no hacen nada dejan de anunciar un
+   * estado. «Ahorro de datos · Desactivado» describe una preferencia que no
+   * existe, no se guarda en ninguna parte y no apaga nada; enseñarla a una
+   * persona real es decirle que hay un ajuste puesto cuando no lo hay.
+   *
+   * En el recorrido de diseño se siguen viendo como estaban, porque ahí la
+   * pantalla es una maqueta y se entiende como tal.
+   */
+  readonly real?: boolean;
+} = {}) {
   const tema = useTema();
   const { apariencia, esquema, cambiarApariencia } = useApariencia();
   const arriba = useAireDeArriba();
+
+  // Lo que se pone donde iba un estado inventado. El mismo texto que ya usa el
+  // perfil para el saldo, para no estrenar una forma nueva de decir lo mismo.
+  const pendiente = real ? 'Todavía no está activo' : undefined;
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
@@ -103,21 +120,39 @@ export function C2Configuracion() {
         </Grupo>
 
         <Grupo titulo="Mapa">
-          <Fila icono="destino" titulo="Vista del mapa" detalle="Estándar" />
+          <Fila
+            icono="destino"
+            titulo="Vista del mapa"
+            detalle={pendiente ?? 'Estándar'}
+            sinDestino={real}
+          />
           <Separador />
-          <Fila icono="moto" titulo="Mostrar vehículos cercanos" detalle="Activado" />
+          <Fila
+            icono="moto"
+            titulo="Mostrar vehículos cercanos"
+            detalle={pendiente ?? 'Activado'}
+            sinDestino={real}
+          />
         </Grupo>
 
         <Grupo titulo="Datos">
-          <Fila icono="rayo" titulo="Ahorro de datos" detalle="Desactivado" />
+          <Fila
+            icono="rayo"
+            titulo="Ahorro de datos"
+            detalle={pendiente ?? 'Desactivado'}
+            sinDestino={real}
+          />
         </Grupo>
 
+        {/* Legal no anuncia ningún estado, así que no miente. Lo que no tiene
+            es PANTALLA: los tres textos no están escritos todavía, y por eso
+            en la aplicación real no llevan galón. */}
         <Grupo titulo="Legal">
-          <Fila icono="escudo" titulo="Términos y condiciones" />
+          <Fila icono="escudo" titulo="Términos y condiciones" sinDestino={real} />
           <Separador />
-          <Fila icono="escudo" titulo="Política de privacidad" />
+          <Fila icono="escudo" titulo="Política de privacidad" sinDestino={real} />
           <Separador />
-          <Fila icono="viajes" titulo="Licencias de terceros" />
+          <Fila icono="viajes" titulo="Licencias de terceros" sinDestino={real} />
         </Grupo>
       </ScrollView>
 
@@ -199,16 +234,20 @@ function OpcionDeApariencia({ titulo, detalle, icono, activa, onPress }: {
   );
 }
 
-function Fila({ icono, titulo, detalle }: {
+function Fila({ icono, titulo, detalle, sinDestino = false }: {
   readonly icono: NombreDeIcono;
   readonly titulo: string;
   readonly detalle?: string;
+  /** Sin destino todavía: se enseña, pero no se anuncia como botón. */
+  readonly sinDestino?: boolean;
 }) {
   const tema = useTema();
 
   return (
     <Pressable
-      accessibilityRole="button"
+      // Sin destino no es un botón: anunciarlo como tal a quien navega
+      // escuchando es prometerle una acción que no existe.
+      accessibilityRole={sinDestino ? 'text' : 'button'}
       accessibilityLabel={detalle ? `${titulo}. ${detalle}` : titulo}
       style={({ pressed }) => ({
         flexDirection: 'row',

@@ -23,6 +23,8 @@ import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { fuenteDeFoto, pedirPerfil } from '../services/perfil';
+import { pedirAvisos } from '../services/avisos';
+import { contarSinLeer } from '../domain/avisos';
 import {
   desdeCuando,
   inicialesDe,
@@ -38,6 +40,10 @@ export default function PantallaDePerfil() {
 
   const [perfil, setPerfil] = useState<PerfilDeUsuario | null>(null);
   const [foto, setFoto] = useState<Foto>(null);
+  // La campana del perfil cuenta avisos REALES. Se pide aparte del perfil
+  // porque son dos endpoints distintos, y un fallo al contar avisos no puede
+  // impedir que se vea el perfil: se queda a cero y ya.
+  const [sinLeer, setSinLeer] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [cerrando, setCerrando] = useState(false);
 
@@ -53,6 +59,9 @@ export default function PantallaDePerfil() {
     }
     setPerfil(respuesta.datos);
     setFoto(await fuenteDeFoto(respuesta.datos));
+
+    const bandeja = await pedirAvisos();
+    if (bandeja.ok) setSinLeer(contarSinLeer(bandeja.datos));
   }, []);
 
   useEffect(() => {
@@ -104,12 +113,27 @@ export default function PantallaDePerfil() {
     <ProveedorDeNavegacion ir={irA}>
       <C2Perfil
         datos={datos}
+        sinLeer={sinLeer}
         cerrando={cerrando}
-        onFila={clave => { if (clave === 'datos') router.push('/perfil-datos'); }}
+        onFila={abrir}
         onCerrarSesion={() => { void cerrarSesion(); }}
       />
     </ProveedorDeNavegacion>
   );
+}
+
+/**
+ * A dónde lleva cada fila del perfil, HOY.
+ *
+ * Sólo las tres que existen como pantalla real. Las demás no hacen nada, y es
+ * deliberado: mandar «Tu saldo» o «Direcciones guardadas» a una maqueta desde
+ * la aplicación de verdad enseñaría datos inventados a una persona real. Dos de
+ * ellas ni siquiera tienen backend.
+ */
+function abrir(clave: string) {
+  if (clave === 'datos') router.push('/perfil-datos');
+  if (clave === 'avisos') router.push('/avisos');
+  if (clave === 'configuracion') router.push('/configuracion');
 }
 
 /**
