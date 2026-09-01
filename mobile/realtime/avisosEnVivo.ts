@@ -35,13 +35,16 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useEvento, useResync } from './ProveedorDeTiempoReal';
 
 /**
- * Cuánto se espera antes de recargar.
+ * De dónde sale el retraso.
  *
- * Una difusión a toda la plataforma llega a la vez a todos los teléfonos. Sin
- * esta pausa, cada uno respondería con una petición inmediata y el servidor
- * recibiría de golpe tantas como usuarios conectados.
+ * La primera versión esperaba 400 ms fijos, y eso NO reparte el pico: lo mueve.
+ * Diez mil teléfonos que reciben la misma difusión esperan los mismos 400 ms y
+ * preguntan todos a la vez, 400 ms después. El servidor recibe el mismo golpe.
+ *
+ * `retrasoDeRecarga` vive en el dominio, es pura y se prueba con un aleatorio
+ * inyectado. Aquí sólo se usa.
  */
-const ESPERA_MS = 400;
+import { retrasoDeRecarga } from '../domain/viajeActivo';
 
 /**
  * Mantiene la bandeja al día.
@@ -56,12 +59,22 @@ export function useAvisosEnVivo(recargar: () => void): void {
 
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pedirRecarga = useCallback(() => {
+  /**
+   * Agrupa y reparte.
+   *
+   * AGRUPA: varios eventos seguidos reinician el temporizador, así que tres
+   * avisos en un segundo producen UNA recarga y no tres.
+   *
+   * REPARTE: cada teléfono elige su propio retraso dentro de una ventana, para
+   * que una difusión a toda la plataforma llegue al servidor como una pendiente
+   * y no como una pared.
+   */
+  const pedirRecarga = useCallback((repartir: boolean) => {
     if (temporizador.current !== null) clearTimeout(temporizador.current);
     temporizador.current = setTimeout(() => {
       temporizador.current = null;
       vigente.current();
-    }, ESPERA_MS);
+    }, retrasoDeRecarga(Math.random(), repartir));
   }, []);
 
   // Sin esto, una recarga pendiente se dispararía sobre una pantalla ya
@@ -71,6 +84,10 @@ export function useAvisosEnVivo(recargar: () => void): void {
   }, []);
 
   // El payload no se mira: da igual qué traiga, la respuesta es la misma.
-  useEvento('platform:notification', pedirRecarga);
-  useResync(pedirRecarga);
+  //
+  // Un aviso PUEDE ser una difusión a toda la plataforma, así que se reparte.
+  // Una reconexión es de este teléfono solo —y además vuelve de estar sin red,
+  // que es cuando más urge saber la verdad— así que no.
+  useEvento('platform:notification', useCallback(() => pedirRecarga(true), [pedirRecarga]));
+  useResync(useCallback(() => pedirRecarga(false), [pedirRecarga]));
 }

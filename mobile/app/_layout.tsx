@@ -33,6 +33,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { configuracion } from '../config/environment';
 import { ProveedorDeSesion } from '../context/AuthContext';
 import { ProveedorDeTiempoReal } from '../realtime/ProveedorDeTiempoReal';
+import { ProveedorDeViajeActivo } from '../realtime/ViajeActivo';
 import { ProveedorDeTema } from '../theme/ThemeContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
@@ -107,6 +108,10 @@ export default function DisposicionRaiz() {
               No conecta solo: espera a que la sesión esté confirmada, y se
               queda apagado en el recorrido de diseño. */}
           <ProveedorDeTiempoReal>
+          {/* El viaje activo va DENTRO del tiempo real: se apoya en su resync
+              y en sus eventos. Y una sola vez, como él: dos autoridades del
+              mismo viaje acabarían discrepando. */}
+          <ProveedorDeViajeActivo>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -118,6 +123,7 @@ export default function DisposicionRaiz() {
               animation: 'slide_from_right'
             }}
           />
+          </ProveedorDeViajeActivo>
           </ProveedorDeTiempoReal>
         </ProveedorDeSesion>
       ) : (

@@ -39,6 +39,43 @@ export async function pedirHistorial(): Promise<Resultado<readonly ViajeDeHistor
   return { ok: true, datos: leerHistorial(respuesta.datos) };
 }
 
+/**
+ * El viaje activo de quien tiene la sesión abierta, o `null` si no hay ninguno.
+ *
+ * EL 204 ES UNA RESPUESTA, NO UN FALLO
+ *
+ * `GET /api/trips/active/me` responde 204 SIN CUERPO cuando no hay viaje. Eso
+ * no es un error: es la autoridad diciendo que no hay. Se traduce a `null`, que
+ * sí limpia el estado, a diferencia de un fallo de red.
+ *
+ * Y OJO CON LA VENTANA DEL SERVIDOR
+ *
+ * El endpoint no devuelve cualquier viaje abierto: un `SEARCHING` deja de
+ * salir a los TRES MINUTOS de crearse, y el resto a las DOCE HORAS. Un viaje
+ * puede seguir vivo en la base y ya no contar como activo. Esa regla es del
+ * servidor y aquí no se replica.
+ */
+export async function pedirViajeActivo(): Promise<Resultado<DetalleReal | null>> {
+  const respuesta = await llamar<unknown>('/api/trips/active/me');
+  if (!respuesta.ok) return respuesta;
+
+  // 204: el cliente devuelve `undefined` como datos.
+  if (respuesta.datos === undefined || respuesta.datos === null) {
+    return { ok: true, datos: null };
+  }
+
+  const detalle = leerDetalle(respuesta.datos);
+  if (detalle === null) {
+    return {
+      ok: false,
+      motivo: 'RESPUESTA_INVALIDA',
+      codigo: null,
+      mensaje: 'El servidor devolvió un viaje activo que no se puede leer.'
+    };
+  }
+  return { ok: true, datos: detalle };
+}
+
 /** El registro completo de un viaje. 403 si quien pregunta no participó. */
 export async function pedirViaje(id: string): Promise<Resultado<DetalleReal>> {
   const respuesta = await llamar<unknown>(`/api/trips/${encodeURIComponent(id)}`);

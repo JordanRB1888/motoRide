@@ -44,6 +44,41 @@ export const EVENTOS_DEL_SERVIDOR = [
    */
   'platform:notification',
 
+  /**
+   * Un viaje cambió de estado.
+   *
+   * Fuente: cinco sitios distintos de `server/index.js`, y ahí está el
+   * problema — el payload NO es el mismo en los cinco:
+   *
+   *   transición del conductor   { tripId, status, canonicalStatus, updatedAt }
+   *   traspaso de Safe Transport { … + driver }
+   *   edición de administración  { tripId, status }              ← sin canonical
+   *   sin conductores            { tripId, status, reason }      ← sin canonical
+   *   aceptación del conductor   { … + driver }
+   *
+   * Y `status` a veces trae el ALIAS —`EN_ROUTE`— mientras el estado real viaja
+   * en `canonicalStatus`. Por eso el payload NO sustituye a la autoridad: se
+   * usa para saber QUE algo cambió, y el estado se vuelve a pedir por HTTP.
+   */
+  'tripStatusUpdated',
+
+  /**
+   * Un viaje se canceló.
+   *
+   * Fuente: `audience.emit('rideCancelled', { tripId })`. Sólo el
+   * identificador: por sí solo no dice ni quién canceló ni cuándo.
+   */
+  'rideCancelled',
+
+  /**
+   * El despacho se quedó sin conductores.
+   *
+   * Fuente: `emit('dispatch:no_drivers', { tripId })`, justo antes de la
+   * cancelación automática. Llega ANTES que el `tripStatusUpdated` de esa
+   * cancelación, así que sirve para dejar de esperar cuanto antes.
+   */
+  'dispatch:no_drivers',
+
   /** El socket rechaza algo. Fuente: el limitador de conexiones y el envoltorio de eventos. */
   'socket:error',
   /** Demasiados eventos en poco tiempo. Se avisa UNA vez por ventana. */
@@ -61,10 +96,13 @@ export type EventoDelServidor = (typeof EVENTOS_DEL_SERVIDOR)[number];
  * su fase. Nombrarlos no los activa.
  */
 export const EVENTOS_PENDIENTES = [
-  // Despacho — REALTIME-INTEGRATION-2
-  'rideRequested', 'rideAccepted', 'rideCancelled',
-  'rideRequestFailed', 'rideAcceptanceFailed', 'rideCancellationRejected',
-  'tripStatusUpdated', 'tripStatusRejected', 'dispatch:no_drivers',
+  // Despacho — la solicitud y sus rechazos, que necesitan pantalla propia.
+  //
+  // OJO: `rideAccepted` NO está aquí ni entre los escuchados, y es a propósito:
+  // el servidor NO lo emite. Es sólo cliente→servidor. Lo que el conductor
+  // recibe al aceptar es un `tripStatusUpdated`.
+  'rideRequested', 'rideRequestFailed', 'rideAcceptanceFailed',
+  'rideCancellationRejected', 'tripStatusRejected',
   // Conductor — DRIVER-INTEGRATION
   'driver:connected', 'driver:status_rejected', 'driver:location_rejected',
   'driverLocationUpdated', 'driverStatusChanged',

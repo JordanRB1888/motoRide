@@ -234,8 +234,10 @@ test('tras reconectar se vuelve a preguntar por HTTP', () => {
   assert.match(cliente, /cliente\.io\.on\('reconnect'/);
   assert.match(cliente, /for \(const observador of observadoresDeResync\) observador\(\);/);
 
+  // El resync sigue conectado; lo que cambió es que ahora distingue si toca
+  // repartir. Una reconexión es de este teléfono solo: no se reparte.
   const enVivo = sinComentarios('realtime/avisosEnVivo.ts');
-  assert.match(enVivo, /useResync\(pedirRecarga\)/);
+  assert.match(enVivo, /useResync\(useCallback\(\(\) => pedirRecarga\(false\)/);
 });
 
 test('el aviso en vivo NO se pinta: dispara la carga HTTP', () => {
@@ -243,7 +245,7 @@ test('el aviso en vivo NO se pinta: dispara la carga HTTP', () => {
   // guardada en la base —la de liquidación no trae identificador—. Insertarla
   // haría imposible marcarla como leída, y la otra saldría dos veces.
   const enVivo = sinComentarios('realtime/avisosEnVivo.ts');
-  assert.match(enVivo, /useEvento\('platform:notification', pedirRecarga\)/);
+  assert.match(enVivo, /useEvento\('platform:notification', useCallback\(\(\) => pedirRecarga\(true\)/);
   // El payload no se lee: da igual qué traiga.
   assert.equal(/payload\.|aviso\.title|\.id/.test(enVivo), false, 'el evento se está leyendo');
 
@@ -261,11 +263,14 @@ test('las dos formas del evento existen de verdad en el servidor', () => {
 });
 
 test('una difusión no dispara una petición por evento', () => {
-  // Llega a la vez a todos los teléfonos conectados; sin la pausa, el servidor
-  // recibiría de golpe tantas peticiones como usuarios.
+  // Llega a la vez a todos los teléfonos conectados. La primera versión
+  // esperaba 400 ms fijos, que MUEVEN el pico en vez de repartirlo;
+  // REALTIME-INTEGRATION-2 lo cambió por agrupación más reparto aleatorio.
+  // Lo que se protege sigue siendo lo mismo: que no salga una petición por
+  // evento.
   const enVivo = sinComentarios('realtime/avisosEnVivo.ts');
-  assert.match(enVivo, /const ESPERA_MS = \d+/);
-  assert.match(enVivo, /clearTimeout\(temporizador\.current\)/);
+  assert.match(enVivo, /clearTimeout\(temporizador\.current\)/, 'no se agrupan');
+  assert.match(enVivo, /retrasoDeRecarga\(/, 'no se reparte');
 });
 
 // ---------------------------------------------------------------------------
