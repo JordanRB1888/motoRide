@@ -15,10 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.plus58express.app",
-      "config": {
-        "googleMapsApiKey": "$EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY"
-      }
+      "bundleIdentifier": "com.plus58express.app"
     },
     "android": {
       "package": "com.plus58express.app",
@@ -27,12 +24,7 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#0e0d0b"
       },
-      "predictiveBackGestureEnabled": false,
-      "config": {
-        "googleMaps": {
-          "apiKey": "$EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY"
-        }
-      }
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png",

@@ -246,9 +246,23 @@ test('tres claves distintas, una por plataforma', () => {
   assert.equal(VARIABLE_CLAVE_IOS, 'EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY');
 
   const app = JSON.parse(leer('app.json'));
-  assert.equal(app.expo.android.config.googleMaps.apiKey, `$${VARIABLE_CLAVE_ANDROID}`);
-  assert.equal(app.expo.ios.config.googleMapsApiKey, `$${VARIABLE_CLAVE_IOS}`);
   assert.ok(app.expo.plugins.includes('react-native-maps'));
+
+  // Esta prueba comprobaba que `app.json` declaraba las claves en
+  // `android.config.googleMaps.apiKey`. Comprobaba que estuviera escrito lo
+  // que yo quería escribir, no que sirviera — y no servía: en JSON un
+  // `"$VARIABLE"` no se sustituye nunca, y el complemento de react-native-maps
+  // ni siquiera mira ahí; es más, borra esa entrada del manifiesto si no le
+  // pasan la clave por sus opciones. El mapa habría salido gris con la prueba
+  // en verde. Lo vimos leyendo el manifiesto generado, no el código.
+  //
+  // Ahora las claves se resuelven en `app.config.js`, que se ejecuta y lee el
+  // entorno de verdad. Aquí sólo queda vigilar que no vuelvan al sitio que no
+  // funciona; que lleguen es cosa de `configuracionDelMapa.test.mjs`, que
+  // ejecuta la configuración y mira el resultado.
+  assert.equal(app.expo.android?.config?.googleMaps, undefined,
+    'las claves volvieron a un sitio donde el complemento no las lee');
+  assert.equal(app.expo.ios?.config?.googleMapsApiKey, undefined);
 });
 
 test('sin clave del navegador se falla CERRADO', () => {
