@@ -163,8 +163,14 @@ export const BASE = `
   .calle{position:absolute;background:var(--calle);opacity:var(--calle-opacidad)}
   .diag{position:absolute;left:-30%;right:-30%;top:58%;height:10px;background:var(--calle);
     opacity:var(--calle-opacidad);transform:rotate(-19deg)}
+  /* El lago, SIN AZUL.
+     Iba en el token de informacion y era el ultimo fondo azulado que quedaba,
+     que es justo lo que el dueno pidio quitar. Estaba escondido debajo de la
+     hoja del conductor; al retirarla, aparecio.
+     Va en el color de las calles con mas cuerpo: se lee como una masa distinta
+     del asfalto sin meter un color que no es de la marca. */
   .agua{position:absolute;right:-18%;bottom:-14%;width:58%;height:38%;border-radius:999px;
-    background:#63c9ff;opacity:.09;transform:rotate(-12deg)}
+    background:var(--calle);opacity:.16;transform:rotate(-12deg)}
 
   .veh{position:absolute;transform:translate(-50%,-50%)}
   .veh img{display:block}
@@ -1196,16 +1202,6 @@ export const PANTALLAS = {
         <span class="etq t3">Fuera de línea</span>
         <span style="width:1px;height:13px;background:var(--borde)"></span>
         <span class="etq t2">Zona demo · Maracaibo</span>
-      </div>
-      <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
-        <div style="display:grid;justify-items:center;gap:9px;padding-bottom:var(--pad)">
-          <span style="width:46px;height:46px;border-radius:50%;display:grid;place-items:center;
-            background:color-mix(in srgb,var(--acento) 14%,transparent)">
-            ${icono('moto', 'var(--acento-texto)', 24)}</span>
-          <span class="enc">Listo para salir</span>
-          <span class="pie t3" style="text-align:center">Moto demo · Placa DEMO-000</span>
-          <span class="etq ok insignia" style="margin-top:2px">Verificado</span>
-        </div>
       </div>
       ${barraConductor(false)}
     </div>`,

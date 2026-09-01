@@ -382,8 +382,11 @@ test('el dibujo web no escribe colores a mano', () => {
   // conoce: se ve bien en el navegador y no existe en la aplicación.
   //
   // Se permiten los grises del andamiaje —el marco del teléfono, la sombra— que
-  // no forman parte de lo que se evalúa, y el azul del agua del mapa, que sale
-  // del token de información.
+  // no forman parte de lo que se evalúa.
+  //
+  // El azul del agua ya no se usa: era el último fondo azulado y el dueño pidió
+  // quitarlos. Se deja en la lista de permitidos para que sacarlo de aquí sea
+  // una decisión aparte y no un efecto colateral de este cambio.
   const codigo = sinComentarios('scripts/pantallasWeb.mjs');
   const hexadecimales = [...new Set(codigo.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [])];
   const permitidos = new Set(['#63c9ff', '#000', '#0000', '#111', '#1a1a1a', '#0d0d0d', '#eee', '#999', '#888', '#ccc', '#e8e8e8']);

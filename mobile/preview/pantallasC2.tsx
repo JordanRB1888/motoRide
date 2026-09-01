@@ -749,20 +749,23 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
           />
         </View>
 
-        {/* Conectado, la hoja se encoge a lo que ocupan las tres cifras: el
-            conductor necesita calle, no panel. Desconectado crece, porque ahí
-            sí hay algo que leer. */}
-        {/* Compacta en los dos estados. Antes, fuera de línea ocupaba media
-            pantalla para decir una frase: el conductor necesita calle, no
-            panel, también mientras espera a conectarse. */}
-        <HojaInferior estado="baja" conAsa={false} alturaAutomatica>
-          {conectado ? (
-            /* Dos cifras y pequeñas. Eran tres en tamaño de encabezado, separadas
-               por rayas, y ocupaban casi tanto como la hoja entera: se abren en
-               marcha, así que van juntas, centradas y del tamaño de una etiqueta.
+        {/* DESCONECTADO NO HAY HOJA.
+            Antes salía una tarjeta con el vehículo, la placa y el sello de
+            verificado. Nada de eso hace falta ahí: quien todavía no se ha
+            conectado no tiene ninguna decisión que tomar salvo conectarse, y
+            para eso ya está el disco de la barra.
 
-               «Resumen» se va por lo mismo que en el panel del disco: un dato
-               vacío ocupando el sitio de un dato no es un dato. */
+            Los datos no se pierden —están en el panel del disco y en el
+            perfil—, sólo dejan de ocupar la pantalla donde no se usan. El
+            conductor gana mapa, que es lo que mira mientras decide si sale. */}
+        {conectado ? (
+          <HojaInferior estado="baja" conAsa={false} alturaAutomatica>
+            {/* Dos cifras y pequeñas. Eran tres en tamaño de encabezado,
+                separadas por rayas, y ocupaban casi tanto como la hoja entera:
+                se abren en marcha, así que van juntas y centradas.
+
+                «Resumen» se va por lo mismo que en el panel del disco: un dato
+                vacío ocupando el sitio de un dato no es un dato. */}
             <View style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -784,26 +787,8 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
                 </View>
               ))}
             </View>
-          ) : (
-            /* Centrado y con el glifo en su disco: suelto al lado del texto se
-               leía como una viñeta perdida. */
-            <View style={{ alignItems: 'center', gap: 9 }}>
-              <View style={{
-                width: 46,
-                height: 46,
-                borderRadius: 23,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: `${tema.color.acento}24`
-              }}>
-                <Icono nombre="moto" color={tema.color.acentoTexto} tamano={24} />
-              </View>
-              <Txt nivel="encabezado" centrado>Listo para salir</Txt>
-              <Txt nivel="pie" tono="tenue" centrado>{CONDUCTOR_DEMO.vehiculo}</Txt>
-              <Insignia texto="Verificado" tono="exito" />
-            </View>
-          )}
-        </HojaInferior>
+          </HojaInferior>
+        ) : null}
       </LienzoDeMapa>
 
       <BarraDeNavegacion

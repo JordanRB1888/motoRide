@@ -114,11 +114,18 @@ function Calles() {
         transform: [{ rotate: '-19deg' }]
       }} />
 
-      {/* Una lámina de agua en la esquina: el lago está siempre a un lado. */}
+      {/* Una lámina de agua en la esquina: el lago está siempre a un lado.
+
+          SIN AZUL. Iba en el token de información y era el último fondo azulado
+          que quedaba, que es justo lo que el dueño pidió quitar. Estaba
+          escondido debajo de la hoja del conductor y apareció al retirarla.
+
+          Va en el color de las calles con más cuerpo: se lee como una masa
+          distinta del asfalto sin meter un color que no es de la marca. */}
       <View style={{
         position: 'absolute', right: '-18%', bottom: '-14%',
         width: '58%', height: '38%', borderRadius: 999,
-        backgroundColor: tema.color.informacion, opacity: 0.09,
+        backgroundColor: colorDeCalle, opacity: 0.16,
         transform: [{ rotate: '-12deg' }]
       }} />
     </View>
