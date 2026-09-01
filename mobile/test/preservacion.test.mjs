@@ -119,10 +119,33 @@ test('el paquete de marca no se desmadra de tamaño', () => {
   // Son fotografías y pesan; el objetivo no es que no pesen nada, sino que
   // nadie meta un PNG de varios megas sin darse cuenta. El teléfono al que va
   // esto es un Android modesto con datos caros.
+  //
+  // El techo subió de 1,1 a 1,8 MB al entrar las seis ilustraciones de las
+  // casillas del inicio. Ese cambio se hizo MIRANDO la cifra, no para callar la
+  // prueba: las seis llegaron a 1254 píxeles y 1,6 MB CADA UNA —nueve megas y
+  // medio para dibujarlas a cuarenta y seis puntos— y se guardaron a 288, que
+  // cubre pantallas de triple densidad. Las seis juntas pesan 594 KB.
+  //
+  // Si esta prueba vuelve a saltar, la respuesta correcta casi siempre es
+  // reducir la imagen, no subir el número.
   const carpeta = path.join(raizMovil, 'assets/marca');
   const total = fs.readdirSync(carpeta)
     .reduce((suma, nombre) => suma + fs.statSync(path.join(carpeta, nombre)).size, 0);
-  assert.ok(total < 1_100_000, `los activos de marca pesan ${Math.round(total / 1024)} KB`);
+  assert.ok(total < 1_800_000, `los activos de marca pesan ${Math.round(total / 1024)} KB`);
+});
+
+test('ninguna ilustración de servicio viene sin reducir', () => {
+  // La de arriba mira el total, y una sola imagen enorme puede colarse debajo
+  // del techo si las demás adelgazan. Ésta las mira una por una: se dibujan a
+  // 46 puntos, así que ninguna tiene excusa para pasar de 200 KB.
+  const carpeta = path.join(raizMovil, 'assets/marca');
+  const ilustraciones = fs.readdirSync(carpeta).filter(nombre => nombre.startsWith('servicio-'));
+  assert.ok(ilustraciones.length > 0, 'no hay ninguna ilustración de servicio');
+
+  for (const nombre of ilustraciones) {
+    const peso = fs.statSync(path.join(carpeta, nombre)).size;
+    assert.ok(peso < 200_000, `${nombre} pesa ${Math.round(peso / 1024)} KB sin reducir`);
+  }
 });
 
 // ---------------------------------------------------------------------------

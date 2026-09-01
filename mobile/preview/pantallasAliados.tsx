@@ -35,11 +35,12 @@
 
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { Boton, Txt } from '../ui/componentes';
+import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
 import { ALIADOS_DEMO, CATEGORIAS_DEMO } from './fixtures';
+import { BotonDeSaldo, CabeceraAmarilla } from './pantallasSaldo';
 
 type Aliado = (typeof ALIADOS_DEMO)[number];
 
@@ -48,9 +49,10 @@ type Aliado = (typeof ALIADOS_DEMO)[number];
 // ---------------------------------------------------------------------------
 
 /** El hueco del logotipo. Hasta que lo haya, la inicial. */
-export function SelloDeComercio({ inicial, tamano = 46 }: {
+export function SelloDeComercio({ inicial, tamano = 46, sobreElAmarillo = false }: {
   readonly inicial: string;
   readonly tamano?: number;
+  readonly sobreElAmarillo?: boolean;
 }) {
   const tema = useTema();
 
@@ -62,12 +64,33 @@ export function SelloDeComercio({ inicial, tamano = 46 }: {
         borderRadius: Math.round(tamano * 0.3),
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: tema.color.superficieElevada,
+        // Sobre la banda amarilla se invierte: el sello va en grafito y la
+        // inicial en amarillo. Un sello claro sobre amarillo desaparece.
+        backgroundColor: sobreElAmarillo ? tema.color.sobreAcento : tema.color.superficieElevada,
         borderWidth: 1,
-        borderColor: tema.color.borde
+        borderColor: sobreElAmarillo ? 'transparent' : tema.color.borde
       }}
     >
-      <Txt nivel="encabezado" tono="acento">{inicial}</Txt>
+      <Txt nivel="encabezado" tono={sobreElAmarillo ? 'marca' : 'acento'}>
+        {inicial}
+      </Txt>
+    </View>
+  );
+}
+
+/** El rótulo de pagado, en su versión para la banda amarilla. */
+function RotuloPagadoSobreAmarillo() {
+  const tema = useTema();
+
+  return (
+    <View style={{
+      borderWidth: 1,
+      borderColor: tema.color.sobreAcento,
+      borderRadius: 6,
+      paddingHorizontal: 7,
+      paddingVertical: 2
+    }}>
+      <Txt nivel="etiqueta" tono="sobreAcento" estilo={{ opacity: 0.78 }}>PUBLICIDAD</Txt>
     </View>
   );
 }
@@ -101,10 +124,14 @@ export function RotuloPagado() {
  * Dibujada con vistas porque la familia de iconos no la tiene y no se añade un
  * glifo nuevo por una flecha. Son dos escuadras y una diagonal.
  */
-export function FlechaDeSalida({ tamano = 13 }: { readonly tamano?: number }) {
+export function FlechaDeSalida({ tamano = 13, sobreElAmarillo = false }: {
+  readonly tamano?: number;
+  readonly sobreElAmarillo?: boolean;
+}) {
   const tema = useTema();
   const grosor = 1.6;
   const caja = tamano * 0.62;
+  const trazo = sobreElAmarillo ? tema.color.sobreAcento : tema.color.textoTenue;
 
   return (
     <View style={{ width: tamano, height: tamano }} accessibilityLabel="Abre fuera de la aplicación">
@@ -116,7 +143,7 @@ export function FlechaDeSalida({ tamano = 13 }: { readonly tamano?: number }) {
         height: caja,
         borderLeftWidth: grosor,
         borderBottomWidth: grosor,
-        borderColor: tema.color.textoTenue
+        borderColor: trazo
       }} />
       <View style={{
         position: 'absolute',
@@ -126,7 +153,7 @@ export function FlechaDeSalida({ tamano = 13 }: { readonly tamano?: number }) {
         height: caja * 0.85,
         borderTopWidth: grosor,
         borderRightWidth: grosor,
-        borderColor: tema.color.textoTenue
+        borderColor: trazo
       }} />
     </View>
   );
@@ -217,55 +244,43 @@ export function C2Aliados() {
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: tema.ritmo.margenPantalla,
-          paddingTop: 18,
-          paddingBottom: tema.ritmo.entreElementos
-        }}>
-          <Txt nivel="titulo" accessibilityRole="header">Aliados</Txt>
-          <View style={{ flex: 1 }} />
-          <RotuloPagado />
-        </View>
+        <CabeceraAmarilla>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Txt nivel="titulo" tono="sobreAcento" accessibilityRole="header">Aliados</Txt>
+            <View style={{ flex: 1 }} />
+            <RotuloPagadoSobreAmarillo />
+          </View>
 
-        <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
-          {/* El destacado: el que paga más. Lleva el filo de marca, que es lo
-              que en C2 significa «esto es lo principal de la pantalla». */}
-          <View style={{
-            overflow: 'hidden',
-            padding: tema.ritmo.dentroDeTarjeta,
-            borderRadius: tema.radio.tarjeta,
-            backgroundColor: tema.color.superficie,
-            gap: tema.ritmo.entreElementos
-          }}>
-            <View style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: 3,
-              backgroundColor: tema.color.acento
-            }} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
-              <SelloDeComercio inicial={estrella.inicial} tamano={52} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Txt nivel="encabezado">{estrella.nombre}</Txt>
-                <Txt nivel="pie" tono="tenue">{estrella.categoria} · {estrella.zona}</Txt>
-              </View>
-            </View>
-            <Txt nivel="cuerpo" tono="secundario">{estrella.gancho}</Txt>
-            <Boton titulo="Escribir al comercio" onPress={() => undefined} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-              <FlechaDeSalida />
-              <Txt nivel="pie" tono="tenue">Te lleva fuera de +58express</Txt>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
+            <SelloDeComercio inicial={estrella.inicial} tamano={52} sobreElAmarillo />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Txt nivel="encabezado" tono="sobreAcento">{estrella.nombre}</Txt>
+              <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
+                {estrella.categoria} · {estrella.zona}
+              </Txt>
             </View>
           </View>
 
+          <Txt nivel="cuerpo" tono="sobreAcento" estilo={{ opacity: 0.9 }}>
+            {estrella.gancho}
+          </Txt>
+
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 3 }}>
+            <BotonDeSaldo accion={{ texto: 'Escribir al comercio', icono: 'perfil', principal: true }} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+            <FlechaDeSalida sobreElAmarillo />
+            <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
+              Te lleva fuera de +58express
+            </Txt>
+          </View>
+        </CabeceraAmarilla>
+
+        <View style={{ paddingHorizontal: tema.ritmo.margenPantalla, paddingTop: tema.ritmo.entreBloques }}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={{ marginTop: tema.ritmo.entreBloques, marginRight: -tema.ritmo.margenPantalla }}
+            style={{ marginRight: -tema.ritmo.margenPantalla }}
             contentContainerStyle={{ gap: 8, paddingRight: tema.ritmo.margenPantalla }}
           >
             {CATEGORIAS_DEMO.map(nombre => {
@@ -348,50 +363,57 @@ export function C2Comercio({ aliado = ALIADOS_DEMO[0] }: { readonly aliado?: Ali
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 13,
-          paddingHorizontal: tema.ritmo.margenPantalla,
-          paddingTop: 18,
-          paddingBottom: tema.ritmo.entreElementos
-        }}>
-          <SelloDeComercio inicial={aliado.inicial} tamano={56} />
-          <View style={{ flex: 1, gap: 3 }}>
-            <Txt nivel="titulo" accessibilityRole="header">{aliado.nombre}</Txt>
-            <Txt nivel="pie" tono="tenue">{aliado.categoria} · {aliado.zona}</Txt>
-          </View>
-        </View>
-
-        <View style={{
-          paddingHorizontal: tema.ritmo.margenPantalla,
-          gap: tema.ritmo.entreBloques
-        }}>
+        <CabeceraAmarilla>
+          {/* El rótulo de pagado va DENTRO de la banda, no debajo. Es
+              información que no se puede tapar ni dejar para el final: es lo
+              primero que hay que saber al abrir un anuncio. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-            <RotuloPagado />
-            <Txt nivel="pie" tono="tenue">Espacio pagado por el comercio</Txt>
-          </View>
-
-          <View style={{ gap: tema.ritmo.entreElementos }}>
-            <Txt nivel="encabezado">{aliado.gancho}</Txt>
-            <Txt nivel="cuerpo" tono="secundario">
-              El comercio atiende por su cuenta. Escríbele para preguntar por lo que
-              ofrece, los precios y cómo pagarle.
+            <RotuloPagadoSobreAmarillo />
+            <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
+              Espacio pagado por el comercio
             </Txt>
           </View>
 
-          <View style={{ gap: tema.ritmo.entreElementos }}>
-            <Boton
-              titulo={aliado.salida === 'whatsapp' ? 'Escribir por WhatsApp' : 'Abrir su página'}
-              onPress={() => undefined}
-            />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, justifyContent: 'center' }}>
-              <FlechaDeSalida />
-              <Txt nivel="pie" tono="tenue">Sales de +58express</Txt>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
+            <SelloDeComercio inicial={aliado.inicial} tamano={56} sobreElAmarillo />
+            <View style={{ flex: 1, gap: 3 }}>
+              <Txt nivel="titulo" tono="sobreAcento" accessibilityRole="header">
+                {aliado.nombre}
+              </Txt>
+              <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
+                {aliado.categoria} · {aliado.zona}
+              </Txt>
             </View>
           </View>
 
-          <View style={{ height: 1, backgroundColor: tema.color.borde }} />
+          <Txt nivel="encabezado" tono="sobreAcento">{aliado.gancho}</Txt>
+
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 3 }}>
+            <BotonDeSaldo
+              accion={{
+                texto: aliado.salida === 'whatsapp' ? 'Escribir por WhatsApp' : 'Abrir su página',
+                icono: 'perfil',
+                principal: true
+              }}
+            />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, justifyContent: 'center' }}>
+            <FlechaDeSalida sobreElAmarillo />
+            <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
+              Sales de +58express
+            </Txt>
+          </View>
+        </CabeceraAmarilla>
+
+        <View style={{
+          paddingHorizontal: tema.ritmo.margenPantalla,
+          paddingTop: tema.ritmo.entreBloques,
+          gap: tema.ritmo.entreBloques
+        }}>
+          <Txt nivel="cuerpo" tono="secundario">
+            El comercio atiende por su cuenta. Escríbele para preguntar por lo que
+            ofrece, los precios y cómo pagarle.
+          </Txt>
 
           <View style={{ gap: tema.ritmo.entreElementos }}>
             <Txt nivel="etiqueta" tono="secundario">LO QUE SÍ HACEMOS NOSOTROS</Txt>

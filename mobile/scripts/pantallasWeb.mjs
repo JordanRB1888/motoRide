@@ -524,19 +524,28 @@ const pulso = () => `
 // ---------------------------------------------------------------------------
 
 /**
- * La cabecera del saldo, A SANGRE.
+ * LA CABECERA AMARILLA, A SANGRE
  *
- * No es una tarjeta y es deliberado: una tarjeta con margenes alrededor dice
- * «esto es un elemento mas de la pantalla», y aqui el saldo ES la pantalla.
- * Ocupa el ancho completo, se mete debajo de la barra de estado y no tiene
- * bordes que la separen de nada.
+ * El patron que abre las pantallas que tienen un SUJETO: tu saldo, un comercio
+ * concreto. No una tarjeta —una tarjeta con margenes dice «esto es un elemento
+ * mas»— sino una banda que ocupa el ancho completo, llega hasta arriba del todo
+ * y no lleva bordes que la separen de nada.
  *
- * Va en amarillo de marca con el texto en grafito. Es el unico sitio de la
- * aplicacion donde el amarillo cubre una superficie grande, y por eso funciona:
- * si estuviera en cinco pantallas dejaria de significar nada. El contraste sale
- * igual en dia y en noche porque el amarillo es el mismo en los dos esquemas.
+ * DONDE SI Y DONDE NO
+ *
+ * El amarillo pleno funciona PORQUE ES RARO. En una pantalla de cada cinco
+ * señala; en todas, deja de señalar. Por eso el criterio no es «queda bien»
+ * sino: va donde hay algo o alguien concreto arriba, y no en una lista —el
+ * historial, los avisos— donde no hay sujeto que presentar.
+ *
+ * El texto va en grafito, que sobre el amarillo de marca contrasta de sobra, y
+ * sale igual en dia y en noche porque los dos colores son los mismos en los dos
+ * esquemas.
+ *
+ * Lo que va DEBAJO son tarjetas normales. Ahi la jerarquia es la contraria: se
+ * consultan, no son el motivo de la visita.
  */
-const cabeceraDeSaldo = (dato, botones) => `
+const cabeceraAmarilla = contenido => `
   <div style="background:var(--acento);color:var(--sobre-acento);
     padding:22px var(--margen) 26px;position:relative;overflow:hidden">
 
@@ -545,13 +554,21 @@ const cabeceraDeSaldo = (dato, botones) => `
     <span style="position:absolute;right:-30px;bottom:-90px;width:180px;height:180px;
       border-radius:50%;background:rgba(255,255,255,.1)"></span>
 
-    <div style="position:relative;display:grid;gap:13px">
+    <div style="position:relative;display:grid;gap:13px">${contenido}</div>
+  </div>`;
+
+/** Un texto sobre el amarillo. El grafito es quien contrasta ahi. */
+const sobreAmarillo = (texto, clase = 'pie', opacidad = 0.78) =>
+  `<span class="${clase}" style="color:var(--sobre-acento);opacity:${opacidad};
+    text-align:left">${texto}</span>`;
+
+const cabeceraDeSaldo = (dato, botones) => cabeceraAmarilla(`
       <div style="display:flex;align-items:center;gap:10px">
         <span class="etq" style="color:var(--sobre-acento);opacity:.78;
           letter-spacing:.08em">${dato.rotulo.toUpperCase()}</span>
         <span class="crece"></span>
         ${icono('escudo', 'var(--sobre-acento)', 15)}
-        <span class="pie" style="color:var(--sobre-acento);opacity:.78">Transacción segura</span>
+        ${sobreAmarillo('Transacción segura')}
       </div>
 
       <div style="display:flex;align-items:flex-end;gap:7px">
@@ -564,12 +581,9 @@ const cabeceraDeSaldo = (dato, botones) => `
           padding-bottom:8px">${dato.recuento}</span>
       </div>
 
-      <span class="pie" style="color:var(--sobre-acento);opacity:.78;text-align:left">
-        ${dato.equivalente} · tasa referencial del BCV</span>
+      ${sobreAmarillo(`${dato.equivalente} · tasa referencial del BCV`)}
 
-      <div style="display:flex;gap:10px;margin-top:3px">${botones}</div>
-    </div>
-  </div>`;
+      <div style="display:flex;gap:10px;margin-top:3px">${botones}</div>`);
 
 /** Un boton de la cabecera. Sobre amarillo, el grafito es el que manda. */
 const botonDeSaldo = (texto, ic, principal = false) => `
@@ -689,7 +703,9 @@ const servicio = dato => {
   // Ancha: el icono al lado del texto, que hay sitio de sobra.
   // Estrecha: el icono ENCIMA. En media columna, ponerlo al lado deja al titulo
   // unos noventa puntos y «Transporte Seguro» se queda en «Transporte...».
-  const lado = dato.ancho ? 54 : 46;
+  // 68 y no 46: son escenas enteras dibujadas como iconos de aplicacion, y a
+  // cuarenta y seis puntos se vuelven un borron.
+  const lado = dato.ancho ? 72 : 68;
 
   // Con ilustracion no hay disco detras: el arte ya viene sobre grafito y con
   // las esquinas hechas, y meterlo en un circulo amarillo seria enmarcar lo que
@@ -756,11 +772,13 @@ const campana = dato => `
  * la verdad; un icono de categoria prestado de los doce que hay mentiria, que
  * es lo que ya paso con la casa que en realidad era la pestania de inicio.
  */
-const sello = (inicial, tam = 46) => `
+const sello = (inicial, tam = 46, sobreElAmarillo = false) => `
   <span style="width:${tam}px;height:${tam}px;flex:0 0 ${tam}px;border-radius:${Math.round(tam * 0.3)}px;
-    display:grid;place-items:center;background:var(--elevada);
-    border:1px solid var(--borde)">
-    <span class="enc ac" style="font-size:${Math.round(tam * 0.4)}px">${inicial}</span>
+    display:grid;place-items:center;
+    background:${sobreElAmarillo ? 'var(--sobre-acento)' : 'var(--elevada)'};
+    border:1px solid ${sobreElAmarillo ? 'transparent' : 'var(--borde)'}">
+    <span class="enc" style="font-size:${Math.round(tam * 0.4)}px;
+      color:${sobreElAmarillo ? 'var(--acento)' : 'var(--acento-texto)'}">${inicial}</span>
   </span>`;
 
 /**
@@ -1280,37 +1298,40 @@ export const PANTALLAS = {
     </div>`,
 
   aliados: () => `
-    <div class="tel crece">
-      <div class="hoja2">
-        <div style="display:flex;align-items:center;padding:18px var(--margen) var(--gap)">
-          <span class="titulo">Aliados</span><span class="crece"></span>
-          ${rotuloPagado}
-        </div>
-        <div style="padding:0 var(--margen) 110px">
+    <div class="tel">
+      <div class="hoja2" style="background:var(--fondo)">
+        ${(() => {
+          const estrella = ALIADOS_DEMO.find(aliado => aliado.destacado) ?? ALIADOS_DEMO[0];
+          return cabeceraAmarilla(`
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="titulo" style="color:var(--sobre-acento)">Aliados</span>
+              <span class="crece"></span>
+              <span class="etq" style="color:var(--sobre-acento);opacity:.78;
+                border:1px solid var(--sobre-acento);border-radius:6px;padding:2px 7px;
+                letter-spacing:.06em">PUBLICIDAD</span>
+            </div>
 
-          ${(() => {
-            const estrella = ALIADOS_DEMO.find(aliado => aliado.destacado);
-            return `
-            <div style="position:relative;overflow:hidden;padding:var(--pad);
-              border-radius:var(--r-tarjeta);background:var(--superficie);display:grid;gap:var(--gap)">
-              <span class="filo"></span>
-              <div style="display:flex;align-items:center;gap:13px">
-                ${sello(estrella.inicial, 52)}
-                <span style="flex:1;display:grid;gap:2px;min-width:0">
-                  <span class="enc">${estrella.nombre}</span>
-                  <span class="pie t3" style="text-align:left">${estrella.categoria} · ${estrella.zona}</span>
-                </span>
-              </div>
-              <span class="cuerpo t2">${estrella.gancho}</span>
-              <div class="boton">Escribir al comercio</div>
-              <div style="display:flex;align-items:center;gap:7px">
-                ${salida}<span class="pie t3">Te lleva fuera de +58express</span>
-              </div>
-            </div>`;
-          })()}
+            <div style="display:flex;align-items:center;gap:13px">
+              ${sello(estrella.inicial, 52, true)}
+              <span style="flex:1;display:grid;gap:2px;min-width:0">
+                <span class="enc" style="color:var(--sobre-acento)">${estrella.nombre}</span>
+                ${sobreAmarillo(`${estrella.categoria} · ${estrella.zona}`)}
+              </span>
+            </div>
 
-          <div class="carrusel" style="margin-top:var(--bloques);
-            margin-right:calc(var(--margen) * -1);padding-right:var(--margen)">
+            ${sobreAmarillo(estrella.gancho, 'cuerpo', 0.9)}
+
+            <div style="display:flex;gap:10px;margin-top:3px">
+              ${botonDeSaldo('Escribir al comercio', 'perfil', true)}
+            </div>
+            <div style="display:flex;align-items:center;gap:7px">
+              ${salida}${sobreAmarillo('Te lleva fuera de +58express')}
+            </div>`);
+        })()}
+
+        <div style="padding:var(--bloques) var(--margen) 110px">
+          <div class="carrusel" style="margin-right:calc(var(--margen) * -1);
+            padding-right:var(--margen)">
             ${CATEGORIAS_DEMO.map((nombre, i) => `
               <span style="flex:0 0 auto;padding:8px 14px;border-radius:999px;
                 background:${i === 0 ? 'var(--elevada)' : 'transparent'};
@@ -1335,39 +1356,39 @@ export const PANTALLAS = {
     </div>`,
 
   comercio: () => `
-    <div class="tel crece">
-      <div class="hoja2">
+    <div class="tel">
+      <div class="hoja2" style="background:var(--fondo)">
         ${(() => {
           const negocio = ALIADOS_DEMO[0];
-          return `
-        <div style="padding:18px var(--margen) var(--gap);display:flex;
-          align-items:center;gap:13px">
-          ${sello(negocio.inicial, 56)}
-          <span style="flex:1;display:grid;gap:3px;min-width:0">
-            <span class="titulo">${negocio.nombre}</span>
-            <span class="pie t3" style="text-align:left">${negocio.categoria} · ${negocio.zona}</span>
-          </span>
-        </div>
-        <div style="padding:0 var(--margen) 110px;display:grid;gap:var(--bloques)">
-          <div style="display:flex;align-items:center;gap:9px">
-            ${rotuloPagado}
-            <span class="pie t3">Espacio pagado por el comercio</span>
-          </div>
-
-          <div style="display:grid;gap:var(--gap)">
-            <span class="enc">${negocio.gancho}</span>
-            <span class="cuerpo t2">El comercio atiende por su cuenta. Escríbele para
-              preguntar por lo que ofrece, los precios y cómo pagarle.</span>
-          </div>
-
-          <div style="display:grid;gap:var(--gap)">
-            <div class="boton">Escribir por WhatsApp</div>
-            <div style="display:flex;align-items:center;gap:7px;justify-content:center">
-              ${salida}<span class="pie t3">Sales de +58express</span>
+          return cabeceraAmarilla(`
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="etq" style="color:var(--sobre-acento);opacity:.78;
+                border:1px solid var(--sobre-acento);border-radius:6px;padding:2px 7px;
+                letter-spacing:.06em">PUBLICIDAD</span>
+              ${sobreAmarillo('Espacio pagado por el comercio')}
             </div>
-          </div>
 
-          <span class="sep"></span>
+            <div style="display:flex;align-items:center;gap:13px">
+              ${sello(negocio.inicial, 56, true)}
+              <span style="flex:1;display:grid;gap:3px;min-width:0">
+                <span class="titulo" style="color:var(--sobre-acento)">${negocio.nombre}</span>
+                ${sobreAmarillo(`${negocio.categoria} · ${negocio.zona}`)}
+              </span>
+            </div>
+
+            ${sobreAmarillo(negocio.gancho, 'enc', 1)}
+
+            <div style="display:flex;gap:10px;margin-top:3px">
+              ${botonDeSaldo('Escribir por WhatsApp', 'perfil', true)}
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;justify-content:center">
+              ${salida}${sobreAmarillo('Sales de +58express')}
+            </div>`);
+        })()}
+
+        <div style="padding:var(--bloques) var(--margen) 110px;display:grid;gap:var(--bloques)">
+          <span class="cuerpo t2">El comercio atiende por su cuenta. Escríbele para
+            preguntar por lo que ofrece, los precios y cómo pagarle.</span>
 
           <div style="display:grid;gap:var(--gap)">
             <span class="etq t2">LO QUE SÍ HACEMOS NOSOTROS</span>
@@ -1379,7 +1400,8 @@ export const PANTALLAS = {
                 ${icono('moto', 'var(--acento-texto)', 20)}</span>
               <span style="flex:1;display:grid;gap:2px">
                 <span class="cuerpo">Pedir un viaje hasta aquí</span>
-                <span class="pie t3" style="text-align:left">Te llevamos, o traemos lo que compres</span>
+                <span class="pie t3" style="text-align:left">Te llevamos, o traemos lo que
+                  compres</span>
               </span>
               ${galonAcento}
             </div>
@@ -1392,8 +1414,7 @@ export const PANTALLAS = {
               productos de este comercio. Cualquier reclamo por el pedido va directo con
               ellos.</span>
           </div>
-        </div>`;
-        })()}
+        </div>
       </div>
       ${barraPasajera('pedir')}
     </div>`,

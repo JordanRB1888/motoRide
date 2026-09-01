@@ -139,7 +139,10 @@ function RotuloPronto() {
 function Casilla({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
   const arte = ARTE_DE_SERVICIO[dato.arte];
-  const lado = dato.ancho ? 54 : 46;
+  // 68 y no 46. Estas ilustraciones estan dibujadas como iconos de aplicacion
+  // —una escena entera, con su fondo y su halo— y a cuarenta y seis puntos se
+  // vuelven un borron. El icono plano si se leia pequenio; una escena, no.
+  const lado = dato.ancho ? 72 : 68;
 
   /**
    * Con ilustración, no hay disco detrás: el arte ya viene sobre grafito y con

@@ -25,7 +25,9 @@ import { Icono, type NombreDeIcono } from './Icono';
 // Texto
 // ---------------------------------------------------------------------------
 
-export type Tono = 'primario' | 'secundario' | 'tenue' | 'acento' | 'sobreAcento' | 'exito' | 'peligro';
+export type Tono =
+  | 'primario' | 'secundario' | 'tenue' | 'acento' | 'sobreAcento'
+  | 'exito' | 'peligro' | 'marca';
 export type Nivel = 'display' | 'titulo' | 'encabezado' | 'cuerpo' | 'etiqueta' | 'pie';
 
 export function Txt({
@@ -56,7 +58,14 @@ export function Txt({
     // El rojo de la emergencia, por la misma razon que el verde: es un tono del
     // sistema. La salida de emergencia aparece en dos pantallas y su color no
     // puede depender de que alguien se acuerde de escribirlo igual en las dos.
-    peligro: tema.color.peligro
+    peligro: tema.color.peligro,
+    // El amarillo de marca SIN corregir. Distinto de `acento`, que en modo dia
+    // baja a ambar oscuro para poder leerse sobre superficies claras.
+    //
+    // Solo vale cuando el fondo es oscuro POR CONSTRUCCION y no por el tema:
+    // hoy, la inicial del sello de un comercio, que va sobre grafito dentro de
+    // la banda amarilla. Sobre una superficie del tema, usa `acento`.
+    marca: tema.color.acento
   };
 
   const esTitular = nivel === 'display' || nivel === 'titulo';

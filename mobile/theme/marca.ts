@@ -150,14 +150,21 @@ export const ACERCAMIENTO_DE_LA_PASAJERA = 1.85;
  * Las rutas van literales dentro de `require` porque Metro las resuelve en
  * tiempo de compilación: una ruta construida con variables no la puede seguir.
  *
- * PENDIENTE: faltan los seis ficheros en `assets/marca/`. En cuanto estén, se
- * añade aquí su `require` y aparecen solos.
+ * Las seis llegaron a 1254 píxeles y pesaban 1,6 MB cada una —nueve megas y
+ * medio para dibujarlas a cuarenta y seis puntos—. Se guardan a 288, que cubre
+ * pantallas de tres veces la densidad: 594 KB las seis juntas.
  */
 export const ARTE_DE_SERVICIO: Readonly<Partial<Record<string, ImageSourcePropType>>> =
   Object.freeze({
-    // Viajes usa la moto de marca, que ya la tenemos: es la misma toma en tres
+    // Viajes usa la moto de marca, que ya la teníamos: es la misma toma en tres
     // cuartos del selector de servicio.
-    viajes: VEHICULOS.MOTO.tarjeta
+    moto: VEHICULOS.MOTO.tarjeta,
+    'servicio-comercios': require('../assets/marca/servicio-comercios.png') as ImageSourcePropType,
+    'servicio-transporte-seguro': require('../assets/marca/servicio-transporte-seguro.png') as ImageSourcePropType,
+    'servicio-envios': require('../assets/marca/servicio-envios.png') as ImageSourcePropType,
+    'servicio-comida': require('../assets/marca/servicio-comida.png') as ImageSourcePropType,
+    'servicio-mercado': require('../assets/marca/servicio-mercado.png') as ImageSourcePropType,
+    'servicio-compra-vende': require('../assets/marca/servicio-compra-vende.png') as ImageSourcePropType
   });
 
 /** Resuelve la imagen de un vehículo. Equivale a `getVehicleAsset` de la web. */

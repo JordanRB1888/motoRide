@@ -50,16 +50,27 @@ type Movimiento = (typeof MOVIMIENTOS_DEMO)[number] | (typeof MOVIMIENTOS_PASAJE
 // La cabecera
 // ---------------------------------------------------------------------------
 
-interface Accion {
+export interface Accion {
   readonly texto: string;
   readonly icono: NombreDeIcono;
   readonly principal?: boolean;
 }
 
-function CabeceraDeSaldo({ dato, acciones }: {
-  readonly dato: Saldo;
-  readonly acciones: readonly Accion[];
-}) {
+/**
+ * LA BANDA AMARILLA, A SANGRE
+ *
+ * El patrón que abre las pantallas con un SUJETO: tu saldo, un comercio
+ * concreto. No una tarjeta —una tarjeta con márgenes dice «esto es un elemento
+ * más»— sino una banda de borde a borde, sin nada que la separe de arriba.
+ *
+ * DÓNDE SÍ Y DÓNDE NO
+ *
+ * El amarillo pleno funciona PORQUE ES RARO. En una pantalla de cada cinco
+ * señala; en todas, deja de señalar. El criterio no es «queda bien» sino: va
+ * donde hay algo o alguien concreto que presentar, y no en una lista —el
+ * historial, los avisos— donde no hay sujeto.
+ */
+export function CabeceraAmarilla({ children }: { readonly children: React.ReactNode }) {
   const tema = useTema();
 
   return (
@@ -82,8 +93,20 @@ function CabeceraDeSaldo({ dato, acciones }: {
         width: 180, height: 180, borderRadius: 90,
         backgroundColor: 'rgba(255,255,255,0.10)'
       }} />
+      <View style={{ gap: 13 }}>{children}</View>
+    </View>
+  );
+}
 
-      <View style={{ gap: 13 }}>
+function CabeceraDeSaldo({ dato, acciones }: {
+  readonly dato: Saldo;
+  readonly acciones: readonly Accion[];
+}) {
+  const tema = useTema();
+
+  return (
+    <CabeceraAmarilla>
+      <>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Txt nivel="etiqueta" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
             {dato.rotulo.toUpperCase()}
@@ -115,13 +138,13 @@ function CabeceraDeSaldo({ dato, acciones }: {
             <BotonDeSaldo key={accion.texto} accion={accion} />
           ))}
         </View>
-      </View>
-    </View>
+      </>
+    </CabeceraAmarilla>
   );
 }
 
 /** Sobre amarillo, el grafito es el que manda: es él quien contrasta. */
-function BotonDeSaldo({ accion }: { readonly accion: Accion }) {
+export function BotonDeSaldo({ accion }: { readonly accion: Accion }) {
   const tema = useTema();
   const relleno = accion.principal === true;
 
