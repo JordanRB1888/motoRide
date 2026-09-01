@@ -93,60 +93,81 @@ export function OpcionesDeBeneficiario({ elegido, onElegir }: {
 }) {
   const tema = useTema();
 
+  /**
+   * Una LISTA, no dos tarjetas.
+   *
+   * Son dos líneas de lo mismo —quién se monta— y como tarjetas separadas
+   * pesaban lo que dos bloques distintos: cuatro cajas apiladas para una
+   * pregunta de dos respuestas, con la hoja subiendo hasta media pantalla.
+   *
+   * El aviso de que pedir por otra persona todavía no funciona va DEBAJO DE ESA
+   * OPCIÓN, no en una caja al final. Una advertencia lejos de lo que advierte
+   * se lee dos veces: una para leerla y otra para averiguar a qué se refería.
+   */
   const opciones: readonly {
     readonly clave: Beneficiario;
     readonly titulo: string;
     readonly detalle: string;
     readonly icono: NombreDeIcono;
+    readonly listo: boolean;
   }[] = [
-    { clave: 'mi', titulo: 'Para mí', detalle: 'Tú te montas', icono: 'perfil' },
-    { clave: 'otra-persona', titulo: 'Para otra persona', detalle: 'Pídelo por alguien más', icono: 'perfil' }
+    { clave: 'mi', titulo: 'Para mí', detalle: 'Tú te montas', icono: 'perfil', listo: true },
+    {
+      clave: 'otra-persona',
+      titulo: 'Para otra persona',
+      detalle: 'Todavía no está conectado al servidor',
+      icono: 'perfil',
+      listo: false
+    }
   ];
 
   return (
-    <View style={{ gap: tema.ritmo.entreElementos }}>
-      {opciones.map(opcion => {
+    <View>
+      {opciones.map((opcion, indice) => {
         const activa = opcion.clave === elegido;
         return (
-          <Pressable
-            key={opcion.clave}
-            onPress={() => onElegir?.(opcion.clave)}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: activa }}
-            accessibilityLabel={`${opcion.titulo}. ${opcion.detalle}`}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 13,
-              padding: 14,
-              borderRadius: tema.radio.tarjeta,
-              backgroundColor: activa ? tema.color.superficieElevada : tema.color.superficie,
-              overflow: 'hidden'
-            }}
-          >
-            {activa ? (
-              <View style={{
-                position: 'absolute', left: 0, top: 0, bottom: 0,
-                width: 3, backgroundColor: tema.color.acento
-              }} />
+          <View key={opcion.clave}>
+            {indice > 0 ? (
+              <View style={{ height: 1, backgroundColor: tema.color.borde }} />
             ) : null}
-            <View style={{
-              width: 38, height: 38, borderRadius: 19,
-              alignItems: 'center', justifyContent: 'center',
-              backgroundColor: activa ? `${tema.color.acento}1f` : tema.color.superficieHundida
-            }}>
-              <Icono
-                nombre={opcion.icono}
-                color={activa ? tema.color.acento : tema.color.textoSecundario}
-                tamano={19}
-              />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Txt nivel="cuerpo">{opcion.titulo}</Txt>
-              <Txt nivel="pie" tono="tenue">{opcion.detalle}</Txt>
-            </View>
-            <Marca activa={activa} />
-          </Pressable>
+            <Pressable
+              onPress={() => onElegir?.(opcion.clave)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: activa, disabled: !opcion.listo }}
+              accessibilityLabel={`${opcion.titulo}. ${opcion.detalle}`}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 13,
+                paddingVertical: 13,
+                opacity: opcion.listo ? 1 : 0.62
+              }}
+            >
+              <View style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: activa
+                  ? `${tema.color.acento}24`
+                  : tema.color.superficieHundida
+              }}>
+                <Icono
+                  nombre={opcion.icono}
+                  color={activa ? tema.color.acentoTexto : tema.color.textoTenue}
+                  tamano={18}
+                />
+              </View>
+
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt nivel="cuerpo">{opcion.titulo}</Txt>
+                <Txt nivel="pie" tono="tenue">{opcion.detalle}</Txt>
+              </View>
+
+              <Marca activa={activa} />
+            </Pressable>
+          </View>
         );
       })}
     </View>
@@ -161,7 +182,9 @@ function Marca({ activa }: { readonly activa: boolean }) {
     <View style={{
       width: 21, height: 21, borderRadius: 11,
       borderWidth: 2,
-      borderColor: activa ? tema.color.acento : tema.color.borde,
+      // `acentoTexto`: en modo dia el amarillo de marca sobre una hoja clara se
+      // queda en 1,35:1, y un control de seleccion tiene que verse.
+      borderColor: activa ? tema.color.acentoTexto : tema.color.borde,
       alignItems: 'center', justifyContent: 'center'
     }}>
       {activa ? (

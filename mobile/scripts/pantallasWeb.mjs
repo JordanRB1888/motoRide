@@ -699,43 +699,81 @@ const ARTE_EN_DISCO = new Set(
     .map(nombre => nombre.replace(/\.png$/, ''))
 );
 
+/**
+ * Las estelas de velocidad.
+ *
+ * Cuatro barras amarillas de distinta longitud, desvaneciendose hacia la
+ * izquierda. Es el mismo gesto del logotipo, donde la moto sale disparada
+ * dejando rastro: aqui hace de fondo para que la moto no flote sobre un
+ * rectangulo vacio.
+ */
+const estelas = `
+  ${[[16, 78, 0.55], [30, 104, 0.9], [46, 88, 0.7], [60, 62, 0.4]].map(([y, largo, op]) => `
+    <span style="position:absolute;right:6px;top:${y}px;width:${largo}px;height:3px;
+      border-radius:3px;opacity:${op};
+      background:linear-gradient(90deg,transparent,var(--acento))"></span>`).join('')}`;
+
+/**
+ * La casilla ANCHA lleva la moto a la derecha, no a la izquierda.
+ *
+ * La fotografia es apaisada —mide vez y media de ancho lo que de alto— y
+ * meterla en el cuadrado que usan las demas la recortaba por las ruedas. Aqui
+ * va con su proporcion, mas grande, asomando por el borde y sobre las estelas.
+ *
+ * El texto se queda a la izquierda, que es donde se empieza a leer.
+ */
+const casillaAncha = dato => `
+  <span style="flex:1 1 100%;position:relative;overflow:hidden;display:block;
+    min-height:96px;padding:16px 150px 16px 16px;border-radius:var(--r-tarjeta);
+    background:var(--superficie);border:1px solid var(--acento)">
+    <span class="filo"></span>
+    ${estelas}
+    <img src="marca/moto.png" width="132" height="88" alt=""
+      style="position:absolute;right:-10px;top:50%;transform:translateY(-50%);
+        object-fit:contain">
+    <span style="position:relative;display:grid;gap:3px">
+      <span class="enc">${dato.titulo}</span>
+      <span class="pie t3" style="text-align:left">${dato.detalle}</span>
+    </span>
+  </span>`;
+
 const servicio = dato => {
-  // Ancha: el icono al lado del texto, que hay sitio de sobra.
-  // Estrecha: el icono ENCIMA. En media columna, ponerlo al lado deja al titulo
-  // unos noventa puntos y «Transporte Seguro» se queda en «Transporte...».
+  if (dato.ancho) return casillaAncha(dato);
+
+  // El icono ENCIMA del texto. En media columna, ponerlo al lado le deja al
+  // titulo unos noventa puntos y «Transporte Seguro» se queda en
+  // «Transporte...».
+  //
   // 68 y no 46: son escenas enteras dibujadas como iconos de aplicacion, y a
   // cuarenta y seis puntos se vuelven un borron.
-  const lado = dato.ancho ? 72 : 68;
+  const lado = 68;
 
   // Con ilustracion no hay disco detras: el arte ya viene sobre grafito y con
   // las esquinas hechas, y meterlo en un circulo amarillo seria enmarcar lo que
   // ya esta enmarcado.
   const disco = ARTE_EN_DISCO.has(dato.arte)
     ? `<img src="marca/${dato.arte}.png" width="${lado}" height="${lado}" alt=""
-        style="flex:0 0 ${lado}px;border-radius:13px;object-fit:cover">`
+        style="border-radius:13px;object-fit:cover">`
     : `
     <span style="width:${lado - 8}px;height:${lado - 8}px;
-      flex:0 0 ${lado - 8}px;border-radius:50%;display:grid;place-items:center;
+      border-radius:50%;display:grid;place-items:center;
       background:${dato.listo
         ? 'color-mix(in srgb,var(--acento) 15%,transparent)'
         : 'var(--hundida)'}">
-      ${icono(dato.icono, dato.listo ? 'var(--acento-texto)' : 'var(--texto-3)', dato.ancho ? 23 : 19)}
+      ${icono(dato.icono, dato.listo ? 'var(--acento-texto)' : 'var(--texto-3)', 19)}
     </span>`;
 
   const texto = `
     <span style="display:grid;gap:2px;min-width:0">
-      <span class="${dato.ancho ? 'enc' : 'cuerpo'}">${dato.titulo}</span>
+      <span class="cuerpo">${dato.titulo}</span>
       <span class="pie t3" style="text-align:left">${dato.detalle}</span>
     </span>`;
 
   return `
-  <span style="flex:${dato.ancho ? '1 1 100%' : '1 1 calc(50% - 5px)'};
-    display:${dato.ancho ? 'flex' : 'grid'};
-    ${dato.ancho ? 'align-items:center;gap:12px;' : 'gap:10px;'}
+  <span style="flex:1 1 calc(50% - 5px);display:grid;gap:10px;
     padding:14px;border-radius:var(--r-tarjeta);background:var(--superficie);
-    border:1px solid ${dato.listo && dato.ancho ? 'var(--acento)' : 'var(--borde)'};
+    border:1px solid var(--borde);
     ${dato.listo ? '' : 'opacity:.62;'}min-width:0;position:relative;overflow:hidden">
-    ${dato.listo && dato.ancho ? '<span class="filo"></span>' : ''}
     ${dato.listo ? '' : `<span style="position:absolute;top:10px;right:10px">${rotuloPronto}</span>`}
     ${disco}
     ${texto}
@@ -1012,31 +1050,36 @@ export const PANTALLAS = {
   pedir: () => `
     <div class="tel">
       <div class="mapa">${CALLES}${MOTOS_TRES}</div>
-      <div class="hoja" style="${hojaMedia};bottom:76px">
+      <div class="hoja" style="bottom:76px">
         <span class="asa"></span>
-        <span class="pastilla" style="align-self:flex-start;padding:7px 9px 7px 11px">
-          ${icono('perfil', 'var(--texto-2)', 15)}<span class="etq t2">Para mí</span>
-          ${icono('galon', 'var(--texto-3)', 12)}</span>
+
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="pastilla" style="padding:7px 9px 7px 11px">
+            ${icono('perfil', 'var(--texto-2)', 15)}<span class="etq t2">Para mí</span>
+            ${icono('galon', 'var(--texto-3)', 12)}</span>
+          <span class="crece"></span>
+          <span class="etq t3">Tasa BCV</span>
+          <span class="etq ac">Bs. 000,00</span>
+        </div>
+
         <div style="height:var(--gap)"></div>
         ${TRAYECTO}
         <div style="height:var(--gap)"></div>
         ${LUGARES}
-        <div style="height:var(--gap)"></div>
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 13px;
-          border-radius:var(--r-campo);background:var(--hundida)">
-          ${icono('dolar', 'var(--texto-2)', 16)}
-          <span class="etq t3">Tasa BCV</span><span class="crece"></span>
-          <span class="etq ac">Bs. 000,00</span>
-        </div>
-        <div style="height:var(--gap)"></div><span class="sep"></span>
-        <div style="padding-top:4px">
-          ${[['Destino de ejemplo 1', 'Guardado como «Casa»'], ['Destino de ejemplo 2', 'Guardado como «Trabajo»']].map(([t, d]) => `
+
+        <div style="height:var(--bloques)"></div>
+        <span class="etq t2">RECIENTES</span>
+        <div style="margin-top:6px">
+          ${[['Destino de ejemplo 1', 'Guardado como «Casa»'], ['Destino de ejemplo 2', 'Guardado como «Trabajo»']].map(([t, d], i) => `
+            ${i > 0 ? '<span class="sep"></span>' : ''}
             <div class="lugar-fila"><span class="redondo">${icono('reloj', 'var(--texto-2)', 17)}</span>
               <span style="flex:1;display:grid;gap:1px"><span class="cuerpo">${t}</span>
-              <span class="pie t3">${d}</span></span></div>`).join('')}
+              <span class="pie t3" style="text-align:left">${d}</span></span></div>`).join('')}
         </div>
-        <div style="height:var(--gap)"></div>
+
+        <div style="height:var(--bloques)"></div>
         <div class="boton">Ver opciones</div>
+        <div style="height:var(--pad)"></div>
       </div>
       ${barraPasajera('abierto')}
     </div>`,
@@ -1047,26 +1090,30 @@ export const PANTALLAS = {
       <div class="hoja" style="padding-top:0">
         <span class="asa"></span>
         <div style="display:grid;gap:var(--gap);padding-bottom:var(--pad)">
-          <span class="titulo">¿Para quién es el viaje?</span>
-          ${[['Para mí', 'Tú te montas', true], ['Para otra persona', 'Pídelo por alguien más', false]].map(([t, d, on]) => `
-            <div class="veh-fila ${on ? 'on' : ''}" style="padding:14px;gap:13px;
-              background:${on ? 'var(--elevada)' : 'var(--superficie)'}">
-              ${on ? '<span class="filo"></span>' : ''}
-              <span style="width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex:0 0 38px;
-                background:${on ? 'color-mix(in srgb,var(--acento) 12%,transparent)' : 'var(--fondo)'}">
-                ${icono('perfil', on ? 'var(--acento)' : 'var(--texto-2)', 19)}</span>
-              <span style="flex:1;display:grid;gap:2px">
-                <span class="cuerpo">${t}</span><span class="pie t3">${d}</span></span>
-              <span style="width:21px;height:21px;border-radius:50%;flex:0 0 21px;
-                border:2px solid ${on ? 'var(--acento)' : 'var(--borde)'};display:grid;place-items:center">
-                ${on ? '<span style="width:11px;height:11px;border-radius:50%;background:var(--acento)"></span>' : ''}
-              </span>
-            </div>`).join('')}
-          <div style="display:flex;align-items:center;gap:9px;padding:12px;
-            border-radius:var(--r-campo);background:var(--hundida)">
-            ${icono('escudo', 'var(--aviso)', 16)}
-            <span class="pie t3">Pedir por otra persona todavía no está conectado al servidor.</span>
+          <span class="enc">¿Para quién es el viaje?</span>
+
+          <div>
+            ${[['Para mí', 'Tú te montas', true, ''],
+               ['Para otra persona', 'Pídelo por alguien más', false,
+                'Todavía no está conectado al servidor']].map(([t, d, on, nota], i) => `
+              ${i > 0 ? '<span class="sep"></span>' : ''}
+              <div style="display:flex;align-items:center;gap:13px;padding:13px 0;
+                ${on ? '' : 'opacity:.62'}">
+                <span style="width:36px;height:36px;border-radius:50%;display:grid;
+                  place-items:center;flex:0 0 36px;
+                  background:${on ? 'color-mix(in srgb,var(--acento) 14%,transparent)' : 'var(--hundida)'}">
+                  ${icono('perfil', on ? 'var(--acento-texto)' : 'var(--texto-3)', 18)}</span>
+                <span style="flex:1;display:grid;gap:2px;min-width:0">
+                  <span class="cuerpo">${t}</span>
+                  <span class="pie t3" style="text-align:left">${nota || d}</span></span>
+                <span style="width:21px;height:21px;border-radius:50%;flex:0 0 21px;
+                  border:2px solid ${on ? 'var(--acento-texto)' : 'var(--borde)'};
+                  display:grid;place-items:center">
+                  ${on ? '<span style="width:11px;height:11px;border-radius:50%;background:var(--acento-texto)"></span>' : ''}
+                </span>
+              </div>`).join('')}
           </div>
+
           <div class="boton">Continuar</div>
         </div>
       </div>

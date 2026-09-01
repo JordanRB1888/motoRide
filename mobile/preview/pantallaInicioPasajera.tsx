@@ -130,19 +130,103 @@ function RotuloPronto() {
 }
 
 /**
- * Una casilla.
+ * Las estelas de velocidad.
  *
- * Ancha: el icono al lado del texto, que hay sitio de sobra.
- * Estrecha: el icono ENCIMA. En media columna, ponerlo al lado le deja al
- * título unos noventa puntos y «Transporte Seguro» se queda en «Transporte…».
+ * Cuatro barras amarillas de distinta longitud. Es el mismo gesto del
+ * logotipo, donde la moto sale disparada dejando rastro: aquí hacen de fondo
+ * para que la moto no flote sobre un rectángulo vacío.
+ */
+function Estelas() {
+  const tema = useTema();
+
+  return (
+    <>
+      {[[16, 78, 0.55], [30, 104, 0.9], [46, 88, 0.7], [60, 62, 0.4]].map(([y, largo, opacidad]) => (
+        <View
+          key={y}
+          style={{
+            position: 'absolute',
+            right: 6,
+            top: y,
+            width: largo,
+            height: 3,
+            borderRadius: 3,
+            opacity: opacidad,
+            backgroundColor: tema.color.acento
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
+ * La casilla ANCHA lleva la moto a la DERECHA, no a la izquierda.
+ *
+ * La fotografía es apaisada —mide vez y media de ancho lo que de alto— y
+ * meterla en el cuadrado que usan las demás la recortaba por las ruedas. Aquí
+ * va con su proporción, más grande, asomando por el borde y sobre las estelas.
+ *
+ * El texto se queda a la izquierda, que es donde se empieza a leer.
+ */
+function CasillaAncha({ dato }: { readonly dato: Servicio }) {
+  const tema = useTema();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={dato.titulo}
+      style={{
+        width: '100%',
+        minHeight: 96,
+        justifyContent: 'center',
+        paddingLeft: 16,
+        paddingRight: 150,
+        paddingVertical: 16,
+        borderRadius: tema.radio.tarjeta,
+        backgroundColor: tema.color.superficie,
+        borderWidth: 1,
+        borderColor: tema.color.acento,
+        overflow: 'hidden'
+      }}
+    >
+      <View style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 3,
+        backgroundColor: tema.color.acento
+      }} />
+      <Estelas />
+      <Image
+        source={ARTE_DE_SERVICIO[dato.arte]}
+        resizeMode="contain"
+        accessibilityIgnoresInvertColors
+        style={{ position: 'absolute', right: -10, width: 132, height: 88 }}
+      />
+      <View style={{ gap: 3 }}>
+        <Txt nivel="encabezado">{dato.titulo}</Txt>
+        <Txt nivel="pie" tono="tenue">{dato.detalle}</Txt>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Una casilla estrecha: el arte ENCIMA del texto.
+ *
+ * En media columna, ponerlo al lado le deja al título unos noventa puntos y
+ * «Transporte Seguro» se queda en «Transporte…».
  */
 function Casilla({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
   const arte = ARTE_DE_SERVICIO[dato.arte];
-  // 68 y no 46. Estas ilustraciones estan dibujadas como iconos de aplicacion
+
+  // 68 y no 46. Estas ilustraciones están dibujadas como iconos de aplicación
   // —una escena entera, con su fondo y su halo— y a cuarenta y seis puntos se
-  // vuelven un borron. El icono plano si se leia pequenio; una escena, no.
-  const lado = dato.ancho ? 72 : 68;
+  // vuelven un borrón. El icono plano sí se leía pequeño; una escena, no.
+  const lado = 68;
 
   /**
    * Con ilustración, no hay disco detrás: el arte ya viene sobre grafito y con
@@ -161,7 +245,7 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
       <Icono
         nombre={dato.icono}
         color={dato.listo ? tema.color.acentoTexto : tema.color.textoTenue}
-        tamano={dato.ancho ? 23 : 19}
+        tamano={19}
       />
     </View>
   ) : (
@@ -174,8 +258,8 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
   );
 
   const texto = (
-    <View style={{ flex: dato.ancho ? 1 : undefined, gap: 2 }}>
-      <Txt nivel={dato.ancho ? 'encabezado' : 'cuerpo'}>{dato.titulo}</Txt>
+    <View style={{ gap: 2 }}>
+      <Txt nivel="cuerpo">{dato.titulo}</Txt>
       <Txt nivel="pie" tono="tenue">{dato.detalle}</Txt>
     </View>
   );
@@ -187,30 +271,17 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
       accessibilityLabel={dato.listo ? dato.titulo : `${dato.titulo}. Pronto`}
       disabled={!dato.listo}
       style={{
-        width: dato.ancho ? '100%' : '48.5%',
-        flexDirection: dato.ancho ? 'row' : 'column',
-        alignItems: dato.ancho ? 'center' : 'stretch',
-        gap: dato.ancho ? 12 : 10,
+        width: '48.5%',
+        gap: 10,
         padding: 14,
         borderRadius: tema.radio.tarjeta,
         backgroundColor: tema.color.superficie,
         borderWidth: 1,
-        borderColor: dato.listo && dato.ancho ? tema.color.acento : tema.color.borde,
+        borderColor: tema.color.borde,
         opacity: dato.listo ? 1 : 0.62,
         overflow: 'hidden'
       }}
     >
-      {dato.listo && dato.ancho ? (
-        <View style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 3,
-          backgroundColor: tema.color.acento
-        }} />
-      ) : null}
-
       {dato.listo ? null : (
         <View style={{ position: 'absolute', top: 10, right: 10 }}>
           <RotuloPronto />
@@ -287,7 +358,9 @@ export function C2InicioPasajera() {
               marginTop: 11
             }}>
               {SERVICIOS_DE_INICIO.map(dato => (
-                <Casilla key={dato.clave} dato={dato} />
+                dato.ancho
+                  ? <CasillaAncha key={dato.clave} dato={dato} />
+                  : <Casilla key={dato.clave} dato={dato} />
               ))}
             </View>
           </View>

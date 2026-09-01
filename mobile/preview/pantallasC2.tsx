@@ -409,10 +409,19 @@ export function C2PedirViaje() {
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <LienzoDeMapa vehiculos={MOTOS_CERCA.slice(0, 3)} conControles={false}>
         <HojaInferior estado="media" desplazable>
-          <ChipDeBeneficiario
-            beneficiario={beneficiario}
-            onPress={() => setBeneficiario(beneficiario === 'mi' ? 'otra-persona' : 'mi')}
-          />
+          {/* La tasa comparte fila con el chip en vez de tener su propia caja.
+              Es un dato de refilon —cuanto vale el dolar hoy— y no una decision
+              que se tome aqui; en su propia caja pesaba lo mismo que el
+              trayecto, que si lo es. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <ChipDeBeneficiario
+              beneficiario={beneficiario}
+              onPress={() => setBeneficiario(beneficiario === 'mi' ? 'otra-persona' : 'mi')}
+            />
+            <View style={{ flex: 1 }} />
+            <Txt nivel="etiqueta" tono="tenue">{TASA_DEMO.etiqueta}</Txt>
+            <Txt nivel="etiqueta" tono="acento">{TASA_DEMO.valor}</Txt>
+          </View>
 
           <View style={{ height: tema.ritmo.entreElementos }} />
           <Trayecto origen={ORIGEN_DEMO} destino={DESTINO_DEMO} />
@@ -422,37 +431,26 @@ export function C2PedirViaje() {
 
           {/* Lo último a donde fuiste, aquí mismo. Es lo que se busca al abrir
               esto: la mayoría de los viajes repiten sitio, y obligarlos a
-              escribir la dirección otra vez es trabajo inventado. */}
-          <View style={{ height: tema.ritmo.entreElementos }} />
-          <Separador />
+              escribir la dirección otra vez es trabajo inventado.
+
+              Con su rótulo y sin separador suelto: un rótulo dice QUÉ es lo que
+              viene, y una raya sola sólo dice que algo cambia. */}
+          <View style={{ height: tema.ritmo.entreBloques }} />
+          <Txt nivel="etiqueta" tono="secundario">RECIENTES</Txt>
           <View style={{ paddingTop: 4 }}>
-            {DESTINOS_RECIENTES_DEMO.slice(0, 2).map(destino => (
-              <FilaDeLugar
-                key={destino.clave}
-                titulo={destino.titulo}
-                detalle={destino.detalle}
-                icono="reloj"
-              />
+            {DESTINOS_RECIENTES_DEMO.slice(0, 2).map((destino, indice) => (
+              <View key={destino.clave}>
+                {indice > 0 ? <Separador /> : null}
+                <FilaDeLugar
+                  titulo={destino.titulo}
+                  detalle={destino.detalle}
+                  icono="reloj"
+                />
+              </View>
             ))}
           </View>
 
-          {/* La tasa, aquí. Es donde se decide un gasto: quien va a pedir un
-              viaje traduce el precio a lo que lleva encima. En la cabecera de
-              todas las pantallas era ruido que se deja de leer. */}
-          <View style={{ height: tema.ritmo.entreElementos }} />
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 8,
-            paddingVertical: 10, paddingHorizontal: 13,
-            borderRadius: tema.radio.campo,
-            backgroundColor: tema.color.superficieHundida
-          }}>
-            <Icono nombre="dolar" color={tema.color.textoSecundario} tamano={16} />
-            <Txt nivel="etiqueta" tono="tenue">{TASA_DEMO.etiqueta}</Txt>
-            <View style={{ flex: 1 }} />
-            <Txt nivel="etiqueta" tono="acento">{TASA_DEMO.valor}</Txt>
-          </View>
-
-          <View style={{ height: tema.ritmo.entreElementos }} />
+          <View style={{ height: tema.ritmo.entreBloques }} />
           <Boton titulo="Ver opciones" onPress={() => undefined} />
         </HojaInferior>
       </LienzoDeMapa>
@@ -484,21 +482,10 @@ export function C2ParaQuienEsElViaje() {
       <LienzoDeMapa vehiculos={MOTOS_CERCA} conControles={false}>
         <HojaInferior estado="media" alturaAutomatica>
           <View style={{ gap: tema.ritmo.entreElementos }}>
-            <Txt nivel="titulo">¿Para quién es el viaje?</Txt>
+            {/* «Encabezado» y no «título»: es una pregunta de dos respuestas en una
+                hoja sobre el mapa, no la cabecera de una pantalla entera. */}
+            <Txt nivel="encabezado" accessibilityRole="header">¿Para quién es el viaje?</Txt>
             <OpcionesDeBeneficiario elegido={beneficiario} onElegir={setBeneficiario} />
-
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 9,
-              padding: 12,
-              borderRadius: tema.radio.campo,
-              backgroundColor: tema.color.fondo
-            }}>
-              <Icono nombre="escudo" color={tema.color.aviso} tamano={16} />
-              <Txt nivel="pie" tono="tenue">
-                Pedir por otra persona todavía no está conectado al servidor.
-              </Txt>
-            </View>
-
             <Boton titulo="Continuar" onPress={() => undefined} />
           </View>
         </HojaInferior>

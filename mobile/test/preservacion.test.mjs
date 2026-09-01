@@ -607,11 +607,15 @@ test('pedir por otra persona se anuncia como NO conectado', () => {
   // El selector funciona en la interfaz, pero el backend no tiene campo de
   // beneficiario ni forma de avisar a quien se monta. Enseñarlo sin decirlo
   // sería prometer una función que no existe.
-  const pantallas = leer('preview/pantallasC2.tsx');
-  assert.match(pantallas, /todavía no está conectado al servidor/);
-
+  // El aviso vive con la opción a la que se refiere, no en una caja al final:
+  // una advertencia lejos de lo que advierte se lee dos veces, una para leerla
+  // y otra para averiguar a qué se refería.
   const trayecto = leer('ui/Trayecto.tsx');
+  assert.match(trayecto, /todavía no está conectado al servidor/i);
   assert.match(trayecto, /backend todavía no sabe[\s*]+pedir un viaje para un tercero/i);
+
+  // Y no se puede elegir mientras no funcione.
+  assert.match(trayecto, /listo: false/, 'la opción no se marca como no disponible');
 });
 
 test('la maqueta no enseña precios verosímiles', () => {
