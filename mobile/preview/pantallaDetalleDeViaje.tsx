@@ -31,7 +31,7 @@
  * desaparecer, porque que falten dice tanto como que estén.
  */
 
-import { Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import { Boton, Insignia, Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
 import {
@@ -42,20 +42,126 @@ import {
 import { useTema } from '../theme/ThemeContext';
 import { useIr } from '../ui/navegar';
 import { CabeceraAmarilla } from './pantallasSaldo';
-import {
-  CONSERVACION_DEMO,
-  detalleDeViaje,
-  type DetalleDeViaje,
-  type HitoDeViaje,
-  type MensajeDeViaje
-} from './fixtures';
+import { CONSERVACION_DEMO, detalleDeViaje } from './fixtures';
 
 const ALTO_DE_LA_BARRA = 76;
 
-export function C2DetalleDeViaje({ clave = 'h1' }: { readonly clave?: string }) {
+/** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
+const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+
+/**
+ * El viaje, tal como esta pantalla lo pinta.
+ *
+ * Es la MISMA forma que tiene el fixture, escrita aquí para que la ruta real no
+ * tenga que importar `preview/fixtures`. La aplicación autenticada construye
+ * uno de éstos a partir de lo que devuelve el backend.
+ */
+export interface DatosDelViaje {
+  readonly estado: string;
+  readonly completado: boolean;
+  readonly fecha: string;
+  readonly referencia: string;
+  readonly origen: string;
+  readonly destino: string;
+  readonly conductor: {
+    readonly nombre: string;
+    readonly vehiculo: string;
+    readonly placa: string;
+  } | null;
+  readonly hitos: readonly {
+    readonly clave: string;
+    readonly titulo: string;
+    readonly hora: string;
+    readonly detalle?: string;
+    readonly ocurrido: boolean;
+  }[];
+  readonly duracion: string;
+  readonly espera: string;
+  readonly cobro: {
+    readonly total: string;
+    readonly metodo: string;
+    readonly desglose: readonly { readonly concepto: string; readonly importe: string }[];
+  };
+  readonly conversacion: readonly {
+    readonly clave: string;
+    readonly mia: boolean;
+    readonly autor: string;
+    readonly hora: string;
+    readonly texto?: string;
+    readonly adjunto?: {
+      readonly rotulo: string;
+      readonly fuente?: { readonly uri: string; readonly headers?: Record<string, string> };
+    };
+  }[];
+  /** Lo que se dice sobre la conservación. */
+  readonly aviso: string;
+  readonly pendiente: string;
+}
+
+/**
+ * El fixture, traducido a la forma que pinta la pantalla.
+ *
+ * Vive aquí y no en la ruta real para que la aplicación autenticada no tenga
+ * que importar `preview/fixtures` ni de refilón.
+ */
+function deEjemplo(clave: string): DatosDelViaje {
+  const dato = detalleDeViaje(clave);
+  return {
+    estado: dato.estado,
+    completado: dato.estado === 'Completado',
+    fecha: dato.fecha,
+    referencia: dato.referencia,
+    origen: dato.origen,
+    destino: dato.destino,
+    conductor: dato.conductor,
+    hitos: dato.hitos,
+    duracion: dato.duracion,
+    espera: dato.espera,
+    cobro: dato.cobro,
+    conversacion: dato.conversacion.map(mensaje => ({
+      clave: mensaje.clave,
+      mia: mensaje.autor === 'pasajera',
+      autor: mensaje.autor === 'pasajera' ? 'Tú' : 'Conductor',
+      hora: mensaje.hora,
+      texto: mensaje.texto,
+      adjunto: mensaje.adjunto === undefined ? undefined : { rotulo: mensaje.adjunto.rotulo }
+    })),
+    aviso: CONSERVACION_DEMO.aviso,
+    pendiente: CONSERVACION_DEMO.pendiente
+  };
+}
+
+/**
+ * Lo que se pinta si alguien monta esta pantalla sin datos en una versión
+ * publicada. Un viaje en blanco se ve como el fallo que es; el de ejemplo
+ * parecería el viaje de otra persona.
+ */
+const VIAJE_VACIO: DatosDelViaje = {
+  estado: '',
+  completado: false,
+  fecha: '',
+  referencia: '',
+  origen: '',
+  destino: '',
+  conductor: null,
+  hitos: [],
+  duracion: '',
+  espera: '',
+  cobro: { total: '', metodo: '', desglose: [] },
+  conversacion: [],
+  aviso: '',
+  pendiente: ''
+};
+
+export function C2DetalleDeViaje({ clave = 'h1', datos, cargandoConversacion = false }: {
+  readonly clave?: string;
+  /** Sin esto se pinta el ejemplo. Con esto, el viaje de verdad. */
+  readonly datos?: DatosDelViaje;
+  readonly cargandoConversacion?: boolean;
+}) {
   const tema = useTema();
   const ir = useIr();
-  const dato = detalleDeViaje(clave);
+  const dato = datos ?? (EN_DESARROLLO ? deEjemplo(clave) : VIAJE_VACIO);
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
@@ -67,7 +173,7 @@ export function C2DetalleDeViaje({ clave = 'h1' }: { readonly clave?: string }) 
 
         <Banda titulo="Qué pasó y a qué hora" icono="reloj">
           <Cronologia hitos={dato.hitos} />
-          {dato.estado === 'Completado' ? (
+          {dato.completado && dato.duracion !== '' ? (
             <View style={{ flexDirection: 'row', gap: tema.ritmo.entreElementos }}>
               <Cifra rotulo="Duración" valor={dato.duracion} />
               <Cifra rotulo="Espera" valor={dato.espera} />
@@ -75,16 +181,26 @@ export function C2DetalleDeViaje({ clave = 'h1' }: { readonly clave?: string }) 
           ) : null}
         </Banda>
 
-        <Banda titulo="Quién te llevó" icono="moto">
-          <Dato rotulo="Conductor" valor={dato.conductor.nombre} />
-          <Dato rotulo="Vehículo" valor={dato.conductor.vehiculo} />
-          <Dato rotulo="Placa" valor={dato.conductor.placa} />
-        </Banda>
+        {/* Un viaje cancelado antes de que nadie lo aceptara no tiene
+            conductor. La banda desaparece en vez de enseñar tres huecos. */}
+        {dato.conductor !== null ? (
+          <Banda titulo="Quién te llevó" icono="moto">
+            <Dato rotulo="Conductor" valor={dato.conductor.nombre} />
+            <Dato rotulo="Vehículo" valor={dato.conductor.vehiculo} />
+            {dato.conductor.placa !== '' ? (
+              <Dato rotulo="Placa" valor={dato.conductor.placa} />
+            ) : null}
+          </Banda>
+        ) : null}
 
         <Banda titulo="Qué se cobró" icono="dolar">
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-            <Txt nivel="titulo">{dato.cobro.total}</Txt>
-            <Txt nivel="pie" tono="secundario">{dato.cobro.metodo}</Txt>
+            {/* Sin importe no se pinta «$0,00»: un viaje que se canceló antes de
+                tener tarifa no costó cero, es que no llegó a costar. */}
+            <Txt nivel="titulo">{dato.cobro.total === '' ? 'Sin cobro' : dato.cobro.total}</Txt>
+            {dato.cobro.metodo !== '' ? (
+              <Txt nivel="pie" tono="secundario">{dato.cobro.metodo}</Txt>
+            ) : null}
           </View>
           {dato.cobro.desglose.map(linea => (
             <Dato key={linea.concepto} rotulo={linea.concepto} valor={linea.importe} />
@@ -93,6 +209,16 @@ export function C2DetalleDeViaje({ clave = 'h1' }: { readonly clave?: string }) 
         </Banda>
 
         <Banda titulo="La conversación" icono="mensaje">
+          {cargandoConversacion ? (
+            <View style={{ paddingVertical: tema.ritmo.entreBloques, alignItems: 'center' }}>
+              <ActivityIndicator color={tema.color.acento} />
+            </View>
+          ) : null}
+
+          {!cargandoConversacion && dato.conversacion.length === 0 ? (
+            <Txt nivel="pie" tono="tenue">No se escribieron mensajes en este viaje.</Txt>
+          ) : null}
+
           {dato.conversacion.map(mensaje => (
             <Burbuja key={mensaje.clave} mensaje={mensaje} />
           ))}
@@ -101,8 +227,8 @@ export function C2DetalleDeViaje({ clave = 'h1' }: { readonly clave?: string }) 
               que nadie abre: quien lee lo que escribió merece saber ahí mismo
               quién más puede leerlo. */}
           <View style={{ gap: 4, marginTop: tema.ritmo.entreElementos }}>
-            <Txt nivel="pie" tono="tenue">{CONSERVACION_DEMO.aviso}</Txt>
-            <Txt nivel="pie" tono="acento">{CONSERVACION_DEMO.pendiente}</Txt>
+            <Txt nivel="pie" tono="tenue">{dato.aviso}</Txt>
+            <Txt nivel="pie" tono="acento">{dato.pendiente}</Txt>
           </View>
         </Banda>
 
@@ -136,7 +262,7 @@ export function C2DetalleDeViaje({ clave = 'h1' }: { readonly clave?: string }) 
  * hace la ficha de un comercio.
  */
 function Cabecera({ dato, onVolver }: {
-  readonly dato: DetalleDeViaje;
+  readonly dato: DatosDelViaje;
   readonly onVolver: () => void;
 }) {
   const tema = useTema();
@@ -218,7 +344,7 @@ function Cabecera({ dato, onVolver }: {
  * línea del texto habría que buscarla en cada renglón, y esta lista se lee
  * justamente para comparar horas.
  */
-function Cronologia({ hitos }: { readonly hitos: readonly HitoDeViaje[] }) {
+function Cronologia({ hitos }: { readonly hitos: DatosDelViaje['hitos'] }) {
   const tema = useTema();
 
   return (
@@ -282,9 +408,9 @@ function Cronologia({ hitos }: { readonly hitos: readonly HitoDeViaje[] }) {
  * No es un chat vivo. No se escribe aquí, y por eso las burbujas no llevan
  * estado de envío ni de leído: sería atrezo.
  */
-function Burbuja({ mensaje }: { readonly mensaje: MensajeDeViaje }) {
+function Burbuja({ mensaje }: { readonly mensaje: DatosDelViaje['conversacion'][number] }) {
   const tema = useTema();
-  const mia = mensaje.autor === 'pasajera';
+  const mia = mensaje.mia;
 
   return (
     <View style={{
@@ -308,11 +434,13 @@ function Burbuja({ mensaje }: { readonly mensaje: MensajeDeViaje }) {
           <Txt nivel="cuerpo">{mensaje.texto}</Txt>
         ) : null}
 
-        {mensaje.adjunto !== undefined ? <Adjunto rotulo={mensaje.adjunto.rotulo} /> : null}
+        {mensaje.adjunto !== undefined ? (
+          <Adjunto rotulo={mensaje.adjunto.rotulo} fuente={mensaje.adjunto.fuente} />
+        ) : null}
       </View>
 
       <Txt nivel="pie" tono="tenue" estilo={{ alignSelf: mia ? 'flex-end' : 'flex-start' }}>
-        {mensaje.hora} · {mia ? 'Tú' : 'Conductor'}
+        {mensaje.hora} · {mensaje.autor}
       </Txt>
     </View>
   );
@@ -328,8 +456,32 @@ function Burbuja({ mensaje }: { readonly mensaje: MensajeDeViaje }) {
  * Que se guarde importa más de lo que parece: una foto del portón o del recibo
  * es justo la clase de prueba que decide un reclamo.
  */
-function Adjunto({ rotulo }: { readonly rotulo: string }) {
+function Adjunto({ rotulo, fuente }: {
+  readonly rotulo: string;
+  /** La imagen privada, con su cabecera de sesión. */
+  readonly fuente?: { readonly uri: string; readonly headers?: Record<string, string> };
+}) {
   const tema = useTema();
+
+  // Con imagen de verdad se enseña la imagen. El marco discontinuo se queda
+  // para la maqueta y para cuando el adjunto no se puede cargar.
+  if (fuente !== undefined) {
+    return (
+      <View style={{
+        borderRadius: tema.radio.campo,
+        overflow: 'hidden',
+        backgroundColor: tema.color.superficieHundida
+      }}>
+        <Image
+          source={fuente}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+          accessibilityLabel={rotulo}
+          style={{ width: '100%', height: 160 }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={{

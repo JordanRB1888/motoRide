@@ -39,7 +39,16 @@ test('cada viaje del historial lleva a su registro, y lo DICE', () => {
   const historial = leer(HISTORIAL);
   const seccion = historial.slice(historial.indexOf('export function C2Historial'));
 
-  assert.match(seccion, /ir\('viaje-detalle', \{ viaje: viaje\.clave \}\)/, 'la fila no abre el registro');
+  // El destino pasó a ser un manejador con respaldo: la aplicación real le
+  // pasa el suyo —que abre la ruta con el identificador de VERDAD— y el
+  // recorrido de diseño cae en el de siempre. Lo que se protege es lo mismo:
+  // que la fila abra el registro de ESE viaje.
+  assert.match(seccion, /onPress=\{\(\) => abrir\(viaje\.clave\)\}/, 'la fila no abre el registro');
+  assert.match(
+    seccion,
+    /onViaje \?\? \(\(clave: string\) => ir\('viaje-detalle', \{ viaje: clave \}\)\)/,
+    'el recorrido de diseño se quedó sin destino'
+  );
   assert.match(seccion, /Ver detalle/, 'no hay nada que anuncie el registro');
 });
 

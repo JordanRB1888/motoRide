@@ -63,6 +63,13 @@ export default function InicioDePasajera() {
       />
 
       <Boton
+        titulo="Tu historial"
+        variante="secundario"
+        onPress={() => { router.push('/historial'); }}
+        testID="boton-historial"
+      />
+
+      <Boton
         titulo="Cerrar sesión"
         variante="secundario"
         onPress={() => { void salir().then(() => { router.replace('/rol'); }); }}

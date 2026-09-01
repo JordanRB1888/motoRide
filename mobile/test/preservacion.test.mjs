@@ -773,10 +773,11 @@ test('el historial abre con la banda amarilla, como saldo y perfil', () => {
   assert.match(historial.slice(0, 1200), /resumen=\{/, 'el historial no abre con banda');
   assert.match(secciones, /<CabeceraAmarilla>/, 'el armazón no sabe pintarla');
 
-  // El resumen se CUENTA de la lista: una cifra escrita a mano se queda vieja
-  // en cuanto cambia lo que hay justo debajo.
-  assert.match(historial.slice(0, 1200), /HISTORIAL_DEMO\.length/);
-  assert.match(historial.slice(0, 1200), /filter\(viaje => viaje\.estado === 'Completado'\)/);
+  // El resumen se CUENTA de la lista que se esté pintando —la real o la de
+  // ejemplo—, no de una cifra escrita a mano que se quedaría vieja en cuanto
+  // cambie lo que hay justo debajo.
+  assert.match(historial.slice(0, 2200), /\$\{lista\.length\} viajes/);
+  assert.match(historial.slice(0, 2200), /lista\.filter\(viaje => viaje\.completado\)/);
 });
 
 test('la barra inferior respeta la franja del sistema', () => {

@@ -34,5 +34,6 @@ export default function PantallaDeConfiguracion() {
 
 function irA(clave: string) {
   if (clave === 'inicio') router.replace('/pasajero');
+  if (clave === 'historial') router.replace('/historial');
   if (clave === 'perfil') router.replace('/perfil');
 }

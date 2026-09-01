@@ -585,13 +585,47 @@ export function C2Saldo() {
 // Historial
 // ---------------------------------------------------------------------------
 
-export function C2Historial() {
+/**
+ * Un viaje de la lista, tal como se pinta.
+ *
+ * Plano y sin nada de `services/`: la misma pantalla sirve para el recorrido de
+ * diseño —con el fixture— y para la aplicación real —con los viajes de
+ * verdad—.
+ */
+export interface ViajeEnPantalla {
+  readonly clave: string;
+  readonly fecha: string;
+  readonly origen: string;
+  readonly destino: string;
+  readonly estado: string;
+  /** `true` sólo cuando el viaje terminó bien. Decide el color de la insignia. */
+  readonly completado: boolean;
+}
+
+const HISTORIAL_DE_EJEMPLO: readonly ViajeEnPantalla[] = HISTORIAL_DEMO.map(viaje => ({
+  clave: viaje.clave,
+  fecha: viaje.fecha,
+  origen: viaje.origen,
+  destino: viaje.destino,
+  estado: viaje.estado,
+  completado: viaje.estado === 'Completado'
+}));
+
+export function C2Historial({ viajes, estado = 'listo', onViaje, onReintentar }: {
+  readonly viajes?: readonly ViajeEnPantalla[];
+  readonly estado?: 'cargando' | 'listo' | 'error';
+  readonly onViaje?: (clave: string) => void;
+  readonly onReintentar?: () => void;
+} = {}) {
   const tema = useTema();
   const ir = useIr();
 
+  const lista = viajes ?? (EN_DESARROLLO ? HISTORIAL_DE_EJEMPLO : []);
   // Contados de lo que hay, no escritos a mano: una cifra a mano se queda
   // vieja en cuanto cambia la lista, y aquí lo que se cuenta está justo debajo.
-  const completados = HISTORIAL_DEMO.filter(viaje => viaje.estado === 'Completado').length;
+  const completados = lista.filter(viaje => viaje.completado).length;
+
+  const abrir = onViaje ?? ((clave: string) => ir('viaje-detalle', { viaje: clave }));
 
   return (
     <Seccion
@@ -603,17 +637,43 @@ export function C2Historial() {
             Todo lo que has pedido, con su registro
           </Txt>
           <View style={{ flexDirection: 'row', gap: 7 }}>
-            <SelloSobreAmarillo texto={`${HISTORIAL_DEMO.length} viajes`} />
+            <SelloSobreAmarillo texto={`${lista.length} viajes`} />
             <SelloSobreAmarillo texto={`${completados} completados`} />
           </View>
         </View>
       }
     >
-      {HISTORIAL_DEMO.map((viaje, indice) => (
+      {estado === 'cargando' ? (
+        <View style={{ paddingVertical: tema.ritmo.entreBloques * 2, alignItems: 'center' }}>
+          <ActivityIndicator color={tema.color.acento} />
+        </View>
+      ) : null}
+
+      {estado === 'error' ? (
+        <View style={{
+          paddingVertical: tema.ritmo.entreBloques,
+          alignItems: 'center',
+          gap: tema.ritmo.entreElementos
+        }}>
+          <Txt nivel="cuerpo" centrado>No se pudo cargar tu historial.</Txt>
+          <Boton titulo="Reintentar" variante="secundario" onPress={onReintentar ?? (() => undefined)} />
+        </View>
+      ) : null}
+
+      {estado === 'listo' && lista.length === 0 ? (
+        <View style={{ paddingVertical: tema.ritmo.entreBloques * 2, alignItems: 'center', gap: 6 }}>
+          <Txt nivel="cuerpo" tono="secundario" centrado>Todavía no has hecho ningún viaje.</Txt>
+          <Txt nivel="pie" tono="tenue" centrado>
+            Cuando pidas el primero, aparecerá aquí con todo su registro.
+          </Txt>
+        </View>
+      ) : null}
+
+      {(estado === 'listo' ? lista : []).map((viaje, indice) => (
         <View key={viaje.clave}>
           {indice > 0 ? <Separador /> : null}
           <Pressable
-            onPress={() => ir('viaje-detalle', { viaje: viaje.clave })}
+            onPress={() => abrir(viaje.clave)}
             accessibilityRole="button"
             accessibilityLabel={`${viaje.fecha}. De ${viaje.origen} a ${viaje.destino}. ${viaje.estado}. Ver el detalle`}
             accessibilityHint="Abre el registro completo: horas, cobro y conversación"
@@ -622,10 +682,7 @@ export function C2Historial() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Txt nivel="etiqueta" tono="secundario">{viaje.fecha}</Txt>
               <View style={{ flex: 1 }} />
-              <Insignia
-                texto={viaje.estado}
-                tono={viaje.estado === 'Completado' ? 'exito' : 'neutro'}
-              />
+              <Insignia texto={viaje.estado} tono={viaje.completado ? 'exito' : 'neutro'} />
             </View>
 
             {/* El mismo par de puntos que en el trayecto: se reconoce sin leer. */}
@@ -655,12 +712,14 @@ export function C2Historial() {
         </View>
       ))}
 
-      <View style={{ marginTop: tema.ritmo.entreBloques, alignItems: 'center', gap: 4 }}>
-        <Txt nivel="pie" tono="tenue" centrado>
-          Cada viaje guarda sus horas, su cobro y la conversación.
-        </Txt>
-        <Txt nivel="pie" tono="tenue">Los importes los calcula el servidor.</Txt>
-      </View>
+      {estado === 'listo' && lista.length > 0 ? (
+        <View style={{ marginTop: tema.ritmo.entreBloques, alignItems: 'center', gap: 4 }}>
+          <Txt nivel="pie" tono="tenue" centrado>
+            Cada viaje guarda sus horas, su cobro y la conversación.
+          </Txt>
+          <Txt nivel="pie" tono="tenue">Los importes los calcula el servidor.</Txt>
+        </View>
+      ) : null}
     </Seccion>
   );
 }
