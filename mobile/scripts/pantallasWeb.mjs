@@ -35,7 +35,12 @@ import { CATALOGO } from '../theme/directions.ts';
 import { FRACCION_POR_ESTADO } from '../theme/hoja.ts';
 // Los comercios salen del mismo fichero que consume el telefono. Repetirlos
 // aqui haria que renombrar uno dejase el navegador ensenando el de antes.
-import { ALIADOS_DEMO, CATEGORIAS_DEMO } from '../preview/fixtures.ts';
+import {
+  ALIADOS_DEMO,
+  CAMPANAS_DEMO,
+  CATEGORIAS_DEMO,
+  SERVICIOS_DE_INICIO
+} from '../preview/fixtures.ts';
 import {
   ESQUEMA_CLARO,
   ESQUEMA_OSCURO,
@@ -511,6 +516,73 @@ const pulso = () => `
   </span>`;
 
 // ---------------------------------------------------------------------------
+// El vestibulo de la pasajera
+// ---------------------------------------------------------------------------
+
+/** La etiqueta de lo que todavia no esta. */
+const rotuloPronto = `<span class="etq t3" style="border:1px solid var(--borde);
+  border-radius:6px;padding:2px 7px">PRONTO</span>`;
+
+/**
+ * Una casilla de servicio.
+ *
+ * Las que no estan listas van atenuadas y con su etiqueta. No se ocultan: la
+ * rejilla completa dice a donde va +58express, y esconder la mitad la dejaria
+ * coja. Pero tampoco se disfrazan de disponibles.
+ */
+const servicio = dato => {
+  // Ancha: el icono al lado del texto, que hay sitio de sobra.
+  // Estrecha: el icono ENCIMA. En media columna, ponerlo al lado deja al titulo
+  // unos noventa puntos y «Transporte Seguro» se queda en «Transporte...».
+  const disco = `
+    <span style="width:${dato.ancho ? 46 : 38}px;height:${dato.ancho ? 46 : 38}px;
+      flex:0 0 ${dato.ancho ? 46 : 38}px;border-radius:50%;display:grid;place-items:center;
+      background:${dato.listo
+        ? 'color-mix(in srgb,var(--acento) 15%,transparent)'
+        : 'var(--hundida)'}">
+      ${icono(dato.icono, dato.listo ? 'var(--acento-texto)' : 'var(--texto-3)', dato.ancho ? 23 : 19)}
+    </span>`;
+
+  const texto = `
+    <span style="display:grid;gap:2px;min-width:0">
+      <span class="${dato.ancho ? 'enc' : 'cuerpo'}">${dato.titulo}</span>
+      <span class="pie t3" style="text-align:left">${dato.detalle}</span>
+    </span>`;
+
+  return `
+  <span style="flex:${dato.ancho ? '1 1 100%' : '1 1 calc(50% - 5px)'};
+    display:${dato.ancho ? 'flex' : 'grid'};
+    ${dato.ancho ? 'align-items:center;gap:12px;' : 'gap:10px;'}
+    padding:14px;border-radius:var(--r-tarjeta);background:var(--superficie);
+    border:1px solid ${dato.listo && dato.ancho ? 'var(--acento)' : 'var(--borde)'};
+    ${dato.listo ? '' : 'opacity:.62;'}min-width:0;position:relative;overflow:hidden">
+    ${dato.listo && dato.ancho ? '<span class="filo"></span>' : ''}
+    ${dato.listo ? '' : `<span style="position:absolute;top:10px;right:10px">${rotuloPronto}</span>`}
+    ${disco}
+    ${texto}
+  </span>`;
+};
+
+/** Una campania: el hueco para promociones, avisos y causas. */
+const campana = dato => `
+  <span style="flex:0 0 268px;padding:var(--pad);border-radius:var(--r-tarjeta);
+    position:relative;overflow:hidden;display:grid;gap:11px;
+    background:${dato.tono === 'acento'
+      ? 'color-mix(in srgb,var(--acento) 13%,var(--superficie))'
+      : 'var(--superficie)'};
+    border:1px solid ${dato.tono === 'acento' ? 'var(--acento)' : 'var(--borde)'}">
+    <span class="etq ${dato.tono === 'acento' ? 'ac' : 't3'}"
+      style="letter-spacing:.07em">${dato.rotulo}</span>
+    <span style="display:grid;gap:5px">
+      <span class="enc">${dato.titulo}</span>
+      <span class="pie t2" style="text-align:left">${dato.detalle}</span>
+    </span>
+    <span style="display:flex;align-items:center;gap:6px">
+      <span class="etq ac">${dato.accion}</span>${galonAcento}
+    </span>
+  </span>`;
+
+// ---------------------------------------------------------------------------
 // Los comercios aliados
 // ---------------------------------------------------------------------------
 
@@ -565,11 +637,11 @@ const aliadoAncho = aliado => `
       <span style="flex:1;min-width:0;display:grid;gap:1px">
         <span class="cuerpo" style="overflow:hidden;text-overflow:ellipsis;
           white-space:nowrap">${aliado.nombre}</span>
-        <span class="pie t3">${aliado.categoria}</span>
+        <span class="pie t3" style="text-align:left">${aliado.categoria}</span>
       </span>
       ${salida}
     </span>
-    <span class="pie t2" style="overflow:hidden;text-overflow:ellipsis;
+    <span class="pie t2" style="text-align:left;overflow:hidden;text-overflow:ellipsis;
       white-space:nowrap">${aliado.gancho}</span>
   </span>`;
 
@@ -579,8 +651,8 @@ const aliadoFila = aliado => `
     ${sello(aliado.inicial)}
     <span style="flex:1;display:grid;gap:2px;min-width:0">
       <span class="cuerpo">${aliado.nombre}</span>
-      <span class="pie t3">${aliado.categoria} · ${aliado.gancho}</span>
-      <span class="pie t3">${aliado.zona}</span>
+      <span class="pie t3" style="text-align:left">${aliado.categoria} · ${aliado.gancho}</span>
+      <span class="pie t3" style="text-align:left">${aliado.zona}</span>
     </span>
     ${salida}
   </div>`;
@@ -677,26 +749,77 @@ export const PANTALLAS = {
       </div>
     </div>`,
 
+  /**
+   * El vestibulo de la pasajera. SIN MAPA, y es la decision grande de aqui.
+   *
+   * El mapa vive ahora detras del disco central: se pide un viaje y entonces
+   * aparece. En reposo, un mapa de tu propia calle no te dice nada que no
+   * sepas, y se estaba gastando la pantalla mas visitada en ensenarlo.
+   *
+   * Lo que se gana con ese espacio es esto: a donde vas, que hace +58express, y
+   * sitio de sobra para lo que la empresa necesite contar o vender.
+   *
+   * La rejilla NO promete lo que no hay. Viajes, Comercios y Transporte Seguro
+   * existen; los otros cuatro llevan su etiqueta de PRONTO y no van a ninguna
+   * parte. Viajes ocupa el ancho entero porque es lo unico que la aplicacion
+   * hace hoy, y seis casillas iguales dirian que somos seis cosas a medias.
+   */
   pasajera: () => `
     <div class="tel">
-      <div class="mapa">${CALLES}${MOTOS}${hito(47, 29, 'orig')}${CTRL}</div>
-      ${CABECERA_PASAJERA}
-      <div class="hoja" style="bottom:76px;padding-top:0">
-        <span class="asa"></span>
-        <div style="padding-bottom:var(--pad)">
-          <div class="campo">${icono('destino', 'var(--acento)', 19)}
-            <span class="cuerpo t2">¿A dónde vas?</span></div>
+      <div class="hoja2" style="background:var(--fondo)">
+
+        <div style="display:flex;align-items:center;gap:12px;
+          padding:18px var(--margen) var(--gap)">
+          <span style="width:42px;height:42px;border-radius:50%;flex:0 0 42px;
+            background:var(--elevada);display:grid;place-items:center">
+            <span class="etq">DP</span></span>
+          <span style="flex:1;display:grid;gap:1px;min-width:0">
+            <span class="enc">Hola, Demo</span>
+            <span class="pie t3" style="text-align:left">Zona demo · Maracaibo</span>
+          </span>
+          <span style="display:grid;gap:1px;text-align:right">
+            <span class="pie t3">Tasa BCV</span>
+            <span class="etq ac">Bs. 000,00</span>
+          </span>
+          <span style="position:relative;width:40px;height:40px;display:grid;place-items:center">
+            ${icono('campana', 'var(--texto-2)', 22)}
+            <span style="position:absolute;top:7px;right:9px;width:9px;height:9px;
+              border-radius:50%;background:var(--acento);border:2px solid var(--fondo)"></span>
+          </span>
+        </div>
+
+        <div style="padding:0 var(--margen) 110px">
+
+          <div class="campo" style="background:var(--elevada)">
+            ${icono('destino', 'var(--acento)', 19)}
+            <span class="cuerpo t2 crece">¿A dónde vas?</span>
+            ${icono('reloj', 'var(--texto-3)', 18)}
+          </div>
           <div style="height:var(--gap)"></div>
           ${LUGARES}
 
+          <div style="margin-top:var(--bloques)">
+            <span class="enc">¿Qué necesitas hoy?</span>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:11px">
+              ${SERVICIOS_DE_INICIO.map(servicio).join('')}
+            </div>
+          </div>
+
+          <div style="margin-top:var(--bloques)">
+            <span class="enc">Lo que está pasando</span>
+            <div class="carrusel" style="margin-top:11px;
+              margin-right:calc(var(--margen) * -1);padding-right:var(--margen)">
+              ${CAMPANAS_DEMO.map(campana).join('')}
+            </div>
+          </div>
+
           <div style="margin-top:var(--bloques);display:flex;align-items:center;gap:9px">
-            <span class="etq t2">ALIADOS</span>
+            <span class="enc crece">Aliados</span>
             ${rotuloPagado}
-            <span class="crece"></span>
             <span class="etq ac">Ver todos</span>
             ${galonAcento}
           </div>
-          <div class="carrusel" style="margin-top:10px;
+          <div class="carrusel" style="margin-top:11px;
             margin-right:calc(var(--margen) * -1);padding-right:var(--margen)">
             ${ALIADOS_DEMO.slice(0, 3).map(aliadoAncho).join('')}
           </div>
@@ -1016,7 +1139,7 @@ export const PANTALLAS = {
                 ${sello(estrella.inicial, 52)}
                 <span style="flex:1;display:grid;gap:2px;min-width:0">
                   <span class="enc">${estrella.nombre}</span>
-                  <span class="pie t3">${estrella.categoria} · ${estrella.zona}</span>
+                  <span class="pie t3" style="text-align:left">${estrella.categoria} · ${estrella.zona}</span>
                 </span>
               </div>
               <span class="cuerpo t2">${estrella.gancho}</span>
@@ -1063,7 +1186,7 @@ export const PANTALLAS = {
           ${sello(negocio.inicial, 56)}
           <span style="flex:1;display:grid;gap:3px;min-width:0">
             <span class="titulo">${negocio.nombre}</span>
-            <span class="pie t3">${negocio.categoria} · ${negocio.zona}</span>
+            <span class="pie t3" style="text-align:left">${negocio.categoria} · ${negocio.zona}</span>
           </span>
         </div>
         <div style="padding:0 var(--margen) 110px;display:grid;gap:var(--bloques)">
@@ -1097,7 +1220,7 @@ export const PANTALLAS = {
                 ${icono('moto', 'var(--acento-texto)', 20)}</span>
               <span style="flex:1;display:grid;gap:2px">
                 <span class="cuerpo">Pedir un viaje hasta aquí</span>
-                <span class="pie t3">Te llevamos, o traemos lo que compres</span>
+                <span class="pie t3" style="text-align:left">Te llevamos, o traemos lo que compres</span>
               </span>
               ${galonAcento}
             </div>

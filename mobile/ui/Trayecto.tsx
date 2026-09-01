@@ -315,6 +315,31 @@ export interface LugarGuardado {
  * leer. Los que aún no tienen dirección se ven a medias, con un más, para que
  * se entienda que están por configurar y no que están rotos.
  */
+/** El campo de «¿A dónde vas?», en reposo. Al tocarlo se abre la petición. */
+export function CampoDeDestino({ onPress }: { readonly onPress?: () => void }) {
+  const tema = useTema();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="search"
+      accessibilityLabel="¿A dónde vas? Buscar destino"
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 11,
+        paddingHorizontal: 15,
+        height: 52,
+        borderRadius: tema.radio.campo,
+        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida
+      })}
+    >
+      <Icono nombre="destino" color={tema.color.acento} tamano={19} />
+      <Txt nivel="cuerpo" tono="secundario">¿A dónde vas?</Txt>
+    </Pressable>
+  );
+}
+
 export function LugaresGuardados({ lugares, onElegir, onAnadir, onNuevo }: {
   readonly lugares: readonly LugarGuardado[];
   readonly onElegir?: (clave: string) => void;

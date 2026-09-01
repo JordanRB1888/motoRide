@@ -63,17 +63,13 @@ import {
   type Beneficiario
 } from '../ui/Trayecto';
 import { useTema } from '../theme/ThemeContext';
-import { AdelantoDeAliados } from './pantallasAliados';
 import type { TipoDeVehiculo } from '../theme/marca';
-import { Campana } from './pantallasC2Secciones';
 import {
-  AVISOS_DEMO,
   CONDUCTOR_DEMO,
   CONTEXTO_DEMO,
   DESTINOS_RECIENTES_DEMO,
   JORNADA_DEMO,
   LUGARES_DEMO,
-  PASAJERA_DEMO,
   TASA_DEMO,
   VIAJE_DEMO
 } from './fixtures';
@@ -121,65 +117,6 @@ const ORIGEN_DEMO = 'Maracaibo · punto de ejemplo';
 const DESTINO_DEMO = DESTINOS_RECIENTES_DEMO[0]?.titulo ?? 'Destino de ejemplo';
 
 /**
- * La cabecera de la pasajera: quién eres y a cómo está el dólar.
- *
- * La tasa va aquí porque en Venezuela es lo primero que se mira antes de
- * decidir un gasto, y porque el servidor ya la tiene: no es un adorno, es el
- * dato con el que la persona traduce el precio del viaje a lo que lleva encima.
- *
- * Flota en dos pastillas en lugar de una barra opaca. Una barra de cabecera se
- * come 70 puntos de mapa a cambio de enseñar dos datos.
- */
-function CabeceraDePasajera() {
-  const tema = useTema();
-
-  return (
-    <View style={{
-      position: 'absolute',
-      left: tema.ritmo.margenPantalla,
-      right: tema.ritmo.margenPantalla,
-      top: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10
-    }}>
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', gap: 9,
-        paddingLeft: 5, paddingRight: 14, paddingVertical: 5,
-        borderRadius: 999,
-        backgroundColor: tema.color.superficieElevada,
-        ...SOBRE_EL_MAPA
-      }}>
-        <View style={{
-          width: 32, height: 32, borderRadius: 16,
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: tema.color.fondo
-        }}>
-          <Txt nivel="etiqueta">{PASAJERA_DEMO.iniciales}</Txt>
-        </View>
-        <View style={{ gap: 1 }}>
-          <Txt nivel="etiqueta">{PASAJERA_DEMO.nombre}</Txt>
-          <Txt nivel="pie" tono="tenue">{PASAJERA_DEMO.zona}</Txt>
-        </View>
-      </View>
-
-      <View style={{ flex: 1 }} />
-
-      {/* La campana, junto a la tasa. Los avisos eran una pantalla a la que no
-          llevaba nada, y existir sin puerta es no existir. */}
-      <View style={{
-        borderRadius: 999,
-        backgroundColor: tema.color.superficieElevada,
-        ...SOBRE_EL_MAPA
-      }}>
-        <Campana sinLeer={AVISOS_DEMO.filter(aviso => aviso.sinLeer).length} />
-      </View>
-
-    </View>
-  );
-}
-
-/**
  * La fila de un lugar: un icono, un nombre y un detalle.
  *
  * Deliberadamente NO es una tarjeta. Tres destinos recientes como tres
@@ -218,31 +155,6 @@ function FilaDeLugar({ titulo, detalle, icono = 'destino', onPress }: {
         <Txt nivel="cuerpo">{titulo}</Txt>
         <Txt nivel="pie" tono="tenue">{detalle}</Txt>
       </View>
-    </Pressable>
-  );
-}
-
-/** El campo de «¿A dónde vas?», en reposo. Al tocarlo se abre la petición. */
-function CampoDeDestino({ onPress }: { readonly onPress?: () => void }) {
-  const tema = useTema();
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="search"
-      accessibilityLabel="¿A dónde vas? Buscar destino"
-      style={({ pressed }) => ({
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 11,
-        paddingHorizontal: 15,
-        height: 52,
-        borderRadius: tema.radio.campo,
-        backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida
-      })}
-    >
-      <Icono nombre="destino" color={tema.color.acento} tamano={19} />
-      <Txt nivel="cuerpo" tono="secundario">¿A dónde vas?</Txt>
     </Pressable>
   );
 }
@@ -468,49 +380,12 @@ export function C2Acceso() {
 // ---------------------------------------------------------------------------
 
 /**
- * El inicio en reposo: el mapa manda y abajo está lo justo.
+ * El inicio de la pasajera vive ahora en `pantallaInicioPasajera.tsx`.
  *
- * A dónde vas, los sitios de siempre y los comercios aliados.
- *
- * Los destinos recientes y la tasa del BCV NO están, y es deliberado: al tocar
- * el disco central se despliega la petición con esas mismas dos cosas dentro.
- * Enseñarlas dos veces no ayudaba a decidir nada y le comía al mapa media
- * pantalla que en reposo no hace falta gastar.
- *
- * Los aliados van DEBAJO de todo eso, no en su lugar. Son tres tarjetas en
- * horizontal, que es lo que cabe sin empujar el mapa fuera de la pantalla;
- * quien quiera más, entra en la lista. Y van aquí y no en la barra porque la
- * barra tiene cuatro sitios y todavía está pendiente de decidir.
+ * Se fue de aquí cuando dejó de llevar mapa: pasó de ser una variante del
+ * lienzo de mapa a ser una pantalla de contenido con su propia rejilla, sus
+ * campañas y sus aliados, y ya no tenía nada que ver con las de al lado.
  */
-export function C2InicioPasajera() {
-  const tema = useTema();
-
-  return (
-    <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
-      <LienzoDeMapa
-        vehiculos={MOTOS_CERCA}
-        hitos={[{ clave: 'yo', en: { x: 47, y: 29 }, tipo: 'origen' }]}
-      >
-        <CabeceraDePasajera />
-
-        {/* Se ajusta a lo que ocupa: dos elementos no necesitan media pantalla,
-            y todo lo que no ocupe la hoja se lo queda el mapa. */}
-        <HojaInferior estado="baja" alturaAutomatica>
-          <CampoDeDestino />
-          <View style={{ height: tema.ritmo.entreElementos }} />
-          <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
-          <AdelantoDeAliados />
-        </HojaInferior>
-      </LienzoDeMapa>
-
-      <BarraDeNavegacion
-        destinos={DESTINOS_DE_PASAJERA}
-        activo="inicio"
-        control={<ControlDePedido abierto={false} />}
-      />
-    </View>
-  );
-}
 
 /**
  * La petición desplegada: lo que aparece al tocar el disco central.

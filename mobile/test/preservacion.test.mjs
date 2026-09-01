@@ -462,8 +462,10 @@ test('los avisos tienen puerta desde las pantallas de uso', () => {
   assert.match(secciones, /export function Campana/);
   assert.match(secciones, /sinLeer > 0/, 'marca lo que está sin leer');
 
-  const pantallas = leer('preview/pantallasC2.tsx');
-  assert.match(pantallas, /<Campana/, 'el inicio de la pasajera lleva campana');
+  // El inicio de la pasajera se mudó a su propio fichero el día que dejó de
+  // llevar mapa. La puerta a los avisos sigue estando donde siempre.
+  const inicio = leer('preview/pantallaInicioPasajera.tsx');
+  assert.match(inicio, /<Campana/, 'el inicio de la pasajera lleva campana');
 });
 
 test('el panel del conductor cabe en un vistazo', () => {

@@ -46,7 +46,6 @@ import {
   C2BuscandoVehiculo,
   C2ConfirmarViaje,
   C2ElegirPuntoPasajera,
-  C2InicioPasajera,
   C2ParaQuienEsElViaje,
   C2PanelDeJornada,
   C2PedirViaje,
@@ -54,6 +53,7 @@ import {
   C2Viaje
 } from '../preview/pantallasC2';
 import { C2Aliados, C2Comercio } from '../preview/pantallasAliados';
+import { C2InicioPasajera } from '../preview/pantallaInicioPasajera';
 import { C2Configuracion } from '../preview/pantallaConfiguracion';
 import { C2SaldoConductor, C2SaldoConductorDeudor } from '../preview/pantallaSaldoConductor';
 import {

@@ -79,6 +79,112 @@ export const SERVICIOS_DEMO = [
 ] as const;
 
 /**
+ * Los servicios del inicio.
+ *
+ * LOS QUE NO EXISTEN LO DICEN
+ *
+ * Hoy +58express hace viajes. Comida, mercado, envíos y compraventa NO están
+ * construidos: no hay backend, ni comercios dados de alta, ni forma de cobrar.
+ * Salen en la rejilla porque el dueño quiere la estructura montada, y llevan
+ * `listo: false`, que en pantalla es una etiqueta de PRONTO y un botón que no
+ * navega a ninguna parte.
+ *
+ * Un botón de «Comida» que no lleva a nada, sin decirlo, es una promesa rota a
+ * la primera pulsación —y de las que las tiendas rechazan—.
+ *
+ * VIAJES OCUPA EL ANCHO ENTERO
+ *
+ * No es una casualidad de maquetación. Es lo único que la aplicación hace hoy,
+ * y una rejilla de seis casillas iguales diría que +58express es seis cosas a
+ * medias en vez de una cosa bien.
+ */
+export const SERVICIOS_DE_INICIO = [
+  {
+    clave: 'viajes',
+    titulo: 'Viajes',
+    detalle: 'Tu moto, a un toque',
+    icono: 'moto' as const,
+    listo: true,
+    ancho: true
+  },
+  {
+    clave: 'comercios',
+    titulo: 'Comercios',
+    detalle: 'Aliados cerca de ti',
+    icono: 'maletin' as const,
+    listo: true,
+    ancho: false
+  },
+  {
+    clave: 'seguro',
+    titulo: 'Transporte Seguro',
+    detalle: 'Traslados programados',
+    icono: 'escudo' as const,
+    listo: true,
+    ancho: false
+  },
+  {
+    clave: 'envios',
+    titulo: 'Envíos',
+    detalle: 'Manda un paquete',
+    icono: 'maletin' as const,
+    listo: false,
+    ancho: false
+  },
+  {
+    clave: 'comida',
+    titulo: 'Comida',
+    detalle: 'Pide y te lo llevamos',
+    icono: 'inicio' as const,
+    listo: false,
+    ancho: false
+  },
+  {
+    clave: 'mercado',
+    titulo: 'Mercado',
+    detalle: 'Sin salir de casa',
+    icono: 'viajes' as const,
+    listo: false,
+    ancho: false
+  },
+  {
+    clave: 'tienda',
+    titulo: 'Compra y vende',
+    detalle: 'Entre vecinos',
+    icono: 'dolar' as const,
+    listo: false,
+    ancho: false
+  }
+] as const;
+
+/**
+ * Las campañas del inicio.
+ *
+ * El espacio donde caben una promoción, un aviso de la ciudad o una campaña
+ * solidaria. Van con texto de ejemplo y SIN CIFRAS: una recaudación inventada
+ * en una captura se lee como dinero recaudado de verdad, y eso con una causa
+ * real sería grave.
+ */
+export const CAMPANAS_DEMO = [
+  {
+    clave: 'c1',
+    rotulo: 'CAMPAÑA',
+    titulo: 'Espacio de campaña',
+    detalle: 'Aquí va una promoción, un aviso de la ciudad o una causa.',
+    accion: 'Ver más',
+    tono: 'acento' as const
+  },
+  {
+    clave: 'c2',
+    rotulo: 'AVISO',
+    titulo: 'Espacio de aviso',
+    detalle: 'Para lo que +58express necesite contar ese día.',
+    accion: 'Leer',
+    tono: 'neutro' as const
+  }
+] as const;
+
+/**
  * Los comercios aliados.
  *
  * QUÉ SON Y QUÉ NO SON
