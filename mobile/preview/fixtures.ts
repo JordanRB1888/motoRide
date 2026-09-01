@@ -460,3 +460,183 @@ export const JORNADA_DEMO = {
   resumen: '—',
   nota: 'Cifras de ejemplo: la cartera todavía no está conectada.'
 } as const;
+
+// ---------------------------------------------------------------------------
+// El registro completo de un viaje
+// ---------------------------------------------------------------------------
+
+/**
+ * QUÉ SE GUARDA DE CADA VIAJE, Y POR QUÉ TANTO
+ *
+ * El historial enseñaba de dónde a dónde y si terminó bien. Eso vale para
+ * acordarse, pero no vale para RECLAMAR, que es cuando de verdad se abre el
+ * historial: me cobraron de más, el conductor nunca llegó, dijimos una cosa por
+ * el chat y pasó otra.
+ *
+ * Para eso hace falta lo de aquí: la hora de cada paso, quién conducía, con qué
+ * vehículo, cuánto se cobró y cómo, y la conversación entera con sus adjuntos.
+ * Sin eso, un reclamo es la palabra de uno contra la del otro.
+ *
+ * ESTO ES LA FORMA, NO LOS DATOS
+ *
+ * El día que el backend guarde el registro, estos objetos vienen del servidor y
+ * las pantallas no cambian. Los importes siguen a cero porque los calcula el
+ * servidor, y las horas son de ejemplo.
+ */
+
+/** Un paso del viaje, con la hora a la que ocurrió. */
+export interface HitoDeViaje {
+  readonly clave: string;
+  readonly titulo: string;
+  /** Vacía cuando el paso no llegó a ocurrir —un viaje cancelado. */
+  readonly hora: string;
+  readonly detalle?: string;
+  readonly ocurrido: boolean;
+}
+
+/**
+ * Un mensaje del chat, tal como queda archivado.
+ *
+ * El adjunto se guarda igual que el texto: una foto del portón o del recibo es
+ * exactamente la clase de prueba que decide un reclamo, y perderla porque «era
+ * sólo una imagen» sería perder lo único que sirve.
+ */
+export interface MensajeDeViaje {
+  readonly clave: string;
+  readonly autor: 'pasajera' | 'conductor';
+  readonly hora: string;
+  readonly texto?: string;
+  readonly adjunto?: { readonly clase: 'imagen'; readonly rotulo: string };
+}
+
+export interface DetalleDeViaje {
+  readonly clave: string;
+  readonly estado: 'Completado' | 'Cancelado';
+  readonly fecha: string;
+  /** El número que se le da a soporte. Sin él, un reclamo empieza por «cuál?». */
+  readonly referencia: string;
+  readonly origen: string;
+  readonly destino: string;
+  readonly conductor: {
+    readonly nombre: string;
+    readonly vehiculo: string;
+    readonly placa: string;
+  };
+  readonly hitos: readonly HitoDeViaje[];
+  readonly duracion: string;
+  readonly espera: string;
+  readonly cobro: {
+    readonly total: string;
+    readonly metodo: string;
+    readonly desglose: readonly { readonly concepto: string; readonly importe: string }[];
+  };
+  readonly conversacion: readonly MensajeDeViaje[];
+}
+
+const VIAJE_COMPLETADO: DetalleDeViaje = {
+  clave: 'h1',
+  estado: 'Completado',
+  fecha: 'Hoy · 08:14',
+  referencia: 'VJ-DEMO-0001',
+  origen: 'Punto de ejemplo A',
+  destino: 'Destino de ejemplo 1',
+  conductor: {
+    nombre: 'Demo Conductor',
+    vehiculo: 'Moto de ejemplo',
+    placa: 'AA000AA'
+  },
+  hitos: [
+    { clave: 'pedido', titulo: 'Pediste el viaje', hora: '08:14', ocurrido: true },
+    { clave: 'asignado', titulo: 'Conductor asignado', hora: '08:15', detalle: 'Demo Conductor', ocurrido: true },
+    { clave: 'recogida', titulo: 'Llegó al punto de recogida', hora: '08:19', ocurrido: true },
+    { clave: 'inicio', titulo: 'Empezó el viaje', hora: '08:21', detalle: 'Esperó 2 minutos', ocurrido: true },
+    { clave: 'destino', titulo: 'Llegó al destino', hora: '08:34', ocurrido: true }
+  ],
+  duracion: '13 minutos',
+  espera: '2 minutos',
+  cobro: {
+    total: '$0,00',
+    metodo: 'Efectivo al conductor',
+    desglose: [
+      { concepto: 'Tarifa del viaje', importe: '$0,00' },
+      { concepto: 'Ajustes', importe: '$0,00' }
+    ]
+  },
+  conversacion: [
+    { clave: 'm1', autor: 'pasajera', hora: '08:16', texto: 'Estoy en la entrada de ejemplo, al lado del portón.' },
+    { clave: 'm2', autor: 'conductor', hora: '08:17', texto: 'Voy llegando, dame dos minutos.' },
+    { clave: 'm3', autor: 'pasajera', hora: '08:17', adjunto: { clase: 'imagen', rotulo: 'Foto de referencia del punto' } },
+    { clave: 'm4', autor: 'conductor', hora: '08:19', texto: 'Listo, ya te veo. Estoy en la esquina.' },
+    { clave: 'm5', autor: 'pasajera', hora: '08:34', texto: 'Gracias, llegó todo bien.' }
+  ]
+};
+
+/**
+ * El mismo registro cuando el viaje NO ocurrió.
+ *
+ * Se guarda igual de completo, y no por simetría: un viaje cancelado es el que
+ * más reclamos genera —me cobraron una cancelación, el conductor no apareció,
+ * canceló él y sale como si hubiera cancelado yo—. Los pasos que no llegaron a
+ * ocurrir se guardan como no ocurridos en vez de desaparecer: que falten dice
+ * tanto como que estén.
+ */
+const VIAJE_CANCELADO: DetalleDeViaje = {
+  clave: 'h3',
+  estado: 'Cancelado',
+  fecha: 'Ayer · 07:41',
+  referencia: 'VJ-DEMO-0003',
+  origen: 'Punto de ejemplo A',
+  destino: 'Destino de ejemplo 3',
+  conductor: {
+    nombre: 'Demo Conductor',
+    vehiculo: 'Moto de ejemplo',
+    placa: 'AA000AA'
+  },
+  hitos: [
+    { clave: 'pedido', titulo: 'Pediste el viaje', hora: '07:41', ocurrido: true },
+    { clave: 'asignado', titulo: 'Conductor asignado', hora: '07:42', detalle: 'Demo Conductor', ocurrido: true },
+    { clave: 'cancelado', titulo: 'Se canceló el viaje', hora: '07:46', detalle: 'Cancelado por la pasajera', ocurrido: true },
+    { clave: 'recogida', titulo: 'Llegó al punto de recogida', hora: '', ocurrido: false },
+    { clave: 'destino', titulo: 'Llegó al destino', hora: '', ocurrido: false }
+  ],
+  duracion: '—',
+  espera: '—',
+  cobro: {
+    total: '$0,00',
+    metodo: 'No se cobró',
+    desglose: [
+      { concepto: 'Cargo por cancelación', importe: '$0,00' }
+    ]
+  },
+  conversacion: [
+    { clave: 'm1', autor: 'conductor', hora: '07:43', texto: 'Voy en camino, hay tráfico de ejemplo.' },
+    { clave: 'm2', autor: 'pasajera', hora: '07:46', texto: 'Disculpa, ya no lo necesito.' }
+  ]
+};
+
+const DETALLES_DEMO: Readonly<Record<string, DetalleDeViaje>> = Object.freeze({
+  h1: VIAJE_COMPLETADO,
+  h2: { ...VIAJE_COMPLETADO, clave: 'h2', fecha: 'Ayer · 19:02', referencia: 'VJ-DEMO-0002', destino: 'Destino de ejemplo 2' },
+  h3: VIAJE_CANCELADO
+});
+
+/** El registro de un viaje del historial. */
+export function detalleDeViaje(clave: string): DetalleDeViaje {
+  return DETALLES_DEMO[clave] ?? VIAJE_COMPLETADO;
+}
+
+/**
+ * Lo que la pantalla dice sobre la conservación de la conversación.
+ *
+ * EL PLAZO SIGUE SIN DECIDIRSE y por eso no hay un número aquí. Poner «12
+ * meses» de relleno sería peor que no decir nada: es una promesa sobre datos
+ * personales, y de las que las tiendas de aplicaciones piden por escrito.
+ *
+ * Lo que SÍ se puede decir hoy es cierto: que queda guardada y que soporte
+ * puede leerla si se abre un reclamo. Quien lee la pantalla merece saberlo
+ * aunque el plazo todavía esté en el aire.
+ */
+export const CONSERVACION_DEMO = {
+  aviso: 'Esta conversación queda guardada con el viaje. Soporte puede leerla si abres un reclamo.',
+  pendiente: 'Plazo de conservación: por definir.'
+} as const;

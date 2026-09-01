@@ -43,7 +43,9 @@ export const NOMBRES_DE_ICONO = [
   'maletin',
   'campana',
   'ajustes',
-  'dolar'
+  'dolar',
+  'mensaje',
+  'imagen'
 ] as const;
 export type NombreDeIcono = (typeof NOMBRES_DE_ICONO)[number];
 
@@ -483,6 +485,94 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
                 backgroundColor: t.activo ? t.color : '#0b0a09'
               }} />
             </View>
+          ))}
+        </>
+      );
+
+    // Una fotografía: el marco con su montaña y su sol.
+    //
+    // Los dos elementos hacen falta. Sólo el marco es un rectángulo, y sólo la
+    // montaña no se entiende sin algo que la encuadre.
+    case 'imagen':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            width: t.tamano * 0.8,
+            height: t.tamano * 0.66,
+            borderRadius: t.tamano * 0.14,
+            borderWidth: t.trazo,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent',
+            overflow: 'hidden'
+          }} />
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.27,
+            left: t.tamano * 0.28,
+            width: t.tamano * 0.13,
+            height: t.tamano * 0.13,
+            borderRadius: t.tamano * 0.07,
+            backgroundColor: t.activo ? '#00000066' : t.color
+          }} />
+          {/* La montaña asoma por detrás del borde de abajo. */}
+          <View style={{ position: 'absolute', bottom: t.tamano * 0.18, right: t.tamano * 0.22 }}>
+            <Triangulo
+              base={t.tamano * 0.44}
+              alto={t.tamano * 0.26}
+              color={t.activo ? '#00000066' : t.color}
+            />
+          </View>
+        </>
+      );
+
+    // Burbuja de conversación: el rectángulo con la cola abajo a la izquierda.
+    //
+    // La cola es lo que la hace burbuja. Sin ella, un rectángulo redondeado con
+    // dos rayas dentro se lee igual de bien como «documento» o «lista», y este
+    // icono tiene que decir «aquí se habló» de un vistazo.
+    case 'mensaje':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.16,
+            width: t.tamano * 0.78,
+            height: t.tamano * 0.56,
+            borderRadius: t.tamano * 0.17,
+            borderWidth: t.trazo,
+            borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+          {/* Apoyada en el borde de abajo y medio punto por dentro, para que
+              se lea como una sola silueta y no como dos piezas pegadas. */}
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.70,
+            left: t.tamano * 0.26,
+            width: 0,
+            height: 0,
+            borderLeftWidth: t.tamano * 0.09,
+            borderRightWidth: t.tamano * 0.09,
+            borderTopWidth: t.tamano * 0.15,
+            borderLeftColor: 'transparent',
+            borderRightColor: 'transparent',
+            borderTopColor: t.color
+          }} />
+          {/* Dos rayas: lo que convierte la burbuja vacía en conversación. */}
+          {[0.34, 0.48].map(alto => (
+            <View
+              key={alto}
+              style={{
+                position: 'absolute',
+                top: t.tamano * alto,
+                left: t.tamano * 0.28,
+                width: t.tamano * (alto === 0.34 ? 0.44 : 0.30),
+                height: t.trazo * 0.8,
+                borderRadius: t.trazo,
+                backgroundColor: t.activo ? '#00000066' : t.color
+              }}
+            />
           ))}
         </>
       );

@@ -41,6 +41,7 @@ import { Separador } from '../ui/HojaInferior';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { EntradaDeTransporteSeguro } from '../ui/Servicio';
 import { useTema } from '../theme/ThemeContext';
+import { useIr } from '../ui/navegar';
 import { CabeceraAmarilla } from './pantallasSaldo';
 import {
   AVISOS_DEMO,
@@ -435,6 +436,7 @@ export function C2Saldo() {
 
 export function C2Historial() {
   const tema = useTema();
+  const ir = useIr();
 
   return (
     <Seccion titulo="Tu historial" activo="historial">
@@ -442,8 +444,10 @@ export function C2Historial() {
         <View key={viaje.clave}>
           {indice > 0 ? <Separador /> : null}
           <Pressable
+            onPress={() => ir('viaje-detalle', { viaje: viaje.clave })}
             accessibilityRole="button"
-            accessibilityLabel={`${viaje.fecha}. De ${viaje.origen} a ${viaje.destino}. ${viaje.estado}`}
+            accessibilityLabel={`${viaje.fecha}. De ${viaje.origen} a ${viaje.destino}. ${viaje.estado}. Ver el detalle`}
+            accessibilityHint="Abre el registro completo: horas, cobro y conversación"
             style={({ pressed }) => ({ paddingVertical: 15, gap: 9, opacity: pressed ? 0.65 : 1 })}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -470,11 +474,22 @@ export function C2Historial() {
                 <Txt nivel="cuerpo" numberOfLines={1}>{viaje.destino}</Txt>
               </View>
             </View>
+
+            {/* La fila entera lleva al registro, pero eso no se ve. El rótulo
+                es lo que lo dice, y hace falta: quien viene a reclamar está
+                buscando dónde se mira lo que pasó, no tanteando filas. */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Txt nivel="etiqueta" tono="acento">Ver detalle</Txt>
+              <Txt nivel="etiqueta" tono="acento">›</Txt>
+            </View>
           </Pressable>
         </View>
       ))}
 
-      <View style={{ marginTop: tema.ritmo.entreBloques, alignItems: 'center' }}>
+      <View style={{ marginTop: tema.ritmo.entreBloques, alignItems: 'center', gap: 4 }}>
+        <Txt nivel="pie" tono="tenue" centrado>
+          Cada viaje guarda sus horas, su cobro y la conversación.
+        </Txt>
         <Txt nivel="pie" tono="tenue">Los importes los calcula el servidor.</Txt>
       </View>
     </Seccion>

@@ -64,7 +64,12 @@ function irA(clave: string, parametros?: Record<string, string>) {
 
   const ruta = RUTA_DE_DESTINO[clave as DestinoDeDiseno];
   if (ruta === undefined) return;
-  router.push(ruta as never);
+
+  // Los demás parámetros viajan tal cual en la query. El detalle de un viaje
+  // necesita saber DE CUÁL habla, y una pantalla que siempre enseña el mismo
+  // registro no es un detalle: es un ejemplo.
+  const consulta = new URLSearchParams(parametros ?? {}).toString();
+  router.push((consulta === '' ? ruta : `${ruta}?${consulta}`) as never);
 }
 
 export default function RecorridoDeDiseno() {

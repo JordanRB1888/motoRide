@@ -25,7 +25,7 @@
 /** Las claves que usan la barra, las casillas y las filas del perfil. */
 export type DestinoDeDiseno =
   | 'inicio' | 'pedir' | 'para-quien' | 'punto' | 'confirmar' | 'buscando' | 'viaje'
-  | 'historial' | 'viaje-seguro' | 'perfil' | 'saldo' | 'avisos' | 'ayuda'
+  | 'historial' | 'viaje-detalle' | 'viaje-seguro' | 'perfil' | 'saldo' | 'avisos' | 'ayuda'
   | 'configuracion' | 'comercios' | 'comercio' | 'pronto'
   | 'conductor' | 'conductor-jornada' | 'conductor-saldo'
   | 'splash' | 'acceso' | 'rol';
@@ -41,6 +41,7 @@ export const RUTA_DE_DESTINO: Readonly<Record<DestinoDeDiseno, string>> = Object
   buscando: `${RAIZ}/buscando`,
   viaje: `${RAIZ}/viaje`,
   historial: `${RAIZ}/historial`,
+  'viaje-detalle': `${RAIZ}/viaje-detalle`,
   'viaje-seguro': `${RAIZ}/viaje-seguro`,
   perfil: `${RAIZ}/perfil`,
   saldo: `${RAIZ}/saldo`,
