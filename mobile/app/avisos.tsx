@@ -23,6 +23,7 @@ import { Redirect, router } from 'expo-router';
 import { C2Avisos, type AvisoEnPantalla } from '../preview/pantallasC2Secciones';
 import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useSesion } from '../context/AuthContext';
+import { useAvisosEnVivo } from '../realtime/avisosEnVivo';
 import { marcarLeido, marcarTodosLeidos, pedirAvisos } from '../services/avisos';
 import {
   conAvisoLeido,
@@ -58,6 +59,11 @@ export default function PantallaDeAvisos() {
   useEffect(() => {
     if (sesion.estado === 'AUTENTICADO') void cargar();
   }, [sesion.estado, cargar]);
+
+  // En vivo. El evento no se pinta: dispara la MISMA carga por HTTP, que es la
+  // autoridad. Así no hay dos caminos para los datos ni forma de duplicar un
+  // aviso, y la reconexión usa exactamente el mismo camino.
+  useAvisosEnVivo(() => { void cargar(); });
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return <C2Avisos estado="cargando" />;

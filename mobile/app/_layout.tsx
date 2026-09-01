@@ -32,6 +32,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { configuracion } from '../config/environment';
 import { ProveedorDeSesion } from '../context/AuthContext';
+import { ProveedorDeTiempoReal } from '../realtime/ProveedorDeTiempoReal';
 import { ProveedorDeTema } from '../theme/ThemeContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
@@ -98,6 +99,14 @@ export default function DisposicionRaiz() {
         // servidor al que preguntar, arrancar la sesión no tendría sentido y
         // sólo produciría un fallo de red confuso.
         <ProveedorDeSesion>
+          {/* El tiempo real va DENTRO de la sesión y una sola vez, aquí.
+              Es lo que garantiza «una sesión, un socket»: montarlo en cada
+              pantalla abriría una conexión por pantalla, y navegar entre
+              pestañas sería abrir y cerrar conexiones.
+
+              No conecta solo: espera a que la sesión esté confirmada, y se
+              queda apagado en el recorrido de diseño. */}
+          <ProveedorDeTiempoReal>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -109,6 +118,7 @@ export default function DisposicionRaiz() {
               animation: 'slide_from_right'
             }}
           />
+          </ProveedorDeTiempoReal>
         </ProveedorDeSesion>
       ) : (
         <AvisoDeConfiguracion detalle={configuracion.detalle} />

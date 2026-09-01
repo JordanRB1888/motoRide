@@ -25,6 +25,7 @@ import { useSesion } from '../context/AuthContext';
 import { fuenteDeFoto, pedirPerfil } from '../services/perfil';
 import { pedirAvisos } from '../services/avisos';
 import { contarSinLeer } from '../domain/avisos';
+import { useAvisosEnVivo } from '../realtime/avisosEnVivo';
 import {
   desdeCuando,
   inicialesDe,
@@ -47,6 +48,18 @@ export default function PantallaDePerfil() {
   const [error, setError] = useState<string | null>(null);
   const [cerrando, setCerrando] = useState(false);
 
+  /**
+   * Sólo el contador.
+   *
+   * Aparte del perfil a propósito: son dos endpoints distintos, un fallo al
+   * contar avisos no puede impedir que se vea el perfil, y un aviso nuevo no
+   * tiene por qué recargar los datos de la persona.
+   */
+  const refrescarAvisos = useCallback(async () => {
+    const bandeja = await pedirAvisos();
+    if (bandeja.ok) setSinLeer(contarSinLeer(bandeja.datos));
+  }, []);
+
   const cargar = useCallback(async () => {
     setError(null);
     const respuesta = await pedirPerfil();
@@ -60,13 +73,16 @@ export default function PantallaDePerfil() {
     setPerfil(respuesta.datos);
     setFoto(await fuenteDeFoto(respuesta.datos));
 
-    const bandeja = await pedirAvisos();
-    if (bandeja.ok) setSinLeer(contarSinLeer(bandeja.datos));
-  }, []);
+    await refrescarAvisos();
+  }, [refrescarAvisos]);
 
   useEffect(() => {
     if (sesion.estado === 'AUTENTICADO') void cargar();
   }, [sesion.estado, cargar]);
+
+  // La campana también se entera sola: un aviso nuevo mientras el perfil está
+  // abierto cambia el contador sin que haya que salir y volver.
+  useAvisosEnVivo(() => { void refrescarAvisos(); });
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return <Centro><ActivityIndicator color={tema.color.acento} size="large" /></Centro>;
