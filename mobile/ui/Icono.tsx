@@ -243,15 +243,42 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
         </>
       );
 
-    // Moto: dos ruedas y el cuadro entre ellas.
-    case 'moto':
+    /**
+     * Moto.
+     *
+     * Dos ruedas y un cuadro son una BICICLETA, que es lo que parecía antes.
+     * Lo que distingue una moto en trazo es el manillar alto y el depósito: sin
+     * esas dos piezas no hay forma de saber cuál de las dos es.
+     *
+     * Se dibuja con vistas porque esta familia no usa SVG. Cada barra es una
+     * línea girada, y las medidas van en fracciones del tamaño para que el
+     * glifo aguante a 15 y a 24 puntos.
+     */
+    case 'moto': {
+      const barra = (clave: string, x: number, y: number, largo: number, giro: number) => (
+        <View
+          key={clave}
+          style={{
+            position: 'absolute',
+            left: t.tamano * x,
+            top: t.tamano * y,
+            width: t.tamano * largo,
+            height: t.trazo,
+            borderRadius: t.trazo,
+            backgroundColor: t.color,
+            transform: [{ rotate: `${giro}deg` }]
+          }}
+        />
+      );
+
       return (
         <>
-          {[0.21, 0.79].map(x => (
+          {/* Las dos ruedas */}
+          {[0.06, 0.64].map(x => (
             <View key={x} style={{
               position: 'absolute',
-              bottom: t.tamano * 0.11,
-              left: t.tamano * x - t.tamano * 0.15,
+              bottom: t.tamano * 0.06,
+              left: t.tamano * x,
               width: t.tamano * 0.3,
               height: t.tamano * 0.3,
               borderRadius: t.tamano * 0.15,
@@ -260,27 +287,20 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
               backgroundColor: t.activo ? t.color : 'transparent'
             }} />
           ))}
-          <View style={{
-            position: 'absolute',
-            top: t.tamano * 0.34,
-            left: t.tamano * 0.22,
-            width: t.tamano * 0.5,
-            height: t.trazo,
-            borderRadius: t.trazo,
-            backgroundColor: t.color,
-            transform: [{ rotate: '-18deg' }]
-          }} />
-          <View style={{
-            position: 'absolute',
-            top: t.tamano * 0.22,
-            right: t.tamano * 0.14,
-            width: t.tamano * 0.26,
-            height: t.trazo,
-            borderRadius: t.trazo,
-            backgroundColor: t.color
-          }} />
+
+          {/* El depósito y el asiento: la línea larga de arriba */}
+          {barra('deposito', 0.3, 0.47, 0.32, 0)}
+          {/* El chasis, de la rueda trasera al depósito */}
+          {barra('chasis', 0.17, 0.62, 0.22, -38)}
+          {/* La horquilla, del depósito al manillar */}
+          {barra('horquilla', 0.58, 0.38, 0.2, -62)}
+          {/* El manillar */}
+          {barra('manillar', 0.6, 0.28, 0.18, 0)}
+          {/* De la horquilla a la rueda delantera */}
+          {barra('tijera', 0.63, 0.52, 0.3, 72)}
         </>
       );
+    }
 
     // Escudo: cuerpo recto arriba y redondeado hacia la punta.
     case 'escudo':

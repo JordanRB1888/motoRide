@@ -30,7 +30,8 @@
  * iguales dirían que +58express es seis cosas a medias en vez de una bien.
  */
 
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, Image, Pressable, ScrollView, View } from 'react-native';
 import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
@@ -47,6 +48,27 @@ import {
 import { AdelantoDeAliados } from './pantallasAliados';
 import { Campana } from './pantallasC2Secciones';
 import { CampoDeDestino, LugaresGuardados } from '../ui/Trayecto';
+
+/**
+ * Lee la preferencia de movimiento reducido del sistema.
+ *
+ * Aquí hay un bucle infinito —el humo— y quien pide no ver movimiento no puede
+ * quedarse con una animación corriendo en la pantalla que más se abre.
+ */
+function useMovimientoReducido(): boolean {
+  const [reducido, setReducido] = useState(false);
+
+  useEffect(() => {
+    let vigente = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(activo => { if (vigente) setReducido(activo); })
+      .catch(() => { /* si no se puede consultar, se anima */ });
+    const suscripcion = AccessibilityInfo.addEventListener('reduceMotionChanged', setReducido);
+    return () => { vigente = false; suscripcion.remove(); };
+  }, []);
+
+  return reducido;
+}
 
 type Servicio = (typeof SERVICIOS_DE_INICIO)[number];
 type Campana = (typeof CAMPANAS_DEMO)[number];
@@ -130,33 +152,72 @@ function RotuloPronto() {
 }
 
 /**
- * Las estelas de velocidad.
+ * El humo del escape.
  *
- * Cuatro barras amarillas de distinta longitud. Es el mismo gesto del
- * logotipo, donde la moto sale disparada dejando rastro: aquí hacen de fondo
- * para que la moto no flote sobre un rectángulo vacío.
+ * Tres volutas que salen por detrás de la moto, suben y se deshacen. Dicen que
+ * la moto está ENCENDIDA, que era la idea; unas rayas de velocidad delante de
+ * una moto parada sólo dicen que hay rayas.
+ *
+ * Va en gris y no en amarillo: el humo amarillo no existe, y además el amarillo
+ * en esa esquina competía con el título.
  */
-function Estelas() {
+function Humo() {
   const tema = useTema();
+  const quieto = useMovimientoReducido();
+
+  if (quieto) return null;
 
   return (
     <>
-      {[[16, 78, 0.55], [30, 104, 0.9], [46, 88, 0.7], [60, 62, 0.4]].map(([y, largo, opacidad]) => (
-        <View
-          key={y}
-          style={{
-            position: 'absolute',
-            right: 6,
-            top: y,
-            width: largo,
-            height: 3,
-            borderRadius: 3,
-            opacity: opacidad,
-            backgroundColor: tema.color.acento
-          }}
-        />
+      {([[0, 20, 0.5], [900, 26, 0.4], [1800, 16, 0.3]] as const).map(([retraso, tam, opacidad]) => (
+        <Voluta key={retraso} retraso={retraso} tamano={tam} opacidad={opacidad} color={tema.color.textoTenue} />
       ))}
     </>
+  );
+}
+
+function Voluta({ retraso, tamano, opacidad, color }: {
+  readonly retraso: number;
+  readonly tamano: number;
+  readonly opacidad: number;
+  readonly color: string;
+}) {
+  const valor = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const ciclo = Animated.loop(
+      Animated.sequence([
+        Animated.delay(retraso),
+        Animated.timing(valor, { toValue: 1, duration: 2800, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+        Animated.delay(2700 - retraso)
+      ])
+    );
+    ciclo.start();
+    return () => ciclo.stop();
+  }, [valor, retraso]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        right: 132,
+        bottom: 26,
+        width: tamano,
+        height: tamano,
+        borderRadius: tamano / 2,
+        backgroundColor: color,
+        opacity: valor.interpolate({
+          inputRange: [0, 0.18, 1],
+          outputRange: [0, opacidad, 0]
+        }),
+        transform: [
+          { translateX: valor.interpolate({ inputRange: [0, 1], outputRange: [0, -26] }) },
+          { translateY: valor.interpolate({ inputRange: [0, 1], outputRange: [0, -30] }) },
+          { scale: valor.interpolate({ inputRange: [0, 1], outputRange: [0.5, 2.4] }) }
+        ]
+      }}
+    />
   );
 }
 
@@ -181,7 +242,7 @@ function CasillaAncha({ dato }: { readonly dato: Servicio }) {
         minHeight: 96,
         justifyContent: 'center',
         paddingLeft: 16,
-        paddingRight: 150,
+        paddingRight: 160,
         paddingVertical: 16,
         borderRadius: tema.radio.tarjeta,
         backgroundColor: tema.color.superficie,
@@ -198,12 +259,12 @@ function CasillaAncha({ dato }: { readonly dato: Servicio }) {
         width: 3,
         backgroundColor: tema.color.acento
       }} />
-      <Estelas />
+      <Humo />
       <Image
         source={ARTE_DE_SERVICIO[dato.arte]}
         resizeMode="contain"
         accessibilityIgnoresInvertColors
-        style={{ position: 'absolute', right: -10, width: 132, height: 88 }}
+        style={{ position: 'absolute', right: 10, width: 132, height: 88 }}
       />
       <View style={{ gap: 3 }}>
         <Txt nivel="encabezado">{dato.titulo}</Txt>
@@ -257,10 +318,12 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
     />
   );
 
+  // Centrado: con el arte arriba a la izquierda, la esquina derecha quedaba
+  // vacía y el texto descolgado. Centradas, las seis se leen como una familia.
   const texto = (
-    <View style={{ gap: 2 }}>
-      <Txt nivel="cuerpo">{dato.titulo}</Txt>
-      <Txt nivel="pie" tono="tenue">{dato.detalle}</Txt>
+    <View style={{ gap: 3 }}>
+      <Txt nivel="cuerpo" centrado>{dato.titulo}</Txt>
+      <Txt nivel="pie" tono="tenue" centrado>{dato.detalle}</Txt>
     </View>
   );
 
@@ -272,8 +335,10 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
       disabled={!dato.listo}
       style={{
         width: '48.5%',
-        gap: 10,
-        padding: 14,
+        alignItems: 'center',
+        gap: 11,
+        paddingVertical: 16,
+        paddingHorizontal: 14,
         borderRadius: tema.radio.tarjeta,
         backgroundColor: tema.color.superficie,
         borderWidth: 1,
@@ -376,7 +441,7 @@ export function C2InicioPasajera() {
           <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
 
           <View style={{ marginTop: tema.ritmo.entreBloques }}>
-            <Txt nivel="encabezado" accessibilityRole="header">¿Qué necesitas hoy?</Txt>
+            <Txt nivel="encabezado" centrado accessibilityRole="header">¿Qué necesitas hoy?</Txt>
             <View style={{
               flexDirection: 'row',
               flexWrap: 'wrap',

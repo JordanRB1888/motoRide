@@ -121,7 +121,7 @@ const TRAZOS = {
   viajes: '<path d="M4 7h11M4 12h16M4 17h9"/><circle cx="19" cy="7" r="2"/><circle cx="16" cy="17" r="2"/>',
   perfil: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
   escudo: '<path d="M12 3l7.5 3v6c0 4.6-3.2 8.2-7.5 9.5C7.7 20.2 4.5 16.6 4.5 12V6z"/><path d="M9 12.2l2.2 2.2 4-4.4"/>',
-  moto: '<circle cx="5.5" cy="16.5" r="3.2"/><circle cx="18.5" cy="16.5" r="3.2"/><path d="M5.5 16.5 9 9h5l3.5 7.5M9 9h6.5"/>',
+  moto: '<circle cx="5" cy="17" r="3.4"/><circle cx="19" cy="17" r="3.4"/><path d="M5 17h3.2l2.3-4.6h4.2"/><path d="M8.2 12.4h6.5l2.1 2.6"/><path d="M14.7 12.4 16.6 8.2"/><path d="M14.9 8.2h3.6"/><path d="M16.6 8.2 19 17"/>',
   reloj: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.4l3.4 2"/>',
   rayo: '<path d="M13.5 2.5 5 13.5h5.5L9.5 21.5 19 10.5h-5.7z"/>',
   maletin: '<rect x="3" y="7.5" width="18" height="12.5" rx="2.5"/><path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5"/>',
@@ -258,6 +258,16 @@ export const BASE = `
   /* El lugar se recorta; el estado, nunca: es lo primero que se lee. */
   .flotante .recorta{overflow:hidden;text-overflow:ellipsis}
   .punto{width:8px;height:8px;border-radius:50%}
+
+  /* El humo del escape: sale, sube, se ensancha y se deshace. */
+  @keyframes humea{
+    0%{opacity:0;transform:translate(0,0) scale(.5)}
+    18%{opacity:var(--humo-op)}
+    100%{opacity:0;transform:translate(-26px,-30px) scale(2.4)}
+  }
+  @media (prefers-reduced-motion:reduce){
+    [style*="animation:humea"]{animation:none;opacity:0}
+  }
 
   /* El carrusel de aliados. La barra de desplazamiento se oculta porque en el
      telefono no existe: ensenarla aqui seria ensenar algo que no va a estar. */
@@ -712,18 +722,22 @@ const ARTE_EN_DISCO = new Map(
 );
 
 /**
- * Las estelas de velocidad.
+ * El humo del escape.
  *
- * Cuatro barras amarillas de distinta longitud, desvaneciendose hacia la
- * izquierda. Es el mismo gesto del logotipo, donde la moto sale disparada
- * dejando rastro: aqui hace de fondo para que la moto no flote sobre un
- * rectangulo vacio.
+ * Tres volutas que salen por detras de la moto, suben y se deshacen. Dicen que
+ * la moto esta ENCENDIDA, que era la idea; unas rayas de velocidad delante de
+ * una moto parada solo dicen que hay rayas.
+ *
+ * Va en gris y no en amarillo: el humo amarillo no existe, y ademas el amarillo
+ * en esa esquina competia con el titulo.
  */
-const estelas = `
-  ${[[16, 78, 0.55], [30, 104, 0.9], [46, 88, 0.7], [60, 62, 0.4]].map(([y, largo, op]) => `
-    <span style="position:absolute;right:6px;top:${y}px;width:${largo}px;height:3px;
-      border-radius:3px;opacity:${op};
-      background:linear-gradient(90deg,transparent,var(--acento))"></span>`).join('')}`;
+const humo = `
+  ${[[0, 20, 0.5], [900, 26, 0.4], [1800, 16, 0.3]].map(([retraso, tam, op]) => `
+    <span style="position:absolute;right:132px;bottom:26px;width:${tam}px;height:${tam}px;
+      border-radius:50%;opacity:0;
+      background:radial-gradient(circle,var(--texto-3) 0%,transparent 68%);
+      animation:humea 2.8s ease-out ${retraso}ms infinite;
+      --humo-op:${op}"></span>`).join('')}`;
 
 /**
  * La casilla ANCHA lleva la moto a la derecha, no a la izquierda.
@@ -736,12 +750,12 @@ const estelas = `
  */
 const casillaAncha = dato => `
   <span style="flex:1 1 100%;position:relative;overflow:hidden;display:block;
-    min-height:96px;padding:16px 150px 16px 16px;border-radius:var(--r-tarjeta);
+    min-height:96px;padding:16px 160px 16px 16px;border-radius:var(--r-tarjeta);
     background:var(--superficie);border:1px solid var(--acento)">
     <span class="filo"></span>
-    ${estelas}
+    ${humo}
     <img src="marca/moto.png" width="132" height="88" alt=""
-      style="position:absolute;right:-10px;top:50%;transform:translateY(-50%);
+      style="position:absolute;right:10px;top:50%;transform:translateY(-50%);
         object-fit:contain">
     <span style="position:relative;display:grid;gap:3px">
       <span class="enc">${dato.titulo}</span>
@@ -776,14 +790,14 @@ const servicio = dato => {
     </span>`;
 
   const texto = `
-    <span style="display:grid;gap:2px;min-width:0">
+    <span style="display:grid;gap:3px;min-width:0;text-align:center">
       <span class="cuerpo">${dato.titulo}</span>
-      <span class="pie t3" style="text-align:left">${dato.detalle}</span>
+      <span class="pie t3" style="text-align:center">${dato.detalle}</span>
     </span>`;
 
   return `
-  <span style="flex:1 1 calc(50% - 5px);display:grid;gap:10px;
-    padding:14px;border-radius:var(--r-tarjeta);background:var(--superficie);
+  <span style="flex:1 1 calc(50% - 5px);display:grid;gap:11px;justify-items:center;
+    padding:16px 14px;border-radius:var(--r-tarjeta);background:var(--superficie);
     border:1px solid var(--borde);
     ${dato.listo ? '' : 'opacity:.62;'}min-width:0;position:relative;overflow:hidden">
     ${dato.listo ? '' : `<span style="position:absolute;top:10px;right:10px">${rotuloPronto}</span>`}
@@ -1042,7 +1056,7 @@ export const PANTALLAS = {
           ${LUGARES}
 
           <div style="margin-top:var(--bloques)">
-            <span class="enc">¿Qué necesitas hoy?</span>
+            <span class="enc" style="text-align:center;display:block">¿Qué necesitas hoy?</span>
             <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:11px">
               ${SERVICIOS_DE_INICIO.map(servicio).join('')}
             </div>
@@ -1114,7 +1128,7 @@ export const PANTALLAS = {
       <div class="hoja" style="padding-top:0">
         <span class="asa"></span>
         <div style="display:grid;gap:var(--gap);padding-bottom:var(--pad)">
-          <span class="enc">¿Para quién es el viaje?</span>
+          <span class="enc" style="text-align:center;display:block">¿Para quién es el viaje?</span>
 
           <div>
             ${[['Para mí', 'Tú te montas', true, ''],
@@ -1184,12 +1198,13 @@ export const PANTALLAS = {
         <span class="etq t2">Zona demo · Maracaibo</span>
       </div>
       <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
-        <div style="display:flex;align-items:center;gap:12px;padding-bottom:var(--pad)">
-          ${icono('moto', 'var(--texto-2)', 20)}
-          <span style="flex:1;display:grid;gap:2px">
-            <span class="cuerpo">Listo para salir</span>
-            <span class="pie t3">Moto demo · Placa DEMO-000</span></span>
-          <span class="etq ok insignia">Verificado</span>
+        <div style="display:grid;justify-items:center;gap:9px;padding-bottom:var(--pad)">
+          <span style="width:46px;height:46px;border-radius:50%;display:grid;place-items:center;
+            background:color-mix(in srgb,var(--acento) 14%,transparent)">
+            ${icono('moto', 'var(--acento-texto)', 24)}</span>
+          <span class="enc">Listo para salir</span>
+          <span class="pie t3" style="text-align:center">Moto demo · Placa DEMO-000</span>
+          <span class="etq ok insignia" style="margin-top:2px">Verificado</span>
         </div>
       </div>
       ${barraConductor(false)}
@@ -1204,13 +1219,15 @@ export const PANTALLAS = {
         <span style="width:1px;height:13px;background:var(--borde)"></span>
         <span class="etq t2 recorta">Cerca de un punto de ejemplo · Vía de ejemplo</span>
       </div>
-      <div class="hoja" style="bottom:76px;padding-top:var(--pad)">
-        <div style="display:flex;padding-bottom:var(--pad)">
-          ${[['Viajes', '8'], ['En ruta', '5 h 20 m'], ['Resumen', '—']].map(([e, v], i) => `
-            <div style="flex:1;display:flex">
-              ${i > 0 ? '<span style="width:1px;background:var(--borde);margin-right:12px"></span>' : ''}
-              <span style="display:grid;gap:3px"><span class="etq t3">${e}</span><span class="enc">${v}</span></span>
-            </div>`).join('')}
+      <div class="hoja" style="bottom:76px;padding-top:14px">
+        <div style="display:flex;align-items:center;gap:18px;padding-bottom:14px;
+          justify-content:center">
+          ${[['Viajes de hoy', '8'], ['En ruta', '5 h 20 m']].map(([e, v], i) => `
+            ${i > 0 ? '<span style="width:1px;height:26px;background:var(--borde)"></span>' : ''}
+            <span style="display:grid;gap:1px;text-align:center">
+              <span class="etq">${v}</span>
+              <span class="pie t3" style="text-align:center">${e}</span>
+            </span>`).join('')}
         </div>
       </div>
       ${barraConductor(true)}
@@ -1219,43 +1236,45 @@ export const PANTALLAS = {
   viaje: () => `
     <div class="tel">
       <div class="mapa">${CALLES}${RUTA_MEDIA}${vehiculo('MOTO', 46, 30, 38, true)}${CTRL}</div>
-      <div class="hoja" style="${hojaMedia}">
+      <div class="hoja" style="bottom:0;padding-top:0">
         <span class="asa"></span>
-        <div style="position:relative;overflow:hidden;border-radius:var(--r-tarjeta);background:var(--elevada);
-          padding:var(--pad);display:flex;align-items:center">
-          <span class="filo"></span>
-          <span style="flex:1;display:grid;gap:3px"><span class="etq t2">ESTADO</span><span class="enc">En camino</span></span>
-          <span style="display:grid;gap:3px;text-align:right"><span class="etq t2">LLEGA EN</span>
-            <span class="titulo ac">4 min</span></span>
-        </div>
-        <div style="height:var(--gap)"></div>
-        <div style="display:flex;align-items:center;gap:13px">
-          <span style="width:44px;height:44px;border-radius:50%;background:var(--elevada);display:grid;place-items:center">
-            <span class="etq">DC</span></span>
-          <span style="flex:1;display:grid;gap:2px"><span class="cuerpo">Demo Conductor</span>
-            <span class="pie t3">Moto demo · DEMO-000 · 4,9</span></span>
-          ${['rayo', 'viajes'].map(ic => `<span style="width:42px;height:42px;border-radius:50%;
-            background:var(--elevada);display:grid;place-items:center">${icono(ic, 'var(--texto-2)', 18)}</span>`).join('')}
-        </div>
-        <div style="height:var(--gap)"></div><span class="sep"></span>
-        <div style="padding-top:var(--gap);display:grid;gap:10px">
-          ${[['var(--texto)', 'Punto de recogida de ejemplo'], ['var(--acento)', 'Destino de ejemplo 1']].map(([c, t]) => `
-            <div style="display:flex;align-items:center;gap:11px">
-              <span style="width:9px;height:9px;border-radius:50%;background:${c}"></span>
-              <span class="cuerpo t2">${t}</span></div>`).join('')}
-        </div>
+        <div style="display:grid;gap:13px;padding-bottom:var(--pad)">
 
-        <!-- La salida de emergencia, durante el viaje. Vivia solo en la
-             pestania de Viaje seguro, que ya no esta en la barra. Aqui esta
-             mejor de lo que estaba: en pleno viaje ya no hay que salirse a
-             buscarla. Con etiqueta y no solo el icono: un circulo rojo al lado
-             de los de llamar y escribir se pulsa sin querer. -->
-        <div style="margin-top:var(--gap);display:flex;align-items:center;justify-content:center;
-          gap:9px;padding:13px;border-radius:var(--r-boton);
-          border:1px solid var(--peligro);
-          background:color-mix(in srgb,var(--peligro) 8%,transparent)">
-          ${icono('escudo', 'var(--peligro)', 18)}
-          <span class="etq" style="color:var(--peligro)">Emergencia</span>
+          <div style="display:flex;align-items:baseline;gap:9px">
+            <span class="enc">En camino</span>
+            <span class="crece"></span>
+            <span class="pie t3">llega en</span>
+            <span class="titulo ac">4 min</span>
+          </div>
+
+          <span class="sep"></span>
+
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="width:40px;height:40px;border-radius:50%;flex:0 0 40px;
+              background:var(--elevada);display:grid;place-items:center">
+              <span class="etq">DC</span></span>
+            <span style="flex:1;display:grid;gap:1px;min-width:0">
+              <span class="cuerpo">Demo Conductor</span>
+              <span class="pie t3" style="text-align:left">Moto demo · DEMO-000 · 4,9</span></span>
+            ${['rayo', 'viajes'].map(ic => `
+              <span style="width:38px;height:38px;border-radius:50%;display:grid;
+                place-items:center;background:var(--hundida)">
+                ${icono(ic, 'var(--texto-2)', 17)}</span>`).join('')}
+          </div>
+
+          <div style="display:grid;gap:7px">
+            ${[['var(--texto)', 'Punto de recogida de ejemplo'], ['var(--acento)', 'Destino de ejemplo 1']].map(([c, t]) => `
+              <div style="display:flex;align-items:center;gap:11px">
+                <span style="width:8px;height:8px;border-radius:50%;background:${c}"></span>
+                <span class="pie t2" style="text-align:left">${t}</span></div>`).join('')}
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:center;gap:9px;
+            padding:11px;border-radius:var(--r-boton);border:1px solid var(--peligro);
+            background:color-mix(in srgb,var(--peligro) 8%,transparent)">
+            ${icono('escudo', 'var(--peligro)', 17)}
+            <span class="etq" style="color:var(--peligro)">Emergencia</span>
+          </div>
         </div>
       </div>
     </div>`,
@@ -1271,7 +1290,7 @@ export const PANTALLAS = {
           <div style="display:grid;gap:9px">
             <span style="position:relative;overflow:hidden;display:block">
               <span class="rastro"></span>
-              <span class="titulo" style="position:relative">Buscando tu moto</span>
+              <span class="titulo" style="position:relative;text-align:center;display:block">Buscando tu moto</span>
             </span>
             <span class="carril"><span></span></span>
             <span class="cuerpo t2">Avisando a los conductores que están cerca de ti.</span>
@@ -1294,20 +1313,26 @@ export const PANTALLAS = {
       <div class="hoja" style="bottom:76px;padding-top:0">
         <span class="asa"></span>
         <div style="display:grid;gap:var(--gap);padding-bottom:var(--pad)">
-          <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;justify-content:center">
             <span class="punto" style="background:var(--exito)"></span>
-            <span class="enc">En línea</span><span class="crece"></span>
+            <span class="enc">En línea</span>
+            <span style="width:1px;height:14px;background:var(--borde)"></span>
             ${icono('destino', 'var(--exito)', 14)}<span class="etq ok">GPS activo</span>
           </div>
-          <div style="display:flex;flex-wrap:wrap">
-            ${[['Vehículo', 'Moto demo · DEMO-000'], ['Zona', 'Zona demo · Maracaibo'],
-               ['Viajes de hoy', '8'], ['En línea', '5 h 20 m']].map(([e, v]) => `
-              <span style="width:50%;padding:7px 12px 7px 0;display:grid;gap:2px;min-width:0">
-                <span class="pie t3" style="text-align:left">${e}</span>
-                <span class="cuerpo" style="overflow:hidden;text-overflow:ellipsis;
-                  white-space:nowrap">${v}</span></span>`).join('')}
-          </div>
-          <span class="pie t3" style="text-align:left">El resumen de la jornada llega
+
+          ${[[['Vehículo', 'Moto demo · DEMO-000'], ['Zona', 'Zona demo · Maracaibo']],
+             [['Viajes de hoy', '8'], ['En línea', '5 h 20 m']]].map(pareja => `
+            <div style="display:flex;border-radius:var(--r-campo);background:var(--hundida);
+              padding:11px 14px">
+              ${pareja.map(([e, v], i) => `
+                ${i > 0 ? '<span style="width:1px;background:var(--borde);margin:0 12px"></span>' : ''}
+                <span style="flex:1;display:grid;gap:2px;min-width:0">
+                  <span class="pie t3" style="text-align:left">${e}</span>
+                  <span class="cuerpo" style="overflow:hidden;text-overflow:ellipsis;
+                    white-space:nowrap">${v}</span></span>`).join('')}
+            </div>`).join('')}
+
+          <span class="pie t3" style="text-align:center">El resumen de la jornada llega
             cuando se encienda la cartera.</span>
           <div class="boton sec" style="border:1px solid var(--borde)">Salir de línea</div>
         </div>
@@ -1504,7 +1529,8 @@ export const PANTALLAS = {
       </div>
       <div class="hoja" style="padding-top:var(--pad)">
         <div style="display:grid;gap:var(--gap);padding-bottom:var(--pad)">
-          <div style="display:grid;gap:3px"><span class="etq t2">PUNTO DE RECOGIDA</span>
+          <div style="display:grid;gap:3px;text-align:center">
+            <span class="etq t2">PUNTO DE RECOGIDA</span>
             <span class="enc">Punto de ejemplo</span></div>
           <div class="boton">Confirmar recogida</div>
         </div>

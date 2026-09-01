@@ -35,7 +35,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
-import { Boton, Insignia, Superficie, Txt } from '../ui/componentes';
+import { Boton, Insignia, Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { Arranque } from '../ui/Arranque';
 import { LienzoDeMapa, type HitoEnMapa, type VehiculoEnMapa } from '../ui/Mapa';
@@ -484,7 +484,7 @@ export function C2ParaQuienEsElViaje() {
           <View style={{ gap: tema.ritmo.entreElementos }}>
             {/* «Encabezado» y no «título»: es una pregunta de dos respuestas en una
                 hoja sobre el mapa, no la cabecera de una pantalla entera. */}
-            <Txt nivel="encabezado" accessibilityRole="header">¿Para quién es el viaje?</Txt>
+            <Txt nivel="encabezado" centrado accessibilityRole="header">¿Para quién es el viaje?</Txt>
             <OpcionesDeBeneficiario elegido={beneficiario} onElegir={setBeneficiario} />
             <Boton titulo="Continuar" onPress={() => undefined} />
           </View>
@@ -504,7 +504,7 @@ export function C2ElegirPuntoPasajera() {
         <HojaInferior estado="baja" conAsa={false} alturaAutomatica>
           <View style={{ gap: tema.ritmo.entreElementos }}>
             <View style={{ gap: 3 }}>
-              <Txt nivel="etiqueta" tono="secundario">PUNTO DE RECOGIDA</Txt>
+              <Txt nivel="etiqueta" tono="secundario" centrado>PUNTO DE RECOGIDA</Txt>
               <Txt nivel="encabezado">Punto de ejemplo</Txt>
             </View>
             <Boton titulo="Confirmar recogida" onPress={() => undefined} />
@@ -757,30 +757,49 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
             panel, también mientras espera a conectarse. */}
         <HojaInferior estado="baja" conAsa={false} alturaAutomatica>
           {conectado ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            /* Dos cifras y pequeñas. Eran tres en tamaño de encabezado, separadas
+               por rayas, y ocupaban casi tanto como la hoja entera: se abren en
+               marcha, así que van juntas, centradas y del tamaño de una etiqueta.
+
+               «Resumen» se va por lo mismo que en el panel del disco: un dato
+               vacío ocupando el sitio de un dato no es un dato. */
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 18
+            }}>
               {[
-                { etiqueta: 'Viajes', valor: JORNADA_DEMO.viajes },
-                { etiqueta: 'En ruta', valor: JORNADA_DEMO.horas },
-                { etiqueta: 'Resumen', valor: JORNADA_DEMO.resumen }
+                { etiqueta: 'Viajes de hoy', valor: JORNADA_DEMO.viajes },
+                { etiqueta: 'En ruta', valor: JORNADA_DEMO.horas }
               ].map((dato, indice) => (
-                <View key={dato.etiqueta} style={{ flex: 1, flexDirection: 'row' }}>
+                <View key={dato.etiqueta} style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
                   {indice > 0 ? (
-                    <View style={{ width: 1, backgroundColor: tema.color.borde, marginRight: 12 }} />
+                    <View style={{ width: 1, height: 26, backgroundColor: tema.color.borde }} />
                   ) : null}
-                  <View style={{ gap: 3 }}>
-                    <Txt nivel="etiqueta" tono="tenue">{dato.etiqueta}</Txt>
-                    <Txt nivel="encabezado">{dato.valor}</Txt>
+                  <View style={{ gap: 1 }}>
+                    <Txt nivel="etiqueta" centrado>{dato.valor}</Txt>
+                    <Txt nivel="pie" tono="tenue" centrado>{dato.etiqueta}</Txt>
                   </View>
                 </View>
               ))}
             </View>
           ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <Icono nombre="moto" color={tema.color.textoSecundario} tamano={20} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Txt nivel="cuerpo">Listo para salir</Txt>
-                <Txt nivel="pie" tono="tenue">{CONDUCTOR_DEMO.vehiculo}</Txt>
+            /* Centrado y con el glifo en su disco: suelto al lado del texto se
+               leía como una viñeta perdida. */
+            <View style={{ alignItems: 'center', gap: 9 }}>
+              <View style={{
+                width: 46,
+                height: 46,
+                borderRadius: 23,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: `${tema.color.acento}24`
+              }}>
+                <Icono nombre="moto" color={tema.color.acentoTexto} tamano={24} />
               </View>
+              <Txt nivel="encabezado" centrado>Listo para salir</Txt>
+              <Txt nivel="pie" tono="tenue" centrado>{CONDUCTOR_DEMO.vehiculo}</Txt>
               <Insignia texto="Verificado" tono="exito" />
             </View>
           )}
@@ -886,101 +905,96 @@ export function C2Viaje() {
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <LienzoDeMapa vehiculos={[conductorEnRuta]} hitos={HITOS_DE_VIAJE} conRuta>
-        <HojaInferior estado="media" conAsa>
-          {/* El estado: la única zona de esta pantalla con filo. */}
-          <Superficie destacada elevada>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Txt nivel="etiqueta" tono="secundario">ESTADO</Txt>
-                <Txt nivel="encabezado">{VIAJE_DEMO.estado}</Txt>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: 3 }}>
-                <Txt nivel="etiqueta" tono="secundario">LLEGA EN</Txt>
-                <Txt nivel="titulo" tono="acento">{VIAJE_DEMO.eta}</Txt>
-              </View>
+        {/* La hoja se ajusta a lo que ocupa.
+            Estaba en «media» con cada bloque separado por dieciséis puntos, y en
+            un viaje se mira UNA cosa —cuánto falta— y de refilón quién viene.
+            Apretada, el mapa gana casi doscientos puntos. */}
+        <HojaInferior estado="baja" conAsa alturaAutomatica>
+          <View style={{ gap: 13 }}>
+            {/* Estado y llegada en UNA línea. En su tarjeta con filo pesaban lo
+                mismo que todo lo demás junto. */}
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 9 }}>
+              <Txt nivel="encabezado">{VIAJE_DEMO.estado}</Txt>
+              <View style={{ flex: 1 }} />
+              <Txt nivel="pie" tono="tenue">llega en</Txt>
+              <Txt nivel="titulo" tono="acento">{VIAJE_DEMO.eta}</Txt>
             </View>
-          </Superficie>
 
-          <View style={{ height: tema.ritmo.entreElementos }} />
+            <Separador />
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
-            <View style={{
-              width: 44, height: 44, borderRadius: 22,
-              alignItems: 'center', justifyContent: 'center',
-              backgroundColor: tema.color.superficieElevada
-            }}>
-              <Txt nivel="etiqueta">{VIAJE_DEMO.iniciales}</Txt>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{
+                width: 40, height: 40, borderRadius: 20,
+                alignItems: 'center', justifyContent: 'center',
+                backgroundColor: tema.color.superficieElevada
+              }}>
+                <Txt nivel="etiqueta">{VIAJE_DEMO.iniciales}</Txt>
+              </View>
+              <View style={{ flex: 1, gap: 1 }}>
+                <Txt nivel="cuerpo">{VIAJE_DEMO.conductor}</Txt>
+                <Txt nivel="pie" tono="tenue" numberOfLines={1}>
+                  {VIAJE_DEMO.vehiculo} · {VIAJE_DEMO.valoracion}
+                </Txt>
+              </View>
+              {(['Llamar', 'Mensaje'] as const).map(accion => (
+                <Pressable
+                  key={accion}
+                  accessibilityRole="button"
+                  accessibilityLabel={accion}
+                  style={{
+                    width: 38, height: 38, borderRadius: 19,
+                    alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: tema.color.superficieHundida
+                  }}
+                >
+                  <Icono
+                    nombre={accion === 'Llamar' ? 'rayo' : 'viajes'}
+                    color={tema.color.textoSecundario}
+                    tamano={17}
+                  />
+                </Pressable>
+              ))}
             </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Txt nivel="cuerpo">{VIAJE_DEMO.conductor}</Txt>
-              <Txt nivel="pie" tono="tenue">{VIAJE_DEMO.vehiculo} · {VIAJE_DEMO.valoracion}</Txt>
+
+            <View style={{ gap: 7 }}>
+              {[
+                { punto: tema.color.textoPrimario, texto: VIAJE_DEMO.origen },
+                { punto: tema.color.acento, texto: VIAJE_DEMO.destino }
+              ].map(parada => (
+                <View key={parada.texto} style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: parada.punto }} />
+                  <Txt nivel="pie" tono="secundario" numberOfLines={1}>{parada.texto}</Txt>
+                </View>
+              ))}
             </View>
-            {(['Llamar', 'Mensaje'] as const).map(accion => (
-              <Pressable
-                key={accion}
-                accessibilityRole="button"
-                accessibilityLabel={accion}
-                style={{
-                  width: 42, height: 42, borderRadius: 21,
-                  alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: tema.color.superficieElevada
-                }}
-              >
-                <Icono
-                  nombre={accion === 'Llamar' ? 'rayo' : 'viajes'}
-                  color={tema.color.textoSecundario}
-                  tamano={18}
-                />
-              </Pressable>
-            ))}
+
+            {/* LA SALIDA DE EMERGENCIA, DURANTE EL VIAJE
+                Vivía sólo en la pestaña de Viaje seguro, que ya no está en la
+                barra. Aquí está mejor de lo que estaba: en pleno viaje ya no hay
+                que salirse a buscarla.
+
+                Con etiqueta y no sólo el icono: un círculo rojo al lado de los de
+                llamar y escribir se pulsa sin querer, y una falsa alarma le
+                cuesta a alguien salir corriendo. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Emergencia. Pedir ayuda ahora"
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 9,
+                paddingVertical: 11,
+                borderRadius: tema.radio.boton,
+                borderWidth: 1,
+                borderColor: tema.color.peligro,
+                backgroundColor: pressed ? `${tema.color.peligro}26` : `${tema.color.peligro}14`
+              })}
+            >
+              <Icono nombre="escudo" color={tema.color.peligro} tamano={17} />
+              <Txt nivel="etiqueta" tono="peligro">Emergencia</Txt>
+            </Pressable>
           </View>
-
-          <View style={{ height: tema.ritmo.entreElementos }} />
-          <Separador />
-          <View style={{ paddingTop: tema.ritmo.entreElementos, gap: 10 }}>
-            {[
-              { punto: tema.color.textoPrimario, texto: VIAJE_DEMO.origen },
-              { punto: tema.color.acento, texto: VIAJE_DEMO.destino }
-            ].map(parada => (
-              <View key={parada.texto} style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
-                <View style={{
-                  width: 9, height: 9, borderRadius: 4.5,
-                  backgroundColor: parada.punto
-                }} />
-                <Txt nivel="cuerpo" tono="secundario" numberOfLines={1}>{parada.texto}</Txt>
-              </View>
-            ))}
-          </View>
-
-          {/* LA SALIDA DE EMERGENCIA, DURANTE EL VIAJE
-              Vivía sólo en la pestaña de Viaje seguro, que ya no está en la
-              barra. Aquí está mejor de lo que estaba: en pleno viaje ya no hay
-              que salirse a buscarla.
-
-              Con etiqueta y no sólo el icono: un círculo rojo al lado de los de
-              llamar y escribir se pulsa sin querer, y una falsa alarma le
-              cuesta a alguien salir corriendo. */}
-          <View style={{ height: tema.ritmo.entreElementos }} />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Emergencia. Pedir ayuda ahora"
-            style={({ pressed }) => ({
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 9,
-              paddingVertical: 13,
-              borderRadius: tema.radio.boton,
-              borderWidth: 1,
-              borderColor: tema.color.peligro,
-              backgroundColor: pressed
-                ? `${tema.color.peligro}26`
-                : `${tema.color.peligro}14`
-            })}
-          >
-            <Icono nombre="escudo" color={tema.color.peligro} tamano={18} />
-            <Txt nivel="etiqueta" tono="peligro">Emergencia</Txt>
-          </Pressable>
         </HojaInferior>
       </LienzoDeMapa>
     </View>

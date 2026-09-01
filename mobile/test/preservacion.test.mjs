@@ -510,8 +510,12 @@ test('los avisos tienen puerta desde las pantallas de uso', () => {
 test('el panel del conductor cabe en un vistazo', () => {
   // Se abre en un semáforo. Los datos van en dos columnas —la mitad de alto que
   // seis filas para lo mismo— y la hoja se ajusta a su contenido.
+  // Dos bloques de dos, cada uno sobre superficie hundida. Antes eran cuatro
+  // datos sueltos sobre la hoja y se leian como texto derramado; agrupados, el
+  // ojo los coge de un vistazo, que es lo unico que hay en un semaforo.
   const estados = leer('ui/Estados.tsx');
-  assert.match(estados, /width: '50%'/, 'los datos van en dos columnas');
+  assert.match(estados, /datos\.slice\(0, 2\), datos\.slice\(2\)/, 'los datos van en dos bloques');
+  assert.match(estados, /superficieHundida/, 'los bloques no se distinguen de la hoja');
 
   const pantallas = leer('preview/pantallasC2.tsx');
   const conductor = pantallas.slice(pantallas.indexOf('export function C2InicioConductor'));

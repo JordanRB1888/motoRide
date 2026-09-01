@@ -407,7 +407,7 @@ export function PanelDeJornada({ jornada, onAlternar }: {
 
   return (
     <View style={{ gap: tema.ritmo.entreElementos }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
         <View style={{
           width: 9, height: 9, borderRadius: 5,
           backgroundColor: jornada.enLinea ? tema.color.exito : tema.color.textoTenue
@@ -426,17 +426,37 @@ export function PanelDeJornada({ jornada, onAlternar }: {
         )}
       </View>
 
-      {/* Dos columnas: la mitad de alto que seis filas para lo mismo. */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-        {datos.map(dato => (
-          // El relleno derecho separa las dos columnas: sin él, un valor largo
-          // llega hasta el borde y se pega al de al lado.
-          <View key={dato.etiqueta} style={{ width: '50%', paddingVertical: 7, paddingRight: 12, gap: 2 }}>
-            <Txt nivel="pie" tono="tenue">{dato.etiqueta}</Txt>
-            <Txt nivel="cuerpo" numberOfLines={1}>{dato.valor}</Txt>
-          </View>
-        ))}
-      </View>
+      {/* Dos bloques de dos, cada uno sobre superficie hundida.
+          Sueltos sobre la hoja se leían como texto derramado: cuatro etiquetas
+          y cuatro valores flotando sin nada que dijera que van juntos. El
+          hundido es apenas un escalón —no es una tarjeta, no lleva borde ni
+          sombra— y basta para que el ojo los agrupe.
+          Se abre en un semáforo: agrupar es lo que lo hace legible de un
+          vistazo. */}
+      {[datos.slice(0, 2), datos.slice(2)].map(pareja => (
+        <View
+          key={pareja.map(dato => dato.etiqueta).join('-')}
+          style={{
+            flexDirection: 'row',
+            borderRadius: tema.radio.campo,
+            backgroundColor: tema.color.superficieHundida,
+            paddingVertical: 11,
+            paddingHorizontal: 14
+          }}
+        >
+          {pareja.map((dato, indice) => (
+            <View key={dato.etiqueta} style={{ flex: 1, flexDirection: 'row' }}>
+              {indice > 0 ? (
+                <View style={{ width: 1, backgroundColor: tema.color.borde, marginRight: 12 }} />
+              ) : null}
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt nivel="pie" tono="tenue">{dato.etiqueta}</Txt>
+                <Txt nivel="cuerpo" numberOfLines={1}>{dato.valor}</Txt>
+              </View>
+            </View>
+          ))}
+        </View>
+      ))}
 
       <View style={{ flexDirection: 'row', gap: tema.ritmo.entreElementos }}>
         <View style={{ flex: 1 }}>
