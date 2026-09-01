@@ -178,13 +178,44 @@ export const ARTE_DE_SERVICIO: Readonly<Partial<Record<string, ImageSourcePropTy
  * `require` local y pasa a ser una dirección del servidor. Un banner que cambia
  * cada semana no puede obligar a publicar en las tiendas.
  */
+/**
+ * La imagen de cada comercio aliado.
+ *
+ * QUÉ SON ESTAS IMÁGENES
+ *
+ * Marcadores de posición. Las compone `scripts/arte-de-publicidad.py` a partir
+ * de las ilustraciones que ya están en la aplicación —la misma desenfocada de
+ * fondo y nítida encima—, para que el relleno tenga el estilo del resto y no
+ * parezca prestado de otra parte.
+ *
+ * No son fotos de ningún negocio y no pretenden serlo: los comercios del
+ * fixture se llaman «de ejemplo». El día que un anunciante suba la suya desde
+ * el panel administrativo, sustituye a la que le toque.
+ *
+ * Por qué rellenarlo ahora: una rejilla de discos grises con una letra dentro
+ * se lee como una sección sin terminar, y ésta es la parte que se vende.
+ */
+export const ARTE_DE_ALIADO: Readonly<Partial<Record<string, ImageSourcePropType>>> =
+  Object.freeze({
+    'aliado-comida': require('../assets/marca/publicidad/aliado-comida.jpg') as ImageSourcePropType,
+    'aliado-salud': require('../assets/marca/publicidad/aliado-salud.jpg') as ImageSourcePropType,
+    'aliado-moto': require('../assets/marca/publicidad/aliado-moto.jpg') as ImageSourcePropType,
+    'aliado-mercado': require('../assets/marca/publicidad/aliado-mercado.jpg') as ImageSourcePropType,
+    'aliado-panaderia': require('../assets/marca/publicidad/aliado-panaderia.jpg') as ImageSourcePropType
+  });
+
 export const ARTE_DE_CAMPANA: Readonly<Partial<Record<string, ImageSourcePropType>>> =
   Object.freeze({
     // En JPEG y no en PNG: es una fotografía sin transparencia, y en PNG pesaba
     // 1,8 MB. Recortada a su propio marco —el arte traía un borde amarillo
     // dentro de un fondo negro, y pintarlo en una tarjeta con borde daba doble
     // marco— y guardada a 900 de ancho: 88 KB.
-    'campana-repuestos': require('../assets/marca/campana-repuestos.jpg') as ImageSourcePropType
+    'campana-repuestos': require('../assets/marca/campana-repuestos.jpg') as ImageSourcePropType,
+    // Compuesta a partir de la ilustración de Transporte Seguro por
+    // `scripts/arte-de-publicidad.py`. Es RELLENO: ocupa el sitio del arte que
+    // entregue quien pague ese espacio, para que el hueco no se vea vacío
+    // mientras tanto.
+    'campana-aviso': require('../assets/marca/publicidad/campana-aviso.jpg') as ImageSourcePropType
   });
 
 /** Resuelve la imagen de un vehículo. Equivale a `getVehicleAsset` de la web. */

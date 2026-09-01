@@ -209,7 +209,7 @@ export const CAMPANAS_DEMO = [
     detalle: 'Para lo que +58express necesite contar ese día.',
     accion: 'Leer',
     tono: 'neutro' as const,
-    banner: undefined
+    banner: 'campana-aviso'
   }
 ] as const;
 
@@ -240,6 +240,9 @@ export const CAMPANAS_DEMO = [
 export const ALIADOS_DEMO = [
   {
     clave: 'a1',
+    // El nombre en `ARTE_DE_ALIADO`. Sin él se dibuja el sello con la
+    // inicial, que es lo que pasará con un aliado nuevo hasta que suba la suya.
+    arte: 'aliado-comida',
     nombre: 'Sabor de ejemplo',
     inicial: 'S',
     categoria: 'Comida',
@@ -250,6 +253,9 @@ export const ALIADOS_DEMO = [
   },
   {
     clave: 'a2',
+    // El nombre en `ARTE_DE_ALIADO`. Sin él se dibuja el sello con la
+    // inicial, que es lo que pasará con un aliado nuevo hasta que suba la suya.
+    arte: 'aliado-salud',
     nombre: 'Farmacia de ejemplo',
     inicial: 'F',
     categoria: 'Salud',
@@ -260,6 +266,9 @@ export const ALIADOS_DEMO = [
   },
   {
     clave: 'a3',
+    // El nombre en `ARTE_DE_ALIADO`. Sin él se dibuja el sello con la
+    // inicial, que es lo que pasará con un aliado nuevo hasta que suba la suya.
+    arte: 'aliado-moto',
     nombre: 'Repuestos de ejemplo',
     inicial: 'R',
     categoria: 'Moto',
@@ -270,6 +279,9 @@ export const ALIADOS_DEMO = [
   },
   {
     clave: 'a4',
+    // El nombre en `ARTE_DE_ALIADO`. Sin él se dibuja el sello con la
+    // inicial, que es lo que pasará con un aliado nuevo hasta que suba la suya.
+    arte: 'aliado-mercado',
     nombre: 'Mercado de ejemplo',
     inicial: 'M',
     categoria: 'Mercado',
@@ -280,6 +292,9 @@ export const ALIADOS_DEMO = [
   },
   {
     clave: 'a5',
+    // El nombre en `ARTE_DE_ALIADO`. Sin él se dibuja el sello con la
+    // inicial, que es lo que pasará con un aliado nuevo hasta que suba la suya.
+    arte: 'aliado-panaderia',
     nombre: 'Panadería de ejemplo',
     inicial: 'P',
     categoria: 'Panadería',

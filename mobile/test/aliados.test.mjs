@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { despojarComentarios } from './ayudas.mjs';
 import { PANTALLAS } from '../scripts/pantallasWeb.mjs';
-import { ALIADOS_DEMO, CATEGORIAS_DEMO } from '../preview/fixtures.ts';
+import { ALIADOS_DEMO, CAMPANAS_DEMO, CATEGORIAS_DEMO } from '../preview/fixtures.ts';
 
 /**
  * Los comercios aliados.
@@ -212,4 +212,68 @@ test('el hueco del logotipo existe y hoy lleva la inicial', () => {
       `la inicial de «${aliado.nombre}» no es su primera letra`
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// El relleno
+// ---------------------------------------------------------------------------
+
+test('cada espacio publicitario tiene imagen, y el fichero existe', () => {
+  // Una rejilla de discos grises con una letra dentro se lee como una sección
+  // sin terminar, y ésta es justo la parte que se vende. El arte es RELLENO
+  // —lo sustituye cada anunciante desde el panel— pero mientras no lo haga,
+  // el hueco no puede verse vacío.
+  const marca = leer('theme/marca.ts');
+
+  for (const aliado of ALIADOS_DEMO) {
+    assert.ok(aliado.arte !== undefined, `«${aliado.nombre}» no tiene imagen`);
+    assert.ok(
+      marca.includes(`'${aliado.arte}': require(`),
+      `«${aliado.arte}» no está en el registro de arte`
+    );
+    assert.ok(
+      fs.existsSync(path.join(raizMovil, `assets/marca/publicidad/${aliado.arte}.jpg`)),
+      `falta el fichero de «${aliado.arte}»`
+    );
+  }
+});
+
+test('ninguna campaña se queda en texto seco', () => {
+  // Dos tarjetas de campaña una al lado de la otra, una con arte y otra sin
+  // él, se ven como si a la segunda le faltara algo. Y le falta.
+  for (const campana of CAMPANAS_DEMO) {
+    assert.ok(campana.banner !== undefined, `la campaña «${campana.titulo}» no tiene banner`);
+  }
+});
+
+test('el arte de relleno se puede REHACER', () => {
+  // Si cambia el encuadre de una tarjeta o el gris de la marca, se vuelve a
+  // ejecutar el script en vez de recordar cómo se hicieron las imágenes.
+  assert.ok(
+    fs.existsSync(path.join(raizMovil, 'scripts/arte-de-publicidad.py')),
+    'las imágenes no tienen receta'
+  );
+});
+
+test('el relleno no se disfraza de negocio real', () => {
+  // Son marcadores de posición. Los comercios se llaman «de ejemplo» y el
+  // código lo dice donde se registran, para que nadie los tome por clientes.
+  const marca = leer('theme/marca.ts');
+  // El comentario va ANTES de la declaracion, que es donde lo lee quien abre
+  // el fichero para anadir una imagen.
+  const explicacion = marca.slice(0, marca.indexOf('export const ARTE_DE_ALIADO'));
+  assert.match(explicacion.slice(-1200), /Marcadores de posición|marcador/i);
+
+  for (const aliado of ALIADOS_DEMO) {
+    assert.match(aliado.nombre, /ejemplo/i, `«${aliado.nombre}» no se anuncia como ejemplo`);
+  }
+});
+
+test('quien no tiene imagen conserva su sello', () => {
+  // Un aliado recién dado de alta no tiene arte hasta que lo suba, y esa fila
+  // tiene que seguir viéndose bien. Si el respaldo desaparece, el día del alta
+  // se ve un hueco.
+  const pantalla = leer('preview/pantallasAliados.tsx');
+  const sello = pantalla.slice(pantalla.indexOf('export function SelloOPortada'));
+  assert.match(sello.slice(0, 700), /<SelloDeComercio/, 'no hay respaldo sin imagen');
 });

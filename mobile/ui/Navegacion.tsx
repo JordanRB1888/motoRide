@@ -291,16 +291,32 @@ export function ControlDeDisponibilidad({ enLinea, onAlternar }: {
  *
  * Mismo disco, aro amarillo. Al abrirse la moto se convierte en aspa: el mismo
  * sitio cierra lo que abrió, sin tener que buscar dónde se cierra.
+ *
+ * SIN MANEJADOR, NAVEGA
+ *
+ * Es el botón más importante de la aplicación y estaba muerto en casi todas
+ * las pantallas: cada una lo montaba sin decirle qué hacer, y un disco que no
+ * responde al tocarlo se lee como una aplicación rota, no como una pantalla sin
+ * terminar.
+ *
+ * El arreglo va AQUÍ y no en las doce pantallas que lo montan, por la misma
+ * razón que la barra resuelve sola sus pestañas: el comportamiento por defecto
+ * de una pieza es de la pieza. Quien necesite otra cosa —abrir una hoja en vez
+ * de cambiar de pantalla— sigue pasando su `onAlternar` y manda.
  */
 export function ControlDePedido({ abierto, onAlternar }: {
   readonly abierto: boolean;
   readonly onAlternar?: () => void;
 }) {
   const tema = useTema();
+  const ir = useIr();
+
+  // Abierto cierra, cerrado abre: el mismo sitio deshace lo que hizo.
+  const alternar = onAlternar ?? (() => ir(abierto ? 'inicio' : 'pedir'));
 
   return (
     <Pressable
-      onPress={onAlternar}
+      onPress={alternar}
       accessibilityRole="button"
       accessibilityState={{ expanded: abierto }}
       accessibilityLabel={abierto ? 'Cerrar la petición de viaje' : 'Pedir un viaje'}

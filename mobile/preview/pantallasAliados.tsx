@@ -34,11 +34,12 @@
  */
 
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
+import { ARTE_DE_ALIADO } from '../theme/marca';
 import { ALIADOS_DEMO, CATEGORIAS_DEMO } from './fixtures';
 import { BotonDeSaldo, CabeceraAmarilla } from './pantallasSaldo';
 
@@ -159,6 +160,69 @@ export function FlechaDeSalida({ tamano = 13, sobreElAmarillo = false }: {
   );
 }
 
+/**
+ * La imagen del anuncio.
+ *
+ * Donde hay imagen se ve la imagen; donde no la hay se ve el sello con la
+ * inicial. No es una excepción mal resuelta: un aliado recién dado de alta no
+ * tiene arte hasta que lo suba, y esa fila tiene que seguir viéndose bien.
+ *
+ * `cover` y no `contain`: el encuadre lo decide la tarjeta y la imagen se
+ * adapta. Con `contain` cada anunciante con una proporción distinta abriría
+ * franjas vacías de tamaños distintos, y la rejilla dejaría de ser una rejilla.
+ */
+export function PortadaDeAliado({ aliado, alto, radio }: {
+  readonly aliado: Aliado;
+  readonly alto: number;
+  readonly radio: number;
+}) {
+  const tema = useTema();
+  const arte = aliado.arte === undefined ? undefined : ARTE_DE_ALIADO[aliado.arte];
+
+  if (arte === undefined) return null;
+
+  return (
+    <View style={{
+      height: alto,
+      borderRadius: radio,
+      overflow: 'hidden',
+      backgroundColor: tema.color.superficieHundida
+    }}>
+      <Image
+        source={arte}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+        style={{ width: '100%', height: '100%' }}
+      />
+    </View>
+  );
+}
+
+/**
+ * En una lista, la imagen del anuncio en lugar del sello.
+ *
+ * Lo que distingue una fila de la siguiente en una lista de anuncios es el
+ * arte, no la letra. Quien todavía no ha subido el suyo conserva el sello, que
+ * para eso está: un aliado recién dado de alta no tiene imagen y esa fila
+ * tiene que seguir viéndose bien.
+ */
+export function SelloOPortada({ aliado, tamano }: {
+  readonly aliado: Aliado;
+  readonly tamano: number;
+}) {
+  const arte = aliado.arte === undefined ? undefined : ARTE_DE_ALIADO[aliado.arte];
+
+  if (arte === undefined) {
+    return <SelloDeComercio inicial={aliado.inicial} tamano={tamano} />;
+  }
+
+  return (
+    <View style={{ width: tamano }}>
+      <PortadaDeAliado aliado={aliado} alto={tamano} radio={tamano / 4} />
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // El adelanto de la hoja de Inicio
 // ---------------------------------------------------------------------------
@@ -212,6 +276,8 @@ export function AdelantoDeAliados({ onVerTodos, onAbrir }: {
               gap: 9
             }}
           >
+            <PortadaDeAliado aliado={aliado} alto={84} radio={13} />
+
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <SelloDeComercio inicial={aliado.inicial} tamano={34} />
               <View style={{ flex: 1, gap: 1 }}>
@@ -317,7 +383,7 @@ export function C2Aliados() {
                   accessibilityLabel={`${aliado.nombre}, ${aliado.categoria}. Publicidad`}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 13 }}
                 >
-                  <SelloDeComercio inicial={aliado.inicial} />
+                  <SelloOPortada aliado={aliado} tamano={56} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Txt nivel="cuerpo">{aliado.nombre}</Txt>
                     <Txt nivel="pie" tono="tenue">{aliado.categoria} · {aliado.gancho}</Txt>

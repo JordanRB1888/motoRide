@@ -658,6 +658,25 @@ test('el disco FLOTA, y se queda quieto si se pide movimiento reducido', () => {
   assert.ok(medida.VUELO > 0 && medida.VUELO <= 6, `vuela ${medida.VUELO} puntos: o no se nota o marea`);
 });
 
+test('el disco de PEDIR lleva a alguna parte por sí solo', () => {
+  // Es el botón más importante de la aplicación y estaba MUERTO en casi todas
+  // las pantallas: cada una lo montaba sin decirle qué hacer. Un disco que no
+  // responde al tocarlo se lee como una aplicación rota, no como una pantalla
+  // sin terminar.
+  //
+  // El comportamiento por defecto es de la pieza, no de las doce pantallas que
+  // la montan. Quien necesite otra cosa sigue pasando su `onAlternar`.
+  const fuente = leer('ui/Navegacion.tsx');
+  const control = fuente.slice(fuente.indexOf('export function ControlDePedido'));
+
+  assert.match(
+    control.slice(0, 900),
+    /onAlternar \?\? \(\(\) => ir\(abierto \? 'inicio' : 'pedir'\)\)/,
+    'el disco no navega si nadie le dice qué hacer'
+  );
+  assert.match(control.slice(0, 900), /onPress=\{alternar\}/);
+});
+
 test('el disco de la pasajera se cierra desde donde se abrió', () => {
   const fuente = leer('ui/Navegacion.tsx');
   assert.match(fuente, /abierto/, 'el disco conoce su estado abierto');
