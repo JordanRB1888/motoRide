@@ -39,6 +39,10 @@ import {
   ALIADOS_DEMO,
   CAMPANAS_DEMO,
   CATEGORIAS_DEMO,
+  GANANCIAS_DEMO,
+  MOVIMIENTOS_DEMO,
+  MOVIMIENTOS_PASAJERA_DEMO,
+  SALDO_DEMO,
   SERVICIOS_DE_INICIO
 } from '../preview/fixtures.ts';
 import {
@@ -454,16 +458,16 @@ const barraPasajera = (modo = 'pedir', activo = 'inicio') => `
       ${disco(modo)}
       <span class="etq ${modo === 'abierto' ? 't3' : 'ac'}">${modo === 'abierto' ? 'Cerrar' : 'Pedir'}</span>
     </div>
-    ${[['Viaje seguro', 'escudo'], ['Perfil', 'perfil']].map(([n, ic]) => `
-      <div class="dest-nav">${icono(ic, 'var(--texto-3)')}
-        <span class="etq t3">${n}</span></div>`).join('')}
+    ${[['Saldo', 'dolar'], ['Perfil', 'perfil']].map(([n, ic]) => `
+      <div class="dest-nav">${icono(ic, n.toLowerCase() === activo ? 'var(--acento)' : 'var(--texto-3)')}
+        <span class="etq ${n.toLowerCase() === activo ? '' : 't3'}">${n}</span></div>`).join('')}
   </div>`;
 
 const barraConductor = (enLinea, activo = 'mapa') => `
   <div class="barra">
-    ${[['Mapa', 'inicio'], ['Saldo', 'dolar']].map(([n, ic], i) => `
-      <div class="dest-nav">${icono(ic, i === 0 && activo === 'mapa' ? 'var(--acento)' : 'var(--texto-3)')}
-        <span class="etq ${i === 0 && activo === 'mapa' ? '' : 't3'}">${n}</span></div>`).join('')}
+    ${[['Mapa', 'inicio'], ['Saldo', 'dolar']].map(([n, ic]) => `
+      <div class="dest-nav">${icono(ic, n.toLowerCase() === activo ? 'var(--acento)' : 'var(--texto-3)')}
+        <span class="etq ${n.toLowerCase() === activo ? '' : 't3'}">${n}</span></div>`).join('')}
     <div class="disco-zona">
       ${disco(enLinea ? 'online' : 'offline')}
       <span class="etq ${enLinea ? 'ok' : 't3'}">${enLinea ? 'En línea' : 'Conectar'}</span>
@@ -514,6 +518,143 @@ const pulso = () => `
         border:2px solid var(--acento);opacity:${0.12 + i * 0.14}"></span>`).join('')}
     <span style="position:relative">${persona(64)}</span>
   </span>`;
+
+// ---------------------------------------------------------------------------
+// El saldo
+// ---------------------------------------------------------------------------
+
+/**
+ * La cabecera del saldo, A SANGRE.
+ *
+ * No es una tarjeta y es deliberado: una tarjeta con margenes alrededor dice
+ * «esto es un elemento mas de la pantalla», y aqui el saldo ES la pantalla.
+ * Ocupa el ancho completo, se mete debajo de la barra de estado y no tiene
+ * bordes que la separen de nada.
+ *
+ * Va en amarillo de marca con el texto en grafito. Es el unico sitio de la
+ * aplicacion donde el amarillo cubre una superficie grande, y por eso funciona:
+ * si estuviera en cinco pantallas dejaria de significar nada. El contraste sale
+ * igual en dia y en noche porque el amarillo es el mismo en los dos esquemas.
+ */
+const cabeceraDeSaldo = (dato, botones) => `
+  <div style="background:var(--acento);color:var(--sobre-acento);
+    padding:22px var(--margen) 26px;position:relative;overflow:hidden">
+
+    <span style="position:absolute;right:-70px;top:-70px;width:220px;height:220px;
+      border-radius:50%;background:rgba(255,255,255,.16)"></span>
+    <span style="position:absolute;right:-30px;bottom:-90px;width:180px;height:180px;
+      border-radius:50%;background:rgba(255,255,255,.1)"></span>
+
+    <div style="position:relative;display:grid;gap:13px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="etq" style="color:var(--sobre-acento);opacity:.78;
+          letter-spacing:.08em">${dato.rotulo.toUpperCase()}</span>
+        <span class="crece"></span>
+        ${icono('escudo', 'var(--sobre-acento)', 15)}
+        <span class="pie" style="color:var(--sobre-acento);opacity:.78">Transacción segura</span>
+      </div>
+
+      <div style="display:flex;align-items:flex-end;gap:7px">
+        <span style="font-size:38px;line-height:42px;font-weight:800;
+          letter-spacing:-1.6px;color:var(--sobre-acento)">${dato.importe}</span>
+        <span class="cuerpo" style="color:var(--sobre-acento);opacity:.72;
+          padding-bottom:6px">${dato.moneda}</span>
+        <span class="crece"></span>
+        <span class="etq" style="color:var(--sobre-acento);opacity:.78;
+          padding-bottom:8px">${dato.recuento}</span>
+      </div>
+
+      <span class="pie" style="color:var(--sobre-acento);opacity:.78;text-align:left">
+        ${dato.equivalente} · tasa referencial del BCV</span>
+
+      <div style="display:flex;gap:10px;margin-top:3px">${botones}</div>
+    </div>
+  </div>`;
+
+/** Un boton de la cabecera. Sobre amarillo, el grafito es el que manda. */
+const botonDeSaldo = (texto, ic, principal = false) => `
+  <span style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+    padding:13px 10px;border-radius:var(--r-boton);min-width:0;
+    background:${principal ? 'var(--sobre-acento)' : 'transparent'};
+    border:1.5px solid var(--sobre-acento)">
+    ${icono(ic, principal ? 'var(--acento)' : 'var(--sobre-acento)', 17)}
+    <span class="etq" style="color:${principal ? 'var(--acento)' : 'var(--sobre-acento)'};
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${texto}</span>
+  </span>`;
+
+/** Una tarjeta de las de debajo. Estas SI son tarjetas, y se nota. */
+const tarjeta = (titulo, detalle, ic, contenido) => `
+  <div style="border-radius:var(--r-tarjeta);background:var(--superficie);
+    border:1px solid var(--borde);padding:var(--pad);display:grid;gap:var(--gap)">
+    <div style="display:flex;align-items:flex-start;gap:11px">
+      <span style="width:34px;height:34px;flex:0 0 34px;border-radius:10px;
+        display:grid;place-items:center;
+        background:color-mix(in srgb,var(--acento) 15%,transparent)">
+        ${icono(ic, 'var(--acento-texto)', 18)}</span>
+      <span style="flex:1;display:grid;gap:2px;min-width:0">
+        <span class="enc">${titulo}</span>
+        ${detalle ? `<span class="pie t3" style="text-align:left">${detalle}</span>` : ''}
+      </span>
+    </div>
+    ${contenido}
+  </div>`;
+
+/**
+ * El grafico de lo ganado por dia.
+ *
+ * Barras y no una linea: son siete valores sueltos que se comparan entre si, no
+ * una serie continua. Y cada barra lleva su importe encima, porque el alto solo
+ * dice «mas o menos que el de al lado» y aqui hace falta saber cuanto.
+ */
+const grafico = `
+  <div style="display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:18px">
+    ${GANANCIAS_DEMO.dias.map(dia => `
+      <span style="flex:1;display:flex;flex-direction:column;align-items:center;
+        justify-content:flex-end;gap:7px;height:100%;min-width:0">
+        <span class="pie t3" style="font-size:10px">${dia.importe}</span>
+        <span style="width:100%;border-radius:5px 5px 2px 2px;
+          height:${Math.max(dia.altura * 100, 3)}%;
+          background:${dia.altura > 0.5 ? 'var(--acento)' : 'color-mix(in srgb,var(--acento) 55%,transparent)'}"></span>
+        <span class="pie t3" style="font-size:11px">${dia.etiqueta}</span>
+      </span>`).join('')}
+  </div>
+  <span class="pie t3" style="text-align:left">${GANANCIAS_DEMO.nota}</span>`;
+
+/**
+ * Que glifo lleva cada movimiento.
+ *
+ * La moto vale para un viaje; para una recarga o una liquidacion no dice nada.
+ * De los doce iconos que hay, estos cinco son los que menos mienten.
+ */
+const GLIFO_DE_MOVIMIENTO = {
+  GANANCIA: 'moto',
+  PAGO: 'moto',
+  COMISION: 'dolar',
+  RECARGA: 'rayo',
+  LIQUIDACION: 'maletin',
+  DEVOLUCION: 'reloj'
+};
+
+/** Una fila de movimiento. La comparten los dos roles. */
+const movimiento = (mov, i) => `
+  ${i > 0 ? '<span class="sep"></span>' : ''}
+  <div style="display:flex;align-items:center;gap:13px;padding:13px 0">
+    <span style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+      flex:0 0 36px;background:${mov.tipo === 'COMISION'
+        ? 'color-mix(in srgb,var(--peligro) 12%,transparent)'
+        : 'var(--elevada)'}">
+      ${icono(GLIFO_DE_MOVIMIENTO[mov.tipo] ?? 'dolar',
+        mov.tipo === 'COMISION' ? 'var(--peligro)' : 'var(--texto-2)', 18)}</span>
+    <span style="flex:1;display:grid;gap:2px;min-width:0">
+      <span class="cuerpo">${mov.titulo}</span>
+      <span class="pie t3" style="text-align:left;overflow:hidden;text-overflow:ellipsis;
+        white-space:nowrap">${mov.detalle}</span>
+      <span class="pie t3" style="text-align:left">${mov.cuando}</span></span>
+    <span style="display:grid;gap:2px;text-align:right">
+      <span class="cuerpo" style="color:${mov.importe.startsWith('−')
+        ? 'var(--texto-2)' : 'var(--exito)'}">${mov.importe}</span>
+      <span class="pie t3">${mov.estado}</span></span>
+  </div>`;
 
 // ---------------------------------------------------------------------------
 // El vestibulo de la pasajera
@@ -992,6 +1133,19 @@ export const PANTALLAS = {
               <span style="width:9px;height:9px;border-radius:50%;background:${c}"></span>
               <span class="cuerpo t2">${t}</span></div>`).join('')}
         </div>
+
+        <!-- La salida de emergencia, durante el viaje. Vivia solo en la
+             pestania de Viaje seguro, que ya no esta en la barra. Aqui esta
+             mejor de lo que estaba: en pleno viaje ya no hay que salirse a
+             buscarla. Con etiqueta y no solo el icono: un circulo rojo al lado
+             de los de llamar y escribir se pulsa sin querer. -->
+        <div style="margin-top:var(--gap);display:flex;align-items:center;justify-content:center;
+          gap:9px;padding:13px;border-radius:var(--r-boton);
+          border:1px solid var(--peligro);
+          background:color-mix(in srgb,var(--peligro) 8%,transparent)">
+          ${icono('escudo', 'var(--peligro)', 18)}
+          <span class="etq" style="color:var(--peligro)">Emergencia</span>
+        </div>
       </div>
     </div>`,
 
@@ -1049,75 +1203,58 @@ export const PANTALLAS = {
     </div>`,
 
   'saldo-conductor': () => `
-    <div class="tel crece">
-      <div style="display:flex;align-items:center;padding:18px var(--margen) var(--gap)">
-        <span class="titulo">Tu saldo</span><span class="crece"></span>
-        <span class="pie t3">Tasa BCV · Bs. 000,00</span>
-      </div>
-      <div style="padding:0 var(--margen) 96px;display:grid;gap:var(--bloques)">
-        <div style="position:relative;overflow:hidden;border-radius:var(--r-tarjeta);
-          background:var(--superficie);padding:var(--pad);display:grid;gap:var(--gap)">
-          <span class="filo"></span>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="etq t2">BALANCE DISPONIBLE</span><span class="crece"></span>
-            <span class="etq t3" style="border:1px solid var(--borde);border-radius:10px;padding:3px 9px">0 viajes</span>
-          </div>
-          <div style="display:flex;align-items:flex-end;gap:6px">
-            <span class="ac" style="font-size:32px;line-height:37px;font-weight:800;
-              letter-spacing:var(--ajuste)">$0,00</span>
-            <span class="cuerpo t3" style="padding-bottom:5px">USD</span>
-          </div>
-          <span class="pie t3">≈ Bs. 000,00 · tasa referencial del BCV</span>
-          <div class="boton">Recargar saldo</div>
-          <div class="boton sec" style="border:1px solid var(--borde)">Solicitar liquidación</div>
-          <span class="pie t3">La cartera todavía no está encendida en el servidor:
-            las cifras se muestran en cero a propósito.</span>
-        </div>
+    <div class="tel">
+      <div class="hoja2" style="background:var(--fondo)">
+        ${cabeceraDeSaldo(SALDO_DEMO.conductor, [
+          botonDeSaldo('Solicitar liquidación', 'dolar'),
+          botonDeSaldo('Recargar saldo', 'rayo', true)
+        ].join(''))}
 
-        <div style="display:flex;align-items:center;gap:12px;padding:14px;
-          border-radius:var(--r-campo);background:var(--superficie)">
-          ${icono('escudo', 'var(--texto-2)', 18)}
-          <span style="flex:1;display:grid;gap:2px">
-            <span class="cuerpo">Cómo se reparte cada viaje</span>
-            <span class="pie t3">Tu parte se acredita y la comisión se descuenta de esta
-              cuenta. El porcentaje lo fija +58express en su configuración.</span></span>
-        </div>
+        <div style="padding:var(--bloques) var(--margen) 110px;display:grid;gap:var(--bloques)">
+          ${tarjeta(GANANCIAS_DEMO.titulo, GANANCIAS_DEMO.detalle, 'viajes', grafico)}
 
-        <div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="enc">Movimientos</span><span class="crece"></span>
-            <span class="pie t3">4 registros</span>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:var(--gap)">
-            ${[['Todos', true], ['Comisiones', false], ['Recargas', false]].map(([n, on]) => `
-              <span style="padding:8px 14px;border-radius:999px;
-                background:${on ? 'var(--elevada)' : 'transparent'};
-                border:1px solid ${on ? 'var(--acento)' : 'var(--borde)'}">
-                <span class="etq ${on ? 'ac' : 't3'}">${n}</span></span>`).join('')}
-          </div>
-          <div style="margin-top:4px">
-            ${[['Ganancia acreditada', 'Efectivo · Viaje de ejemplo', 'Hoy · 08:20', '+$0,00', 'Confirmado', false],
-               ['Comisión +58Express', 'Viaje de ejemplo', 'Hoy · 08:20', '−$0,00', 'Aplicada', true],
-               ['Recarga', 'Pago Móvil · Ref. de ejemplo', 'Ayer · 17:05', '+$0,00', 'Verificada', false],
-               ['Liquidación', 'Transferencia de ejemplo', 'Hace 3 días', '−$0,00', 'Pagada', false]
-              ].map(([t, d, c, imp, est, comision], i) => `
-              ${i > 0 ? '<span class="sep"></span>' : ''}
-              <div style="display:flex;align-items:center;gap:13px;padding:13px 0">
-                <span style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
-                  flex:0 0 36px;background:${comision ? 'color-mix(in srgb,var(--peligro) 12%,transparent)' : 'var(--elevada)'}">
-                  ${icono(comision ? 'dolar' : 'moto', comision ? 'var(--peligro)' : 'var(--texto-2)', 18)}</span>
-                <span style="flex:1;display:grid;gap:2px;min-width:0">
-                  <span class="cuerpo">${t}</span>
-                  <span class="pie t3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d}</span>
-                  <span class="pie t3">${c}</span></span>
-                <span style="display:grid;gap:2px;text-align:right">
-                  <span class="cuerpo" style="color:${imp.startsWith('−') ? 'var(--texto-2)' : 'var(--exito)'}">${imp}</span>
-                  <span class="pie t3">${est}</span></span>
-              </div>`).join('')}
-          </div>
+          ${tarjeta('Cómo se reparte cada viaje', '', 'escudo', `
+            <span class="cuerpo t2">Tu parte se acredita y la comisión se descuenta de
+              esta cuenta. El porcentaje lo fija +58express en su configuración.</span>`)}
+
+          ${tarjeta('Movimientos de la cuenta', `${MOVIMIENTOS_DEMO.length} registros`, 'reloj', `
+            <div style="display:flex;gap:8px">
+              ${[['Todos', true], ['Comisiones', false], ['Recargas', false]].map(([n, on]) => `
+                <span style="padding:8px 14px;border-radius:999px;
+                  background:${on ? 'var(--elevada)' : 'transparent'};
+                  border:1px solid ${on ? 'var(--acento)' : 'var(--borde)'}">
+                  <span class="etq ${on ? 'ac' : 't3'}">${n}</span></span>`).join('')}
+            </div>
+            <div>${MOVIMIENTOS_DEMO.map(movimiento).join('')}</div>`)}
         </div>
       </div>
       ${barraConductor(true, 'saldo')}
+    </div>`,
+
+  'saldo-pasajera': () => `
+    <div class="tel">
+      <div class="hoja2" style="background:var(--fondo)">
+        ${cabeceraDeSaldo(SALDO_DEMO.pasajera, [
+          botonDeSaldo('Datos de pago', 'perfil'),
+          botonDeSaldo('Registrar recarga', 'rayo', true)
+        ].join(''))}
+
+        <div style="padding:var(--bloques) var(--margen) 110px;display:grid;gap:var(--bloques)">
+          ${tarjeta('Movimientos', `${MOVIMIENTOS_PASAJERA_DEMO.length} registros`, 'reloj',
+            `<div>${MOVIMIENTOS_PASAJERA_DEMO.map(movimiento).join('')}</div>`)}
+
+          ${tarjeta('Cómo se paga un viaje', '', 'escudo', `
+            <span class="cuerpo t2">Puedes pagar en efectivo al conductor o con tu saldo.
+              Recargas por Pago Móvil y el importe queda disponible al verificarse.</span>`)}
+
+          <div style="padding:14px;border-radius:var(--r-campo);background:var(--superficie);
+            display:flex;gap:10px">
+            ${icono('rayo', 'var(--aviso)', 17)}
+            <span class="pie t3" style="text-align:left">${SALDO_DEMO.pasajera.nota}</span>
+          </div>
+        </div>
+      </div>
+      ${barraPasajera('pedir', 'saldo')}
     </div>`,
 
   aliados: () => `
@@ -1272,6 +1409,7 @@ export const NOMBRES = {
   'buscando-moto': 'Buscando tu moto',
   'panel-jornada': 'Panel del disco',
   'saldo-conductor': 'Saldo del conductor',
+  'saldo-pasajera': 'Saldo de la pasajera',
   aliados: 'Aliados comerciales',
   comercio: 'Ficha de un comercio',
   'punto-en-mapa': 'Elegir punto en el mapa',

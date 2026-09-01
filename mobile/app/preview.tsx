@@ -55,7 +55,8 @@ import {
 import { C2Aliados, C2Comercio } from '../preview/pantallasAliados';
 import { C2InicioPasajera } from '../preview/pantallaInicioPasajera';
 import { C2Configuracion } from '../preview/pantallaConfiguracion';
-import { C2SaldoConductor, C2SaldoConductorDeudor } from '../preview/pantallaSaldoConductor';
+import { C2SaldoConductorDeudor } from '../preview/pantallaSaldoConductor';
+import { C2SaldoConductor, C2SaldoPasajera } from '../preview/pantallasSaldo';
 import {
   C2Avisos,
   C2Ayuda,
@@ -122,6 +123,7 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'conductor-online', nombre: 'Conductor en línea', Componente: C2ConductorEnLinea },
   { clave: 'jornada', nombre: 'Panel del disco', Componente: C2PanelDeJornada },
   { clave: 'saldo-conductor', nombre: 'Saldo conductor', Componente: C2SaldoConductor },
+  { clave: 'saldo-pasajera', nombre: 'Saldo pasajera', Componente: C2SaldoPasajera },
   { clave: 'saldo-deuda', nombre: 'Saldo en deuda', Componente: C2SaldoConductorDeudor },
   { clave: 'viaje', nombre: 'Viaje', Componente: C2Viaje },
   { clave: 'aliados', nombre: 'Aliados', Componente: C2Aliados },

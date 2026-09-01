@@ -344,6 +344,74 @@ export const MOVIMIENTOS_DEMO = [
  * No hay GPS todavía: estos valores llegan de aquí. Lo que existe en el código
  * es el hueco con la forma que tendrá cuando haya ubicación real.
  */
+/**
+ * La cabecera del saldo, en los dos roles.
+ *
+ * TODAS LAS CIFRAS A CERO, Y NO ES PEREZA
+ *
+ * La cartera no está encendida en el servidor. Un importe creíble aquí acaba
+ * citado como si fuera el saldo real de alguien —en una captura, en una
+ * reunión, en una tienda de aplicaciones—, y ese es el peor sitio para que un
+ * número de ejemplo se confunda con dinero.
+ *
+ * La tasa también va a cero por lo mismo: el dato es real en la aplicación —el
+ * servidor lo guarda en su configuración de precios— pero ESTA cifra no.
+ */
+export const SALDO_DEMO = {
+  pasajera: {
+    rotulo: 'Saldo disponible',
+    importe: '$0,00',
+    moneda: 'USD',
+    equivalente: '≈ Bs. 000,00',
+    recuento: '0 viajes',
+    nota: 'La cartera todavía no está encendida en el servidor: las cifras se muestran en cero a propósito.'
+  },
+  conductor: {
+    rotulo: 'Balance disponible real',
+    importe: '$0,00',
+    moneda: 'USD',
+    equivalente: '≈ Bs. 000,00',
+    recuento: '0 viajes',
+    nota: 'La cartera todavía no está encendida en el servidor: las cifras se muestran en cero a propósito.'
+  }
+} as const;
+
+/**
+ * Lo ganado por día, para el gráfico del conductor.
+ *
+ * Las alturas son de ejemplo y los importes van a cero. Se guarda la ALTURA
+ * aparte del importe justamente para eso: el gráfico necesita forma para poder
+ * mirarlo, y el importe no puede inventarse. El día que la cartera se encienda,
+ * la altura sale del importe y este campo desaparece.
+ */
+export const GANANCIAS_DEMO = {
+  titulo: 'Ganancia económica',
+  detalle: 'Lo ganado en viajes, separado del saldo operativo',
+  dias: [
+    { clave: 'mar', etiqueta: 'mar', importe: '$0,00', altura: 0.56 },
+    { clave: 'mie', etiqueta: 'mié', importe: '$0,00', altura: 0.04 },
+    { clave: 'jue', etiqueta: 'jue', importe: '$0,00', altura: 1 },
+    { clave: 'vie', etiqueta: 'vie', importe: '$0,00', altura: 0.73 },
+    { clave: 'sab', etiqueta: 'sáb', importe: '$0,00', altura: 0.04 },
+    { clave: 'dom', etiqueta: 'dom', importe: '$0,00', altura: 0.04 },
+    { clave: 'lun', etiqueta: 'lun', importe: '$0,00', altura: 0.11 }
+  ],
+  nota: 'Alturas de ejemplo. Los importes los calcula el servidor.'
+} as const;
+
+/**
+ * Los movimientos de la pasajera.
+ *
+ * Distintos de los del conductor: ella recarga y paga viajes; él cobra y se le
+ * descuenta la comisión. Mezclarlos en una sola lista daría una pantalla que no
+ * es de ninguno de los dos.
+ */
+export const MOVIMIENTOS_PASAJERA_DEMO = [
+  { clave: 'p1', tipo: 'PAGO' as const, titulo: 'Viaje pagado', detalle: 'Punto de ejemplo A → Destino de ejemplo 1', cuando: 'Hoy · 08:14', importe: '−$0,00', estado: 'Cobrado' },
+  { clave: 'p2', tipo: 'RECARGA' as const, titulo: 'Recarga', detalle: 'Pago Móvil · Ref. de ejemplo', cuando: 'Ayer · 19:40', importe: '+$0,00', estado: 'Verificada' },
+  { clave: 'p3', tipo: 'DEVOLUCION' as const, titulo: 'Devolución', detalle: 'Viaje cancelado de ejemplo', cuando: 'Ayer · 07:41', importe: '+$0,00', estado: 'Aplicada' }
+] as const;
+
 export const CONTEXTO_DEMO = {
   zona: 'Zona demo · Maracaibo',
   cerca: 'un punto de ejemplo',

@@ -964,6 +964,36 @@ export function C2Viaje() {
               </View>
             ))}
           </View>
+
+          {/* LA SALIDA DE EMERGENCIA, DURANTE EL VIAJE
+              Vivía sólo en la pestaña de Viaje seguro, que ya no está en la
+              barra. Aquí está mejor de lo que estaba: en pleno viaje ya no hay
+              que salirse a buscarla.
+
+              Con etiqueta y no sólo el icono: un círculo rojo al lado de los de
+              llamar y escribir se pulsa sin querer, y una falsa alarma le
+              cuesta a alguien salir corriendo. */}
+          <View style={{ height: tema.ritmo.entreElementos }} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Emergencia. Pedir ayuda ahora"
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 9,
+              paddingVertical: 13,
+              borderRadius: tema.radio.boton,
+              borderWidth: 1,
+              borderColor: tema.color.peligro,
+              backgroundColor: pressed
+                ? `${tema.color.peligro}26`
+                : `${tema.color.peligro}14`
+            })}
+          >
+            <Icono nombre="escudo" color={tema.color.peligro} tamano={18} />
+            <Txt nivel="etiqueta" tono="peligro">Emergencia</Txt>
+          </Pressable>
         </HojaInferior>
       </LienzoDeMapa>
     </View>

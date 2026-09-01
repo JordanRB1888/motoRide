@@ -65,7 +65,7 @@ const GRUPOS = [
   {
     nombre: 'Pasajera',
     claves: ['pasajera', 'pedir', 'para-quien', 'punto-en-mapa', 'confirmar', 'buscando-moto', 'viaje',
-      'aliados', 'comercio']
+      'aliados', 'comercio', 'saldo-pasajera']
   },
   {
     nombre: 'Conductor',
@@ -75,7 +75,7 @@ const GRUPOS = [
 
 /** Las que existen en el código pero aún no están dibujadas para navegador. */
 const PENDIENTES = [
-  'Historial', 'Viaje seguro', 'Perfil', 'Saldo pasajera',
+  'Historial', 'Viaje seguro', 'Perfil',
   'Avisos', 'Ayuda', 'Configuración', 'Seguridad de cuenta',
   'Legal', 'Eliminar cuenta'
 ];

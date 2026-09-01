@@ -25,7 +25,7 @@ import { Icono, type NombreDeIcono } from './Icono';
 // Texto
 // ---------------------------------------------------------------------------
 
-export type Tono = 'primario' | 'secundario' | 'tenue' | 'acento' | 'sobreAcento' | 'exito';
+export type Tono = 'primario' | 'secundario' | 'tenue' | 'acento' | 'sobreAcento' | 'exito' | 'peligro';
 export type Nivel = 'display' | 'titulo' | 'encabezado' | 'cuerpo' | 'etiqueta' | 'pie';
 
 export function Txt({
@@ -52,7 +52,11 @@ export function Txt({
     sobreAcento: tema.color.sobreAcento,
     // El verde de «en linea». Es un tono del sistema, no un color suelto:
     // asi el estado del conductor no se escribe a mano en cada pantalla.
-    exito: tema.color.exito
+    exito: tema.color.exito,
+    // El rojo de la emergencia, por la misma razon que el verde: es un tono del
+    // sistema. La salida de emergencia aparece en dos pantallas y su color no
+    // puede depender de que alguien se acuerde de escribirlo igual en las dos.
+    peligro: tema.color.peligro
   };
 
   const esTitular = nivel === 'display' || nivel === 'titulo';

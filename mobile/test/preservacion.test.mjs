@@ -419,14 +419,30 @@ test('la barra de la pasajera usa los nombres acordados', () => {
   // «Historial» y no «Viajes»: lo que hay ahí son los que YA hiciste, y
   // «Viajes» en una aplicación de viajes no distingue nada.
   //
-  // «Viaje seguro» y no «Seguridad»: dice de qué va y coincide con el nombre
-  // que la marca ya usa. «Seguridad» a secas suena a ajustes de contraseña.
+  // «Saldo» sustituye a «Viaje seguro»: Transporte Seguro tiene su casilla en
+  // el inicio, y repetirlo gastaba una de las cuatro pestañas en algo que ya
+  // estaba a un toque.
   const fuente = leer('ui/Navegacion.tsx');
   const barra = fuente.slice(fuente.indexOf('DESTINOS_DE_PASAJERA'));
+  const soloPasajera = barra.slice(0, barra.indexOf('DESTINOS_DE_CONDUCTOR'));
 
-  assert.match(barra, /etiqueta: 'Historial'/);
-  assert.match(barra, /etiqueta: 'Viaje seguro'/);
-  assert.doesNotMatch(barra.slice(0, barra.indexOf('DESTINOS_DE_CONDUCTOR')), /etiqueta: 'Seguridad'/);
+  assert.match(soloPasajera, /etiqueta: 'Historial'/);
+  assert.match(soloPasajera, /etiqueta: 'Saldo'/);
+  assert.doesNotMatch(soloPasajera, /etiqueta: 'Seguridad'/);
+});
+
+test('quitar la pestaña NO deja la emergencia más lejos', () => {
+  // Es la única razón por la que ese cambio de barra es aceptable. La
+  // emergencia vivía sólo en la pestaña de Viaje seguro; sin ella, pedir ayuda
+  // en pleno viaje pasaría de un toque a tres, y con miedo de por medio.
+  //
+  // Ahora está en la pantalla del viaje en curso, que es donde hace falta.
+  const pantallas = leer('preview/pantallasC2.tsx');
+  const viaje = pantallas.slice(pantallas.indexOf('export function C2Viaje'));
+  assert.match(viaje, /Emergencia/, 'el viaje en curso no tiene salida de emergencia');
+
+  // Y sigue estando en Transporte Seguro, que es su casa.
+  assert.match(leer('preview/pantallasC2Secciones.tsx'), /Emergencia/);
 });
 
 test('los ajustes de cuenta viven en el perfil, no en la barra', () => {

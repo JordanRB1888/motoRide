@@ -375,9 +375,17 @@ export const DESTINOS_DE_PASAJERA: readonly DestinoDeNavegacion[] = Object.freez
   // «Historial», no «Viajes»: lo que hay ahí son los que YA hiciste. «Viajes»
   // en una aplicación de viajes no distingue nada — podría ser cualquier cosa.
   { clave: 'historial', icono: 'reloj', etiqueta: 'Historial' },
-  // «Viaje seguro», no «Seguridad»: dice de qué va, y coincide con el nombre
-  // que la marca ya usa. «Seguridad» a secas suena a ajustes de contraseña.
-  { clave: 'viaje-seguro', icono: 'escudo', etiqueta: 'Viaje seguro' },
+  // «Saldo» ocupa el sitio que tenía «Viaje seguro».
+  //
+  // Transporte Seguro tiene ahora su propia casilla en el inicio, grande y a la
+  // vista, así que gastar una de las cuatro pestañas en repetirlo era gastarla
+  // en algo que ya está a un toque. El saldo sí necesita pestaña: recargar y
+  // revisar movimientos no se hace de un vistazo.
+  //
+  // El botón de EMERGENCIA no se pierde con la pestaña. Se muda a la pantalla
+  // del viaje en curso, que es donde de verdad hace falta: ahí queda a un
+  // toque, y antes obligaba a salirse del viaje para buscarlo.
+  { clave: 'saldo', icono: 'dolar', etiqueta: 'Saldo' },
   { clave: 'perfil', icono: 'perfil', etiqueta: 'Perfil' }
 ]);
 
