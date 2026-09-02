@@ -249,9 +249,52 @@ test('sin permiso no se entra en servicio, y con él sí', () => {
   // mandar a los ajustes a quien sólo hacía falta preguntar.
   assert.equal(puertaParaEntrarEnServicio('DENEGADO'), 'PEDIR');
   assert.equal(puertaParaEntrarEnServicio('BLOQUEADO'), 'AJUSTES');
-  // En el navegador no hay segundo plano NI permiso que conceder: exigirlo
-  // encerraría al conductor fuera de servicio sin nada que pueda hacer.
-  assert.equal(puertaParaEntrarEnServicio('NO_DISPONIBLE'), 'SIN_PERMISO_QUE_PEDIR');
+  // Desde el navegador no se conduce. La plataforma operativa del conductor es
+  // la aplicación móvil nativa, y sólo ésa.
+  assert.equal(puertaParaEntrarEnServicio('NO_DISPONIBLE'), 'SOLO_DESDE_LA_APP');
+});
+
+test('DESDE EL NAVEGADOR NO SE ENTRA EN SERVICIO', () => {
+  // Decisión del dueño. El navegador no tiene ubicación en segundo plano: en
+  // cuanto la pestaña deja de estar activa suspende los temporizadores y deja
+  // de haber posiciones, sin avisar. La pantalla diría «En línea» mientras el
+  // despacho ve una posición rancia y lo descarta.
+  assert.notEqual(puertaParaEntrarEnServicio('NO_DISPONIBLE'), 'ADELANTE');
+
+  const codigo = sinComentarios('realtime/Disponibilidad.tsx');
+  const alternar = codigo.slice(codigo.indexOf('const alternar'));
+  const cuerpo = alternar.slice(0, alternar.indexOf('const valor'));
+
+  // Se sigue SÓLO con la puerta abierta, en vez de con una lista de casos que
+  // rechazan: así un motivo nuevo de bloqueo nace bloqueando, y olvidarse de
+  // añadirlo no deja entrar en servicio a quien no debe.
+  assert.match(cuerpo, /if \(puerta !== 'ADELANTE'\) \{/);
+  assert.match(cuerpo, /rechazada\(previa, 'SOLO_DESDE_LA_APP'\)/);
+
+  // Y ni siquiera se molesta al servidor.
+  const bloqueo = cuerpo.indexOf("'SOLO_DESDE_LA_APP'");
+  const peticion = cuerpo.indexOf('pedirEstadoDeConductor(pedido)');
+  assert.ok(bloqueo < peticion, 'se pide el estado pese al bloqueo de plataforma');
+});
+
+test('el conductor nativo SIGUE pudiendo ponerse en servicio', () => {
+  // La otra mitad de la regla, y la que más importa no romper: bloquear la web
+  // no puede costar la jornada de nadie en el teléfono.
+  assert.equal(puertaParaEntrarEnServicio('CONCEDIDO'), 'ADELANTE');
+  assert.equal(debeSeguirEnSegundoPlano({
+    haySesion: true, esConductor: true, estado: 'AVAILABLE', permisoDeSegundoPlano: true
+  }), true);
+});
+
+test('la web NO saca de servicio a quien trabaja con el móvil', () => {
+  // Negarse a ponerlo en línea y quitarle lo que ya tiene son cosas distintas.
+  // Si está trabajando con su teléfono y abre la web para mirar sus ganancias,
+  // sacarlo desde la pestaña le rompería la jornada que SÍ sostiene el móvil.
+  for (const estado of ['AVAILABLE', 'BUSY', 'IN_TRIP']) {
+    assert.equal(reconciliarSinPermiso({
+      estado, permiso: 'NO_DISPONIBLE', hayViajeActivo: false
+    }), 'NADA', `la web tumba una jornada estando ${estado}`);
+  }
 });
 
 test('el ORDEN es permiso primero, servidor después', () => {
@@ -269,8 +312,15 @@ test('el ORDEN es permiso primero, servidor después', () => {
   assert.ok(puerta < peticion,
     'se pide el estado al servidor ANTES de asegurar el permiso');
 
-  // Y el camino del «no» sale sin llegar a pedir nada.
-  assert.match(cuerpo, /if \(puerta === 'PEDIR' && !await pedirPermiso\(\)\) \{[\s\S]{0,220}return;/);
+  // Y todos los caminos del «no» salen sin llegar a pedir nada. Cada rama que
+  // no acaba en `ADELANTE` tiene su `return` antes de la petición.
+  const bloqueo = cuerpo.slice(cuerpo.indexOf("if (puerta !== 'ADELANTE') {"), peticion);
+  for (const motivo of ['SIN_PERMISO_DE_FONDO', 'PERMISO_EN_AJUSTES', 'SOLO_DESDE_LA_APP']) {
+    const donde = bloqueo.indexOf(motivo);
+    assert.ok(donde !== -1, `falta el camino de salida para ${motivo}`);
+    assert.match(bloqueo.slice(donde), /^[^\n]*\n\s*return;/,
+      `${motivo} no sale: sigue hasta pedir el estado`);
+  }
 });
 
 test('salir de servicio no pide ningún permiso', () => {

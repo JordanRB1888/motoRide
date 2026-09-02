@@ -71,19 +71,26 @@ export type PuertaDeEntrada =
   | 'PEDIR'
   /** El sistema ya no pregunta: hay que ofrecer los ajustes del teléfono. */
   | 'AJUSTES'
-  /** No hay permiso que pedir en esta plataforma. */
-  | 'SIN_PERMISO_QUE_PEDIR';
+  /** Aquí no se conduce. Desde el navegador, sólo desde la aplicación móvil. */
+  | 'SOLO_DESDE_LA_APP';
 
 export function puertaParaEntrarEnServicio(permiso: PermisoDeFondo): PuertaDeEntrada {
   if (permiso === 'CONCEDIDO') return 'ADELANTE';
   if (permiso === 'BLOQUEADO') return 'AJUSTES';
 
-  // En el navegador no existe seguimiento en segundo plano NI permiso que
-  // conceder. Exigir aquí uno que la plataforma no ofrece dejaría al conductor
-  // encerrado fuera de servicio sin nada que pueda hacer para salir, que no es
-  // lo que la regla pretende: la regla habla del teléfono, que es donde hay algo
-  // que conceder.
-  if (permiso === 'NO_DISPONIBLE') return 'SIN_PERMISO_QUE_PEDIR';
+  // DESDE EL NAVEGADOR NO SE CONDUCE
+  //
+  // Decisión del dueño: la plataforma operativa del conductor es la aplicación
+  // móvil nativa, y sólo ésa. El navegador no tiene ubicación en segundo plano,
+  // así que en cuanto la pestaña deja de estar activa el sistema suspende los
+  // temporizadores y deja de haber posiciones — sin avisar a nadie.
+  //
+  // Lo que se evita es el peor estado posible: la pantalla diciendo «En línea»
+  // mientras el despacho ve una posición rancia y lo descarta. Él cree que
+  // trabaja, no le llegan viajes, y quien espera ve una moto que no se mueve.
+  //
+  // Estar fuera de servicio es honesto. Parecerlo sin serlo, no.
+  if (permiso === 'NO_DISPONIBLE') return 'SOLO_DESDE_LA_APP';
 
   // `DESCONOCIDO` y `DENEGADO`: se pregunta. Del segundo se sale volviendo a
   // preguntar, y volver a pulsar el botón es esa acción explícita — no se
@@ -125,9 +132,15 @@ export function reconciliarSinPermiso({
   readonly permiso: PermisoDeFondo;
   readonly hayViajeActivo: boolean;
 }): Reconciliacion {
-  // Con el permiso dado no hay nada que reconciliar. Y donde no existe el
-  // permiso tampoco: no se puede echar a nadie por no tener algo que la
-  // plataforma no ofrece.
+  // Con el permiso dado no hay nada que reconciliar.
+  //
+  // Y desde el navegador tampoco se reconcilia, aunque desde allí no se pueda
+  // entrar en servicio. Son dos cosas distintas y confundirlas haría daño: si
+  // el conductor está trabajando con su teléfono y abre la web para mirar sus
+  // ganancias, sacarlo de servicio desde la pestaña le rompería la jornada que
+  // SÍ está sosteniendo el móvil.
+  //
+  // La web se niega a ponerlo en línea. No le quita lo que ya tiene.
   if (permiso === 'CONCEDIDO' || permiso === 'NO_DISPONIBLE') return 'NADA';
 
   // Todavía no se ha mirado qué dice el sistema. Decidir aquí sacaría de

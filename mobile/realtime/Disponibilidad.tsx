@@ -224,20 +224,36 @@ export function ProveedorDeDisponibilidad({ children }: { readonly children: Rea
       // ajustes del teléfono mientras la aplicación estaba al fondo.
       if (puerta !== 'ADELANTE') puerta = puertaParaEntrarEnServicio(await refrescar());
 
-      if (puerta === 'PEDIR' && !await pedirPermiso()) {
-        // Dijo que no. Se queda fuera de servicio y NO se le insiste: volver a
-        // pulsar el botón es la acción explícita que lo intenta otra vez.
-        setDisponibilidad(previa => rechazada(previa, 'SIN_PERMISO_DE_FONDO'));
-        return;
-      }
-
-      if (puerta === 'AJUSTES') {
-        // El sistema ya no pregunta. `pedirPermiso` ofrece el camino oficial a
-        // los ajustes y no pasa de ahí: al volver, el permiso se relee solo y
-        // basta con pulsar el botón otra vez.
-        await pedirPermiso();
-        setDisponibilidad(previa => rechazada(previa, 'PERMISO_EN_AJUSTES'));
-        return;
+      // Sólo se sigue con la puerta ABIERTA. Está escrito así —y no con una
+      // lista de casos que rechazan— para que un motivo nuevo de bloqueo nazca
+      // bloqueando: olvidarse de añadirlo aquí dejaría entrar en servicio a
+      // quien no debe, que es el error caro.
+      if (puerta !== 'ADELANTE') {
+        if (puerta === 'PEDIR') {
+          if (await pedirPermiso()) {
+            // Concedido en el momento: sigue adelante sin tener que volver a
+            // pulsar.
+            puerta = 'ADELANTE';
+          } else {
+            // Dijo que no. Se queda fuera de servicio y NO se le insiste:
+            // volver a pulsar es la acción explícita que lo intenta otra vez.
+            setDisponibilidad(previa => rechazada(previa, 'SIN_PERMISO_DE_FONDO'));
+            return;
+          }
+        } else if (puerta === 'AJUSTES') {
+          // El sistema ya no pregunta. `pedirPermiso` ofrece el camino oficial
+          // a los ajustes y no pasa de ahí: al volver, el permiso se relee solo
+          // y basta con pulsar el botón otra vez.
+          await pedirPermiso();
+          setDisponibilidad(previa => rechazada(previa, 'PERMISO_EN_AJUSTES'));
+          return;
+        } else {
+          // `SOLO_DESDE_LA_APP`: desde el navegador no se conduce. No hay nada
+          // que pedir ni que arreglar aquí, así que ni siquiera se molesta al
+          // servidor.
+          setDisponibilidad(previa => rechazada(previa, 'SOLO_DESDE_LA_APP'));
+          return;
+        }
       }
     }
 

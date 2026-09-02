@@ -5,6 +5,7 @@ import { eventLogger } from '../utils/logger.js';
 import { showToast } from '../components/toast.js';
 import { createLocationThrottle } from '../utils/locationThrottle.js';
 import { evaluateLocationSample, normalizeLocationSample } from '../utils/locationQuality.js';
+import { AVISO_SOLO_DESDE_LA_APP, puedeEntrarEnServicioDesde } from '../utils/driverPlatform.js';
 
 class DriverGpsTracker {
   constructor() {
@@ -58,6 +59,21 @@ class DriverGpsTracker {
 
   async startTracking(user) {
     if (this.isTracking) return;
+
+    // DESDE EL NAVEGADOR NO SE CONDUCE
+    //
+    // Va lo PRIMERO, antes de tocar ninguna bandera y antes de conectar nada:
+    // ésta es la única puerta de la web hacia `driver:connect` con `AVAILABLE`
+    // y hacia el GPS operativo, así que salir aquí es lo que de verdad cierra
+    // el paso. Un botón deshabilitado no serviría de nada mientras este
+    // servicio siga siendo alcanzable desde cualquier otro sitio.
+    //
+    // El porqué está en `utils/driverPlatform`: sin ubicación en segundo plano
+    // «En línea» sería mentira en cuanto la pestaña deja de estar activa.
+    if (!puedeEntrarEnServicioDesde()) {
+      showToast(AVISO_SOLO_DESDE_LA_APP, 'warning');
+      return false;
+    }
 
     // Al arrancar o reconectar, el servidor no sabe dónde está la moto: la
     // primera muestra debe viajar sin esperar al regulador.

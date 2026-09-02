@@ -27,6 +27,7 @@ import { canonicalPhotoPath, createPrivatePhotoLoader, hydratePrivatePhotos, use
 import { createNavigationBanner } from '../../components/navigationBanner.js';
 import { NAVIGATION_PHASE, createDriverNavigation } from '../../services/driverNavigation.js';
 import { distanceBetweenMeters } from '../../utils/locationQuality.js';
+import { AVISO_SOLO_DESDE_LA_APP, puedeEntrarEnServicioDesde } from '../../utils/driverPlatform.js';
 import { createTripEventQueue } from '../../services/tripEventQueue.js';
 import { SYNC_STATE, createTripTransitionSync } from '../../services/tripTransitionSync.js';
 import { createScreenLifecycle } from '../../utils/screenLifecycle.js';
@@ -354,6 +355,22 @@ export function renderDriverApp(container) {
     }
 
     function setOnline(online) {
+        // Ponerse en servicio es cosa de la aplicación móvil. Se comprueba aquí
+        // porque a `setOnline(true)` se llega desde media docena de sitios —el
+        // botón, aceptar un viaje, volver a una jornada abierta— y hacerlo en
+        // cada uno dejaría un hueco tarde o temprano.
+        //
+        // Todo lo demás de la web del conductor sigue igual: su perfil, sus
+        // datos, su historial, sus ganancias, sus documentos y su
+        // configuración. Lo único que no puede hacer desde aquí es ponerse en
+        // línea, porque el navegador no puede sostener esa promesa.
+        if (online && !puedeEntrarEnServicioDesde()) {
+            showToast(AVISO_SOLO_DESDE_LA_APP, 'warning');
+            // El interruptor vuelve a decir la verdad: sigue fuera de servicio.
+            // Dejarlo encendido sería exactamente la mentira que esto evita.
+            reflejarDisponibilidad(false);
+            return;
+        }
         if (online && user.isVerified === false) {
             showToast('Tu cuenta está pendiente de aprobación administrativa', 'warning');
             return;
