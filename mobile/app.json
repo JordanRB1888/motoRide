@@ -45,6 +45,14 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "+58Express usa la cámara para fotografiar tus documentos y tu vehículo cuando te postulas como conductor.",
+          "photosPermission": "+58Express accede a tus fotos para adjuntar tus documentos cuando te postulas como conductor.",
+          "microphonePermission": false
+        }
+      ],
       "./plugins/rutaCortaDeCmake"
     ],
     "experiments": {

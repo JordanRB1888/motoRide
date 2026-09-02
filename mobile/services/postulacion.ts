@@ -15,8 +15,8 @@
  *
  *   POST  /api/driver-applications              multipart; crea cuenta y expediente
  *                                               201 → { user, token, application }
+ *                                               nace en `draft` si faltan documentos
  *                                               400 VALIDATION_FAILED (+ fields)
- *                                               400 MISSING_DOCUMENTS (+ missing)
  *                                               409 USER_EXISTS
  *                                               409 DRIVER_APPLICATION_EXISTS
  *                                               401 EXISTING_ACCOUNT_AUTH_REQUIRED
@@ -25,6 +25,14 @@
  *   PATCH /api/driver-applications/me           409 APPLICATION_LOCKED en revisión
  *   PUT   /api/driver-applications/me/documents/:tipo   multipart, un archivo
  *   POST  /api/driver-applications/me/submit    400 MISSING_DOCUMENTS (+ missing)
+ *                                               400 VALIDATION_FAILED (+ fields)
+ *
+ * LA SESIÓN SIGUE SIENDO UNA
+ *
+ * Crear el expediente devuelve un token, y aquí NO se guarda: la sesión la
+ * gobierna `AuthContext`, y la pantalla, tras crear la cuenta, entra por
+ * `entrar()` como cualquiera. Guardar el token por otro camino sería una
+ * segunda autoridad de sesión.
  *
  * LOS DOCUMENTOS SON PRIVADOS
  *
@@ -36,6 +44,15 @@
 import { llamar } from './api';
 import type { Resultado } from '../domain/apiResult';
 import type { EstadoDeSolicitud } from '../domain/driverApplication';
+import type {
+  ClaveDeServicio,
+  DatosDeLicencia,
+  DatosDelCertificadoMedico,
+  DatosDelVehiculo,
+  DatosPersonales,
+  TipoDeVehiculo
+} from '../domain/postulacion';
+import { normalizarCedula, normalizarPlaca, normalizarRif, regionDeLaCiudad } from '../domain/postulacion';
 
 /** Un archivo tal como lo entrega React Native: una ruta, no un `Blob`. */
 export interface FotoParaSubir {
@@ -43,7 +60,7 @@ export interface FotoParaSubir {
   readonly nombre: string;
   /** `image/jpeg`, `image/png`… Lo que diga el selector. */
   readonly tipo: string;
-  readonly tamano?: number;
+  readonly tamano?: number | null;
 }
 
 /** El tope del servidor: cinco megas por archivo. */
@@ -53,25 +70,51 @@ export interface DocumentoDeLaSolicitud {
   readonly id: string;
   readonly type: string;
   readonly status: string;
-  readonly uploadedAt: string | null;
+  readonly updatedAt: string | null;
 }
+
+export interface CorreccionPedida {
+  readonly type: string;
+  readonly reason: string | null;
+}
+
+export type EstadoDeControl = 'NOT_REQUIRED' | 'PENDING' | 'PASSED' | 'FAILED';
 
 /** La solicitud, tal como la ve su dueño. Sin trazabilidad interna. */
 export interface SolicitudPropia {
   readonly id: string | null;
   readonly status: EstadoDeSolicitud;
+  readonly requirementsVersion: number;
   readonly submittedAt: string | null;
   readonly updatedAt: string | null;
   /** Por qué se rechazó o qué hay que corregir. Lo escribe administración. */
   readonly decisionReason: string | null;
   /** Los tipos de documento que hay que rehacer. */
   readonly requestedChanges: readonly string[];
+  /** Cada uno con su motivo. */
+  readonly requestedChangeDetails: readonly CorreccionPedida[];
+  /** Si además hay un dato escrito que corregir. */
+  readonly textualCorrections: string | null;
+  readonly servicesAppliedFor: readonly ClaveDeServicio[];
+  readonly vehicleType: TipoDeVehiculo;
   readonly personal: Readonly<Record<string, unknown>> | null;
   readonly vehicle: Readonly<Record<string, unknown>> | null;
+  readonly license: { readonly grade: number | null; readonly expiration: string | null };
+  readonly medicalCertificate: { readonly expiration: string | null };
+  readonly checkpoints: Readonly<Record<string, EstadoDeControl>>;
   readonly documents: readonly DocumentoDeLaSolicitud[];
+  /** Qué obligatorios faltan, según el servidor. Es la autoridad. */
+  readonly missingDocuments: readonly string[];
 }
 
 const ESTADOS = ['draft', 'pending', 'approved', 'rejected', 'needs_changes', 'suspended'];
+const CONTROLES = ['NOT_REQUIRED', 'PENDING', 'PASSED', 'FAILED'];
+
+const cadena = (valor: unknown): string | null => (typeof valor === 'string' && valor !== '' ? valor : null);
+const objeto = (valor: unknown): Record<string, unknown> | null =>
+  (typeof valor === 'object' && valor !== null ? (valor as Record<string, unknown>) : null);
+const listaDeCadenas = (valor: unknown): string[] =>
+  (Array.isArray(valor) ? valor.filter((item): item is string => typeof item === 'string') : []);
 
 /**
  * Lee la respuesta del servidor sin fiarse de ella.
@@ -81,35 +124,52 @@ const ESTADOS = ['draft', 'pending', 'approved', 'rejected', 'needs_changes', 's
  * por no reconocer un valor.
  */
 function leerSolicitud(datos: unknown): SolicitudPropia | null {
-  if (typeof datos !== 'object' || datos === null) return null;
-  const bruto = datos as Record<string, unknown>;
-  if (typeof bruto.status !== 'string') return null;
+  const bruto = objeto(datos);
+  if (bruto === null || typeof bruto.status !== 'string') return null;
 
-  const documentos = Array.isArray(bruto.documents) ? bruto.documents : [];
+  const licencia = objeto(bruto.license) ?? {};
+  const medico = objeto(bruto.medicalCertificate) ?? {};
+  const controlesBrutos = objeto(bruto.checkpoints) ?? {};
+  const controles: Record<string, EstadoDeControl> = {};
+  for (const [nombre, valor] of Object.entries(controlesBrutos)) {
+    if (typeof valor === 'string' && CONTROLES.includes(valor)) controles[nombre] = valor as EstadoDeControl;
+  }
+  const vehiculo = objeto(bruto.vehicle);
 
   return {
-    id: typeof bruto.id === 'string' ? bruto.id : null,
+    id: cadena(bruto.id),
     status: (ESTADOS.includes(bruto.status) ? bruto.status : 'pending') as EstadoDeSolicitud,
-    submittedAt: typeof bruto.submittedAt === 'string' ? bruto.submittedAt : null,
-    updatedAt: typeof bruto.updatedAt === 'string' ? bruto.updatedAt : null,
-    decisionReason: typeof bruto.decisionReason === 'string' ? bruto.decisionReason : null,
-    requestedChanges: Array.isArray(bruto.requestedChanges)
-      ? bruto.requestedChanges.filter((item): item is string => typeof item === 'string')
-      : [],
-    personal: typeof bruto.personal === 'object' && bruto.personal !== null
-      ? (bruto.personal as Record<string, unknown>)
-      : null,
-    vehicle: typeof bruto.vehicle === 'object' && bruto.vehicle !== null
-      ? (bruto.vehicle as Record<string, unknown>)
-      : null,
-    documents: documentos
-      .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    requirementsVersion: Number.isInteger(bruto.requirementsVersion) ? (bruto.requirementsVersion as number) : 1,
+    submittedAt: cadena(bruto.submittedAt),
+    updatedAt: cadena(bruto.updatedAt),
+    decisionReason: cadena(bruto.decisionReason),
+    requestedChanges: listaDeCadenas(bruto.requestedChanges),
+    requestedChangeDetails: (Array.isArray(bruto.requestedChangeDetails) ? bruto.requestedChangeDetails : [])
+      .map(objeto)
+      .filter((item): item is Record<string, unknown> => item !== null)
+      .map(item => ({ type: cadena(item.type) ?? '', reason: cadena(item.reason) })),
+    textualCorrections: cadena(bruto.textualCorrections),
+    servicesAppliedFor: listaDeCadenas(bruto.servicesAppliedFor)
+      .filter((item): item is ClaveDeServicio => item === 'PASSENGER_TRANSPORT' || item === 'DELIVERY'),
+    vehicleType: vehiculo?.type === 'CAR' ? 'CAR' : 'MOTO',
+    personal: objeto(bruto.personal),
+    vehicle: vehiculo,
+    license: {
+      grade: Number.isInteger(licencia.grade) ? (licencia.grade as number) : null,
+      expiration: cadena(licencia.expiration)
+    },
+    medicalCertificate: { expiration: cadena(medico.expiration) },
+    checkpoints: controles,
+    documents: (Array.isArray(bruto.documents) ? bruto.documents : [])
+      .map(objeto)
+      .filter((item): item is Record<string, unknown> => item !== null)
       .map(item => ({
-        id: typeof item.id === 'string' ? item.id : '',
-        type: typeof item.type === 'string' ? item.type : '',
-        status: typeof item.status === 'string' ? item.status : 'pending',
-        uploadedAt: typeof item.uploadedAt === 'string' ? item.uploadedAt : null
-      }))
+        id: cadena(item.id) ?? '',
+        type: cadena(item.type) ?? '',
+        status: cadena(item.status) ?? 'pending',
+        updatedAt: cadena(item.updatedAt)
+      })),
+    missingDocuments: listaDeCadenas(bruto.missingDocuments)
   };
 }
 
@@ -137,7 +197,7 @@ export interface FalloDePostulacion {
 
 function traducirFallo(respuesta: Extract<Resultado<unknown>, { ok: false }>): FalloDePostulacion {
   const codigo = respuesta.codigo ?? '';
-  const detalle = (respuesta as unknown as { datos?: Record<string, unknown> }).datos ?? {};
+  const detalle = objeto((respuesta as unknown as { datos?: unknown }).datos) ?? {};
 
   if (respuesta.motivo === 'SIN_RED') return { ok: false, motivo: 'SIN_CONEXION' };
 
@@ -149,16 +209,14 @@ function traducirFallo(respuesta: Extract<Resultado<unknown>, { ok: false }>): F
     EXISTING_ACCOUNT_AUTH_REQUIRED: 'NECESITA_CONTRASENA',
     APPLICATION_LOCKED: 'EN_REVISION',
     INVALID_DOCUMENT: 'DOCUMENTO_INVALIDO',
+    INVALID_FILE_TYPE: 'DOCUMENTO_INVALIDO',
     FILE_TOO_LARGE: 'ARCHIVO_DEMASIADO_GRANDE',
+    LIMIT_FILE_SIZE: 'ARCHIVO_DEMASIADO_GRANDE',
     UPLOAD_FAILED: 'DOCUMENTO_INVALIDO'
   };
 
-  const campos = typeof detalle.fields === 'object' && detalle.fields !== null
-    ? (detalle.fields as Record<string, string>)
-    : undefined;
-  const faltan = Array.isArray(detalle.missing)
-    ? detalle.missing.filter((item): item is string => typeof item === 'string')
-    : undefined;
+  const campos = objeto(detalle.fields) as Record<string, string> | null;
+  const faltan = Array.isArray(detalle.missing) ? listaDeCadenas(detalle.missing) : null;
 
   return {
     ok: false,
@@ -185,6 +243,85 @@ function interpretar(respuesta: Resultado<unknown>): ResultadoDeSolicitud {
     : { ok: true, solicitud };
 }
 
+// ---------------------------------------------------------------------------
+// Crear
+// ---------------------------------------------------------------------------
+
+export interface DatosParaPostularse {
+  readonly vehiculo: TipoDeVehiculo;
+  readonly servicios: readonly ClaveDeServicio[];
+  readonly personales: DatosPersonales;
+  readonly datosDelVehiculo: DatosDelVehiculo;
+  readonly licencia: DatosDeLicencia;
+  readonly certificadoMedico: DatosDelCertificadoMedico;
+  /** La de la cuenta nueva, o la de la cuenta de pasajera que ya existe. */
+  readonly contrasena: string;
+}
+
+/** Los campos tal como los nombra el servidor. */
+export function camposDelServidor(datos: Omit<DatosParaPostularse, 'contrasena'>): Record<string, string> {
+  const region = regionDeLaCiudad(datos.personales.ciudad) ?? '';
+  return {
+    servicesAppliedFor: datos.servicios.join(','),
+    firstName: datos.personales.nombre.trim(),
+    lastName: datos.personales.apellido.trim(),
+    identityNumber: normalizarCedula(datos.personales.cedula),
+    rif: normalizarRif(datos.personales.rif),
+    birthDate: datos.personales.nacimiento.trim(),
+    phone: datos.personales.telefono.trim(),
+    email: datos.personales.correo.trim().toLowerCase(),
+    address: datos.personales.direccion.trim(),
+    city: datos.personales.ciudad.trim(),
+    region,
+    vehicleType: datos.vehiculo,
+    vehicleBrand: datos.datosDelVehiculo.marca.trim(),
+    vehicleModel: datos.datosDelVehiculo.modelo.trim(),
+    vehicleYear: datos.datosDelVehiculo.ano.trim(),
+    vehicleColor: datos.datosDelVehiculo.color.trim(),
+    vehiclePlate: normalizarPlaca(datos.datosDelVehiculo.placa),
+    vehicleLegalDocumentType: datos.datosDelVehiculo.documentoLegal,
+    licenseGrade: datos.licencia.grado.trim(),
+    licenseExpiration: datos.licencia.vencimiento.trim(),
+    medicalCertificateExpiration: datos.certificadoMedico.vencimiento.trim()
+  };
+}
+
+export type ResultadoDeCreacion =
+  | { readonly ok: true; readonly solicitud: SolicitudPropia; readonly correo: string }
+  | FalloDePostulacion;
+
+/**
+ * Crea la cuenta y el expediente, sin documentos: nace como borrador.
+ *
+ * El token que devuelve el servidor NO se guarda aquí. La pantalla entra
+ * después por `entrar()` del contexto de sesión, con el correo y la
+ * contraseña que la persona acaba de escribir.
+ */
+export async function crearPostulacion(datos: DatosParaPostularse): Promise<ResultadoDeCreacion> {
+  const formulario = new FormData();
+  for (const [campo, valor] of Object.entries(camposDelServidor(datos))) {
+    if (valor !== '') formulario.append(campo, valor);
+  }
+  formulario.append('password', datos.contrasena);
+
+  const respuesta = await llamar<unknown>('/api/driver-applications', {
+    metodo: 'POST',
+    conSesion: false,
+    cuerpo: formulario,
+    tiempoMaximoMs: 60_000
+  });
+  if (!respuesta.ok) return traducirFallo(respuesta);
+
+  const bruto = objeto(respuesta.datos);
+  const solicitud = leerSolicitud(bruto?.application);
+  if (solicitud === null) return { ok: false, motivo: 'ERROR_DEL_SERVIDOR' };
+  return { ok: true, solicitud, correo: datos.personales.correo.trim().toLowerCase() };
+}
+
+// ---------------------------------------------------------------------------
+// Leer, corregir, subir, enviar
+// ---------------------------------------------------------------------------
+
 /**
  * Mi solicitud, si la hay.
  *
@@ -203,7 +340,7 @@ export async function leerMiPostulacion(): Promise<LecturaDeSolicitud> {
     : { ok: true, solicitud };
 }
 
-/** Corrige los datos de una solicitud que aún se puede tocar. */
+/** Corrige los datos de una solicitud que aún se puede tocar. Campos del servidor. */
 export async function actualizarMiPostulacion(
   campos: Readonly<Record<string, string>>
 ): Promise<ResultadoDeSolicitud> {
@@ -223,7 +360,7 @@ export async function subirDocumento(
   tipo: string,
   foto: FotoParaSubir
 ): Promise<ResultadoDeSolicitud> {
-  if (foto.tamano !== undefined && foto.tamano > TAMANO_MAXIMO_DE_DOCUMENTO) {
+  if (typeof foto.tamano === 'number' && foto.tamano > TAMANO_MAXIMO_DE_DOCUMENTO) {
     return { ok: false, motivo: 'ARCHIVO_DEMASIADO_GRANDE' };
   }
 
@@ -244,12 +381,17 @@ export async function subirDocumento(
 /**
  * Manda la solicitud a revisión.
  *
- * El servidor vuelve a comprobar que estén los siete documentos. Si falta
- * alguno responde cuáles, y la pantalla los enseña por su nombre en vez de
- * decir «error al enviar».
+ * El servidor vuelve a comprobar los documentos según el vehículo, y que estén
+ * el RIF y la licencia. Si falta algo responde qué, y la pantalla lo enseña
+ * por su nombre en vez de decir «error al enviar».
  */
 export async function enviarARevision(): Promise<ResultadoDeSolicitud> {
   return interpretar(await llamar<unknown>('/api/driver-applications/me/submit', {
     metodo: 'POST'
   }));
+}
+
+/** La ruta protegida de un documento. Sólo con sesión; nunca una URL pública. */
+export function rutaDelDocumento(id: string): string {
+  return `/api/driver-documents/${encodeURIComponent(id)}/content`;
 }
