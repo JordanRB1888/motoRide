@@ -215,7 +215,9 @@ test('/diseno sigue montando los fixtures, y sólo él', () => {
 test('el acceso sigue siendo el real', () => {
   const acceso = sinComentarios('app/acceso.tsx');
   assert.equal(/preview\/fixtures|_DEMO\b|diseno/.test(acceso), false);
-  assert.match(sinComentarios('app/index.tsx'), /["']\/rol["']/);
+  // Sin sesion, la raiz va al ACCESO real: el selector de rol es solo
+  // desarrollo desde REAL-APP-BOOT-GATE.
+  assert.match(sinComentarios('app/index.tsx'), /href="\/acceso"/);
 });
 
 test('el «$0,00» del laboratorio no puede llegar a la pantalla real', () => {

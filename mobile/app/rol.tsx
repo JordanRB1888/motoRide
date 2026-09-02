@@ -13,7 +13,7 @@
  */
 
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AtajoAlLaboratorio } from '../components/AtajoAlLaboratorio';
@@ -23,8 +23,19 @@ import { LogoQueEntra } from '../ui/Marca';
 import { colores, espaciado, tipografia } from '../theme/tokens';
 import { guardarUltimoRol, type RolMovil } from '../services/session';
 
+/** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
+const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+
 export default function SelectorDeRol() {
   const [guardando, setGuardando] = useState<RolMovil | null>(null);
+
+  // SÓLO EN DESARROLLO, Y SÓLO A PROPÓSITO
+  //
+  // Esta pantalla era la raíz de la aplicación sin sesión. Ya no: el arranque
+  // va al acceso real, y el rol lo decide el backend. Esto se queda como
+  // herramienta del dueño para entrar al recorrido de diseño y al laboratorio,
+  // alcanzable yendo a `/rol` expresamente. En release ni siquiera existe.
+  if (!EN_DESARROLLO) return <Redirect href="/acceso" />;
 
   const elegir = (rol: RolMovil) => {
     setGuardando(rol);

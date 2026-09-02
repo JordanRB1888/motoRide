@@ -79,7 +79,14 @@ export default function Arranque() {
     );
   }
 
-  return <Redirect href="/rol" />;
+  // SIN SESIÓN, AL ACCESO REAL
+  //
+  // Aquí se mandaba a `/rol`, el selector «¿Cómo quieres continuar?». Era una
+  // herramienta de desarrollo haciendo de arranque: la aplicación real abría
+  // preguntando un rol que no es suyo decidir —lo decide el backend— y con
+  // atajos al laboratorio a la vista. El dueño lo vio en Android y tenía
+  // razón. Sin sesión, lo único que toca es entrar.
+  return <Redirect href="/acceso" />;
 }
 
 const estilos = StyleSheet.create({

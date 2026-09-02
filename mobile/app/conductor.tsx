@@ -154,7 +154,7 @@ export default function InicioDeConductor() {
       <Boton
         titulo="Cerrar sesión"
         variante="secundario"
-        onPress={() => { void salir().then(() => { router.replace('/rol'); }); }}
+        onPress={() => { void salir().then(() => { router.replace('/acceso'); }); }}
         testID="boton-cerrar-sesion"
       />
     </Pantalla>

@@ -191,9 +191,12 @@ test('el laboratorio es alcanzable desde la aplicacion', () => {
   // la direccion a mano en Expo Go. La primera version puso la puerta solo en
   // la pantalla de «falta configurar el servidor», y desaparecia justo cuando
   // alguien creaba su .env y la aplicacion empezaba a funcionar.
-  for (const pantalla of ['app/rol.tsx', 'app/acceso.tsx']) {
-    assert.match(leer(pantalla), /<AtajoAlLaboratorio \/>/, `${pantalla} no enlaza el laboratorio`);
-  }
+  // Solo el selector, que es la herramienta de desarrollo. El acceso real
+  // NO lleva puertas al laboratorio desde REAL-APP-BOOT-GATE: es la pantalla
+  // que abre la aplicacion, y ahi no hay nada de desarrollo que ensenar.
+  assert.match(leer('app/rol.tsx'), /<AtajoAlLaboratorio \/>/, 'el selector no enlaza el laboratorio');
+  assert.equal(/AtajoAlLaboratorio/.test(despojarComentarios(leer('app/acceso.tsx'))), false,
+    'el acceso real vuelve a ensenar el laboratorio');
   // Dos puertas: el recorrido de la aplicacion navegable y el laboratorio de
   // pantallas sueltas. La primera es la forma normal de mirar el diseno desde
   // que la aplicacion se puede recorrer; la segunda sigue siendo comoda para

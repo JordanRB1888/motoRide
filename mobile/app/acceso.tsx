@@ -16,16 +16,14 @@
  */
 
 import { useRef, useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { StyleSheet, TextInput, View } from 'react-native';
 
-import { AtajoAlLaboratorio } from '../components/AtajoAlLaboratorio';
 import { Pantalla } from '../components/Pantalla';
 import { Boton, Txt } from '../ui/componentes';
 import { LogoQueEntra } from '../ui/Marca';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
-import { esRolMovil, type RolMovil } from '../services/session';
 import { experienciaDeLaIdentidad } from '../domain/authState';
 import type { MotivoDeLogin } from '../services/auth';
 
@@ -49,8 +47,13 @@ const MENSAJES: Readonly<Record<MotivoDeLogin, string>> = Object.freeze({
 
 export default function Acceso() {
   const tema = useTema();
-  const { rol } = useLocalSearchParams<{ rol?: string }>();
-  const experienciaElegida: RolMovil = esRolMovil(rol) ? rol : 'passenger';
+  // EL ROL NO SE ELIGE AQUÍ, NI SE MANDA
+  //
+  // Antes esta pantalla recibía el rol del selector y lo enviaba al backend,
+  // que rechaza el acceso si no coincide con el de la cuenta: elegir mal era
+  // «Correo o contraseña incorrectos» con una contraseña correcta. La
+  // elección manual actuaba como autoridad, y no lo es. La autoridad es la
+  // sesión que devuelve el backend: quien entra va a donde su cuenta diga.
 
   const { entrar, sesion } = useSesion();
   const [identificador, setIdentificador] = useState('');
@@ -65,13 +68,7 @@ export default function Acceso() {
     if (!puedeEnviar) return;
     setError(null);
 
-    const resultado = await entrar({
-      identificador,
-      contrasena,
-      // La experiencia elegida viaja como comprobación: el backend responde 401
-      // si no coincide con el rol REAL de la cuenta.
-      rol: experienciaElegida
-    });
+    const resultado = await entrar({ identificador, contrasena });
 
     if (!resultado.ok) {
       setError(MENSAJES[resultado.motivo]);
@@ -95,10 +92,10 @@ export default function Acceso() {
       </View>
 
       <View style={{ paddingTop: tema.ritmo.entreBloques, gap: 6 }}>
-        <Txt nivel="titulo" accessibilityRole="header">
-          {experienciaElegida === 'driver' ? 'Acceso de conductor' : 'Acceso de pasajera'}
-        </Txt>
-        <Txt nivel="cuerpo" tono="secundario">Entra con la cuenta que ya tienes.</Txt>
+        {/* El texto del acceso aprobado en el recorrido de diseño (`C2Acceso`):
+            sin rol en el título, porque el rol no se elige aquí. */}
+        <Txt nivel="titulo" accessibilityRole="header">Entra a tu cuenta</Txt>
+        <Txt nivel="cuerpo" tono="secundario">Tu moto, a un toque.</Txt>
       </View>
 
       {/* Los campos van sobre el fondo, sin tarjeta que los envuelva. Cada
@@ -145,15 +142,10 @@ export default function Acceso() {
           testID="boton-entrar"
         />
 
-        <Boton
-          titulo="Cambiar de modo"
-          variante="secundario"
-          onPress={() => { router.replace('/rol'); }}
-          deshabilitado={enviando}
-        />
-
-        {/* Sólo en desarrollo: en release no dibuja nada. */}
-        <AtajoAlLaboratorio />
+        {/* Sin «Cambiar de modo» ni atajos al laboratorio. El acceso aprobado
+            no los tiene, y ninguna puerta de desarrollo pertenece a la pantalla
+            que abre la aplicación. El selector sigue existiendo en `/rol`, sólo
+            en desarrollo y sólo yendo a él a propósito. */}
       </View>
     </Pantalla>
   );
