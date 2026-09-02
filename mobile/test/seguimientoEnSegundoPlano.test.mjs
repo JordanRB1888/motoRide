@@ -15,7 +15,9 @@ import {
   CADA_MS_EN_SEGUNDO_PLANO,
   debeSeguirEnSegundoPlano,
   ESPERA_TRAS_EXCESO_MS,
+  puertaParaEntrarEnServicio,
   reaccionarAlFallo,
+  reconciliarSinPermiso,
   TAREA_DE_UBICACION,
   tocaEnviar
 } from '../domain/seguimientoEnSegundoPlano.ts';
@@ -48,6 +50,7 @@ const sinComentarios = relativa => despojarComentarios(leer(relativa));
 
 const TAREA = 'ubicacion/tareaDeUbicacion.ts';
 const MANDO = 'ubicacion/SeguimientoDelConductor.tsx';
+const PERMISO = 'ubicacion/PermisoDeSegundoPlano.tsx';
 
 /** Todo el código de la aplicación, con su ruta relativa. */
 function codigoDeLaAplicacion() {
@@ -196,32 +199,251 @@ test('sólo un fichero manda arrancar y parar', () => {
   assert.match(mando, /pararSeguimiento\(\)/);
 });
 
-test('el permiso se pide donde se sabe si está en servicio', () => {
-  // Se pidió antes desde `Disponibilidad`, que se monta POR ENCIMA de este
-  // proveedor: alli el contexto del seguimiento es el valor por defecto y la
-  // peticion no ocurria nunca. Lo delató Metro al arrancar la aplicación, no
-  // una prueba; ésta existe para que no vuelva.
-  const mando = sinComentarios(MANDO);
-  assert.match(mando, /requestBackgroundPermissionsAsync\(\)/);
-  assert.match(mando, /enServicio\(disponibilidad\.estado\)/);
-  // Y una sola vez: si se pidiera con el permiso ya resuelto, se insistiría
-  // cada vez que se pone en línea alguien que ya dijo que no.
-  assert.match(mando, /permiso !== 'DESCONOCIDO'\) return;/);
+test('el permiso vive solo, y el seguimiento sólo lo lee', () => {
+  // El permiso es una propiedad del TELÉFONO: existe antes de que nadie entre y
+  // sobrevive a cerrar la aplicación. Separarlo de quien decide arrancar la
+  // tarea es lo que permite exigirlo antes de entrar en servicio.
+  const permisos = sinComentarios(PERMISO);
+  assert.match(permisos, /requestBackgroundPermissionsAsync\(\)/);
+  assert.match(permisos, /requestForegroundPermissionsAsync\(\)/);
 
-  const disponibilidad = sinComentarios('realtime/Disponibilidad.tsx');
-  assert.equal(/pedirPermisoDeFondo|useSeguimiento/.test(disponibilidad), false,
-    'la disponibilidad vuelve a pedir el permiso desde donde no puede');
+  // Quien enciende y apaga la tarea NO pide permisos: sólo mira el que hay.
+  const mando = sinComentarios(MANDO);
+  assert.equal(/requestBackgroundPermissionsAsync|requestForegroundPermissionsAsync/.test(mando), false,
+    'el seguimiento vuelve a pedir permisos por su cuenta');
+  assert.match(mando, /usePermisoDeSegundoPlano\(\)/);
 });
 
-test('la disponibilidad y el seguimiento no se importan en círculo', () => {
-  // Un ciclo deja valores sin inicializar segun quien cargue primero, y el que
-  // habia aqui producia justo eso: una funcion que no hacia nada.
-  const seguimiento = sinComentarios(MANDO);
+test('ninguno de los tres se importa en círculo', () => {
+  // Un ciclo deja valores sin inicializar según quién cargue primero, y el que
+  // hubo aquí producía justo eso: una función que no hacía nada. El orden de
+  // dependencias es una línea recta y tiene que seguir siéndolo.
+  //
+  //   PermisoDeSegundoPlano  ←  Disponibilidad  ←  SeguimientoDelConductor
+  const permisos = sinComentarios(PERMISO);
   const disponibilidad = sinComentarios('realtime/Disponibilidad.tsx');
+  const seguimiento = sinComentarios(MANDO);
 
+  // El permiso no depende de nadie de los otros dos.
+  assert.equal(/Disponibilidad|SeguimientoDelConductor/.test(permisos), false,
+    'el permiso mira hacia abajo y cierra un ciclo');
+
+  // La disponibilidad usa el permiso, y NO el seguimiento.
+  assert.match(disponibilidad, /usePermisoDeSegundoPlano/);
+  assert.equal(/useSeguimiento|SeguimientoDelConductor/.test(disponibilidad), false,
+    'la disponibilidad depende del seguimiento y cierra un ciclo');
+
+  // Y el seguimiento, el último, puede usar los dos.
   assert.match(seguimiento, /from '\.\.\/realtime\/Disponibilidad'/);
-  assert.equal(/from '\.\.\/ubicacion\//.test(disponibilidad), false,
-    'la disponibilidad importa de ubicacion/ y cierra el ciclo');
+});
+
+// ---------------------------------------------------------------------------
+// Opción B: el permiso va ANTES de entrar en servicio
+// ---------------------------------------------------------------------------
+
+test('sin permiso no se entra en servicio, y con él sí', () => {
+  assert.equal(puertaParaEntrarEnServicio('CONCEDIDO'), 'ADELANTE');
+  assert.equal(puertaParaEntrarEnServicio('DESCONOCIDO'), 'PEDIR');
+  // De un «no» se sale volviendo a preguntar; de un «no» definitivo, sólo desde
+  // los ajustes. Confundirlos es o insistir con un diálogo que ya no aparece, o
+  // mandar a los ajustes a quien sólo hacía falta preguntar.
+  assert.equal(puertaParaEntrarEnServicio('DENEGADO'), 'PEDIR');
+  assert.equal(puertaParaEntrarEnServicio('BLOQUEADO'), 'AJUSTES');
+  // En el navegador no hay segundo plano NI permiso que conceder: exigirlo
+  // encerraría al conductor fuera de servicio sin nada que pueda hacer.
+  assert.equal(puertaParaEntrarEnServicio('NO_DISPONIBLE'), 'SIN_PERMISO_QUE_PEDIR');
+});
+
+test('el ORDEN es permiso primero, servidor después', () => {
+  // Es la mitad del encargo. Pedir el estado primero dejaría una ventana en la
+  // que el despacho ya cuenta con un conductor del que todavía no se sabe si
+  // podrá decir dónde está, y habría que deshacer algo ya anunciado.
+  const codigo = sinComentarios('realtime/Disponibilidad.tsx');
+  const alternar = codigo.slice(codigo.indexOf('const alternar'));
+  const cuerpo = alternar.slice(0, alternar.indexOf('const valor'));
+
+  const puerta = cuerpo.indexOf('puertaParaEntrarEnServicio');
+  const peticion = cuerpo.indexOf('pedirEstadoDeConductor(pedido)');
+  assert.ok(puerta !== -1, 'el interruptor ya no comprueba el permiso');
+  assert.ok(peticion !== -1, 'el interruptor ya no pide el estado');
+  assert.ok(puerta < peticion,
+    'se pide el estado al servidor ANTES de asegurar el permiso');
+
+  // Y el camino del «no» sale sin llegar a pedir nada.
+  assert.match(cuerpo, /if \(puerta === 'PEDIR' && !await pedirPermiso\(\)\) \{[\s\S]{0,220}return;/);
+});
+
+test('salir de servicio no pide ningún permiso', () => {
+  // Quitarse de en medio siempre se puede. Exigir algo para dejar de trabajar
+  // dejaría a alguien atrapado en línea.
+  const codigo = sinComentarios('realtime/Disponibilidad.tsx');
+  assert.match(codigo, /if \(pedido === 'AVAILABLE'\) \{/);
+});
+
+test('un «no» no se convierte en insistir', () => {
+  // Una vez denegado, el sistema deja de preguntar. Reintentar solo gastaría el
+  // único intento y dejaría al conductor sin camino de vuelta.
+  const codigo = sinComentarios('realtime/Disponibilidad.tsx');
+  const alternar = codigo.slice(codigo.indexOf('const alternar'));
+  const cuerpo = alternar.slice(0, alternar.indexOf('const valor'));
+
+  // Se pide como mucho una vez por pulsación: dos llamadas y serían dos
+  // diálogos seguidos.
+  assert.equal((cuerpo.match(/await pedirPermiso\(\)/g) ?? []).length, 2,
+    'el interruptor pide el permiso un número de veces inesperado');
+  // Y las dos son excluyentes: una en el camino de PEDIR y otra en el de AJUSTES.
+  assert.match(cuerpo, /puerta === 'PEDIR'/);
+  assert.match(cuerpo, /puerta === 'AJUSTES'/);
+
+  // El permiso no se pide desde ningún efecto: sólo desde el interruptor, que
+  // es una acción explícita del conductor.
+  const proveedor = sinComentarios(PERMISO);
+  const efectos = proveedor.split('useEffect(').slice(1);
+  for (const efecto of efectos) {
+    assert.equal(/requestBackgroundPermissionsAsync|requestForegroundPermissionsAsync/.test(efecto.slice(0, 600)), false,
+      'un efecto pide el permiso solo: eso es un bucle de diálogos esperando');
+  }
+});
+
+test('cuando el sistema ya no pregunta, se ofrecen los ajustes', () => {
+  const proveedor = sinComentarios(PERMISO);
+  assert.match(proveedor, /Linking\.openSettings\(\)/);
+  // Y no se abre por sorpresa: primero se cuenta por qué.
+  assert.match(proveedor, /ofrecerLosAjustes/);
+  assert.match(leer(PERMISO), /Abrir ajustes/);
+});
+
+test('se explica antes de que salga el diálogo del sistema', () => {
+  // A la pregunta del sistema, sin contexto, casi todo el mundo dice que no. Y
+  // una vez dicho que no, el sistema deja de preguntar.
+  const codigo = sinComentarios(PERMISO);
+  const explicacion = codigo.indexOf('explicarYPreguntar()');
+  const peticion = codigo.indexOf('requestBackgroundPermissionsAsync');
+  assert.ok(explicacion !== -1, 'ya no se explica nada antes de pedir');
+  assert.ok(explicacion < peticion, 'se pide el permiso antes de explicar para qué');
+
+  // Y el primer plano va antes que el segundo: los dos sistemas rechazan el
+  // segundo sin el primero, y pedirlos al revés gasta el único intento.
+  assert.ok(codigo.indexOf('requestForegroundPermissionsAsync') < peticion);
+});
+
+// ---------------------------------------------------------------------------
+// Opción B: el servidor dice que trabaja y el teléfono ya no puede
+// ---------------------------------------------------------------------------
+
+test('sin permiso y sin viaje, se sale de servicio', () => {
+  assert.equal(reconciliarSinPermiso({
+    estado: 'AVAILABLE', permiso: 'DENEGADO', hayViajeActivo: false
+  }), 'SACAR_DE_SERVICIO');
+  assert.equal(reconciliarSinPermiso({
+    estado: 'AVAILABLE', permiso: 'BLOQUEADO', hayViajeActivo: false
+  }), 'SACAR_DE_SERVICIO');
+});
+
+test('UN VIAJE EN MARCHA NO SE ROMPE POR UN PERMISO', () => {
+  // Es la excepción protegida. Sacar de servicio a alguien con una persona
+  // subida a la moto es mucho peor que la falta de permiso.
+  for (const caso of [
+    { estado: 'BUSY', hayViajeActivo: false },
+    { estado: 'IN_TRIP', hayViajeActivo: false },
+    // Y basta con que haya viaje, aunque el estado diga otra cosa: cualquiera
+    // de las dos señales es motivo suficiente para no tocar nada.
+    { estado: 'AVAILABLE', hayViajeActivo: true }
+  ]) {
+    assert.equal(
+      reconciliarSinPermiso({ ...caso, permiso: 'DENEGADO' }),
+      'AVISAR_SIN_TOCAR_EL_VIAJE',
+      `se rompe el viaje con ${JSON.stringify(caso)}`
+    );
+  }
+});
+
+test('no se saca de servicio a quien no toca', () => {
+  // Con permiso, nada que arreglar.
+  assert.equal(reconciliarSinPermiso({
+    estado: 'AVAILABLE', permiso: 'CONCEDIDO', hayViajeActivo: false
+  }), 'NADA');
+
+  // Fuera de servicio, nada que arreglar.
+  assert.equal(reconciliarSinPermiso({
+    estado: 'OFFLINE', permiso: 'DENEGADO', hayViajeActivo: false
+  }), 'NADA');
+
+  // Y durante el arranque, ANTES de haber mirado qué dice el sistema, no se
+  // decide: hacerlo sacaría de servicio a todo el mundo al abrir la aplicación.
+  assert.equal(reconciliarSinPermiso({
+    estado: 'AVAILABLE', permiso: 'DESCONOCIDO', hayViajeActivo: false
+  }), 'NADA');
+
+  // En el navegador tampoco: no se echa a nadie por no tener algo que la
+  // plataforma no ofrece.
+  assert.equal(reconciliarSinPermiso({
+    estado: 'AVAILABLE', permiso: 'NO_DISPONIBLE', hayViajeActivo: false
+  }), 'NADA');
+});
+
+test('la salida forzada la ejecuta el SERVIDOR, no la pantalla', () => {
+  // Apagar el disco por nuestra cuenta contaría una verdad que el despacho no
+  // comparte: él seguiría ofreciéndole viajes.
+  const codigo = sinComentarios('realtime/Disponibilidad.tsx');
+  assert.match(codigo, /reconciliarSinPermiso\(/);
+  assert.match(codigo, /pedirEstadoDeConductor\('OFFLINE'\)/);
+  // Y una sola vez: el efecto se dispara con cada cambio, y pedirlo en bucle
+  // inundaría al servidor.
+  assert.match(codigo, /if \(reconciliando\.current\) return;/);
+
+  // El estado NO se fabrica localmente: `confirmada` sólo se llama desde lo que
+  // llega del servidor, nunca desde la reconciliación.
+  const reconciliacion = codigo.slice(codigo.indexOf('quePasa !== '));
+  assert.equal(/confirmada\(/.test(reconciliacion.slice(0, 500)), false,
+    'la reconciliación se inventa el estado en vez de esperar al servidor');
+});
+
+test('nadie sale de servicio sin enterarse', () => {
+  // Creería que sigue trabajando y esperaría viajes que no van a llegar.
+  const codigo = sinComentarios('realtime/Disponibilidad.tsx');
+  assert.match(codigo, /setSacadoPorElPermiso\(true\)/);
+
+  const pantalla = leer('app/conductor.tsx');
+  assert.match(pantalla, /sacadoDeServicioPorElPermiso/);
+  assert.match(pantalla, /faltaElPermisoDeFondo/);
+  assert.match(pantalla, /Alert\.alert\(/);
+  // Con salida a los ajustes en los dos avisos, que es el camino oficial.
+  assert.equal((pantalla.match(/abrirAjustesDeUbicacion\(\)/g) ?? []).length, 2);
+});
+
+test('la pantalla del conductor no se rediseñó', () => {
+  // El encargo lo pide explícitamente. Lo único que se añadió son avisos del
+  // sistema: ni un componente nuevo, ni un estilo nuevo, ni una vista más.
+  const pantalla = sinComentarios('app/conductor.tsx');
+  assert.match(pantalla, /<C2InicioConductor enLinea=\{enLinea\} onAlternar=\{alternar\} \/>/);
+  assert.equal(/StyleSheet\.create\(\{[\s\S]*permiso/i.test(pantalla), false,
+    'se añadieron estilos para el aviso en vez de usar el del sistema');
+});
+
+test('lo último que se pide no se pierde por estar ocupado', () => {
+  // Fallo real, visto quitando el permiso desde los ajustes: el efecto se
+  // disparó mientras otra pasada seguía en marcha, se descartó, y el servicio
+  // quedó anunciando en la barra que usaba una ubicación que ya no podía leer.
+  const mando = sinComentarios(MANDO);
+
+  // La intención que llega mientras se trabaja se GUARDA, no se tira.
+  assert.match(mando, /pendiente\.current = debe;/);
+  // Y se aplica al terminar, hasta que no quede nada nuevo.
+  assert.match(mando, /pendiente\.current === null\) break;/);
+});
+
+test('si el sistema se niega, no queda una promesa colgando', () => {
+  // Encender o apagar puede fallar cuando acaban de quitarle el permiso. Un
+  // rechazo sin capturar deja el estado a medias y sólo se ve en el depurador.
+  const mando = sinComentarios(MANDO);
+  assert.match(mando, /\} catch \{/);
+  // Y lo que se muestra es lo que el sistema diga de verdad, pase lo que pase.
+  assert.match(mando, /finally \{[\s\S]{0,200}setSiguiendo\(await estaSiguiendo\(\)/);
+
+  // Lo recordado por la tarea se olvida aunque parar falle: heredar el ritmo
+  // viejo al volver a arrancar saltaría el primer envío.
+  assert.match(sinComentarios(TAREA), /finally \{\s*olvidarLoDeLaTarea\(\);/);
 });
 
 test('quien decide pregunta al SISTEMA, no a una variable suya', () => {

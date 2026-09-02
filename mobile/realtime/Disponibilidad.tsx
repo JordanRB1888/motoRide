@@ -40,6 +40,12 @@ import {
 import { conectarComoConductor, escuchar, pedirEstadoDeConductor } from './socket';
 import { useTiempoReal } from './ProveedorDeTiempoReal';
 import { useSesion } from '../context/AuthContext';
+import { useViajeActivo } from './ViajeActivo';
+import { usePermisoDeSegundoPlano } from '../ubicacion/PermisoDeSegundoPlano';
+import {
+  puertaParaEntrarEnServicio,
+  reconciliarSinPermiso
+} from '../domain/seguimientoEnSegundoPlano';
 import {
   alTocarElInterruptor,
   confirmada,
@@ -55,14 +61,41 @@ interface ValorDeDisponibilidad {
   readonly disponibilidad: Disponibilidad;
   /** `true` si el disco de la barra debe estar encendido. */
   readonly enLinea: boolean;
-  /** Pide entrar o salir de servicio. No cambia nada por su cuenta. */
-  readonly alternar: () => void;
+  /**
+   * Pide entrar o salir de servicio.
+   *
+   * Para ENTRAR se asegura antes el permiso de segundo plano, porque sin él el
+   * estado prometería algo que la aplicación no puede cumplir. Para salir no
+   * pide nada. El estado lo confirma siempre el servidor.
+   */
+  readonly alternar: () => Promise<void>;
+  /**
+   * Está en servicio con un viaje en marcha y SIN permiso de segundo plano.
+   *
+   * Es el único caso en que ese estado se sostiene, y se sostiene sólo porque
+   * romper el viaje sería peor. Quien lo lea debe contarlo como lo que es: algo
+   * urgente que arreglar para que el seguimiento vuelva.
+   */
+  readonly faltaElPermisoDeFondo: boolean;
+  /**
+   * Se le acaba de sacar de servicio porque el permiso ya no está.
+   *
+   * Nadie debe salir de servicio sin enterarse: creería que sigue trabajando y
+   * esperaría viajes que no van a llegar. Se apaga al recuperar el permiso o al
+   * volver a entrar en servicio.
+   */
+  readonly sacadoDeServicioPorElPermiso: boolean;
+  /** Ofrece los ajustes del teléfono. Para el aviso, sin duplicar el camino. */
+  readonly abrirAjustesDeUbicacion: () => Promise<void>;
 }
 
 const APAGADO: ValorDeDisponibilidad = {
   disponibilidad: DISPONIBILIDAD_INICIAL,
   enLinea: false,
-  alternar: () => undefined
+  alternar: async () => undefined,
+  faltaElPermisoDeFondo: false,
+  sacadoDeServicioPorElPermiso: false,
+  abrirAjustesDeUbicacion: async () => undefined
 };
 
 const Contexto = createContext<ValorDeDisponibilidad>(APAGADO);
@@ -70,6 +103,9 @@ const Contexto = createContext<ValorDeDisponibilidad>(APAGADO);
 export function ProveedorDeDisponibilidad({ children }: { readonly children: ReactNode }) {
   const { sesion } = useSesion();
   const { estado: conexion } = useTiempoReal();
+  const { viaje } = useViajeActivo();
+  const { permiso, pedirPermiso, refrescar, abrirAjustes } = usePermisoDeSegundoPlano();
+  const [sacadoPorElPermiso, setSacadoPorElPermiso] = useState(false);
 
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad>(DISPONIBILIDAD_INICIAL);
 
@@ -161,7 +197,7 @@ export function ProveedorDeDisponibilidad({ children }: { readonly children: Rea
   // ---------------------------------------------------------------------
   // El interruptor
   // ---------------------------------------------------------------------
-  const alternar = useCallback(() => {
+  const alternar = useCallback(async () => {
     if (!esConductor || !conectado) return;
 
     // Desde `IN_TRIP` no hay nada que alternar: no se sale de servicio con
@@ -169,32 +205,118 @@ export function ProveedorDeDisponibilidad({ children }: { readonly children: Rea
     const pedido = alTocarElInterruptor(disponibilidad.estado);
     if (pedido === null) return;
 
+    // EL PERMISO VA ANTES DE PEDIR EL ESTADO
+    //
+    // Decisión del dueño: en +58Express no se pasa a `AVAILABLE` sin lo que
+    // hace falta para mantener la ubicación con el teléfono guardado.
+    //
+    // El orden importa. Pedir el estado primero y el permiso después dejaría
+    // una ventana en la que el despacho ya cree que hay un conductor
+    // trabajando cuando todavía no se sabe si podrá decir dónde está, y habría
+    // que deshacer algo ya anunciado. Así que primero el teléfono, y sólo
+    // entonces el servidor.
+    //
+    // Salir de servicio no pide nada: quitarse de en medio siempre se puede.
+    if (pedido === 'AVAILABLE') {
+      let puerta = puertaParaEntrarEnServicio(permiso);
+
+      // Lo que se sabía del permiso puede ser viejo: pudo cambiar desde los
+      // ajustes del teléfono mientras la aplicación estaba al fondo.
+      if (puerta !== 'ADELANTE') puerta = puertaParaEntrarEnServicio(await refrescar());
+
+      if (puerta === 'PEDIR' && !await pedirPermiso()) {
+        // Dijo que no. Se queda fuera de servicio y NO se le insiste: volver a
+        // pulsar el botón es la acción explícita que lo intenta otra vez.
+        setDisponibilidad(previa => rechazada(previa, 'SIN_PERMISO_DE_FONDO'));
+        return;
+      }
+
+      if (puerta === 'AJUSTES') {
+        // El sistema ya no pregunta. `pedirPermiso` ofrece el camino oficial a
+        // los ajustes y no pasa de ahí: al volver, el permiso se relee solo y
+        // basta con pulsar el botón otra vez.
+        await pedirPermiso();
+        setDisponibilidad(previa => rechazada(previa, 'PERMISO_EN_AJUSTES'));
+        return;
+      }
+    }
+
+    // Ha vuelto a pulsar el botón: el aviso anterior ya no describe nada.
+    setSacadoPorElPermiso(false);
+
     setDisponibilidad(pidiendo);
     if (!pedirEstadoDeConductor(pedido)) {
       setDisponibilidad(previa => rechazada(previa, 'SIN_CONEXION'));
+    }
+  }, [esConductor, conectado, disponibilidad.estado, permiso, pedirPermiso, refrescar]);
+
+  // ---------------------------------------------------------------------
+  // Cuando el servidor dice que trabaja y el teléfono ya no puede
+  // ---------------------------------------------------------------------
+  //
+  // Pasa de verdad: se puso en servicio ayer con el permiso dado y hoy lo ha
+  // quitado desde los ajustes. El servidor sigue diciendo `AVAILABLE` y la
+  // aplicación ya no puede cumplir lo que ese estado promete.
+  //
+  // La corrección la hace el SERVIDOR, no esta pantalla: se le pide el cambio y
+  // se espera su confirmación, igual que con cualquier otro. Apagar el disco
+  // por nuestra cuenta contaría una verdad que el despacho no comparte.
+  //
+  // Y si hay un viaje en marcha no se toca NADA: romper un viaje real con
+  // alguien subido a la moto es mucho peor que la falta de permiso.
+  const reconciliando = useRef(false);
+
+  useEffect(() => {
+    if (!esConductor || !conectado) return;
+    if (disponibilidad.fase === 'PIDIENDO') return;
+
+    const quePasa = reconciliarSinPermiso({
+      estado: disponibilidad.estado,
+      permiso,
+      hayViajeActivo: viaje !== null
+    });
+
+    if (quePasa !== 'SACAR_DE_SERVICIO') return;
+    // Una sola vez por incoherencia: el efecto se dispara con cada cambio y
+    // pedir `OFFLINE` en bucle inundaría al servidor.
+    if (reconciliando.current) return;
+
+    reconciliando.current = true;
+    setDisponibilidad(pidiendo);
+    if (!pedirEstadoDeConductor('OFFLINE')) {
+      setDisponibilidad(previa => rechazada(previa, 'SIN_CONEXION'));
+      reconciliando.current = false;
       return;
     }
+    // Para que la pantalla pueda contarlo. Nadie debe salir de servicio sin
+    // enterarse de por qué: creería que sigue trabajando.
+    setSacadoPorElPermiso(true);
+  }, [esConductor, conectado, disponibilidad.estado, disponibilidad.fase, permiso, viaje]);
 
-    // EL PERMISO DE SEGUNDO PLANO NO SE PIDE AQUI
-    //
-    // Se pedia en este sitio, y estaba mal por dos motivos que se descubrieron
-    // al arrancar la aplicacion de verdad. El primero es del arbol: el
-    // proveedor de seguimiento se monta POR DEBAJO de este, asi que desde aqui
-    // su contexto era el valor por defecto y la peticion no llegaba a ocurrir
-    // nunca. El segundo es que importarse mutuamente creaba un ciclo entre los
-    // dos ficheros, y un ciclo deja valores sin inicializar segun quien cargue
-    // primero.
-    //
-    // Lo pide `SeguimientoDelConductor`, que ya escucha este estado y decide
-    // todo lo demas del segundo plano. Aqui solo se pide el cambio de estado al
-    // servidor, que es lo que este fichero sabe hacer.
-  }, [esConductor, conectado, disponibilidad.estado]);
+  // Al recuperar el permiso vuelve a poder reconciliarse: si lo quita otra vez
+  // más adelante, hay que volver a sacarlo de servicio.
+  useEffect(() => {
+    if (permiso === 'CONCEDIDO') {
+      reconciliando.current = false;
+      setSacadoPorElPermiso(false);
+    }
+  }, [permiso]);
 
   const valor = useMemo(() => ({
     disponibilidad,
     enLinea: enServicio(disponibilidad.estado),
-    alternar
-  }), [disponibilidad, alternar]);
+    alternar,
+    // Lo que la pantalla necesita para contarlo sin rediseñarse: en servicio y
+    // sin permiso es una condición crítica —el seguimiento no puede existir— y
+    // sólo se sostiene mientras haya un viaje que proteger.
+    faltaElPermisoDeFondo: reconciliarSinPermiso({
+      estado: disponibilidad.estado,
+      permiso,
+      hayViajeActivo: viaje !== null
+    }) === 'AVISAR_SIN_TOCAR_EL_VIAJE',
+    sacadoDeServicioPorElPermiso: sacadoPorElPermiso,
+    abrirAjustesDeUbicacion: abrirAjustes
+  }), [disponibilidad, alternar, permiso, viaje, sacadoPorElPermiso, abrirAjustes]);
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }

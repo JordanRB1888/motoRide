@@ -25,7 +25,8 @@
  */
 
 import { Redirect, router } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
@@ -39,7 +40,66 @@ import { useDisponibilidad } from '../realtime/Disponibilidad';
 
 export default function InicioDeConductor() {
   const { sesion, salir } = useSesion();
-  const { enLinea, alternar } = useDisponibilidad();
+  const {
+    enLinea,
+    alternar,
+    faltaElPermisoDeFondo,
+    sacadoDeServicioPorElPermiso,
+    abrirAjustesDeUbicacion
+  } = useDisponibilidad();
+
+  // LO QUE HAY QUE CONTAR CUANDO FALTA EL PERMISO
+  //
+  // Dos situaciones distintas, y ninguna puede pasar en silencio. No se dibuja
+  // nada nuevo en la pantalla: son avisos del sistema, que es lo mínimo que
+  // hace falta para que el conductor se entere de algo que le afecta ahora.
+  //
+  // Cada uno aparece UNA vez por situación. Un aviso que reaparece en cada
+  // repintado se cierra sin leerlo.
+  const avisado = useRef({ sacado: false, enViaje: false });
+
+  useEffect(() => {
+    if (!sacadoDeServicioPorElPermiso) {
+      avisado.current.sacado = false;
+      return;
+    }
+    if (avisado.current.sacado) return;
+    avisado.current.sacado = true;
+
+    Alert.alert(
+      'Te pusimos fuera de línea',
+      'Sin el permiso de ubicación en segundo plano no sabemos dónde estás cuando '
+      + 'guardas el teléfono, y el sistema dejaría de ofrecerte viajes.\n\n'
+      + 'Actívalo y vuelve a ponerte en línea cuando quieras.',
+      [
+        { text: 'Entendido', style: 'cancel' },
+        { text: 'Abrir ajustes', onPress: () => { void abrirAjustesDeUbicacion(); } }
+      ]
+    );
+  }, [sacadoDeServicioPorElPermiso, abrirAjustesDeUbicacion]);
+
+  useEffect(() => {
+    if (!faltaElPermisoDeFondo) {
+      avisado.current.enViaje = false;
+      return;
+    }
+    if (avisado.current.enViaje) return;
+    avisado.current.enViaje = true;
+
+    // El viaje NO se toca: romperlo con alguien subido a la moto sería mucho
+    // peor que la falta de permiso. Pero mientras tanto su posición sólo viaja
+    // con la pantalla encendida, y quien le espera necesita verla.
+    Alert.alert(
+      'Falta el permiso de ubicación',
+      'Tu viaje sigue en marcha, pero sin el permiso en segundo plano tu pasajera '
+      + 'deja de ver dónde estás en cuanto apagas la pantalla.\n\n'
+      + 'Actívalo ahora, o mantén la pantalla encendida hasta terminar.',
+      [
+        { text: 'Ahora no', style: 'cancel' },
+        { text: 'Abrir ajustes', onPress: () => { void abrirAjustesDeUbicacion(); } }
+      ]
+    );
+  }, [faltaElPermisoDeFondo, abrirAjustesDeUbicacion]);
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (

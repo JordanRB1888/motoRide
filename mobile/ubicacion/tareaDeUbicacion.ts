@@ -212,10 +212,17 @@ export async function arrancarSeguimiento(): Promise<boolean> {
  * arrancar más tarde, empieza de cero.
  */
 export async function pararSeguimiento(): Promise<void> {
-  if (await Location.hasStartedLocationUpdatesAsync(TAREA_DE_UBICACION)) {
-    await Location.stopLocationUpdatesAsync(TAREA_DE_UBICACION);
+  try {
+    if (await Location.hasStartedLocationUpdatesAsync(TAREA_DE_UBICACION)) {
+      await Location.stopLocationUpdatesAsync(TAREA_DE_UBICACION);
+    }
+  } finally {
+    // Lo recordado se olvida PASE LO QUE PASE. Si parar falló —el sistema puede
+    // negarse cuando acaban de quitarle el permiso— y luego se vuelve a
+    // arrancar, heredar el ritmo de antes haría saltarse el primer envío
+    // justo cuando más falta hace saber dónde está.
+    olvidarLoDeLaTarea();
   }
-  olvidarLoDeLaTarea();
 }
 
 /** Lo que el SISTEMA dice, no lo que creemos. Para comprobar de verdad. */

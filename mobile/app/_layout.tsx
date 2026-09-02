@@ -36,6 +36,7 @@ import { ProveedorDeTiempoReal } from '../realtime/ProveedorDeTiempoReal';
 import { ProveedorDeViajeActivo } from '../realtime/ViajeActivo';
 import { ProveedorDeUbicacion } from '../ubicacion/UbicacionDelDispositivo';
 import { ProveedorDeSeguimiento } from '../ubicacion/SeguimientoDelConductor';
+import { ProveedorDePermisoDeSegundoPlano } from '../ubicacion/PermisoDeSegundoPlano';
 import { ProveedorDeDisponibilidad } from '../realtime/Disponibilidad';
 import { ProveedorDeUbicacionEnVivo } from '../realtime/UbicacionEnVivo';
 import { ProveedorDeTema } from '../theme/ThemeContext';
@@ -125,6 +126,15 @@ export default function DisposicionRaiz() {
               No pide permiso al arrancar. Espera a que una pantalla lo pida,
               cuando el usuario esta haciendo algo que lo justifica: un permiso
               que salta nada mas abrir la aplicacion se deniega casi siempre. */}
+          {/* El permiso para medir con la aplicacion cerrada. Va POR ENCIMA de
+              la disponibilidad porque ponerse en servicio lo EXIGE: primero el
+              permiso, y solo entonces se le pide el estado al servidor. Al
+              reves quedaria una ventana en la que el despacho ya cuenta con un
+              conductor que quiza no pueda decir donde esta.
+
+              Es una propiedad del TELEFONO, no de la jornada: existe antes de
+              que nadie entre y sobrevive a cerrar la aplicacion. */}
+          <ProveedorDePermisoDeSegundoPlano>
           {/* Si el conductor esta en servicio. Va ANTES de la ubicacion en vivo
               porque esta le pregunta: fuera de servicio no se emite nada. */}
           <ProveedorDeDisponibilidad>
@@ -153,6 +163,7 @@ export default function DisposicionRaiz() {
           </ProveedorDeUbicacion>
           </ProveedorDeSeguimiento>
           </ProveedorDeDisponibilidad>
+          </ProveedorDePermisoDeSegundoPlano>
           </ProveedorDeViajeActivo>
           </ProveedorDeTiempoReal>
         </ProveedorDeSesion>

@@ -30,6 +30,123 @@ import { enServicio, type EstadoDelConductor } from './disponibilidad';
 export const TAREA_DE_UBICACION = 'plus58express-ubicacion-del-conductor';
 
 /**
+ * En qué punto está el permiso de segundo plano.
+ *
+ * `DENEGADO` y `BLOQUEADO` son distintos y hay que tratarlos distinto: del
+ * primero se sale volviendo a preguntar, del segundo sólo desde los ajustes del
+ * teléfono. Confundirlos produce o bien insistir con un diálogo que el sistema
+ * ya no muestra, o bien mandar a los ajustes a quien sólo hacía falta preguntar.
+ */
+export type PermisoDeFondo =
+  /** Todavía no se ha mirado qué dice el sistema. */
+  | 'DESCONOCIDO'
+  /** Puede seguir midiendo con la aplicación cerrada. */
+  | 'CONCEDIDO'
+  /** Dijo que no, pero el sistema todavía deja preguntar. */
+  | 'DENEGADO'
+  /** El sistema ya no pregunta: sólo se arregla desde los ajustes. */
+  | 'BLOQUEADO'
+  /** La plataforma no ofrece este permiso — el navegador, sin ir más lejos. */
+  | 'NO_DISPONIBLE';
+
+/**
+ * PONERSE EN SERVICIO EXIGE EL PERMISO. ANTES, NO DESPUÉS.
+ *
+ * Decisión del dueño: en +58Express un conductor no pasa de `OFFLINE` a
+ * `AVAILABLE` sin lo que hace falta para mantener su ubicación con el teléfono
+ * guardado.
+ *
+ * El orden importa y es lo que esta función protege. Pedir el estado primero y
+ * el permiso después deja una ventana —corta, pero real— en la que el sistema
+ * cree que hay un conductor trabajando cuando todavía no se sabe si podrá
+ * decir dónde está. Y si acaba diciendo que no, hay que deshacer algo que ya se
+ * anunció al despacho.
+ *
+ * Así que: permiso, y sólo entonces se le pide al servidor el cambio.
+ */
+export type PuertaDeEntrada =
+  /** Ya se puede pedir `AVAILABLE` al servidor. */
+  | 'ADELANTE'
+  /** Hay que preguntar al sistema. */
+  | 'PEDIR'
+  /** El sistema ya no pregunta: hay que ofrecer los ajustes del teléfono. */
+  | 'AJUSTES'
+  /** No hay permiso que pedir en esta plataforma. */
+  | 'SIN_PERMISO_QUE_PEDIR';
+
+export function puertaParaEntrarEnServicio(permiso: PermisoDeFondo): PuertaDeEntrada {
+  if (permiso === 'CONCEDIDO') return 'ADELANTE';
+  if (permiso === 'BLOQUEADO') return 'AJUSTES';
+
+  // En el navegador no existe seguimiento en segundo plano NI permiso que
+  // conceder. Exigir aquí uno que la plataforma no ofrece dejaría al conductor
+  // encerrado fuera de servicio sin nada que pueda hacer para salir, que no es
+  // lo que la regla pretende: la regla habla del teléfono, que es donde hay algo
+  // que conceder.
+  if (permiso === 'NO_DISPONIBLE') return 'SIN_PERMISO_QUE_PEDIR';
+
+  // `DESCONOCIDO` y `DENEGADO`: se pregunta. Del segundo se sale volviendo a
+  // preguntar, y volver a pulsar el botón es esa acción explícita — no se
+  // insiste solo.
+  return 'PEDIR';
+}
+
+/**
+ * QUÉ HACER CUANDO EL SERVIDOR DICE QUE TRABAJA Y EL TELÉFONO DICE QUE NO PUEDE
+ *
+ * Pasa de verdad: el conductor se puso en servicio ayer con el permiso dado, y
+ * hoy lo ha quitado desde los ajustes del teléfono. O reinstaló. O cambió de
+ * teléfono. El servidor sigue diciendo `AVAILABLE` y la aplicación ya no puede
+ * cumplir lo que ese estado promete.
+ *
+ * Fingir que trabaja normalmente sería lo peor: el despacho le ofrecería viajes
+ * a alguien cuya posición va a envejecer hasta desaparecer, y quien espera en la
+ * calle vería una moto que no se mueve.
+ *
+ * Pero hay una excepción que NO se toca. Si tiene un viaje en marcha, sacarlo de
+ * servicio por su cuenta rompería un viaje real con una persona subida a la
+ * moto. Eso es mucho peor que la falta de permiso. El viaje sigue, y la falta de
+ * permiso se cuenta como lo que es: algo urgente que arreglar.
+ */
+export type Reconciliacion =
+  /** Todo coherente, o todavía no se sabe lo suficiente para decidir. */
+  | 'NADA'
+  /** Pedir al SERVIDOR que lo ponga fuera de servicio. */
+  | 'SACAR_DE_SERVICIO'
+  /** Hay un viaje en marcha: no se toca, pero hay que avisar. */
+  | 'AVISAR_SIN_TOCAR_EL_VIAJE';
+
+export function reconciliarSinPermiso({
+  estado,
+  permiso,
+  hayViajeActivo
+}: {
+  readonly estado: EstadoDelConductor | null;
+  readonly permiso: PermisoDeFondo;
+  readonly hayViajeActivo: boolean;
+}): Reconciliacion {
+  // Con el permiso dado no hay nada que reconciliar. Y donde no existe el
+  // permiso tampoco: no se puede echar a nadie por no tener algo que la
+  // plataforma no ofrece.
+  if (permiso === 'CONCEDIDO' || permiso === 'NO_DISPONIBLE') return 'NADA';
+
+  // Todavía no se ha mirado qué dice el sistema. Decidir aquí sacaría de
+  // servicio a todo el mundo durante el arranque, antes de saber nada.
+  if (permiso === 'DESCONOCIDO') return 'NADA';
+
+  // Fuera de servicio no hay incoherencia que arreglar.
+  if (!enServicio(estado)) return 'NADA';
+
+  // El viaje manda. Se comprueban las dos cosas —el estado del servidor y si
+  // hay viaje en curso— porque cualquiera de las dos basta para no tocar nada.
+  if (hayViajeActivo || estado === 'BUSY' || estado === 'IN_TRIP') {
+    return 'AVISAR_SIN_TOCAR_EL_VIAJE';
+  }
+
+  return 'SACAR_DE_SERVICIO';
+}
+
+/**
  * Las condiciones para que el seguimiento exista.
  *
  * Se comprueban juntas y en un sitio: repartidas por la aplicación, cualquiera

@@ -381,7 +381,12 @@ test('el segundo plano vive en UN solo sitio', () => {
   // que hace esta aplicacion, y tiene que poder leerse en un fichero.
   const permitidos = [
     path.join('ubicacion', 'tareaDeUbicacion.ts'),
-    path.join('ubicacion', 'SeguimientoDelConductor.tsx')
+    path.join('ubicacion', 'SeguimientoDelConductor.tsx'),
+    // El permiso se separo del seguimiento al exigirlo ANTES de entrar en
+    // servicio: tiene que estar montado por encima de la disponibilidad para
+    // que esta pueda preguntarle. Sigue estando en `ubicacion/`, nombrado y
+    // contado, que es lo que esta prueba protege.
+    path.join('ubicacion', 'PermisoDeSegundoPlano.tsx')
   ];
   const carpetas = ['app', 'ubicacion', 'realtime', 'domain', 'services', 'context', 'ui', 'preview'];
   for (const carpeta of carpetas) {
