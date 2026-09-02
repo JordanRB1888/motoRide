@@ -16,15 +16,16 @@
  */
 
 import { useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, TextInput, View } from 'react-native';
 
 import { Pantalla } from '../components/Pantalla';
-import { Boton, Txt } from '../ui/componentes';
+import { Boton, Insignia, Txt } from '../ui/componentes';
 import { LogoQueEntra } from '../ui/Marca';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { experienciaDeLaIdentidad } from '../domain/authState';
+import { describirIntencion, esIntencionDeEntrada } from '../domain/entrada';
 import type { MotivoDeLogin } from '../services/auth';
 
 /**
@@ -47,13 +48,17 @@ const MENSAJES: Readonly<Record<MotivoDeLogin, string>> = Object.freeze({
 
 export default function Acceso() {
   const tema = useTema();
-  // EL ROL NO SE ELIGE AQUÍ, NI SE MANDA
+  // LA INTENCIÓN SE ENSEÑA; EL ROL NO SE ELIGE AQUÍ, NI SE MANDA
   //
-  // Antes esta pantalla recibía el rol del selector y lo enviaba al backend,
-  // que rechaza el acceso si no coincide con el de la cuenta: elegir mal era
-  // «Correo o contraseña incorrectos» con una contraseña correcta. La
-  // elección manual actuaba como autoridad, y no lo es. La autoridad es la
-  // sesión que devuelve el backend: quien entra va a donde su cuenta diga.
+  // La bienvenida trae lo que la persona eligió —Pasajero o Conductor— y aquí
+  // sólo se ENSEÑA, como contexto. No viaja al backend. Antes esta pantalla
+  // recibía el rol del selector y lo enviaba, y el backend rechaza el acceso
+  // si no coincide con el de la cuenta: elegir mal era «Correo o contraseña
+  // incorrectos» con una contraseña correcta. La elección manual actuaba como
+  // autoridad, y no lo es. La autoridad es la sesión que devuelve el backend:
+  // quien entra va a donde su cuenta diga, eligiera lo que eligiera.
+  const { intencion: intencionElegida } = useLocalSearchParams<{ intencion?: string }>();
+  const intencion = esIntencionDeEntrada(intencionElegida) ? describirIntencion(intencionElegida) : null;
 
   const { entrar, sesion } = useSesion();
   const [identificador, setIdentificador] = useState('');
@@ -79,6 +84,9 @@ export default function Acceso() {
 
     // A dónde se va lo decide la identidad REAL del backend, no lo elegido.
     const destino = experienciaDeLaIdentidad(resultado.usuario);
+    // La bienvenida y el acceso no se quedan debajo de la casa: volver atrás
+    // desde el inicio no debe enseñar la entrada con la sesión ya abierta.
+    if (router.canDismiss()) router.dismissAll();
     router.replace(destino === 'driver' ? '/conductor' : '/pasajero');
   };
 
@@ -96,6 +104,13 @@ export default function Acceso() {
             sin rol en el título, porque el rol no se elige aquí. */}
         <Txt nivel="titulo" accessibilityRole="header">Entra a tu cuenta</Txt>
         <Txt nivel="cuerpo" tono="secundario">Tu moto, a un toque.</Txt>
+        {/* El contexto elegido en la bienvenida, discreto. Es una pista de a
+            qué venía, no una promesa: a dónde va lo dirá su cuenta. */}
+        {intencion ? (
+          <View style={{ paddingTop: 6 }} testID="acceso-intencion">
+            <Insignia texto={intencion.titulo} tono="acento" />
+          </View>
+        ) : null}
       </View>
 
       {/* Los campos van sobre el fondo, sin tarjeta que los envuelva. Cada
@@ -142,10 +157,10 @@ export default function Acceso() {
           testID="boton-entrar"
         />
 
-        {/* Sin «Cambiar de modo» ni atajos al laboratorio. El acceso aprobado
-            no los tiene, y ninguna puerta de desarrollo pertenece a la pantalla
-            que abre la aplicación. El selector sigue existiendo en `/rol`, sólo
-            en desarrollo y sólo yendo a él a propósito. */}
+        {/* Sin «Cambiar de modo» ni atajos al laboratorio: cambiar de modo es
+            volver a la bienvenida, y ninguna puerta de desarrollo pertenece a
+            la entrada. El selector de desarrollo sigue en `/rol`, sólo en
+            desarrollo y sólo yendo a él a propósito. */}
       </View>
     </Pantalla>
   );

@@ -11,7 +11,7 @@
  * Esta pantalla sólo mira el resultado y decide a dónde ir:
  *
  *   ARRANCANDO      esperando la respuesta
- *   SIN_SESION      al selector de experiencia
+ *   SIN_SESION      a la bienvenida oficial
  *   AUTENTICADO     a la experiencia que dice la identidad REAL
  *   SIN_VERIFICAR   hay token y no se pudo preguntar: se ofrece reintentar
  *
@@ -79,14 +79,14 @@ export default function Arranque() {
     );
   }
 
-  // SIN SESIÓN, AL ACCESO REAL
+  // SIN SESIÓN, A LA BIENVENIDA OFICIAL
   //
-  // Aquí se mandaba a `/rol`, el selector «¿Cómo quieres continuar?». Era una
-  // herramienta de desarrollo haciendo de arranque: la aplicación real abría
-  // preguntando un rol que no es suyo decidir —lo decide el backend— y con
-  // atajos al laboratorio a la vista. El dueño lo vio en Android y tenía
-  // razón. Sin sesión, lo único que toca es entrar.
-  return <Redirect href="/acceso" />;
+  // «¿Cómo quieres continuar?», Pasajero o Conductor, y de ahí al acceso.
+  // Es la pantalla oficial de entrada, no el selector de desarrollo que
+  // hacía de raíz antes de REAL-APP-BOOT-GATE: sin atajos al laboratorio y
+  // sin que la elección sea autoridad de nada. El rol lo sigue diciendo el
+  // backend cuando la persona entra.
+  return <Redirect href="/bienvenida" />;
 }
 
 const estilos = StyleSheet.create({

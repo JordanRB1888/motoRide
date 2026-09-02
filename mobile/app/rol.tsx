@@ -1,5 +1,5 @@
 /**
- * «¿Cómo quieres continuar?» — la primera pantalla real.
+ * El selector de DESARROLLO. La pantalla real es `bienvenida.tsx`.
  *
  * ESTO ES NAVEGACIÓN, NO AUTORIZACIÓN
  *
@@ -35,7 +35,7 @@ export default function SelectorDeRol() {
   // va al acceso real, y el rol lo decide el backend. Esto se queda como
   // herramienta del dueño para entrar al recorrido de diseño y al laboratorio,
   // alcanzable yendo a `/rol` expresamente. En release ni siquiera existe.
-  if (!EN_DESARROLLO) return <Redirect href="/acceso" />;
+  if (!EN_DESARROLLO) return <Redirect href="/bienvenida" />;
 
   const elegir = (rol: RolMovil) => {
     setGuardando(rol);
@@ -47,7 +47,7 @@ export default function SelectorDeRol() {
     });
     // Al ACCESO, no directamente a la experiencia: sin sesión no hay nada que
     // enseñar, y entrar «como conductor» sin autenticarse no significa nada.
-    router.push({ pathname: '/acceso', params: { rol } });
+    router.push({ pathname: '/acceso', params: { intencion: rol } });
   };
 
   return (

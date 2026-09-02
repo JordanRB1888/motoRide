@@ -41,10 +41,11 @@ const usuario = (extra = {}) => ({
 // La raíz
 // ---------------------------------------------------------------------------
 
-test('sin sesión, la raíz va al ACCESO real', () => {
+test('sin sesión, la raíz va a la BIENVENIDA oficial', () => {
   const raiz = sinComentarios('app/index.tsx');
-  // Lo último que hace, cuando no hay sesión.
-  assert.match(raiz, /return <Redirect href="\/acceso" \/>;\s*\}\s*$/m);
+  // Lo último que hace, cuando no hay sesión. Desde AUTH-ENTRY-EXPERIENCE-1
+  // es la bienvenida oficial, que lleva al acceso real.
+  assert.match(raiz, /return <Redirect href="\/bienvenida" \/>;\s*\}\s*$/m);
   // Y ya nunca al selector.
   assert.equal(/["']\/rol["']/.test(raiz), false, 'la raíz vuelve a mandar al selector');
 });
@@ -72,8 +73,10 @@ test('el acceso NO manda ningún rol al backend', () => {
   // Mandarlo convertía una elección de pantalla en autoridad.
   const acceso = sinComentarios('app/acceso.tsx');
   assert.match(acceso, /await entrar\(\{ identificador, contrasena \}\)/);
-  assert.equal(/rol:|useLocalSearchParams|esRolMovil/.test(acceso), false,
-    'el acceso vuelve a elegir o mandar un rol');
+  // Puede LEER la intención de la bienvenida para enseñarla como contexto,
+  // pero ni `rol` ni `role` aparecen en lo que se manda.
+  assert.equal(/\brol:|\brole:|esRolMovil/.test(acceso), false,
+    'el acceso vuelve a mandar un rol');
 });
 
 test('tras entrar, se va a donde diga la cuenta', () => {
@@ -126,7 +129,7 @@ test('el selector NO es la raíz ni un respaldo de nadie', () => {
 test('el selector no existe en release', () => {
   const selector = sinComentarios('app/rol.tsx');
   assert.match(selector, /__DEV__/);
-  assert.match(selector, /if \(!EN_DESARROLLO\) return <Redirect href="\/acceso" \/>;/);
+  assert.match(selector, /if \(!EN_DESARROLLO\) return <Redirect href="\/bienvenida" \/>;/);
 });
 
 test('los atajos al laboratorio viven en el selector, no en el acceso', () => {
@@ -145,20 +148,21 @@ test('/diseno sigue siendo sólo desarrollo', () => {
 // Salir, restaurar, fallar
 // ---------------------------------------------------------------------------
 
-test('cerrar sesión vuelve al ACCESO, nunca al selector', () => {
+test('cerrar sesión vuelve a la BIENVENIDA, nunca al selector', () => {
   // El conductor navega él mismo; el perfil vuelve a la raíz, que sin sesión
-  // ya manda al acceso; la tarjeta de «sin conexión» sólo sale, y la raíz
-  // decide.
-  assert.match(sinComentarios('app/conductor.tsx'), /salir\(\)\.then\(\(\) => \{ router\.replace\('\/acceso'\); \}\)/);
+  // ya manda a la bienvenida; la tarjeta de «sin conexión» sólo sale, y la
+  // raíz decide.
+  assert.match(sinComentarios('app/conductor.tsx'), /salir\(\)\.then\(\(\) => \{ router\.replace\('\/bienvenida'\); \}\)/);
   assert.match(sinComentarios('app/perfil.tsx'), /router\.replace\('\/'\)/);
 });
 
-test('restaurar sesión no enseña el acceso de paso', () => {
-  // Mientras se pregunta al backend, la raíz enseña el arranque, no el acceso:
-  // un acceso que aparece y desaparece hace creer que se cerró la sesión.
+test('restaurar sesión no enseña la bienvenida de paso', () => {
+  // Mientras se pregunta al backend, la raíz enseña el arranque, no la
+  // bienvenida: una entrada que aparece y desaparece hace creer que se cerró
+  // la sesión.
   const raiz = sinComentarios('app/index.tsx');
   const arrancando = raiz.indexOf("sesion.estado === 'ARRANCANDO'");
-  const acceso = raiz.indexOf('href="/acceso"');
+  const acceso = raiz.indexOf('href="/bienvenida"');
   assert.ok(arrancando !== -1 && acceso !== -1);
   assert.ok(arrancando < acceso, 'el acceso se decide antes de saber si hay sesión');
   assert.match(raiz.slice(arrancando, acceso), /ActivityIndicator/);

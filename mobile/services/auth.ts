@@ -23,7 +23,11 @@
  *
  * Todo lo de abajo sale de leer `server/index.js`:
  *
- *   POST /api/auth/login   { identifier, password, role? }
+ *   POST /api/auth/login   { identifier, password }
+ *                          (`role` existe en el backend y NO se manda: es
+ *                          una comprobación contra la cuenta que convertía
+ *                          la elección de pantalla en «contraseña
+ *                          incorrecta». AUTH-ENTRY-EXPERIENCE-1.)
  *                          200 → { status, user, token }
  *                          401 INVALID_CREDENTIALS
  *                          403 ACCOUNT_DISABLED
@@ -52,14 +56,6 @@ export interface CredencialesDeAcceso {
   /** Correo o teléfono. El backend acepta cualquiera de los dos. */
   readonly identificador: string;
   readonly contrasena: string;
-  /**
-   * La experiencia elegida en el selector.
-   *
-   * El backend la usa para comprobar que coincide con el rol REAL de la cuenta,
-   * y responde 401 si no. No es una petición de privilegios: es una
-   * comprobación más.
-   */
-  readonly rol?: 'passenger' | 'driver';
 }
 
 /** Inicia sesión contra el backend. */
@@ -72,8 +68,7 @@ export async function iniciarSesion(
     conSesion: false,
     cuerpo: {
       identifier: credenciales.identificador.trim(),
-      password: credenciales.contrasena,
-      ...(credenciales.rol ? { role: credenciales.rol } : {})
+      password: credenciales.contrasena
     }
   });
 

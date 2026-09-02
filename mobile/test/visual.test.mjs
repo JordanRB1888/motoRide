@@ -197,6 +197,8 @@ test('el laboratorio es alcanzable desde la aplicacion', () => {
   assert.match(leer('app/rol.tsx'), /<AtajoAlLaboratorio \/>/, 'el selector no enlaza el laboratorio');
   assert.equal(/AtajoAlLaboratorio/.test(despojarComentarios(leer('app/acceso.tsx'))), false,
     'el acceso real vuelve a ensenar el laboratorio');
+  assert.equal(/AtajoAlLaboratorio/.test(despojarComentarios(leer('ui/Bienvenida.tsx'))), false,
+    'la bienvenida oficial vuelve a ensenar el laboratorio');
   // Dos puertas: el recorrido de la aplicacion navegable y el laboratorio de
   // pantallas sueltas. La primera es la forma normal de mirar el diseno desde
   // que la aplicacion se puede recorrer; la segunda sigue siendo comoda para
