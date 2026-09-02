@@ -326,10 +326,15 @@ test('NO se emite ningún evento de despacho todavía', () => {
   // cambiar de estado o hablar por el chat—, que necesita sus pantallas y sus
   // confirmaciones antes de poder dispararse desde aquí.
   const carpetas = ['realtime', 'app', 'preview', 'services'];
+  //
+  // `driver:connect` y `driver:status` salen de la lista en
+  // DRIVER-AVAILABILITY-1: el conductor ya puede ponerse en servicio desde
+  // su pantalla. Siguen vedados los que MUEVEN UN VIAJE — pedir, aceptar,
+  // rechazar, cancelar, cambiar de estado, calificar y hablar por el chat—,
+  // que necesitan sus pantallas y sus confirmaciones antes de dispararse.
   const prohibidos = [
     'rideRequested', 'rideAccepted', 'rideRejected', 'rideCancelled',
-    'tripStatusUpdated', 'tripRated', 'chat:send_message',
-    'driver:connect', 'driver:status'
+    'tripStatusUpdated', 'tripRated', 'chat:send_message'
   ];
 
   for (const carpeta of carpetas) {
@@ -369,9 +374,11 @@ test('NO se emite ningún evento de despacho todavía', () => {
       `hay una emision con el evento en una variable: ${emision}`);
   }
 
-  // Y son exactamente las dos autorizadas.
+  // Y son exactamente las autorizadas: dos de ubicacion y dos de presencia.
   const eventosEmitidos = emisiones.map(e => e.replace(/\.emit\('/, '').replace(/'$/, ''));
-  assert.deepEqual(eventosEmitidos.sort(), ['driver:location', 'passenger:location_update']);
+  assert.deepEqual(eventosEmitidos.sort(), [
+    'driver:connect', 'driver:location', 'driver:status', 'passenger:location_update'
+  ]);
 });
 
 test('el inventario separa lo conectado de lo pendiente', () => {

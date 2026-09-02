@@ -46,8 +46,16 @@ test('una identidad completa se lee', () => {
   assert.equal(identidad.role, 'driver');
   assert.equal(identidad.isVerified, true);
   // Sólo lo necesario: no se arrastra el objeto entero como verdad permanente.
+  //
+  // `driverStatus` entra en DRIVER-AVAILABILITY-1 porque el disco de la barra
+  // tiene que saber de dónde parte al abrir la aplicación: sin él, un conductor
+  // que dejó la aplicación en servicio la abriría con el disco apagado y
+  // creería que se ha desconectado. Sigue siendo lo NECESARIO, no el objeto
+  // entero — el saldo, el teléfono y los documentos siguen fuera.
   assert.deepEqual(Object.keys(identidad).sort(),
-    ['accountStatus', 'firstName', 'isVerified', 'lastName', 'role', 'id'].sort());
+    ['accountStatus', 'driverStatus', 'firstName', 'isVerified', 'lastName', 'role', 'id'].sort());
+  // Y en una cuenta sin estado de conductor queda vacío, no inventado.
+  assert.equal(leerIdentidad({ ...CONDUCTOR_APROBADO, status: undefined }).driverStatus, '');
 });
 
 test('una identidad a medias se rechaza entera', () => {

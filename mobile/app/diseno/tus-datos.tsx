@@ -16,6 +16,8 @@ import type { PerfilDeUsuario } from '../../domain/perfil';
 const PERFIL_DE_EJEMPLO: PerfilDeUsuario = {
   id: 'demo',
   role: 'passenger',
+  // Una cuenta de pasajera no tiene estado de conductor.
+  driverStatus: '',
   firstName: 'Demo',
   lastName: 'Pasajera',
   email: 'demo@ejemplo.com',

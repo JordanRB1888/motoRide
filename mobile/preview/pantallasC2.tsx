@@ -693,10 +693,24 @@ export function C2BuscandoAuto() {
  * No hay tablero financiero. La cartera está apagada en el servidor, y el
  * resumen del día se muestra vacío con su nota.
  */
-export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: boolean }) {
+export function C2InicioConductor({ enLinea = false, onAlternar }: {
+  readonly enLinea?: boolean;
+  /**
+   * Que pasa al tocar el disco.
+   *
+   * Sin manejador la pantalla se gobierna sola, como en el recorrido de
+   * diseno. Con manejador manda quien lo pasa: en la aplicacion real, el
+   * servidor, que es quien decide si el conductor esta en servicio.
+   */
+  readonly onAlternar?: () => void;
+}) {
   const tema = useTema();
   const arriba = useAireDeArriba();
-  const [conectado, setConectado] = useState(enLinea);
+  const [propio, setPropio] = useState(enLinea);
+
+  // Con manejador externo el estado viene de fuera y esta pantalla no
+  // guarda ninguno: dos fuentes para lo mismo acaban discrepando.
+  const conectado = onAlternar === undefined ? propio : enLinea;
 
   const mio: VehiculoEnMapa = {
     clave: 'yo', tipo: 'MOTO', en: { x: 48, y: 30 }, rumbo: 12, destacado: true
@@ -773,7 +787,7 @@ export function C2InicioConductor({ enLinea = false }: { readonly enLinea?: bool
         control={
           <ControlDeDisponibilidad
             enLinea={conectado}
-            onAlternar={() => setConectado(valor => !valor)}
+            onAlternar={onAlternar ?? (() => setPropio(valor => !valor))}
           />
         }
       />

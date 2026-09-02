@@ -111,6 +111,36 @@ export const EVENTOS_DEL_SERVIDOR = [
   'driver:location_rejected',
   'passenger:location_rejected',
 
+  /**
+   * El conductor entró en servicio.
+   *
+   * Fuente: el manejador de `driver:connect`, que responde
+   * `{success, socketId, driver}` con el usuario completo. Confirma que el
+   * servidor lo registró en la flota.
+   */
+  'driver:connected',
+
+  /**
+   * El estado del conductor cambió.
+   *
+   * Fuente: `emitDriverPresence()`, que lo manda al propio conductor, a
+   * administración y —si tiene viaje— al pasajero. Payload:
+   * `{driverId, userId, status}`.
+   *
+   * Es la AUTORIDAD sobre el estado: llega tanto cuando el cambio lo pidió el
+   * conductor como cuando lo decidió el servidor o administración.
+   */
+  'driverStatusChanged',
+
+  /**
+   * El servidor no aceptó un cambio de estado.
+   *
+   * Fuente: `driver:status_rejected` con `INVALID_DRIVER_STATUS` —el conductor
+   * pidió uno que no puede asignarse, como `SUSPENDED`— o
+   * `DATABASE_WRITE_FAILED`.
+   */
+  'driver:status_rejected',
+
   /** El socket rechaza algo. Fuente: el limitador de conexiones y el envoltorio de eventos. */
   'socket:error',
   /** Demasiados eventos en poco tiempo. Se avisa UNA vez por ventana. */
@@ -135,12 +165,8 @@ export const EVENTOS_PENDIENTES = [
   // recibe al aceptar es un `tripStatusUpdated`.
   'rideRequested', 'rideRequestFailed', 'rideAcceptanceFailed',
   'rideCancellationRejected', 'tripStatusRejected',
-  // Conductor — DRIVER-INTEGRATION
-  //
-  // Los cuatro de ubicacion salieron de aqui en LOCATION-INTEGRATION-1B: ya
-  // tienen consumidor. Lo que queda es la presencia y el estado del conductor,
-  // que necesitan su propia pantalla.
-  'driver:connected', 'driver:status_rejected', 'driverStatusChanged',
+  // Conductor — los tres de presencia salieron en DRIVER-AVAILABILITY-1.
+  // No queda ninguno pendiente de esta familia.
   // Chat en vivo — CHAT-INTEGRATION
   'chat:message', 'chat:error',
   // Cartera y calificación

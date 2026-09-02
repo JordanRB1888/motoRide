@@ -35,6 +35,7 @@ import { ProveedorDeSesion } from '../context/AuthContext';
 import { ProveedorDeTiempoReal } from '../realtime/ProveedorDeTiempoReal';
 import { ProveedorDeViajeActivo } from '../realtime/ViajeActivo';
 import { ProveedorDeUbicacion } from '../ubicacion/UbicacionDelDispositivo';
+import { ProveedorDeDisponibilidad } from '../realtime/Disponibilidad';
 import { ProveedorDeUbicacionEnVivo } from '../realtime/UbicacionEnVivo';
 import { ProveedorDeTema } from '../theme/ThemeContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
@@ -123,6 +124,9 @@ export default function DisposicionRaiz() {
               No pide permiso al arrancar. Espera a que una pantalla lo pida,
               cuando el usuario esta haciendo algo que lo justifica: un permiso
               que salta nada mas abrir la aplicacion se deniega casi siempre. */}
+          {/* Si el conductor esta en servicio. Va ANTES de la ubicacion en vivo
+              porque esta le pregunta: fuera de servicio no se emite nada. */}
+          <ProveedorDeDisponibilidad>
           <ProveedorDeUbicacion>
           {/* La ubicacion saliendo y entrando por el socket. Va DENTRO del
               proveedor de ubicacion y del viaje activo porque necesita a los
@@ -141,6 +145,7 @@ export default function DisposicionRaiz() {
           />
           </ProveedorDeUbicacionEnVivo>
           </ProveedorDeUbicacion>
+          </ProveedorDeDisponibilidad>
           </ProveedorDeViajeActivo>
           </ProveedorDeTiempoReal>
         </ProveedorDeSesion>

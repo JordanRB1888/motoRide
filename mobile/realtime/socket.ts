@@ -266,6 +266,42 @@ export function enviarUbicacionDePasajera(
   return true;
 }
 
+/**
+ * Registrar al conductor en la flota.
+ *
+ * El servidor lo mete en la sala `drivers`, guarda su socket para poder
+ * ofrecerle viajes y le fija el estado. Sin esto, un conductor con sesión
+ * abierta no existe para el despacho.
+ *
+ * La identidad, como siempre, sale de la sesión firmada: el servidor busca al
+ * conductor por `socket.data.auth.userId` y no mira nada del mensaje salvo el
+ * estado pedido.
+ */
+export function conectarComoConductor(estado: 'AVAILABLE' | 'OFFLINE'): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('driver:connect', { status: estado });
+  return true;
+}
+
+/**
+ * Pedir un cambio de estado.
+ *
+ * PEDIR, no fijar. Lo que se pinta después es lo que el servidor confirme por
+ * `driverStatusChanged`, no esto. Si se pintara el deseo, un conductor podría
+ * verse en línea mientras el servidor lo tiene fuera, esperando viajes que no
+ * van a llegar.
+ *
+ * Los estados de administración no caben en el tipo a propósito: el servidor
+ * los rechaza, y nadie debe poder auto-suspenderse ni auto-reactivarse.
+ */
+export function pedirEstadoDeConductor(
+  estado: 'AVAILABLE' | 'BUSY' | 'IN_TRIP' | 'OFFLINE'
+): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('driver:status', { status: estado });
+  return true;
+}
+
 /** Sólo para las pruebas: si hay socket abierto ahora mismo. */
 export function hayConexion(): boolean {
   return socket !== null;

@@ -56,6 +56,18 @@ export interface PerfilDeUsuario {
   readonly isVerified: boolean;
   readonly accountStatus: string;
   /**
+   * Si el conductor esta en servicio, según el SERVIDOR.
+   *
+   * `AVAILABLE`, `BUSY`, `IN_TRIP`, `OFFLINE`, y también los de
+   * administración —`SUSPENDED`, `PENDING_APPROVAL`— cuando toque. Cadena
+   * vacía si el servidor no lo dice: en una cuenta de pasajera no existe.
+   *
+   * Es el estado de ARRANQUE. A partir de ahí manda `driverStatusChanged`,
+   * que llega por el socket; este campo sólo dice de dónde se parte al
+   * abrir la aplicación.
+   */
+  readonly driverStatus: string;
+  /**
    * La ruta de la fotografía privada, tal como la deriva el servidor
    * (`/api/users/:id/photo`), o `null` si no hay ninguna. Nunca una URL
    * externa: el servidor la reconstruye del almacenamiento en cada respuesta.
@@ -97,6 +109,7 @@ export function leerPerfil(cuerpo: unknown): PerfilDeUsuario | null {
     // Igual que en la identidad: sólo el `true` explícito cuenta.
     isVerified: dato.isVerified === true,
     accountStatus: texto(dato.accountStatus) || 'ACTIVE',
+    driverStatus: texto(dato.status),
     photoUrl: typeof dato.photoUrl === 'string' && dato.photoUrl !== '' ? dato.photoUrl : null,
     createdAt: texto(dato.createdAt),
     vehicleBrand: texto(dato.vehicleBrand),

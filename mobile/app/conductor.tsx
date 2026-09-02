@@ -16,6 +16,12 @@
  *
  * Quien tenga sesión pero no la aprobación ve su SITUACIÓN, no una interfaz de
  * conductor a medias.
+ *
+ * Y quien SÍ está aprobado ve la pantalla de conductor aprobada, con el disco
+ * de la barra conectado a su estado real. Ese estado lo decide el servidor:
+ * tocar el disco lo PIDE, y lo que se pinta es lo que el servidor confirma.
+ * Pintar el deseo del usuario dejaría a alguien viéndose «en línea» mientras
+ * el servidor lo tiene fuera, esperando viajes que no van a llegar.
  */
 
 import { Redirect, router } from 'expo-router';
@@ -27,9 +33,13 @@ import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { useSesion } from '../context/AuthContext';
 import { puedeOperarComoConductor } from '../domain/authState';
 import { describirSituacion, SIN_SOLICITUD } from '../domain/driverApplication';
+import { C2InicioConductor } from '../preview/pantallasC2';
+import { ProveedorDeNavegacion } from '../ui/navegar';
+import { useDisponibilidad } from '../realtime/Disponibilidad';
 
 export default function InicioDeConductor() {
   const { sesion, salir } = useSesion();
+  const { enLinea, alternar } = useDisponibilidad();
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (
@@ -50,6 +60,19 @@ export default function InicioDeConductor() {
   // atrás— no ve nada de conductor. Se le manda a lo suyo.
   if (usuario.role !== 'driver') return <Redirect href="/pasajero" />;
 
+  // APROBADO: su pantalla de verdad.
+  //
+  // La misma que se aprobó en el recorrido de diseño, con el disco de la barra
+  // —que ya estaba dibujado y sin conectar— pidiendo el cambio de estado al
+  // servidor. Nada nuevo dibujado aquí.
+  if (operativo) {
+    return (
+      <ProveedorDeNavegacion ir={irA}>
+        <C2InicioConductor enLinea={enLinea} onAlternar={alternar} />
+      </ProveedorDeNavegacion>
+    );
+  }
+
   return (
     <Pantalla desplazable testID="inicio-conductor">
       <View style={estilos.cabecera}>
@@ -61,17 +84,11 @@ export default function InicioDeConductor() {
         </Text>
       </View>
 
+      {/* Aquí sólo llega quien NO está aprobado: el aprobado se fue arriba a
+          su pantalla. La tarjeta de «todo listo, la disponibilidad llega en la
+          siguiente entrega» desaparece porque esa entrega es ésta. */}
       <View style={estilos.cuerpo}>
-        {operativo ? (
-          <View style={estilos.tarjeta} testID="conductor-operativo">
-            <Text style={estilos.tarjetaTitulo}>Todo listo</Text>
-            <Text style={estilos.tarjetaTexto}>
-              La disponibilidad y las carreras llegan en la siguiente entrega.
-            </Text>
-          </View>
-        ) : (
-          <SituacionSinAprobar />
-        )}
+        <SituacionSinAprobar />
       </View>
 
       <Boton
@@ -82,6 +99,18 @@ export default function InicioDeConductor() {
       />
     </Pantalla>
   );
+}
+
+/**
+ * A dónde lleva la barra del conductor.
+ *
+ * Sólo lo que ya existe conectado. Lo que todavía no tiene pantalla real no se
+ * enlaza: un destino que no lleva a ninguna parte se lee como una avería.
+ */
+function irA(clave: string) {
+  if (clave === 'perfil') router.replace('/perfil');
+  if (clave === 'historial') router.replace('/historial');
+  if (clave === 'mapa') router.replace('/conductor');
 }
 
 /**

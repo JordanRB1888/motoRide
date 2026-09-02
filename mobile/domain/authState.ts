@@ -51,6 +51,16 @@ export interface IdentidadDeUsuario {
   /** `true` sólo si el backend lo dice. Un conductor sin esto no opera. */
   readonly isVerified: boolean;
   readonly accountStatus: string;
+  /**
+   * Si el conductor esta en servicio, segun el SERVIDOR.
+   *
+   * Es el estado de ARRANQUE: a partir de ahi manda `driverStatusChanged`, que
+   * llega por el socket. Sin esto, un conductor que dejo la aplicacion en
+   * servicio la abriria con el disco apagado y creeria que se ha desconectado.
+   *
+   * Cadena vacia en una cuenta de pasajera, donde no existe.
+   */
+  readonly driverStatus: string;
 }
 
 export const MOTIVOS_DE_CIERRE = [
@@ -145,6 +155,7 @@ export function leerIdentidad(cuerpo: unknown): IdentidadDeUsuario | null {
     // Sólo el `true` explícito cuenta. Cualquier otra cosa —ausente, `'yes'`,
     // `1`— se lee como no verificado, que es el lado seguro.
     isVerified: dato.isVerified === true,
-    accountStatus: typeof dato.accountStatus === 'string' ? dato.accountStatus : 'ACTIVE'
+    accountStatus: typeof dato.accountStatus === 'string' ? dato.accountStatus : 'ACTIVE',
+    driverStatus: typeof dato.status === 'string' ? dato.status : ''
   };
 }

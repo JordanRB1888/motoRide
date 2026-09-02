@@ -30,6 +30,8 @@ import { useTiempoReal } from './ProveedorDeTiempoReal';
 import { useViajeActivo } from './ViajeActivo';
 import { useSesion } from '../context/AuthContext';
 import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
+import { useDisponibilidad } from './Disponibilidad';
+import { debeEmitirUbicacion } from '../domain/disponibilidad';
 import { crearReguladorDeEnvio } from '../domain/envioDeUbicacion';
 import {
   aceptarUbicacion,
@@ -53,6 +55,7 @@ export function ProveedorDeUbicacionEnVivo({ children }: { readonly children: Re
   const { estado: conexion } = useTiempoReal();
   const { viaje } = useViajeActivo();
   const { estado: ubicacion } = useUbicacion();
+  const { disponibilidad } = useDisponibilidad();
 
   const [conductor, setConductor] = useState<PosicionDelConductor | null>(null);
   const [ultimoRechazo, setUltimoRechazo] = useState<string | null>(null);
@@ -78,6 +81,12 @@ export function ProveedorDeUbicacionEnVivo({ children }: { readonly children: Re
   useEffect(() => {
     if (!autenticada || !conectado) return;
 
+    // Un conductor FUERA DE SERVICIO no manda su posicion. Su GPS sigue
+    // midiendo para su propio mapa —ver donde esta no depende de estar
+    // trabajando— pero mandarlo gasta datos y bateria que paga el, y no
+    // sirve para nada: el despacho no le va a ofrecer viajes estando fuera.
+    if (rol === 'driver' && !debeEmitirUbicacion(disponibilidad.estado)) return;
+
     // Sólo lo que las reglas de calidad ya aceptaron. No se vuelve a validar
     // aquí con otro criterio: dos validaciones distintas acaban discrepando.
     const posicion = ubicacion.posicion;
@@ -94,7 +103,7 @@ export function ProveedorDeUbicacionEnVivo({ children }: { readonly children: Re
     // Marcar sólo si salió: con el socket caído, la siguiente muestra debe
     // poder intentarlo otra vez sin esperar al latido.
     if (enviado) regulador.current.seEnvio(punto);
-  }, [autenticada, conectado, rol, ubicacion.posicion, viaje?.id]);
+  }, [autenticada, conectado, rol, ubicacion.posicion, viaje?.id, disponibilidad.estado]);
 
   // Tras una reconexión, la primera muestra vuelve a viajar: el servidor pudo
   // perder la anterior, y una posición de antes del corte no vale como actual.
