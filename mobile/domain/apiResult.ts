@@ -38,6 +38,18 @@ export interface FalloDeApi {
    * que ya existía cambia.
    */
   readonly detalle?: unknown;
+  /**
+   * El código HTTP, cuando hubo respuesta.
+   *
+   * `motivo` agrupa: un 429 y un 503 son los dos `ERROR_DEL_SERVIDOR`, y para
+   * una pantalla eso basta —«el servidor no responde»—. Pero quien decide si
+   * reintentar necesita distinguirlos: ante un 429 hay que esperar, y ante un
+   * 503 la siguiente muestra puede intentarlo ya.
+   *
+   * `null` cuando no hubo respuesta: sin red, tiempo agotado o configuración
+   * inválida. Opcional, así que nada de lo que ya lo lee cambia.
+   */
+  readonly estadoHttp?: number | null;
 }
 
 /**

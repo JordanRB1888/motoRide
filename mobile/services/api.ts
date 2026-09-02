@@ -38,8 +38,9 @@ const fallo = (
   motivo: MotivoDeError,
   mensaje: string,
   codigo: string | null = null,
-  detalle?: unknown
-): Resultado<never> => ({ ok: false, motivo, codigo, mensaje, detalle });
+  detalle?: unknown,
+  estadoHttp: number | null = null
+): Resultado<never> => ({ ok: false, motivo, codigo, mensaje, detalle, estadoHttp });
 
 export interface OpcionesDePeticion {
   readonly metodo?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -118,9 +119,9 @@ export async function llamar<T>(ruta: string, opciones: OpcionesDePeticion = {})
   const codigo = leerCodigoDeError(cuerpo);
 
   if (respuesta.status === 401) {
-    return fallo('NO_AUTENTICADO', 'La sesión no es válida o caducó.', codigo, cuerpo);
+    return fallo('NO_AUTENTICADO', 'La sesión no es válida o caducó.', codigo, cuerpo, 401);
   }
-  return fallo('ERROR_DEL_SERVIDOR', codigo ?? `El servidor respondió ${respuesta.status}.`, codigo, cuerpo);
+  return fallo('ERROR_DEL_SERVIDOR', codigo ?? `El servidor respondió ${respuesta.status}.`, codigo, cuerpo, respuesta.status);
 }
 
 /** Saca el código del cuerpo de error sin asumir que venga bien formado. */

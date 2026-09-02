@@ -374,7 +374,15 @@ test('el observador se apaga al irse al fondo y se recupera al volver', () => {
 // Los límites de esta fase
 // ---------------------------------------------------------------------------
 
-test('NO se pide permiso de segundo plano en ninguna parte', () => {
+test('el segundo plano vive en UN solo sitio', () => {
+  // Esta prueba prohibia cualquier segundo plano. El dueno lo autorizo en
+  // DRIVER-LOCATION-RESILIENCE-1, y lo que protege ahora es que no se
+  // reparta: seguir a alguien con la aplicacion cerrada es lo mas invasivo
+  // que hace esta aplicacion, y tiene que poder leerse en un fichero.
+  const permitidos = [
+    path.join('ubicacion', 'tareaDeUbicacion.ts'),
+    path.join('ubicacion', 'SeguimientoDelConductor.tsx')
+  ];
   const carpetas = ['app', 'ubicacion', 'realtime', 'domain', 'services', 'context', 'ui', 'preview'];
   for (const carpeta of carpetas) {
     const ruta = path.join(raizMovil, carpeta);
@@ -382,26 +390,30 @@ test('NO se pide permiso de segundo plano en ninguna parte', () => {
     for (const nombre of fs.readdirSync(ruta, { recursive: true })) {
       const completa = path.join(ruta, String(nombre));
       if (!fs.statSync(completa).isFile() || !/\.tsx?$/.test(completa)) continue;
+      if (permitidos.some(p => completa.endsWith(p))) continue;
       const codigo = despojarComentarios(fs.readFileSync(completa, 'utf8'));
-      assert.equal(/requestBackgroundPermissionsAsync|startLocationUpdatesAsync|ACCESS_BACKGROUND_LOCATION/.test(codigo), false,
-        `${carpeta}/${nombre} pide segundo plano`);
+      assert.equal(/requestBackgroundPermissionsAsync|startLocationUpdatesAsync/.test(codigo), false,
+        `${carpeta}/${nombre} toca el segundo plano por su cuenta`);
     }
   }
 });
 
-test('el manifiesto declara primer plano y NADA más', () => {
+test('el texto del permiso dice lo que de verdad pasa', () => {
   const app = JSON.parse(leer('app.json'));
   const entrada = app.expo.plugins.find(p => Array.isArray(p) && p[0] === 'expo-location');
   assert.ok(entrada, 'expo-location no está declarado como complemento');
 
-  assert.equal(entrada[1].isAndroidBackgroundLocationEnabled, false);
-  assert.equal(entrada[1].isIosBackgroundLocationEnabled, false);
-  assert.equal(entrada[1].isAndroidForegroundServiceEnabled, false);
-
-  // Y el texto dice lo que de verdad pasa: nada de rastreo en segundo plano,
-  // porque todavía no ocurre.
+  // El de primer plano NO menciona segundo plano: ese permiso no lo cubre,
+  // y prometerlo ahi seria pedir una cosa contando otra.
   assert.match(entrada[1].locationWhenInUsePermission, /ubicación para mostrar dónde estás/);
   assert.equal(/segundo plano|siempre|todo el tiempo/i.test(entrada[1].locationWhenInUsePermission), false);
+
+  // Y el de segundo plano SI lo dice, con las dos mitades de la verdad:
+  // cuando se comparte y cuando deja de compartirse. Prometer solo la
+  // primera mitad seria la mentira facil.
+  const fondo = entrada[1].locationAlwaysAndWhenInUsePermission;
+  assert.match(fondo, /pantalla esté apagada/);
+  assert.match(fondo, /sales de servicio/);
 });
 
 test('la ubicación NO se manda a ningún sitio todavía', () => {

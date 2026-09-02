@@ -71,9 +71,14 @@ test('esta fase NO instala nada nativo', () => {
   // lo autorizó y la aplicación ya usa la ubicación en primer plano. El
   // resto sigue prohibido, y `expo-task-manager` en especial: es lo que
   // hace falta para seguir midiendo con la aplicación cerrada.
+  // `expo-task-manager` sale de la lista en DRIVER-LOCATION-RESILIENCE-1:
+  // el dueno autorizo el seguimiento en segundo plano del conductor en
+  // servicio, y esa es la pieza oficial que lo hace posible. Lo que se
+  // protege ahora no es que no exista, sino que solo exista trabajando
+  // —eso lo vigila `seguimientoEnSegundoPlano.test.mjs`—.
   for (const prohibida of [
     'expo-maps', '@react-native-community/netinfo',
-    'expo-notifications', 'expo-image-picker', 'expo-task-manager'
+    'expo-notifications', 'expo-image-picker', 'expo-background-fetch'
   ]) {
     assert.equal(dependencias.includes(prohibida), false, `se instaló ${prohibida}`);
   }

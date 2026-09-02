@@ -287,9 +287,16 @@ test('sigue sin haber despacho', () => {
   }
 });
 
-test('sigue sin haber segundo plano', () => {
-  const paquete = JSON.parse(leer('package.json'));
-  assert.equal('expo-task-manager' in (paquete.dependencies ?? {}), false);
+test('la disponibilidad no sabe nada del segundo plano', () => {
+  // Este fichero pide el cambio de estado al servidor y escucha la respuesta.
+  // Nada mas. El segundo plano —permiso, arranque y parada— vive entero en
+  // `SeguimientoDelConductor`, que se monta POR DEBAJO de este proveedor.
+  //
+  // Se intento al reves y no funcionaba: desde aqui el contexto del seguimiento
+  // era el valor por defecto, asi que el permiso no llegaba a pedirse nunca, y
+  // ademas los dos ficheros se importaban en ciclo.
   const capa = sinComentarios('realtime/Disponibilidad.tsx');
-  assert.equal(/TaskManager|Background|startLocationUpdates/.test(capa), false);
+  assert.equal(/pedirPermisoDeFondo|useSeguimiento|SeguimientoDelConductor/.test(capa), false,
+    'la disponibilidad vuelve a depender del seguimiento');
+  assert.equal(/TaskManager|startLocationUpdatesAsync|stopLocationUpdatesAsync/.test(capa), false);
 });

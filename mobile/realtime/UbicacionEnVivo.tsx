@@ -24,6 +24,7 @@
  */
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { escuchar, enviarUbicacionDeConductor, enviarUbicacionDePasajera } from './socket';
 import { useTiempoReal } from './ProveedorDeTiempoReal';
@@ -57,6 +58,25 @@ export function ProveedorDeUbicacionEnVivo({ children }: { readonly children: Re
   const { estado: ubicacion } = useUbicacion();
   const { disponibilidad } = useDisponibilidad();
 
+  // CON LA PANTALLA APAGADA MANDA LA TAREA, NO EL SOCKET
+  //
+  // Los dos transportes existen para momentos distintos: el socket mientras
+  // alguien mira, y una peticion HTTP cada quince segundos cuando el
+  // telefono esta guardado. Si los dos mandaran a la vez seria el doble de
+  // datos del conductor y el doble de escrituras en el servidor para decir
+  // lo mismo.
+  //
+  // El estado de la aplicacion es lo unico que sabe de verdad donde esta la
+  // pantalla, asi que es lo que marca la frontera.
+  const [enPantalla, setEnPantalla] = useState(AppState.currentState === 'active');
+
+  useEffect(() => {
+    const suscripcion = AppState.addEventListener('change', (siguiente: AppStateStatus) => {
+      setEnPantalla(siguiente === 'active');
+    });
+    return () => suscripcion.remove();
+  }, []);
+
   const [conductor, setConductor] = useState<PosicionDelConductor | null>(null);
   const [ultimoRechazo, setUltimoRechazo] = useState<string | null>(null);
 
@@ -81,6 +101,9 @@ export function ProveedorDeUbicacionEnVivo({ children }: { readonly children: Re
   useEffect(() => {
     if (!autenticada || !conectado) return;
 
+    // Sin pantalla, este camino calla: manda la tarea de segundo plano.
+    if (!enPantalla) return;
+
     // Un conductor FUERA DE SERVICIO no manda su posicion. Su GPS sigue
     // midiendo para su propio mapa —ver donde esta no depende de estar
     // trabajando— pero mandarlo gasta datos y bateria que paga el, y no
@@ -103,7 +126,7 @@ export function ProveedorDeUbicacionEnVivo({ children }: { readonly children: Re
     // Marcar sólo si salió: con el socket caído, la siguiente muestra debe
     // poder intentarlo otra vez sin esperar al latido.
     if (enviado) regulador.current.seEnvio(punto);
-  }, [autenticada, conectado, rol, ubicacion.posicion, viaje?.id, disponibilidad.estado]);
+  }, [autenticada, conectado, enPantalla, rol, ubicacion.posicion, viaje?.id, disponibilidad.estado]);
 
   // Tras una reconexión, la primera muestra vuelve a viajar: el servidor pudo
   // perder la anterior, y una posición de antes del corte no vale como actual.

@@ -169,7 +169,10 @@ test('no hay GPS en segundo plano ni registro de notificaciones', () => {
   // la pieza que hace falta para eso, y no está.
   const paquete = JSON.parse(fs.readFileSync(path.join(raizMovil, 'package.json'), 'utf8'));
   const dependencias = Object.keys(paquete.dependencies ?? {});
-  for (const nombre of ['expo-notifications', 'expo-task-manager', 'expo-background-fetch']) {
+  // `expo-task-manager` entra en DRIVER-LOCATION-RESILIENCE-1 con el
+  // seguimiento del conductor en servicio. Sigue vedado el registro de
+  // notificaciones, que es otra cosa y necesita su propio consentimiento.
+  for (const nombre of ['expo-notifications', 'expo-background-fetch']) {
     assert.equal(dependencias.includes(nombre), false,
       `${nombre} no corresponde a esta fase`);
   }

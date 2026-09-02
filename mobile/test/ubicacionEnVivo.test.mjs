@@ -359,21 +359,13 @@ test('el conductor no se pone disponible por tener GPS', () => {
   }
 });
 
-test('sigue sin haber segundo plano', () => {
-  const carpetas = ['app', 'ubicacion', 'realtime', 'domain', 'services', 'context'];
-  for (const carpeta of carpetas) {
-    const ruta = path.join(raizMovil, carpeta);
-    if (!fs.existsSync(ruta)) continue;
-    for (const nombre of fs.readdirSync(ruta, { recursive: true })) {
-      const completa = path.join(ruta, String(nombre));
-      if (!fs.statSync(completa).isFile() || !/\.tsx?$/.test(completa)) continue;
-      const codigo = despojarComentarios(fs.readFileSync(completa, 'utf8'));
-      assert.equal(/requestBackgroundPermissionsAsync|TaskManager|startLocationUpdatesAsync/.test(codigo), false,
-        `${carpeta}/${nombre} intenta medir en segundo plano`);
-    }
-  }
-  const paquete = JSON.parse(leer('package.json'));
-  assert.equal('expo-task-manager' in (paquete.dependencies ?? {}), false);
+test('la tuberia del socket no toca el segundo plano', () => {
+  // El segundo plano existe desde DRIVER-LOCATION-RESILIENCE-1, pero vive en
+  // `ubicacion/`. Esta tuberia manda por socket con la pantalla encendida y
+  // no sabe nada de tareas: mezclar las dos cosas aqui haria imposible saber
+  // cual de los dos transportes esta mandando.
+  const tuberia = sinComentarios('realtime/UbicacionEnVivo.tsx');
+  assert.equal(/TaskManager|startLocationUpdatesAsync|requestBackgroundPermissions/.test(tuberia), false);
 });
 
 test('el recorrido de diseño no manda ninguna posición', () => {

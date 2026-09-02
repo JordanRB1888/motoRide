@@ -172,7 +172,22 @@ export function ProveedorDeDisponibilidad({ children }: { readonly children: Rea
     setDisponibilidad(pidiendo);
     if (!pedirEstadoDeConductor(pedido)) {
       setDisponibilidad(previa => rechazada(previa, 'SIN_CONEXION'));
+      return;
     }
+
+    // EL PERMISO DE SEGUNDO PLANO NO SE PIDE AQUI
+    //
+    // Se pedia en este sitio, y estaba mal por dos motivos que se descubrieron
+    // al arrancar la aplicacion de verdad. El primero es del arbol: el
+    // proveedor de seguimiento se monta POR DEBAJO de este, asi que desde aqui
+    // su contexto era el valor por defecto y la peticion no llegaba a ocurrir
+    // nunca. El segundo es que importarse mutuamente creaba un ciclo entre los
+    // dos ficheros, y un ciclo deja valores sin inicializar segun quien cargue
+    // primero.
+    //
+    // Lo pide `SeguimientoDelConductor`, que ya escucha este estado y decide
+    // todo lo demas del segundo plano. Aqui solo se pide el cambio de estado al
+    // servidor, que es lo que este fichero sabe hacer.
   }, [esConductor, conectado, disponibilidad.estado]);
 
   const valor = useMemo(() => ({
