@@ -1,5 +1,25 @@
 /**
- * Cómo se ve el mapa de día y de noche.
+ * Cómo se ve el mapa de día y de noche — CUANDO NO MANDA GOOGLE CLOUD.
+ *
+ * QUIÉN MANDA AHORA
+ *
+ * El dueño diseñó el mapa en Cloud-based Maps Styling y lo asoció a un
+ * identificador por plataforma. Con identificador, **la autoridad visual es
+ * Google Cloud** y esto no se aplica: el aspecto se cambia en la consola de
+ * Google, sin tocar código ni publicar una versión.
+ *
+ * Y no es que se prefiera uno: **no pueden convivir**. Google ignora el JSON
+ * de estilo en cuanto hay identificador de mapa y lo avisa por consola. Tener
+ * los dos puestos sería mentir sobre de dónde sale lo que se ve, y el día que
+ * alguien cambie estos colores no pasaría nada y no sabría por qué.
+ * `estiloLocalSiHaceFalta()` es el único sitio donde se decide.
+ *
+ * ENTONCES ¿POR QUÉ SIGUE ESTO AQUÍ?
+ *
+ * Porque sin identificador el mapa saldría con los colores de fábrica de
+ * Google —carreteras naranjas, agua azul brillante— dentro de una aplicación
+ * grafito y amarilla. Esto es la red: cubre el arranque de un entorno recién
+ * clonado y el día que un identificador se borre o caduque.
  *
  * POR QUÉ HAY QUE ESTILARLO
  *
@@ -91,4 +111,22 @@ export const MAPA_DE_DIA: readonly ReglaDeEstilo[] = Object.freeze([
 /** El estilo que le toca al esquema que se esté viendo. */
 export function estiloDelMapa(esquema: 'claro' | 'oscuro'): readonly ReglaDeEstilo[] {
   return esquema === 'oscuro' ? MAPA_DE_NOCHE : MAPA_DE_DIA;
+}
+
+/**
+ * UNA SOLA AUTORIDAD SOBRE EL ASPECTO DEL MAPA.
+ *
+ * Con identificador de mapa devuelve `undefined`, y quien llama no debe pasar
+ * ningún JSON de estilo: manda Google Cloud. Sin identificador devuelve el
+ * estilo local, que es la red de seguridad.
+ *
+ * Los dos adaptadores —navegador y teléfono— preguntan aquí. Que la decisión
+ * viva en una función y no repartida en dos ficheros es lo que evita que un
+ * día uno de ellos aplique las dos cosas.
+ */
+export function estiloLocalSiHaceFalta(
+  esquema: 'claro' | 'oscuro',
+  identificadorDeMapa: string
+): readonly ReglaDeEstilo[] | undefined {
+  return identificadorDeMapa === '' ? estiloDelMapa(esquema) : undefined;
 }

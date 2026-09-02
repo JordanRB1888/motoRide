@@ -33,8 +33,13 @@ import { View } from 'react-native';
 
 import { Txt } from '../ui/componentes';
 import { useEsquema, useTema } from '../theme/ThemeContext';
-import { claveDelNavegador, faltaLaClave, hayClaveDelNavegador } from './claves';
-import { estiloDelMapa } from './estilos';
+import {
+  claveDelNavegador,
+  faltaLaClave,
+  hayClaveDelNavegador,
+  identificadorDelNavegador
+} from './claves';
+import { estiloLocalSiHaceFalta } from './estilos';
 import { PiezaDelMarcador, ReticulaCentral, tamanoDelMarcador } from './Marcadores';
 import { mereceMoverse, type Camara, type ModeloDelMapa } from './modelo';
 
@@ -51,17 +56,44 @@ function cargarGoogle(): Promise<boolean> {
 
   cargando = new Promise<boolean>(resolver => {
     if (typeof document === 'undefined') return resolver(false);
-    if ((globalThis as Google).google?.maps) return resolver(true);
+    if (typeof (globalThis as Google).google?.maps?.importLibrary === 'function') {
+      return resolver(true);
+    }
 
     const clave = claveDelNavegador();
     if (clave === '') return resolver(false);
 
+    // EL `onload` DEL SCRIPT NO SIRVE, Y ES UNA CARRERA QUE SE GANA A VECES
+    //
+    // Con `loading=async` el fichero llega y se ejecuta, pero Google sigue
+    // preparando la API un rato después. Justo en `onload`,
+    // `google.maps.importLibrary` todavía no existe —comprobado— y el mapa
+    // falla con un error que no dice nada de lo que pasa. Un instante más
+    // tarde sí está, así que el fallo va y viene según lo que tarde la red.
+    //
+    // `callback` es el mecanismo que Google da para esto: llama cuando la API
+    // está lista de verdad. Va en el objeto global porque el script sólo puede
+    // llamar a algo que encuentre por nombre.
+    const avisar = '__mapaDe58ExpressListo';
+    (globalThis as Record<string, unknown>)[avisar] = () => {
+      delete (globalThis as Record<string, unknown>)[avisar];
+      resolver(true);
+    };
+
+    // `map_ids` declara el identificador por adelantado para que Google traiga
+    // el estilo del dueño con el script y no en una segunda vuelta: sin esto
+    // el mapa aparece un instante con los colores de fábrica y luego cambia.
+    const identificador = identificadorDelNavegador();
+    const precarga = identificador === ''
+      ? ''
+      : `&map_ids=${encodeURIComponent(identificador)}`;
+
     const etiqueta = document.createElement('script');
     // `loading=async` es lo que Google pide desde 2023; sin ello avisa por
     // consola en cada carga.
-    etiqueta.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(clave)}&loading=async`;
+    etiqueta.src = 'https://maps.googleapis.com/maps/api/js'
+      + `?key=${encodeURIComponent(clave)}&loading=async&callback=${avisar}${precarga}`;
     etiqueta.async = true;
-    etiqueta.onload = () => resolver(true);
     // Un fallo de Google no puede tumbar la aplicación: se resuelve en `false`
     // y la pantalla enseña el hueco.
     etiqueta.onerror = () => resolver(false);
@@ -77,51 +109,111 @@ export function MapaDeMovilidad({ modelo }: { readonly modelo: ModeloDelMapa }) 
 
   const contenedor = useRef<HTMLDivElement | null>(null);
   const mapa = useRef<any>(null);
-  const marcadoresVivos = useRef<any[]>([]);
   const ultima = useRef<Camara | null>(null);
+
+  // La proyección del mapa, para saber en qué píxel cae una coordenada.
+  //
+  // Sin esto los marcadores se colocaban por regla de tres sobre la cámara del
+  // modelo, y al arrastrar el mapa se quedaban clavados en la pantalla
+  // mientras las calles pasaban por debajo. Un marcador de origen que no
+  // apunta al origen es peor que no tener marcador.
+  const capa = useRef<any>(null);
+
+  // Los nodos de cada marcador, para moverlos sin volver a dibujarlos.
+  //
+  // Google llama a `draw()` en cada fotograma mientras el mapa se mueve. Pedir
+  // un repintado de React ahí dentro deja la página en un bucle: se repinta,
+  // Google vuelve a dibujar, y otra vez. Movemos el nodo y ya está — es lo que
+  // hace el propio Google con sus marcadores.
+  const nodos = useRef(new Map<string, HTMLElement>());
+  const colocar = useRef<() => void>(() => undefined);
 
   const [listo, setListo] = useState(false);
   const [fallo, setFallo] = useState(!hayClaveDelNavegador());
 
-  const estilo = useMemo(() => estiloDelMapa(esquema), [esquema]);
+  const identificador = identificadorDelNavegador();
 
-  // Crear el mapa. Una sola vez: recrearlo en cada cambio pierde la cámara y
-  // vuelve a pedir los mosaicos.
+  // Con identificador manda Google Cloud y esto es `undefined`. Los dos a la
+  // vez no se pueden: Google ignora `styles` en cuanto hay `mapId` y lo avisa
+  // por consola.
+  const estilo = useMemo(
+    () => estiloLocalSiHaceFalta(esquema, identificador),
+    [esquema, identificador]
+  );
+
+  // CREAR EL MAPA — y rehacerlo al cambiar de tema, sólo por eso
+  //
+  // `mapId` y `colorScheme` son opciones de construcción: Google no deja
+  // cambiarlas después. Con el estilo en la nube, pasar de día a noche exige
+  // un mapa nuevo.
+  //
+  // Es el precio del estilo en la nube. Se paga dos veces al día, y se
+  // recupera dónde estaba mirando para que no salte a otro sitio.
   useEffect(() => {
     let vigente = true;
 
-    void cargarGoogle().then(cargado => {
+    void (async () => {
+      const cargado = await cargarGoogle();
       if (!vigente) return;
       if (!cargado) return setFallo(true);
 
       const google = (globalThis as Google).google;
       if (!google?.maps || contenedor.current === null) return setFallo(true);
 
-      mapa.current = new google.maps.Map(contenedor.current, {
-        center: { lat: modelo.camara.centro.lat, lng: modelo.camara.centro.lng },
-        zoom: 13,
+      // Con `loading=async` el script NO trae las clases: sólo el cargador.
+      // `google.maps.Map` no existe hasta pedir su biblioteca, y usarlo antes
+      // da «Map is not a constructor», que no dice nada de lo que pasa.
+      const { Map, OverlayView } = await google.maps.importLibrary('maps');
+      if (!vigente || contenedor.current === null) return;
+
+      // Si ya había mapa, se conserva su vista y se limpia el hueco: dos
+      // mapas dentro del mismo contenedor se apilan uno sobre otro.
+      const centroPrevio = mapa.current?.getCenter?.();
+      const zoomPrevio = mapa.current?.getZoom?.();
+      if (mapa.current !== null) contenedor.current.innerHTML = '';
+
+      mapa.current = new Map(contenedor.current, {
+        center: centroPrevio ?? {
+          lat: modelo.camara.centro.lat,
+          lng: modelo.camara.centro.lng
+        },
+        zoom: zoomPrevio ?? 13,
+        // El identificador trae el estilo del dueño. Sin él se usa el JSON
+        // local, que es la red de seguridad.
+        ...(identificador === '' ? { styles: estilo } : { mapId: identificador }),
+        // Elige el estilo claro u oscuro DENTRO del identificador. Manda el
+        // tema de +58express, no `prefers-color-scheme`: la aplicación decide
+        // su hora por Caracas y el mapa tiene que ir con ella.
+        colorScheme: esquema === 'oscuro' ? 'DARK' : 'LIGHT',
         // Los controles de Google se quitan: la aplicación tiene los suyos y
         // dos juegos de botones encima del mismo mapa es un desorden. El
         // logotipo y los créditos NO se tocan — son obligatorios.
         disableDefaultUI: true,
-        clickableIcons: false,
-        styles: estilo
+        clickableIcons: false
       });
+      // Una capa vacía, sólo para que Google diga dónde cae cada coordenada.
+      // Su `draw` se llama en cada movimiento del mapa —arrastrar, ampliar,
+      // animar—, y ahí es donde los marcadores se vuelven a colocar.
+      const superficie = new OverlayView();
+      superficie.onAdd = () => undefined;
+      superficie.onRemove = () => undefined;
+      superficie.draw = () => colocar.current();
+      superficie.setMap(mapa.current);
+      capa.current = superficie;
+
       ultima.current = modelo.camara;
       setListo(true);
-    });
+    })();
 
-    return () => { vigente = false; };
-    // Sin dependencias: se monta una vez y vive mientras viva la pantalla.
+    return () => {
+      vigente = false;
+      capa.current?.setMap(null);
+      capa.current = null;
+    };
+    // Sólo el tema y el identificador rehacen el mapa. El modelo cambia a cada
+    // rato y rehacerlo entonces sería un parpadeo constante.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // El tema. Cambiar el estilo NO remonta el mapa, así que la cámara, los
-  // marcadores y el viaje siguen donde estaban.
-  useEffect(() => {
-    if (mapa.current === null) return;
-    mapa.current.setOptions({ styles: estilo });
-  }, [estilo]);
+  }, [esquema, identificador]);
 
   // La cámara, sólo cuando merece la pena moverse.
   useEffect(() => {
@@ -133,8 +225,12 @@ export function MapaDeMovilidad({ modelo }: { readonly modelo: ModeloDelMapa }) 
     mapa.current.panTo({ lat: modelo.camara.centro.lat, lng: modelo.camara.centro.lng });
 
     // Con dos puntos o más se encuadra todo; con uno, sólo se centra.
+    //
+    // `LatLngBounds` sale del cargador dinámico igual que `Map`, así que se
+    // comprueba antes de usarlo: si aún no llegó, el `panTo` de arriba ya dejó
+    // la cámara en su sitio y sólo se pierde el encuadre holgado.
     const conCoordenadas = modelo.marcadores.length > 1 ? modelo.marcadores : [];
-    if (conCoordenadas.length > 1 && google?.maps) {
+    if (conCoordenadas.length > 1 && typeof google?.maps?.LatLngBounds === 'function') {
       const limites = new google.maps.LatLngBounds();
       for (const marcador of conCoordenadas) {
         limites.extend({ lat: marcador.en.lat, lng: marcador.en.lng });
@@ -143,19 +239,41 @@ export function MapaDeMovilidad({ modelo }: { readonly modelo: ModeloDelMapa }) 
     }
   }, [modelo.camara, modelo.marcadores, modelo.aireInferior, listo]);
 
-  // Los marcadores se pintan como capas encima del contenedor, no con
-  // `google.maps.Marker`: así son las MISMAS piezas de React que en el
-  // teléfono —la moto amarilla aprobada— y no un icono aparte que habría que
-  // mantener en dos sitios.
-  useEffect(() => {
-    if (mapa.current === null || !listo) return;
+  /**
+   * Poner cada marcador donde Google dice que cae su coordenada.
+   *
+   * Se llama en cada movimiento del mapa y toca el DOM directamente: mover
+   * cuatro nodos es barato, repintar React sesenta veces por segundo no.
+   *
+   * Mientras Google no tenga proyección —los primeros fotogramas— los
+   * marcadores se quedan ocultos: más vale que aparezcan un instante tarde a
+   * que aparezcan en el sitio equivocado.
+   */
+  colocar.current = () => {
+    const proyeccion = capa.current?.getProjection?.();
     const google = (globalThis as Google).google;
-    if (!google?.maps) return;
 
-    for (const vivo of marcadoresVivos.current) vivo.setMap(null);
-    marcadoresVivos.current = [];
-    // Los superpuestos se colocan en el efecto de abajo, sobre el DOM.
-  }, [listo]);
+    for (const marcador of modelo.marcadores) {
+      const nodo = nodos.current.get(marcador.clave);
+      if (nodo === undefined) continue;
+
+      const pixel = proyeccion && google?.maps
+        ? proyeccion.fromLatLngToContainerPixel(new google.maps.LatLng(marcador.en.lat, marcador.en.lng))
+        : null;
+
+      if (pixel === null || pixel === undefined) {
+        nodo.style.visibility = 'hidden';
+        continue;
+      }
+
+      const lado = tamanoDelMarcador(marcador);
+      nodo.style.visibility = 'visible';
+      nodo.style.transform = `translate(${pixel.x - lado / 2}px, ${pixel.y - lado / 2}px)`;
+    }
+  };
+
+  // Al cambiar los marcadores hay que recolocarlos aunque el mapa no se mueva.
+  useEffect(() => { colocar.current(); }, [modelo.marcadores, listo]);
 
   if (fallo) return <HuecoDelMapa />;
 
@@ -168,50 +286,39 @@ export function MapaDeMovilidad({ modelo }: { readonly modelo: ModeloDelMapa }) 
         style={{ flex: 1 }}
       />
 
-      {/* Los marcadores, encima. Se colocan en porcentaje respecto a la cámara
-          conocida: no hace falta proyección exacta para que la composición sea
-          la aprobada, y evita mantener dos juegos de iconos. */}
+      {/* Los marcadores, encima del lienzo pero anclados al mapa: su sitio lo
+          da la proyección de Google, así que siguen a las calles cuando el
+          mapa se arrastra o se amplía.
+
+          Se pintan como capas de React y no con `google.maps.Marker` para que
+          sean las MISMAS piezas que en el teléfono —la moto amarilla
+          aprobada— y no un icono aparte que mantener en dos sitios.
+
+          Cada uno se dibuja UNA vez y luego sólo se mueve: su sitio lo pone
+          `colocar()` sobre el nodo, en cada movimiento del mapa. */}
       {listo ? (
         <View pointerEvents="none" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}>
-          {modelo.marcadores.map(marcador => {
-            const lado = tamanoDelMarcador(marcador);
-            const posicion = enPorcentaje(marcador.en, modelo.camara);
-            return (
-              <View
-                key={marcador.clave}
-                style={{
-                  position: 'absolute',
-                  left: `${posicion.x}%`,
-                  top: `${posicion.y}%`,
-                  marginLeft: -lado / 2,
-                  marginTop: -lado / 2
-                }}
-              >
-                <PiezaDelMarcador marcador={marcador} />
-              </View>
-            );
-          })}
+          {modelo.marcadores.map(marcador => (
+            <View
+              key={marcador.clave}
+              ref={(nodo: unknown) => {
+                if (nodo === null) nodos.current.delete(marcador.clave);
+                else nodos.current.set(marcador.clave, nodo as HTMLElement);
+                colocar.current();
+              }}
+              // Oculto hasta que la proyección diga dónde va: en la esquina
+              // superior izquierda se leería como un marcador en el mar.
+              style={{ position: 'absolute', top: 0, left: 0, visibility: 'hidden' }}
+            >
+              <PiezaDelMarcador marcador={marcador} />
+            </View>
+          ))}
         </View>
       ) : null}
 
       {modelo.eligiendoPunto ? <ReticulaCentral /> : null}
     </View>
   );
-}
-
-/**
- * Dónde cae una coordenada dentro de la vista, en porcentaje.
- *
- * Es una proyección plana, no la de Mercator que usa Google. A la escala de una
- * ciudad la diferencia es de píxeles, y a cambio los marcadores son las mismas
- * piezas de React que en el teléfono.
- */
-function enPorcentaje(punto: { lat: number; lng: number }, camara: Camara) {
-  const mitad = camara.abarca / 2;
-  return {
-    x: ((punto.lng - (camara.centro.lng - mitad)) / camara.abarca) * 100,
-    y: (((camara.centro.lat + mitad) - punto.lat) / camara.abarca) * 100
-  };
 }
 
 /**

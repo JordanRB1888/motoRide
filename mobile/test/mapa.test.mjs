@@ -16,7 +16,14 @@ import {
   RADIO_DE_SERVICIO_KM
 } from '../mapa/modelo.ts';
 import { estiloDelMapa, MAPA_DE_DIA, MAPA_DE_NOCHE } from '../mapa/estilos.ts';
-import { VARIABLE_CLAVE_ANDROID, VARIABLE_CLAVE_IOS, VARIABLE_CLAVE_WEB } from '../mapa/claves.ts';
+import {
+  VARIABLE_CLAVE_ANDROID,
+  VARIABLE_CLAVE_IOS,
+  VARIABLE_CLAVE_WEB,
+  VARIABLE_MAPA_ANDROID,
+  VARIABLE_MAPA_IOS,
+  VARIABLE_MAPA_WEB
+} from '../mapa/claves.ts';
 import { AIRE_BAJO_LA_HOJA, mapaDelViaje } from '../domain/mapaDelViaje.ts';
 import { leerDetalle } from '../domain/viajes.ts';
 
@@ -225,15 +232,145 @@ test('ninguna pantalla define su propio estilo de mapa', () => {
   }
 });
 
-test('cambiar de tema NO remonta el mapa', () => {
-  // Remontarlo perdería la cámara y volvería a pedir los mosaicos, y con un
-  // viaje en curso eso se ve como un fallo.
+test('el mapa se rehace por el tema, y por nada más', () => {
+  // Esta prueba decía «cambiar de tema NO remonta el mapa». Dejó de ser
+  // posible al pasar el estilo a Google Cloud: `mapId` y `colorScheme` en el
+  // navegador, y `googleMapId` y `userInterfaceStyle` en el teléfono, son
+  // opciones de CREACIÓN. En react-native-maps sus setters dicen literalmente
+  // «do nothing (initialProp)». No es una decisión nuestra.
+  //
+  // Lo que sigue importando —y es lo que se protege ahora— es que se rehaga
+  // SÓLO por el tema o el identificador. Rehacerlo cuando cambia el modelo
+  // sería un parpadeo continuo, porque el modelo cambia a cada rato.
   const web = sinComentarios('mapa/MapaDeMovilidad.tsx');
-  assert.match(web, /mapa\.current\.setOptions\(\{ styles: estilo \}\)/);
+
+  // Las dependencias del efecto que CREA el mapa, no las de los otros: el de
+  // la cámara sí depende del modelo, y debe seguir haciéndolo.
+  const creacion = web.slice(web.indexOf('new Map(contenedor.current'));
+  assert.ok(web.includes('new Map(contenedor.current'), 'no encuentro dónde se crea el mapa');
+  const dependencias = creacion.match(/\}, \[([^\]]*)\]\);/);
+  assert.ok(dependencias, 'no encuentro las dependencias del efecto que crea el mapa');
+  assert.equal(dependencias[1].trim(), 'esquema, identificador',
+    'el mapa del navegador se rehace por algo que no es el tema');
 
   const nativo = sinComentarios('mapa/MapaDeMovilidad.native.tsx');
-  // El estilo va como propiedad del mismo MapView, no como `key`.
-  assert.equal(/key=\{esquema\}|key=\{estilo/.test(nativo), false);
+  assert.match(nativo, /key=\{`\$\{identificador\}:\$\{esquema\}`\}/);
+
+  // Y que al rehacerlo no se pierda dónde estaba mirando: saltar a otro sitio
+  // al amanecer se lee como un fallo.
+  assert.match(web, /centroPrevio/);
+  assert.match(nativo, /initialRegion=\{region\(ultima\.current \?\? modelo\.camara\)\}/);
+  assert.match(nativo, /onRegionChangeComplete/);
+});
+
+test('los marcadores van pegados al mapa, no a la pantalla', () => {
+  // Se colocaban por regla de tres sobre la cámara del modelo. Al arrastrar el
+  // mapa se quedaban clavados mientras las calles pasaban por debajo: el
+  // marcador de origen dejaba de señalar el origen. Se vio arrastrando el mapa.
+  //
+  // Ahora el sitio lo da la proyección de Google, la misma que coloca sus
+  // propios marcadores.
+  const web = sinComentarios('mapa/MapaDeMovilidad.tsx');
+  assert.match(web, /fromLatLngToContainerPixel/);
+  assert.equal(/enPorcentaje/.test(web), false, 'sigue la proyección inventada');
+
+  // Y se recolocan moviendo el nodo, no repintando: Google llama a `draw()` en
+  // cada fotograma del movimiento, y pedir un repintado de React ahí deja la
+  // página en un bucle. Se probó: la página dejaba de responder.
+  assert.match(web, /superficie\.draw = \(\) => colocar\.current\(\)/);
+  assert.match(web, /nodo\.style\.transform = /);
+
+  // Sin proyección todavía, el marcador se esconde en vez de irse a la esquina
+  // superior izquierda, que se leería como un marcador en mitad del lago.
+  assert.match(web, /nodo\.style\.visibility = 'hidden'/);
+});
+
+test('se espera a que Google esté listo, no a que llegue su fichero', () => {
+  // `loading=async` hace que el script se ejecute y siga preparando la API un
+  // rato. En `onload`, `google.maps.importLibrary` todavía no existe —visto en
+  // el navegador— y el mapa fallaba con «Map is not a constructor». Un instante
+  // después sí está, así que el fallo iba y venía según la red.
+  const web = sinComentarios('mapa/MapaDeMovilidad.tsx');
+  assert.match(web, /&callback=\$\{avisar\}/);
+  assert.equal(/etiqueta\.onload/.test(web), false, 'vuelve a fiarse del onload');
+
+  // Y las clases se piden por biblioteca, que es como funciona el cargador.
+  assert.match(web, /importLibrary\('maps'\)/);
+});
+
+test('la pantalla de validación del mapa no llega a release', () => {
+  // Lleva coordenadas fijas escritas a mano para poder mirar el mapa sin
+  // levantar el backend. En una versión publicada no puede alcanzarse.
+  const pantalla = leer('app/validacion-mapa.tsx');
+  assert.match(pantalla, /if \(!EN_DESARROLLO\) return <Redirect href="\/" \/>;/);
+
+  // Y no habla con nadie: ni API, ni socket, ni sesión.
+  const sinTexto = despojarComentarios(pantalla);
+  for (const prohibido of ['fetch(', 'apiFetch', 'io(', 'useSesion', 'useViajeActivo']) {
+    assert.equal(sinTexto.includes(prohibido), false,
+      `la pantalla de validación usa ${prohibido}`);
+  }
+});
+
+test('el estilo de la nube y el local nunca se aplican a la vez', () => {
+  // Google ignora el JSON de estilo en cuanto hay identificador de mapa. Tener
+  // los dos puestos sería mentir sobre de dónde sale lo que se ve: alguien
+  // cambiaría estos colores, no pasaría nada, y no sabría por qué.
+  const estilos = sinComentarios('mapa/estilos.ts');
+  assert.match(estilos, /export function estiloLocalSiHaceFalta/);
+  assert.match(estilos, /identificadorDeMapa === '' \? estiloDelMapa\(esquema\) : undefined/);
+
+  // Y que la decisión esté en un solo sitio: ningún adaptador puede elegir por
+  // su cuenta, o un día uno de los dos aplicará las dos cosas.
+  for (const fichero of ['mapa/MapaDeMovilidad.tsx', 'mapa/MapaDeMovilidad.native.tsx']) {
+    const codigo = sinComentarios(fichero);
+    assert.match(codigo, /estiloLocalSiHaceFalta\(esquema, identificador\)/, fichero);
+    assert.equal(/estiloDelMapa\(/.test(codigo), false,
+      `${fichero} se salta la decisión y coge el estilo local directamente`);
+  }
+
+  // En el navegador, `styles` y `mapId` van en ramas excluyentes del mismo
+  // objeto de opciones.
+  const web = sinComentarios('mapa/MapaDeMovilidad.tsx');
+  assert.match(web, /identificador === '' \? \{ styles: estilo \} : \{ mapId: identificador \}/);
+});
+
+test('cada plataforma usa su identificador, nunca el de otra', () => {
+  // Google valida el tipo del identificador contra el SDK que lo pide: el de
+  // JavaScript en Android deja el mapa gris y sin explicación.
+  assert.equal(VARIABLE_MAPA_WEB, 'EXPO_PUBLIC_GOOGLE_MAP_ID_WEB');
+  assert.equal(VARIABLE_MAPA_ANDROID, 'EXPO_PUBLIC_GOOGLE_MAP_ID_ANDROID');
+  assert.equal(VARIABLE_MAPA_IOS, 'EXPO_PUBLIC_GOOGLE_MAP_ID_IOS');
+
+  const web = sinComentarios('mapa/MapaDeMovilidad.tsx');
+  assert.match(web, /identificadorDelNavegador\(\)/);
+  assert.equal(/GOOGLE_MAP_ID_ANDROID|GOOGLE_MAP_ID_IOS/.test(web), false,
+    'el navegador nombra el identificador de otra plataforma');
+
+  const nativo = sinComentarios('mapa/MapaDeMovilidad.native.tsx');
+  assert.match(nativo, /Platform\.OS === 'ios' \? identificadorDeIOS\(\) : identificadorDeAndroid\(\)/);
+  assert.equal(/GOOGLE_MAP_ID_WEB|identificadorDelNavegador/.test(nativo), false,
+    'el teléfono nombra el identificador del navegador');
+
+  // Los nombres se leen enteros y literales: Expo sustituye `process.env`
+  // mirando el texto, y una lectura armada devolvería vacío siempre.
+  const claves = sinComentarios('mapa/claves.ts');
+  for (const nombre of [VARIABLE_MAPA_WEB, VARIABLE_MAPA_ANDROID, VARIABLE_MAPA_IOS]) {
+    assert.match(claves, new RegExp(`process\\.env\\.${nombre}`));
+  }
+});
+
+test('el tema del mapa lo manda +58express, no el navegador ni el sistema', () => {
+  // La aplicación decide día y noche por la hora de Caracas. Si el mapa
+  // siguiera al sistema, alguien con el teléfono en claro a las nueve de la
+  // noche vería la aplicación oscura con un mapa blanco dentro.
+  const web = sinComentarios('mapa/MapaDeMovilidad.tsx');
+  assert.match(web, /colorScheme: esquema === 'oscuro' \? 'DARK' : 'LIGHT'/);
+  assert.equal(/prefers-color-scheme|FOLLOW_SYSTEM|matchMedia/.test(web), false);
+
+  const nativo = sinComentarios('mapa/MapaDeMovilidad.native.tsx');
+  assert.match(nativo, /userInterfaceStyle=\{esquema === 'oscuro' \? 'dark' : 'light'\}/);
+  assert.equal(/useColorScheme|Appearance\.|'system'/.test(nativo), false);
 });
 
 // ---------------------------------------------------------------------------
