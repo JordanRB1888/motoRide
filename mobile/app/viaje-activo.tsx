@@ -28,6 +28,7 @@ import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { useViajeActivo } from '../realtime/ViajeActivo';
 import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
+import { useUbicacionEnVivo } from '../realtime/UbicacionEnVivo';
 import { mapaDelViaje } from '../domain/mapaDelViaje';
 import {
   datosDelViaje,
@@ -40,6 +41,7 @@ export default function PantallaDelViajeActivo() {
   const { sesion } = useSesion();
   const { estado, viaje } = useViajeActivo();
   const { estado: ubicacion, pedirUbicacion, refrescar } = useUbicacion();
+  const { conductor } = useUbicacionEnVivo();
 
   // Se pide el permiso AQUI y no al abrir la aplicacion.
   //
@@ -87,10 +89,16 @@ export default function PantallaDelViajeActivo() {
   //
   // La tuya sí, cuando el GPS la sepa. Si no hay permiso o todavía no llegó,
   // `posicion` es null y el marcador sencillamente no se pinta.
+  // La moto de verdad, cuando el servidor dice donde esta. `conductor` ya
+  // viene filtrado por conductor asignado y por viaje, y desaparece solo
+  // cuando su posicion deja de ser reciente: enseniar la de hace cinco minutos
+  // mandaria a alguien a una esquina donde la moto ya no esta.
   const mapa = mapaDelViaje(viaje, {
     usuarioEn: ubicacion.posicion === null
       ? null
       : { lat: ubicacion.posicion.lat, lng: ubicacion.posicion.lng },
+    conductorEn: conductor?.en ?? null,
+    rumboDelConductor: conductor?.rumbo ?? null,
     centrarEn
   });
 

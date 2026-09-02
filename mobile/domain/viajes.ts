@@ -120,6 +120,17 @@ export function leerHistorial(cuerpo: unknown): readonly ViajeDeHistorial[] {
 // ---------------------------------------------------------------------------
 
 export interface ParticipanteDeViaje {
+  /**
+   * El identificador que usa el servidor.
+   *
+   * Hace falta para saber si un evento de posicion en vivo es de ESTA moto o
+   * de otra: `driverLocationUpdated` viaja con `driverId` y hay que poder
+   * compararlo. `null` cuando el servidor no lo publica.
+   *
+   * No se ensena en ninguna pantalla ni se usa como autoridad: la identidad
+   * sigue saliendo de la sesion firmada.
+   */
+  readonly id: string | null;
   readonly nombre: string;
   readonly vehiculo: string;
   readonly placa: string;
@@ -282,7 +293,14 @@ function leerConductor(persona: unknown, tipoDeVehiculo: string): ParticipanteDe
     ? dato.rating.toFixed(1).replace('.', ',')
     : null;
 
-  return { nombre, vehiculo, placa: texto(dato.vehiclePlate), valoracion: nota };
+  const identificador = texto(dato.id);
+  return {
+    id: identificador === '' ? null : identificador,
+    nombre,
+    vehiculo,
+    placa: texto(dato.vehiclePlate),
+    valoracion: nota
+  };
 }
 
 // ---------------------------------------------------------------------------

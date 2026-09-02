@@ -319,11 +319,17 @@ test('no se registran secretos', () => {
 
 test('NO se emite ningún evento de despacho todavía', () => {
   // El transporte ya podría, y por eso hace falta la prueba.
+  //
+  // Los dos de UBICACION salieron de la lista en LOCATION-INTEGRATION-1B: el
+  // dueño los autorizó y ya se emiten, con su regulador y sus reglas de
+  // calidad. Lo que sigue vedado es el NEGOCIO — pedir, aceptar, cancelar,
+  // cambiar de estado o hablar por el chat—, que necesita sus pantallas y sus
+  // confirmaciones antes de poder dispararse desde aquí.
   const carpetas = ['realtime', 'app', 'preview', 'services'];
   const prohibidos = [
     'rideRequested', 'rideAccepted', 'rideRejected', 'rideCancelled',
     'tripStatusUpdated', 'tripRated', 'chat:send_message',
-    'driver:connect', 'driver:location', 'passenger:location_update'
+    'driver:connect', 'driver:status'
   ];
 
   for (const carpeta of carpetas) {
@@ -343,13 +349,35 @@ test('NO se emite ningún evento de despacho todavía', () => {
     }
   }
 
-  // Y el transporte no expone ninguna forma de emitir.
-  assert.equal(/export function emitir|\.emit\(/.test(sinComentarios('realtime/socket.ts')), false,
-    'el transporte ya deja emitir');
+  // Y el transporte no expone una forma GENERICA de emitir.
+  //
+  // Esta linea prohibia cualquier `.emit(`. Dejo de valer cuando el dueno
+  // autorizo la ubicacion: ahora hay dos emisores, pero siguen siendo dos
+  // funciones concretas con su nombre de evento escrito. La defensa que
+  // importa es que nadie pueda mandar un evento ARBITRARIO — con un
+  // `emitir(evento, payload)` la lista de lo que este cliente es capaz de
+  // decir dejaria de poder leerse en ningun sitio.
+  const transporte = sinComentarios('realtime/socket.ts');
+
+  assert.equal(/export function emitir\b|export function emit\b/.test(transporte), false,
+    'el transporte expone un emisor generico');
+
+  // Cada emision lleva su evento escrito, nunca una variable.
+  const emisiones = transporte.match(/\.emit\(([^,)]+)/g) ?? [];
+  for (const emision of emisiones) {
+    assert.match(emision, /\.emit\('[a-z:_]+'/,
+      `hay una emision con el evento en una variable: ${emision}`);
+  }
+
+  // Y son exactamente las dos autorizadas.
+  const eventosEmitidos = emisiones.map(e => e.replace(/\.emit\('/, '').replace(/'$/, ''));
+  assert.deepEqual(eventosEmitidos.sort(), ['driver:location', 'passenger:location_update']);
 });
 
 test('el inventario separa lo conectado de lo pendiente', () => {
-  // Ninguno de los pendientes se escucha todavía.
+  // Ninguno de los pendientes se escucha todavía. Los cuatro de ubicacion
+  // salieron de esa lista en LOCATION-INTEGRATION-1B porque ya tienen
+  // consumidor: nombrar un evento no lo activa, conectarlo si.
   for (const pendiente of EVENTOS_PENDIENTES) {
     assert.equal(EVENTOS_DEL_SERVIDOR.includes(pendiente), false, `«${pendiente}» ya se escucha`);
   }

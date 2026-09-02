@@ -205,6 +205,67 @@ export function escuchar(evento: EventoDelServidor, escucha: Escucha): () => voi
   return () => { socket?.off(evento, envoltorio); };
 }
 
+/**
+ * Mandar la posición del conductor.
+ *
+ * POR QUÉ NO HAY UN `emitir(evento, payload)` GENÉRICO
+ *
+ * Porque entonces cualquier componente podría mandar cualquier cosa, y la
+ * lista de lo que este cliente es capaz de emitir dejaría de poder leerse en
+ * ningún sitio. Con funciones concretas, lo que sale por el socket son estas
+ * dos cosas y se puede comprobar de un vistazo — y con una prueba.
+ *
+ * LA IDENTIDAD NO VA EN EL PAYLOAD
+ *
+ * Ni `driverId`, ni `userId`, ni el rol. El servidor los saca de la sesión
+ * firmada (`socket.data.auth.userId`) y **ignora** lo que venga en el mensaje.
+ * Mandarlos sugeriría que sirven para algo, y el día que alguien se fiara de
+ * ellos tendría un agujero de suplantación.
+ *
+ * EL RUMBO SÓLO SI SE SABE
+ *
+ * El servidor rellena `heading: 0` cuando no llega, así que mandar un cero
+ * inventado es indistinguible de decir «mira al norte». Si no se sabe, no se
+ * manda el campo.
+ */
+export function enviarUbicacionDeConductor(
+  posicion: { lat: number; lng: number; rumbo?: number | null }
+): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('driver:location', {
+    latitude: posicion.lat,
+    longitude: posicion.lng,
+    ...(typeof posicion.rumbo === 'number' && Number.isFinite(posicion.rumbo)
+      ? { heading: posicion.rumbo }
+      : {})
+  });
+  return true;
+}
+
+/**
+ * Mandar la posición de la pasajera.
+ *
+ * El servidor sólo la acepta si esa pasajera tiene un viaje en curso, y con
+ * ella actualiza el punto de recogida del viaje. Por eso `viajeId` viaja en el
+ * mensaje: no como autoridad —el servidor busca el viaje por la sesión— sino
+ * porque el contrato ya probado en la web lo incluye.
+ */
+export function enviarUbicacionDePasajera(
+  posicion: { lat: number; lng: number; rumbo?: number | null },
+  viajeId: string | null
+): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('passenger:location_update', {
+    ...(viajeId === null ? {} : { tripId: viajeId }),
+    latitude: posicion.lat,
+    longitude: posicion.lng,
+    ...(typeof posicion.rumbo === 'number' && Number.isFinite(posicion.rumbo)
+      ? { heading: posicion.rumbo }
+      : {})
+  });
+  return true;
+}
+
 /** Sólo para las pruebas: si hay socket abierto ahora mismo. */
 export function hayConexion(): boolean {
   return socket !== null;

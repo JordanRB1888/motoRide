@@ -35,6 +35,7 @@ import { ProveedorDeSesion } from '../context/AuthContext';
 import { ProveedorDeTiempoReal } from '../realtime/ProveedorDeTiempoReal';
 import { ProveedorDeViajeActivo } from '../realtime/ViajeActivo';
 import { ProveedorDeUbicacion } from '../ubicacion/UbicacionDelDispositivo';
+import { ProveedorDeUbicacionEnVivo } from '../realtime/UbicacionEnVivo';
 import { ProveedorDeTema } from '../theme/ThemeContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
@@ -123,6 +124,10 @@ export default function DisposicionRaiz() {
               cuando el usuario esta haciendo algo que lo justifica: un permiso
               que salta nada mas abrir la aplicacion se deniega casi siempre. */}
           <ProveedorDeUbicacion>
+          {/* La ubicacion saliendo y entrando por el socket. Va DENTRO del
+              proveedor de ubicacion y del viaje activo porque necesita a los
+              dos: de uno saca que mandar, del otro a que conductor escuchar. */}
+          <ProveedorDeUbicacionEnVivo>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -134,6 +139,7 @@ export default function DisposicionRaiz() {
               animation: 'slide_from_right'
             }}
           />
+          </ProveedorDeUbicacionEnVivo>
           </ProveedorDeUbicacion>
           </ProveedorDeViajeActivo>
           </ProveedorDeTiempoReal>

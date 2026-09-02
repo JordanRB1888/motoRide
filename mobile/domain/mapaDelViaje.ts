@@ -106,7 +106,16 @@ export function mapaDelViaje(
       rumbo: opciones.rumboDelConductor ?? null,
       destacado: true
     });
-    puntos.push(conductorEn);
+    // NO entra en el encuadre, y esto cambia en LOCATION-INTEGRATION-1B.
+    //
+    // Antes entraba porque su posicion era fija: llegaba una vez con el viaje
+    // y no se movia. Ahora llega por el socket cada pocos segundos, y si
+    // siguiera dentro del encuadre el mapa se reajustaria con cada evento —le
+    // quitaria el mapa de las manos a quien lo esta arrastrando para mirar su
+    // calle, y ademas justo mientras la moto se acerca, que es cuando mas se
+    // mira la pantalla.
+    //
+    // El marcador se mueve; la camara se queda donde el usuario la dejo.
   }
 
   // DONDE ESTA QUIEN MIRA

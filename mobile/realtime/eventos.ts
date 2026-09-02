@@ -79,6 +79,38 @@ export const EVENTOS_DEL_SERVIDOR = [
    */
   'dispatch:no_drivers',
 
+  /**
+   * El conductor se movió.
+   *
+   * Fuente: `emitDriverLocation()` en `server/index.js`, que lo manda a
+   * administración, al propio conductor y —sólo si tiene viaje activo— al
+   * pasajero de ESE viaje.
+   *
+   * Payload: `{lat, lng, heading, updatedAt, driverId, userId, tripId}`. El
+   * `heading` siempre viene: el servidor pone cero cuando el cliente no lo
+   * mandó, así que un cero no distingue «al norte» de «no se sabe».
+   */
+  'driverLocationUpdated',
+
+  /**
+   * La pasajera se movió.
+   *
+   * Fuente: el manejador de `passenger:location_update`, que lo manda al
+   * conductor del viaje y a administración. Este cliente lo declara para tener
+   * el inventario completo; hoy no lo consume nadie en el móvil.
+   */
+  'passengerLocationUpdated',
+
+  /**
+   * El servidor no aceptó una posición.
+   *
+   * Fuente: `driver:location_rejected` con `INVALID_COORDINATES` o
+   * `DATABASE_WRITE_FAILED`; `passenger:location_rejected` sólo con el
+   * segundo. Ninguno lleva coordenadas.
+   */
+  'driver:location_rejected',
+  'passenger:location_rejected',
+
   /** El socket rechaza algo. Fuente: el limitador de conexiones y el envoltorio de eventos. */
   'socket:error',
   /** Demasiados eventos en poco tiempo. Se avisa UNA vez por ventana. */
@@ -104,10 +136,11 @@ export const EVENTOS_PENDIENTES = [
   'rideRequested', 'rideRequestFailed', 'rideAcceptanceFailed',
   'rideCancellationRejected', 'tripStatusRejected',
   // Conductor — DRIVER-INTEGRATION
-  'driver:connected', 'driver:status_rejected', 'driver:location_rejected',
-  'driverLocationUpdated', 'driverStatusChanged',
-  // Pasajera
-  'passengerLocationUpdated', 'passenger:location_rejected',
+  //
+  // Los cuatro de ubicacion salieron de aqui en LOCATION-INTEGRATION-1B: ya
+  // tienen consumidor. Lo que queda es la presencia y el estado del conductor,
+  // que necesitan su propia pantalla.
+  'driver:connected', 'driver:status_rejected', 'driverStatusChanged',
   // Chat en vivo — CHAT-INTEGRATION
   'chat:message', 'chat:error',
   // Cartera y calificación
