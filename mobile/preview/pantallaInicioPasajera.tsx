@@ -75,6 +75,45 @@ function useMovimientoReducido(): boolean {
 
 type Servicio = (typeof SERVICIOS_DE_INICIO)[number];
 type Campana = (typeof CAMPANAS_DEMO)[number];
+type Lugar = (typeof LUGARES_DEMO)[number];
+
+/**
+ * Lo que esta pantalla enseña y NO decide.
+ *
+ * Quién eres, a cuánto está el dólar, cuántos avisos tienes sin leer, tus
+ * sitios guardados, las campañas y si hay aliados que enseñar. En el recorrido
+ * de diseño salen de los fixtures; en la aplicación real, de la sesión y del
+ * servidor. La pantalla es la misma en los dos sitios: lo único que cambia es
+ * de dónde vienen los datos.
+ *
+ * Todo lo que no llega, no se pinta. Una campaña de ejemplo o «Bs. 000,00» en
+ * la aplicación de alguien que va a pagar es una mentira, y ninguna sección
+ * vale tanto como para inventarla.
+ */
+export interface DatosDelInicio {
+  readonly nombre: string;
+  readonly iniciales: string;
+  /** Debajo del nombre. `null` si no hay nada real que decir ahí. */
+  readonly zona: string | null;
+  /** La tasa del día. `null` mientras no exista una de verdad. */
+  readonly tasa: { readonly etiqueta: string; readonly valor: string } | null;
+  readonly avisosSinLeer: number;
+  readonly lugares: readonly Lugar[];
+  readonly campanas: readonly Campana[];
+  readonly conAliados: boolean;
+}
+
+/** Los datos del recorrido de diseño. Sólo ahí. */
+const DATOS_DEMO: DatosDelInicio = Object.freeze({
+  nombre: PASAJERA_DEMO.nombre,
+  iniciales: PASAJERA_DEMO.iniciales,
+  zona: PASAJERA_DEMO.zona,
+  tasa: TASA_DEMO,
+  avisosSinLeer: AVISOS_DEMO.filter(aviso => aviso.sinLeer).length,
+  lugares: LUGARES_DEMO,
+  campanas: CAMPANAS_DEMO,
+  conAliados: true
+});
 
 // ---------------------------------------------------------------------------
 // La cabecera
@@ -88,7 +127,7 @@ type Campana = (typeof CAMPANAS_DEMO)[number];
  * manda el otro: en Venezuela la tasa se consulta a todas horas y esta es la
  * pantalla que más se abre.
  */
-function Cabecera() {
+function Cabecera({ datos }: { readonly datos: DatosDelInicio }) {
   const arriba = useAireDeArriba();
   const tema = useTema();
   const ir = useIr();
@@ -111,29 +150,36 @@ function Cabecera() {
         justifyContent: 'center',
         backgroundColor: tema.color.superficieElevada
       }}>
-        <Txt nivel="etiqueta">{PASAJERA_DEMO.iniciales}</Txt>
+        <Txt nivel="etiqueta">{datos.iniciales}</Txt>
       </View>
 
       <View style={{ flex: 1, gap: 1 }}>
-        <Txt nivel="encabezado" numberOfLines={1}>Hola, {PASAJERA_DEMO.nombre.split(' ')[0]}</Txt>
-        <Txt nivel="pie" tono="tenue" numberOfLines={1}>{PASAJERA_DEMO.zona}</Txt>
+        <Txt nivel="encabezado" numberOfLines={1}>Hola, {datos.nombre.split(' ')[0]}</Txt>
+        {datos.zona !== null && (
+          <Txt nivel="pie" tono="tenue" numberOfLines={1}>{datos.zona}</Txt>
+        )}
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${TASA_DEMO.etiqueta}, ${TASA_DEMO.valor}`}
-        onPress={() => ir('saldo')}
-        style={{ alignItems: 'flex-end', gap: 1 }}
-      >
-        <Txt nivel="pie" tono="tenue">{TASA_DEMO.etiqueta}</Txt>
-        <Txt nivel="etiqueta" tono="acento">{TASA_DEMO.valor}</Txt>
-      </Pressable>
+      {/* Sólo con una tasa de verdad. Con el cambio apagado no hay ninguna,
+          y «Bs. 000,00» en la pantalla de alguien que va a pagar es una
+          cifra falsa, no un hueco. */}
+      {datos.tasa !== null && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${datos.tasa.etiqueta}, ${datos.tasa.valor}`}
+          onPress={() => ir('saldo')}
+          style={{ alignItems: 'flex-end', gap: 1 }}
+        >
+          <Txt nivel="pie" tono="tenue">{datos.tasa.etiqueta}</Txt>
+          <Txt nivel="etiqueta" tono="acento">{datos.tasa.valor}</Txt>
+        </Pressable>
+      )}
 
       {/* El componente compartido, no un dibujo repetido: el punto de «sin
           leer» sale de los avisos de verdad, y redibujarlo aquí dejaría un
           punto encendido para siempre. */}
       <Campana
-        sinLeer={AVISOS_DEMO.filter(aviso => aviso.sinLeer).length}
+        sinLeer={datos.avisosSinLeer}
         onPress={() => ir('avisos')}
       />
     </View>
@@ -447,19 +493,30 @@ function TarjetaDeCampana({ dato }: { readonly dato: Campana }) {
 // La pantalla
 // ---------------------------------------------------------------------------
 
-export function C2InicioPasajera() {
+export function C2InicioPasajera({ datos = DATOS_DEMO }: {
+  /**
+   * Sin nada, los datos de ejemplo: es el recorrido de diseño. La aplicación
+   * real pasa los suyos —de la sesión y del servidor— y esta misma pantalla
+   * los pinta.
+   */
+  readonly datos?: DatosDelInicio;
+} = {}) {
   const tema = useTema();
   const ir = useIr();
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
-        <Cabecera />
+        <Cabecera datos={datos} />
 
         <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
           <CampoDeDestino onPress={() => ir('pedir')} />
-          <View style={{ height: tema.ritmo.entreElementos }} />
-          <LugaresGuardados lugares={LUGARES_DEMO} onNuevo={() => undefined} />
+          {datos.lugares.length > 0 && (
+            <>
+              <View style={{ height: tema.ritmo.entreElementos }} />
+              <LugaresGuardados lugares={datos.lugares} onNuevo={() => undefined} />
+            </>
+          )}
 
           <View style={{ marginTop: tema.ritmo.entreBloques }}>
             <Txt nivel="encabezado" centrado accessibilityRole="header">¿Qué necesitas hoy?</Txt>
@@ -477,16 +534,23 @@ export function C2InicioPasajera() {
             </View>
           </View>
 
-          <Carrusel titulo="Lo que está pasando" paso={310}>
-            {CAMPANAS_DEMO.map(dato => (
-              <TarjetaDeCampana key={dato.clave} dato={dato} />
-            ))}
-          </Carrusel>
+          {/* Las campañas y los aliados los gestiona administración. Mientras
+              no lleguen de verdad, no se enseñan: una campaña de ejemplo en la
+              aplicación real es publicidad de algo que no existe. */}
+          {datos.campanas.length > 0 && (
+            <Carrusel titulo="Lo que está pasando" paso={310}>
+              {datos.campanas.map(dato => (
+                <TarjetaDeCampana key={dato.clave} dato={dato} />
+              ))}
+            </Carrusel>
+          )}
 
-          <AdelantoDeAliados
-            onVerTodos={() => ir('comercios')}
-            onAbrir={() => ir('comercio')}
-          />
+          {datos.conAliados && (
+            <AdelantoDeAliados
+              onVerTodos={() => ir('comercios')}
+              onAbrir={() => ir('comercio')}
+            />
+          )}
         </View>
       </ScrollView>
 

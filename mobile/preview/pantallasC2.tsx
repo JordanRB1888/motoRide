@@ -406,12 +406,14 @@ export function C2PedirViaje() {
             <FilaDeVehiculo
               tipo="MOTO"
               minutos={4}
+              precio={PRECIO_DE_EJEMPLO}
               activa={vehiculo === 'MOTO'}
               onPress={() => setVehiculo('MOTO')}
             />
             <FilaDeVehiculo
               tipo="AUTO"
               minutos={7}
+              precio={PRECIO_DE_EJEMPLO}
               activa={vehiculo === 'AUTO'}
               onPress={() => setVehiculo('AUTO')}
             />
@@ -542,12 +544,14 @@ export function C2ConfirmarViaje() {
               <FilaDeVehiculo
                 tipo="MOTO"
                 minutos={4}
+                precio={PRECIO_DE_EJEMPLO}
                 activa={vehiculo === 'MOTO'}
                 onPress={() => setVehiculo('MOTO')}
               />
               <FilaDeVehiculo
                 tipo="AUTO"
                 minutos={7}
+                precio={PRECIO_DE_EJEMPLO}
                 activa={vehiculo === 'AUTO'}
                 onPress={() => setVehiculo('AUTO')}
               />
@@ -578,8 +582,27 @@ export function C2ConfirmarViaje() {
  * Se EXPORTA para que la pantalla real de pedir use exactamente esta, y no una
  * copia parecida: dos formas de ensenar lo mismo acaban separandose.
  */
-export function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
+/**
+ * El precio que ensena una tarjeta de vehiculo.
+ *
+ * `bolivares` va aparte y puede faltar: con el cambio apagado no hay tasa, y
+ * «Bs. 0,00» al lado de un importe real seria una cifra inventada.
+ */
+export interface PrecioDeTarjeta {
+  readonly dolares: string;
+  readonly bolivares: string | null;
+}
+
+/** El hueco del recorrido de diseno. Solo ahi: es un dibujo, no un precio. */
+export const PRECIO_DE_EJEMPLO: PrecioDeTarjeta = Object.freeze({ dolares: '$0,00', bolivares: 'Bs. 0,00' });
+
+export function FilaDeVehiculo({ tipo, minutos, precio, activa, onPress }: {
   readonly tipo: TipoDeVehiculo;
+  /**
+   * Cuanto cuesta. OPCIONAL: sin precio del servidor la tarjeta no pinta
+   * ninguno. Un «$0,00» esperando se lee como una cotizacion de cero.
+   */
+  readonly precio?: PrecioDeTarjeta;
   /**
    * Cuanto tarda en llegar. OPCIONAL, y casi siempre ausente.
    *
@@ -634,10 +657,14 @@ export function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
         </Txt>
       </View>
 
-      <View style={{ alignItems: 'flex-end', gap: 1 }}>
-        <Txt nivel="encabezado" tono={activa ? 'acento' : 'secundario'}>$0,00</Txt>
-        <Txt nivel="pie" tono="tenue">Bs. 0,00</Txt>
-      </View>
+      {precio !== undefined && (
+        <View style={{ alignItems: 'flex-end', gap: 1 }}>
+          <Txt nivel="encabezado" tono={activa ? 'acento' : 'secundario'}>{precio.dolares}</Txt>
+          {precio.bolivares !== null && (
+            <Txt nivel="pie" tono="tenue">{precio.bolivares}</Txt>
+          )}
+        </View>
+      )}
     </Pressable>
   );
 }

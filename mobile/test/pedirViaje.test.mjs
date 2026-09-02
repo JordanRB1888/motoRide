@@ -305,7 +305,7 @@ test('NO se inventa ETA ni descuentos', () => {
 
   // Y las tarjetas de vehículo se pintan SIN minutos: nadie sabe cuánto tarda
   // en llegar una moto.
-  assert.match(pantalla, /<FilaDeVehiculo tipo="MOTO" activa=/);
+  assert.match(pantalla, /<FilaDeVehiculo\s+tipo="MOTO"\s+activa=/);
   assert.equal(/<FilaDeVehiculo[^>]*minutos=/.test(pantalla), false,
     'se pintan minutos de llegada inventados');
 });
@@ -457,7 +457,7 @@ test('la pantalla aprobada no se rediseñó', () => {
   // Las tarjetas de moto y auto que el dueño puso en lugar de los destinos
   // recientes son las MISMAS: se importan del recorrido de diseño.
   const pantalla = sinComentarios('app/pedir.tsx');
-  assert.match(pantalla, /import \{ FilaDeVehiculo \} from '\.\.\/preview\/pantallasC2'/);
+  assert.match(pantalla, /import \{ FilaDeVehiculo, type PrecioDeTarjeta \} from '\.\.\/preview\/pantallasC2'/);
   assert.match(pantalla, /CÓMO QUIERES IR/);
   // Y el resto de piezas también son las aprobadas, no copias.
   for (const pieza of ['HojaInferior', 'LienzoDeMapa', 'Trayecto', 'BarraDeNavegacion', 'ControlDePedido']) {

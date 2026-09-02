@@ -36,13 +36,13 @@ import { HojaInferior } from '../ui/HojaInferior';
 import { LienzoDeMapa } from '../ui/Mapa';
 import { Trayecto } from '../ui/Trayecto';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
-import { FilaDeVehiculo } from '../preview/pantallasC2';
+import { FilaDeVehiculo, type PrecioDeTarjeta } from '../preview/pantallasC2';
 import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { useViajeActivo } from '../realtime/ViajeActivo';
 import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
-import { CAMARA_DE_MARACAIBO } from '../mapa/modelo';
+import { CAMARA_DE_MARACAIBO, distanciaKm } from '../mapa/modelo';
 import { crearViaje, pedirEstimacion } from '../services/pedido';
 import {
   metricasDelRecorrido,
@@ -55,6 +55,12 @@ import {
   type QueFalta,
   type TipoEnLaPantalla
 } from '../domain/pedirViaje';
+
+/**
+ * Menos de esto no es moverse: es el reticulo sin tocar sobre donde ya estas.
+ * Cincuenta metros son media cuadra de Maracaibo.
+ */
+const DISTANCIA_MINIMA_KM = 0.05;
 
 /** Lo que se le dice a quien no puede pedir todavía. */
 const AVISO: Readonly<Record<QueFalta, string>> = Object.freeze({
@@ -190,23 +196,54 @@ export default function PantallaDePedir() {
 
   const trabajando = fase === 'ESTIMANDO' || fase === 'PIDIENDO';
 
+  // EL MODELO DEL MAPA SE MEMORIZA, Y NO ES UN DETALLE
+  //
+  // El mapa nativo mueve la camara cuando cambia `modelo.camara` POR
+  // IDENTIDAD. Construir el modelo inline hacia que cada `setDestino`
+  // fabricara una camara nueva, el mapa se moviera, avisara de su centro y
+  // volviera a `setDestino`: un bucle que React corta con «Maximum update
+  // depth exceeded». Se vio en el emulador, no en las pruebas.
+  //
+  // Solo depende del origen: la camara arranca sobre ti y el reticulo esta
+  // siempre puesto, elijas lo que elijas.
+  const modelo = useMemo(() => ({
+    camara: origen === null
+      ? CAMARA_DE_MARACAIBO
+      : { ...CAMARA_DE_MARACAIBO, centro: { lat: origen.lat, lng: origen.lng } },
+    marcadores: [],
+    ruta: [],
+    // El reticulo de «mueve el mapa, no el pin»: el centro es lo que se
+    // esta eligiendo.
+    eligiendoPunto: true,
+    aireInferior: 0
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [origen?.lat, origen?.lng]);
+
+  // El importe del servidor, solo en la tarjeta del vehiculo que se estimo.
+  const precioDeTarjeta = (vehiculo: TipoEnLaPantalla): PrecioDeTarjeta | undefined => {
+    if (estimacion === null || estimacion.tipo !== vehiculo) return undefined;
+    return {
+      dolares: `$${estimacion.dolares.toFixed(2)}`,
+      bolivares: estimacion.bolivares === null ? null : `Bs. ${estimacion.bolivares.toFixed(2)}`
+    };
+  };
+
   return (
     <ProveedorDeNavegacion ir={irA}>
       <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
         <LienzoDeMapa
           conControles={false}
-          modelo={{
-            camara: origen === null
-              ? CAMARA_DE_MARACAIBO
-              : { ...CAMARA_DE_MARACAIBO, centro: { lat: origen.lat, lng: origen.lng } },
-            marcadores: [],
-            ruta: [],
-            // El retículo de «mueve el mapa, no el pin»: mientras no haya
-            // destino, el centro es lo que se está eligiendo.
-            eligiendoPunto: true,
-            aireInferior: 0
-          }}
-          onCentro={centro => setDestino({
+          modelo={modelo}
+          onCentro={centro => {
+            // El reticulo arranca centrado en donde estas. Hasta que el mapa se
+            // mueva de ahi, no hay destino: un viaje a donde ya estas no es un
+            // viaje, y «el punto que elegiste» seria mentira antes de elegir.
+            if (origen !== null && distanciaKm(origen, centro) < DISTANCIA_MINIMA_KM) return;
+            // Y el mismo punto dos veces tampoco: el mapa avisa al asentarse
+            // aunque nadie lo haya tocado, y apuntarlo otra vez seria repintar
+            // para nada.
+            if (destino !== null && distanciaKm(destino, centro) < 0.001) return;
+            setDestino({
             lat: centro.lat,
             lng: centro.lng,
             // Sin dirección: se eligió un punto en el mapa, no un sitio con
@@ -214,7 +251,8 @@ export default function PantallaDePedir() {
             direccion: null,
             precision: null,
             fuente: 'mapa'
-          })}
+            });
+          }}
         >
           <HojaInferior estado="media" desplazable>
             <Trayecto
@@ -227,8 +265,21 @@ export default function PantallaDePedir() {
             <View style={{ paddingTop: 4, gap: 8 }}>
               {/* Sin minutos: nadie sabe cuánto tarda en llegar una moto, y
                   ponerlo sería prometer una hora que no se puede cumplir. */}
-              <FilaDeVehiculo tipo="MOTO" activa={tipo === 'MOTO'} onPress={() => setTipo('MOTO')} />
-              <FilaDeVehiculo tipo="AUTO" activa={tipo === 'AUTO'} onPress={() => setTipo('AUTO')} />
+              {/* Y sin precio hasta que el servidor lo diga: la tarjeta elegida
+                  ensena el importe de la estimacion, la otra nada. Un «$0,00»
+                  esperando se leeria como una cotizacion de cero. */}
+              <FilaDeVehiculo
+                tipo="MOTO"
+                activa={tipo === 'MOTO'}
+                precio={precioDeTarjeta('MOTO')}
+                onPress={() => setTipo('MOTO')}
+              />
+              <FilaDeVehiculo
+                tipo="AUTO"
+                activa={tipo === 'AUTO'}
+                precio={precioDeTarjeta('AUTO')}
+                onPress={() => setTipo('AUTO')}
+              />
             </View>
 
             {/* EL PRECIO, TAL COMO LO DIJO EL SERVIDOR
