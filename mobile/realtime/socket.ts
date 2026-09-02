@@ -302,6 +302,23 @@ export function pedirEstadoDeConductor(
   return true;
 }
 
+/**
+ * Cancelar el viaje que se está buscando.
+ *
+ * El servidor comprueba que el viaje es de quien lo pide —la identidad sale de
+ * la sesión firmada, no del mensaje— y que su estado admite cancelarse. Si algo
+ * no cuadra responde `rideCancellationRejected` con el motivo; si va bien,
+ * `rideCancelled`.
+ *
+ * Devuelve si el mensaje llegó a salir. Que salga NO significa que esté
+ * cancelado: eso lo dice el servidor, y hasta entonces el viaje sigue vivo.
+ */
+export function cancelarViaje(viajeId: string): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('rideCancelled', { tripId: viajeId });
+  return true;
+}
+
 /** Sólo para las pruebas: si hay socket abierto ahora mismo. */
 export function hayConexion(): boolean {
   return socket !== null;

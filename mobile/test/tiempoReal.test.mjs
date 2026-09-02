@@ -337,8 +337,13 @@ test('NO se emite ningún evento de despacho todavía', () => {
   // su pantalla. Siguen vedados los que MUEVEN UN VIAJE — pedir, aceptar,
   // rechazar, cancelar, cambiar de estado, calificar y hablar por el chat—,
   // que necesitan sus pantallas y sus confirmaciones antes de dispararse.
+  //
+  // `rideCancelled` sale en PASSENGER-TRIP-1: la pasajera ya puede cancelar la
+  // busqueda, con la confirmacion del servidor y sin limpiar nada por su
+  // cuenta. Siguen vedados los que mueven un viaje desde el lado del
+  // CONDUCTOR y los que todavia no tienen pantalla.
   const prohibidos = [
-    'rideRequested', 'rideAccepted', 'rideRejected', 'rideCancelled',
+    'rideRequested', 'rideAccepted', 'rideRejected',
     'tripStatusUpdated', 'tripRated', 'chat:send_message'
   ];
 
@@ -375,14 +380,17 @@ test('NO se emite ningún evento de despacho todavía', () => {
   // Cada emision lleva su evento escrito, nunca una variable.
   const emisiones = transporte.match(/\.emit\(([^,)]+)/g) ?? [];
   for (const emision of emisiones) {
-    assert.match(emision, /\.emit\('[a-z:_]+'/,
+    assert.match(emision, /\.emit\('[a-zA-Z:_]+'/,
       `hay una emision con el evento en una variable: ${emision}`);
   }
 
   // Y son exactamente las autorizadas: dos de ubicacion y dos de presencia.
   const eventosEmitidos = emisiones.map(e => e.replace(/\.emit\('/, '').replace(/'$/, ''));
+  // `rideCancelled` entra en PASSENGER-TRIP-1: la pasajera cancela su propia
+  // busqueda. Sigue siendo una funcion concreta con su evento escrito.
   assert.deepEqual(eventosEmitidos.sort(), [
-    'driver:connect', 'driver:location', 'driver:status', 'passenger:location_update'
+    'driver:connect', 'driver:location', 'driver:status', 'passenger:location_update',
+    'rideCancelled'
   ]);
 });
 

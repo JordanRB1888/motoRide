@@ -71,6 +71,19 @@ export const EVENTOS_DEL_SERVIDOR = [
   'rideCancelled',
 
   /**
+   * La cancelacion NO se acepto.
+   *
+   * Fuente: `socket.emit('rideCancellationRejected', { tripId, error, status })`
+   * con `TRIP_NOT_FOUND`, `FORBIDDEN`, `TRIP_NOT_CANCELLABLE` o
+   * `DATABASE_WRITE_FAILED`.
+   *
+   * Importa escucharlo: sin esto una cancelacion rechazada se veria igual
+   * que una aceptada que tarda, y la pantalla esperaria por un viaje que
+   * sigue vivo. El viaje NO se limpia hasta que el servidor lo confirme.
+   */
+  'rideCancellationRejected',
+
+  /**
    * El despacho se quedó sin conductores.
    *
    * Fuente: `emit('dispatch:no_drivers', { tripId })`, justo antes de la
@@ -164,7 +177,7 @@ export const EVENTOS_PENDIENTES = [
   // el servidor NO lo emite. Es sólo cliente→servidor. Lo que el conductor
   // recibe al aceptar es un `tripStatusUpdated`.
   'rideRequested', 'rideRequestFailed', 'rideAcceptanceFailed',
-  'rideCancellationRejected', 'tripStatusRejected',
+  'tripStatusRejected',
   // Conductor — los tres de presencia salieron en DRIVER-AVAILABILITY-1.
   // No queda ninguno pendiente de esta familia.
   // Chat en vivo — CHAT-INTEGRATION

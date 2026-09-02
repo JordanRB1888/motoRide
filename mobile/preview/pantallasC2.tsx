@@ -572,9 +572,23 @@ export function C2ConfirmarViaje() {
 }
 
 /** Una opción de vehículo, en fila: el vehículo, quién cabe, cuánto tarda y cuánto cuesta. */
-function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
+/**
+ * La tarjeta de vehiculo aprobada por el dueno.
+ *
+ * Se EXPORTA para que la pantalla real de pedir use exactamente esta, y no una
+ * copia parecida: dos formas de ensenar lo mismo acaban separandose.
+ */
+export function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
   readonly tipo: TipoDeVehiculo;
-  readonly minutos: number;
+  /**
+   * Cuanto tarda en llegar. OPCIONAL, y casi siempre ausente.
+   *
+   * En el recorrido de diseno eran cuatro y siete minutos escritos a mano.
+   * En la pantalla real no hay de donde sacarlos —el servidor no calcula
+   * cuanto tarda una moto en llegar— y ponerlos igualmente seria prometer
+   * una hora que nadie va a cumplir. Sin el dato, la tarjeta no lo dice.
+   */
+  readonly minutos?: number;
   readonly activa: boolean;
   readonly onPress?: () => void;
 }) {
@@ -587,7 +601,11 @@ function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
       onPress={onPress}
       accessibilityRole="radio"
       accessibilityState={{ selected: activa }}
-      accessibilityLabel={`${nombre}, ${plazas} ${plazas === 1 ? 'persona' : 'personas'}, ${minutos} minutos`}
+      accessibilityLabel={[
+        nombre,
+        `${plazas} ${plazas === 1 ? 'persona' : 'personas'}`,
+        ...(minutos === undefined ? [] : [`${minutos} minutos`])
+      ].join(', ')}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -612,7 +630,7 @@ function FilaDeVehiculo({ tipo, minutos, activa, onPress }: {
       <View style={{ flex: 1, gap: 2 }}>
         <Txt nivel="encabezado" tono={activa ? 'primario' : 'secundario'}>{nombre}</Txt>
         <Txt nivel="pie" tono="tenue">
-          {plazas} {plazas === 1 ? 'persona' : 'personas'} · {minutos} min
+          {plazas} {plazas === 1 ? 'persona' : 'personas'}{minutos === undefined ? '' : ` · ${minutos} min`}
         </Txt>
       </View>
 

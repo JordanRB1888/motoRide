@@ -261,17 +261,34 @@ test('el viaje terminado saca de la pantalla sin dejarla en la pila', () => {
 // Lo que esta fase sigue sin hacer
 // ---------------------------------------------------------------------------
 
-test('cancelar todavía NO está conectado', () => {
-  // Emitir `rideCancelled` es despacho. El botón se queda como en el recorrido
-  // de diseño: sin manejador, no hace nada.
+test('cancelar NO limpia el viaje por su cuenta', () => {
+  // La prueba exigia que cancelar no estuviera conectado. PASSENGER-TRIP-1 lo
+  // conecta, y lo que protege ahora es mas importante: que el viaje NO se de
+  // por cancelado hasta que el servidor lo confirme.
+  //
+  // Limpiarlo de forma optimista seria ensenar <<ya no tienes viaje>> mientras
+  // el servidor sigue buscandole conductor. Si la cancelacion se rechaza
+  // —alguien acaba de aceptarla— quien mira creeria que no va nadie a
+  // recogerlo, y si que va.
   const ruta = sinComentarios('app/viaje-activo.tsx');
-  assert.equal(/onCancelar=/.test(ruta), false, 'se conectó cancelar');
+  assert.match(ruta, /onCancelar=/);
+  assert.match(ruta, /cancelarViaje\(viajeId\)/);
+
+  // Se escuchan las DOS respuestas: sin el rechazo, una cancelacion negada se
+  // veria igual que una aceptada que tarda.
+  assert.match(ruta, /escuchar\('rideCancelled'/);
+  assert.match(ruta, /escuchar\('rideCancellationRejected'/);
+
+  // Y nada de borrar el viaje aqui: eso lo hace el almacen cuando el servidor
+  // deja de darlo.
+  assert.equal(/setViaje\(null\)|olvidarViaje|setEstado\('SIN_VIAJE'\)/.test(ruta), false,
+    'la pantalla limpia el viaje sin esperar al servidor');
 });
 
 test('sigue sin emitirse nada de negocio', () => {
   for (const fichero of ['app/viaje-activo.tsx', 'domain/superficieDelViaje.ts', 'preview/pantallasC2.tsx']) {
     const codigo = despojarComentarios(leer(fichero));
-    for (const evento of ['rideRequested', 'rideAccepted', 'rideCancelled', 'tripStatusUpdated', 'tripRated']) {
+    for (const evento of ['rideRequested', 'rideAccepted', 'tripStatusUpdated', 'tripRated']) {
       assert.equal(new RegExp(`emit\\(['"\`]${evento}`).test(codigo), false, `${fichero} emite «${evento}»`);
     }
   }

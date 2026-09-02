@@ -214,6 +214,13 @@ export interface PropiedadesDelLienzo {
    * verdad llegará con el mapa real.
    */
   readonly eligiendoPunto?: boolean;
+  /**
+   * El punto que queda bajo el reticulo cuando el mapa deja de moverse.
+   *
+   * Solo avisa mientras `eligiendoPunto` esta encendido. Fuera de ese modo
+   * el centro es el encuadre, no la decision de nadie.
+   */
+  readonly onCentro?: (centro: { lat: number; lng: number }) => void;
   /** Controles flotantes sobre el mapa (recentrar, capas). */
   readonly conControles?: boolean;
   /**
@@ -253,6 +260,7 @@ export function LienzoDeMapa({
   eligiendoPunto = false,
   conControles = true,
   onCentrar,
+  onCentro,
   modelo,
   children
 }: PropiedadesDelLienzo) {
@@ -267,7 +275,7 @@ export function LienzoDeMapa({
           —controles, hoja, barra, retículo— se pinta igual encima de los dos. */}
       {modelo === undefined ? <Calles /> : (
         <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}>
-          <MapaDeMovilidad modelo={modelo} />
+          <MapaDeMovilidad modelo={modelo} onCentro={onCentro} />
         </View>
       )}
 

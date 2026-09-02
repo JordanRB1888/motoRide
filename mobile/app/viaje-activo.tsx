@@ -27,6 +27,7 @@ import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { useViajeActivo } from '../realtime/ViajeActivo';
+import { cancelarViaje, escuchar } from '../realtime/socket';
 import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
 import { useUbicacionEnVivo } from '../realtime/UbicacionEnVivo';
 import { mapaDelViaje } from '../domain/mapaDelViaje';
@@ -64,6 +65,47 @@ export default function PantallaDelViajeActivo() {
     const donde = ubicacion.posicion;
     if (donde !== null) setCentrarEn({ lat: donde.lat, lng: donde.lng });
   }, [refrescar, ubicacion.posicion]);
+
+  // ---------------------------------------------------------------------
+  // Cancelar la busqueda
+  // ---------------------------------------------------------------------
+  //
+  // EL VIAJE NO SE LIMPIA HASTA QUE EL SERVIDOR LO DIGA
+  //
+  // Se pide la cancelacion y se espera. Borrarlo aqui de forma optimista seria
+  // ensenar que ya no hay viaje mientras el servidor sigue buscandole un
+  // conductor: si la cancelacion se rechaza —porque alguien acaba de aceptarlo,
+  // o porque la base no pudo escribir— quien mira la pantalla creeria que no va
+  // nadie a recogerlo, y si que va.
+  //
+  // Mientras tanto el boton se apaga. Un segundo `rideCancelled` no rompe nada
+  // en el servidor, pero deja a alguien pulsando sin respuesta.
+  const [cancelando, setCancelando] = useState(false);
+  const viajeId = viaje?.id ?? null;
+
+  const cancelar = useCallback(() => {
+    if (viajeId === null || cancelando) return;
+    if (!cancelarViaje(viajeId)) return;
+    setCancelando(true);
+  }, [viajeId, cancelando]);
+
+  // La respuesta del servidor, en sus dos formas.
+  useEffect(() => {
+    if (!cancelando) return;
+
+    // Aceptada: el almacen vuelve a preguntar y la pantalla se va sola cuando
+    // el estado real deje de ser un viaje activo.
+    const dejarDeEscucharHecho = escuchar('rideCancelled', () => setCancelando(false));
+
+    // Rechazada: el viaje SIGUE. Se vuelve a habilitar el boton para poder
+    // intentarlo otra vez.
+    const dejarDeEscucharFallo = escuchar('rideCancellationRejected', () => setCancelando(false));
+
+    return () => {
+      dejarDeEscucharHecho();
+      dejarDeEscucharFallo();
+    };
+  }, [cancelando]);
 
   // Cuando el servidor deja de dar el viaje —completado, cancelado, o fuera de
   // su ventana— esta pantalla ya no tiene nada que enseñar. Se vuelve al
@@ -105,10 +147,11 @@ export default function PantallaDelViajeActivo() {
   if (viaje.estado === 'SEARCHING') {
     return (
       <ProveedorDeNavegacion ir={irA}>
-        {/* Cancelar todavía no está conectado: emitir `rideCancelled` es
-            despacho, y esta fase sólo consume estado. Sin manejador, el botón
-            se queda como en el recorrido de diseño. */}
-        <C2BuscandoVehiculo tipo={tipoQueSeBusca(viaje)} mapa={mapa} />
+        <C2BuscandoVehiculo
+          tipo={tipoQueSeBusca(viaje)}
+          mapa={mapa}
+          onCancelar={cancelando ? undefined : cancelar}
+        />
       </ProveedorDeNavegacion>
     );
   }

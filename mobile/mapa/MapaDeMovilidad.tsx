@@ -103,13 +103,25 @@ function cargarGoogle(): Promise<boolean> {
   return cargando;
 }
 
-export function MapaDeMovilidad({ modelo }: { readonly modelo: ModeloDelMapa }) {
+export function MapaDeMovilidad({ modelo, onCentro }: {
+  readonly modelo: ModeloDelMapa;
+  /** El centro cada vez que el mapa deja de moverse, eligiendo punto. */
+  readonly onCentro?: (centro: { lat: number; lng: number }) => void;
+}) {
   const tema = useTema();
   const esquema = useEsquema();
 
   const contenedor = useRef<HTMLDivElement | null>(null);
   const mapa = useRef<any>(null);
   const ultima = useRef<Camara | null>(null);
+
+  // El escuchador de `idle` se registra UNA vez, al crear el mapa, asi que no
+  // puede cerrar sobre el modelo ni sobre la funcion de este repintado: se
+  // quedaria con los de aquel momento. Se leen por referencia, siempre al dia.
+  const modeloVivo = useRef(modelo);
+  modeloVivo.current = modelo;
+  const alElegir = useRef(onCentro);
+  alElegir.current = onCentro;
 
   // La proyección del mapa, para saber en qué píxel cae una coordenada.
   //
@@ -199,6 +211,14 @@ export function MapaDeMovilidad({ modelo }: { readonly modelo: ModeloDelMapa }) 
       superficie.onRemove = () => undefined;
       superficie.draw = () => colocar.current();
       superficie.setMap(mapa.current);
+
+      // El centro al soltar. `idle` es el evento que Google dispara cuando el
+      // mapa termina de moverse; `center_changed` saltaria por fotograma.
+      mapa.current.addListener('idle', () => {
+        if (!modeloVivo.current.eligiendoPunto) return;
+        const centro = mapa.current?.getCenter?.();
+        if (centro) alElegir.current?.({ lat: centro.lat(), lng: centro.lng() });
+      });
       capa.current = superficie;
 
       ultima.current = modelo.camara;

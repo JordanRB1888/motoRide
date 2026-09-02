@@ -57,7 +57,17 @@ const identificadorDeLaPlataforma = (): string =>
  */
 const MARGEN_PARA_DIBUJARSE = 1500;
 
-export function MapaDeMovilidad({ modelo }: { readonly modelo: ModeloDelMapa }) {
+export function MapaDeMovilidad({ modelo, onCentro }: {
+  readonly modelo: ModeloDelMapa;
+  /**
+   * El centro del mapa cada vez que deja de moverse.
+   *
+   * Es el gesto de <<mueve el mapa, no el pin>>: el reticulo esta fijo en el
+   * centro, asi que el centro ES el punto elegido. Se avisa al soltar y no
+   * mientras se arrastra, que dispararia una peticion por fotograma.
+   */
+  readonly onCentro?: (centro: { lat: number; lng: number }) => void;
+}) {
   const tema = useTema();
   const esquema = useEsquema();
   const mapa = useRef<MapView>(null);
@@ -144,10 +154,11 @@ export function MapaDeMovilidad({ modelo }: { readonly modelo: ModeloDelMapa }) 
         customMapStyle={estilo as unknown as MapStyleElement[] | undefined}
         // Dónde se quedó mirando, para que un remontaje no pierda la vista.
         onRegionChangeComplete={vista => {
-          ultima.current = {
-            centro: { lat: vista.latitude, lng: vista.longitude },
-            abarca: vista.latitudeDelta
-          };
+          const centro = { lat: vista.latitude, lng: vista.longitude };
+          ultima.current = { centro, abarca: vista.latitudeDelta };
+          // Solo cuando alguien esta eligiendo: fuera de ese modo el centro es
+          // el encuadre, no una decision de nadie.
+          if (modelo.eligiendoPunto) onCentro?.(centro);
         }}
         // El logotipo de Google y la brújula son obligatorios y no se pueden
         // tapar. Este relleno los sube por encima de la hoja inferior.

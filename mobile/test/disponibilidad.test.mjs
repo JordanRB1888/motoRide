@@ -272,7 +272,11 @@ test('el GPS no pone a nadie disponible', () => {
 
 test('sigue sin haber despacho', () => {
   const carpetas = ['realtime', 'app', 'preview', 'services'];
-  const prohibidos = ['rideAccepted', 'rideRejected', 'rideCancelled', 'tripRated', 'chat:send_message'];
+  // `rideCancelled` sale de la lista en PASSENGER-TRIP-1: la pasajera ya
+  // puede cancelar la busqueda desde su pantalla, con su confirmacion del
+  // servidor. Siguen vedados los del CONDUCTOR —aceptar y rechazar— que son
+  // la fase siguiente y necesitan su superficie.
+  const prohibidos = ['rideAccepted', 'rideRejected', 'tripRated', 'chat:send_message'];
   for (const carpeta of carpetas) {
     for (const nombre of fs.readdirSync(path.join(raizMovil, carpeta), { recursive: true })) {
       const completa = path.join(raizMovil, carpeta, String(nombre));
