@@ -41,8 +41,14 @@ import { experienciaDeLaIdentidad } from './authState';
 export const INTENCIONES_DE_ENTRADA = ['passenger', 'driver'] as const;
 export type IntencionDeEntrada = (typeof INTENCIONES_DE_ENTRADA)[number];
 
-/** Sin nada recordado, se preselecciona Pasajero: es la mayoría. */
-export const INTENCION_POR_DEFECTO: IntencionDeEntrada = 'passenger';
+/**
+ * El lema de la marca.
+ *
+ * Es el que ya usa la web —`index.html`, `brandLogo.js`— y el que el dueño
+ * confirmó como EL lema. Antes la bienvenida decía «Mototaxi en Maracaibo»,
+ * que describe el servicio pero no es la marca.
+ */
+export const LEMA = 'Tu moto, al instante.';
 
 export function esIntencionDeEntrada(valor: unknown): valor is IntencionDeEntrada {
   return typeof valor === 'string'

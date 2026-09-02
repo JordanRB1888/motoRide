@@ -113,6 +113,26 @@ export const AVATARES_DE_ROL = Object.freeze({
 });
 
 /**
+ * Los logotipos de Google y de Apple, para los botones de entrada.
+ *
+ * NO SON LOS OFICIALES. Google y Apple entregan los suyos y exigen usarlos;
+ * estos los dibuja `scripts/marcas-de-terceros.py` con sus formas y colores
+ * para poder ver y probar la pantalla, y HAY QUE SUSTITUIRLOS antes de
+ * publicar en las tiendas.
+ *
+ * Mientras tanto los botones estan deshabilitados —no hay autenticacion social
+ * real detras—, asi que nadie llega a un flujo de Google o de Apple detras de
+ * un logotipo que no es el suyo.
+ *
+ * La manzana va en negro con transparencia y la aplicacion la tine segun el
+ * esquema, que es su norma. La «G» es de cuatro colores y no se recolorea.
+ */
+export const MARCAS_DE_TERCEROS = Object.freeze({
+  google: require('../assets/marca/terceros/google.png') as ImageSourcePropType,
+  apple: require('../assets/marca/terceros/apple.png') as ImageSourcePropType
+});
+
+/**
  * Dónde cae la cara de la pasajera dentro de su avatar.
  *
  * En fracciones del lado y no en píxeles: el activo está guardado a 288 y

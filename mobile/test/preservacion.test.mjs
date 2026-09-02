@@ -217,7 +217,7 @@ test('las pantallas REALES llevan el logotipo, no la marca escrita a mano', () =
   // acceso abria con un titulo. Existiendo el logotipo oficial con la moto,
   // eso era quedarse corto justo donde se abre la aplicacion.
   for (const pantalla of ['app/rol.tsx', 'app/acceso.tsx']) {
-    assert.match(leer(pantalla), /<Logo(Horizontal|QueEntra)/, pantalla);
+    assert.match(leer(pantalla), /<Logo(Horizontal|QueEntra|Encendido)/, pantalla);
   }
 });
 

@@ -146,13 +146,18 @@ export function Superficie({
 // ---------------------------------------------------------------------------
 
 export function Boton({
-  titulo, onPress, variante = 'principal', descripcion,
+  titulo, onPress, variante = 'principal', descripcion, sufijo,
   deshabilitado = false, cargando = false, etiquetaAccesible, estilo, testID
 }: {
   readonly titulo: string;
   readonly onPress: () => void;
   readonly variante?: 'principal' | 'secundario' | 'silencioso';
   readonly descripcion?: string;
+  /**
+   * Algo a la derecha del titulo, dentro del boton. Decoracion: no se
+   * anuncia, porque lo que se lee en voz alta es el titulo.
+   */
+  readonly sufijo?: ReactNode;
   readonly deshabilitado?: boolean;
   readonly cargando?: boolean;
   readonly etiquetaAccesible?: string;
@@ -198,10 +203,13 @@ export function Boton({
         <ActivityIndicator color={esPrincipal ? tema.color.sobreAcento : tema.color.acento} />
       ) : (
         <View style={estilosBase.centro}>
-          <Txt nivel="cuerpo" tono={esPrincipal ? 'sobreAcento' : 'primario'} centrado
-            estilo={{ fontWeight: '600' } as never}>
-            {titulo}
-          </Txt>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Txt nivel="cuerpo" tono={esPrincipal ? 'sobreAcento' : 'primario'} centrado
+              estilo={{ fontWeight: '600' } as never}>
+              {titulo}
+            </Txt>
+            {sufijo}
+          </View>
           {descripcion !== undefined && (
             <Txt nivel="pie" tono={esPrincipal ? 'sobreAcento' : 'secundario'} centrado>
               {descripcion}

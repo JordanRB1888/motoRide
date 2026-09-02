@@ -10,8 +10,10 @@
  * oficiales, y valen precisamente porque son reconocibles.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Image, View } from 'react-native';
+
+import { useMovimientoReducido } from './movimiento';
 import {
   ACERCAMIENTO_DE_LA_PASAJERA,
   AVATARES_DE_ROL,
@@ -117,6 +119,165 @@ export function LogoQueEntra({ ancho = 232, alDetenerse }: {
       ]
     }}>
       <LogoHorizontal ancho={ancho} />
+    </Animated.View>
+  );
+}
+
+/**
+ * El logotipo que LLEGA y frena.
+ *
+ * ES LA SEGUNDA MITAD DE UN MISMO GESTO
+ *
+ * En la bienvenida, al pulsar Pasajero o Conductor, la moto arranca y se va
+ * por la derecha. Aquí entra por la izquierda, cruza, se pasa un poco de
+ * largo, y frena: el morro se hunde, la moto se inclina hacia adelante y
+ * vuelve a asentarse. Las dos pantallas cuentan un solo viaje.
+ *
+ * El frenazo es lo que lo hace creíble. Una entrada que simplemente se detiene
+ * en el centro se lee como un elemento que aparece; una que se pasa, cabecea y
+ * vuelve se lee como algo que iba con inercia.
+ *
+ * Con movimiento reducido no hay viaje: el logotipo ya está donde tiene que
+ * estar.
+ */
+export function LogoQueFrena({ ancho = 216, alDetenerse }: {
+  readonly ancho?: number;
+  /** Se avisa al terminar de frenar: a partir de ahí manda el ralentí. */
+  readonly alDetenerse?: () => void;
+}) {
+  const avance = useRef(new Animated.Value(0)).current;
+  const quieto = useMovimientoReducido();
+
+  useEffect(() => {
+    if (quieto) {
+      avance.setValue(1);
+      alDetenerse?.();
+      return;
+    }
+    const animacion = Animated.timing(avance, {
+      toValue: 1,
+      duration: 760,
+      // Sin `easing` compuesto: la curva la dan los tramos de abajo, que es
+      // donde de verdad se decide cómo frena.
+      easing: Easing.linear,
+      useNativeDriver: true
+    });
+    animacion.start(({ finished }) => { if (finished) alDetenerse?.(); });
+    return () => animacion.stop();
+  }, [avance, quieto, alDetenerse]);
+
+  // Los cuatro momentos: fuera por la izquierda, llegada rápida, pasada de
+  // largo, y asiento.
+  const pasos = [0, 0.46, 0.66, 1];
+
+  return (
+    <Animated.View style={{
+      opacity: avance.interpolate({ inputRange: [0, 0.12, 1], outputRange: [0, 1, 1] }),
+      transform: [
+        {
+          translateX: avance.interpolate({
+            inputRange: pasos,
+            outputRange: [-ancho * 1.35, ancho * 0.09, -ancho * 0.02, 0]
+          })
+        },
+        // El cabeceo del frenazo: se inclina hacia adelante al clavar y se
+        // endereza. Menos de dos grados.
+        {
+          rotate: avance.interpolate({
+            inputRange: pasos,
+            outputRange: ['-1.6deg', '1.7deg', '-0.5deg', '0deg']
+          })
+        },
+        // Y la suspensión se hunde un punto al frenar.
+        {
+          translateY: avance.interpolate({
+            inputRange: pasos,
+            outputRange: [0, 2.2, -0.8, 0]
+          })
+        }
+      ]
+    }}>
+      <LogoHorizontal ancho={ancho} />
+    </Animated.View>
+  );
+}
+
+/**
+ * El logotipo con el motor encendido.
+ *
+ * Entra como siempre —`LogoQueEntra`, la animación de la web— y, cuando
+ * asienta, se queda al ralentí: la moto tiembla un poco, como una moto parada
+ * en punto muerto, y la suspensión la mece más despacio. Son dos movimientos
+ * sumados porque uno solo no lo parece: el temblor corto sin el balanceo se
+ * lee como un defecto de la pantalla, y el balanceo solo parece que flota.
+ *
+ * Nada de esto pasa de punto y medio, y con movimiento reducido no pasa nada
+ * en absoluto.
+ *
+ * `enMarcha` lo apaga desde fuera. Lo usa la bienvenida cuando la moto arranca
+ * de verdad y se va: el motor ya no está al ralentí.
+ */
+export function LogoEncendido({ ancho = 232, enMarcha = true, llegada = 'marca', alDetenerse }: {
+  readonly ancho?: number;
+  readonly enMarcha?: boolean;
+  /**
+   * Cómo aparece.
+   *
+   *   marca    la entrada de siempre, la de la web: la que abre la aplicación.
+   *   frenazo  llega por la izquierda y clava el freno: la continuación de la
+   *            moto que se fue de la bienvenida.
+   */
+  readonly llegada?: 'marca' | 'frenazo';
+  /** Se avisa cuando el logotipo termina de entrar y empieza el ralentí. */
+  readonly alDetenerse?: () => void;
+}) {
+  const quieto = useMovimientoReducido();
+  const [asentado, setAsentado] = useState(false);
+  const temblor = useRef(new Animated.Value(0)).current;
+  const balanceo = useRef(new Animated.Value(0)).current;
+
+  const alAsentar = useCallback(() => {
+    setAsentado(true);
+    alDetenerse?.();
+  }, [alDetenerse]);
+
+  const encendido = asentado && enMarcha && !quieto;
+
+  useEffect(() => {
+    if (!encendido) { temblor.setValue(0); return; }
+    const ciclo = Animated.loop(
+      Animated.sequence([
+        Animated.timing(temblor, { toValue: 1, duration: 70, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(temblor, { toValue: 0, duration: 70, easing: Easing.linear, useNativeDriver: true })
+      ])
+    );
+    ciclo.start();
+    return () => ciclo.stop();
+  }, [encendido, temblor]);
+
+  useEffect(() => {
+    if (!encendido) { balanceo.setValue(0); return; }
+    const ciclo = Animated.loop(
+      Animated.sequence([
+        Animated.timing(balanceo, { toValue: 1, duration: 980, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(balanceo, { toValue: 0, duration: 980, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
+      ])
+    );
+    ciclo.start();
+    return () => ciclo.stop();
+  }, [encendido, balanceo]);
+
+  return (
+    <Animated.View style={{
+      transform: [
+        { translateY: temblor.interpolate({ inputRange: [0, 1], outputRange: [0, -0.7] }) },
+        { translateY: balanceo.interpolate({ inputRange: [0, 1], outputRange: [0.8, -1.6] }) },
+        { rotate: balanceo.interpolate({ inputRange: [0, 1], outputRange: ['-0.15deg', '0.45deg'] }) }
+      ]
+    }}>
+      {llegada === 'frenazo'
+        ? <LogoQueFrena ancho={ancho} alDetenerse={alAsentar} />
+        : <LogoQueEntra ancho={ancho} alDetenerse={alAsentar} />}
     </Animated.View>
   );
 }
