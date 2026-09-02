@@ -10,16 +10,21 @@ import {
 } from '../domain/driverApplicationProjections.js';
 import {
   DRIVER_APPLICATION_STATUS,
-  DRIVER_DOCUMENT_TYPES,
-  REQUIRED_DRIVER_DOCUMENTS,
+  REQUIREMENTS_VERSION,
+  UPLOADABLE_DOCUMENT_TYPES,
+  defaultCheckpoints,
   missingRequiredDocuments,
-  normalizeDriverApplicationInput,
+  normalizeRequestedChanges,
+  normalizeStoredApplication,
+  validateApplicationForSubmission,
   validateDriverApplicationInput
 } from '../domain/driverApplicationModel.js';
 
+// Solo lo que se puede subir hoy. El vídeo de presentación está en el modelo
+// pero no aquí: el almacenamiento privado no lo admite todavía.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: DRIVER_DOCUMENT_TYPES.length },
+  limits: { fileSize: 5 * 1024 * 1024, files: UPLOADABLE_DOCUMENT_TYPES.length },
   fileFilter: (_req, file, callback) => {
     if (['image/jpeg','image/png','image/webp','application/pdf'].includes(file.mimetype)) return callback(null, true);
     const error = new Error('INVALID_FILE_TYPE');
@@ -28,7 +33,7 @@ const upload = multer({
   }
 });
 
-const uploadFields = upload.fields(DRIVER_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
+const uploadFields = upload.fields(UPLOADABLE_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
 const singleDocumentUpload = upload.single('file');
 
 import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from '../services/httpRateLimit.js';
@@ -45,6 +50,15 @@ const limitadores = {
   // Revision de expedientes desde administracion.
   expedientes: createIdentityLimiter({ name: 'expedientes', limit: 240, windowMs: MINUTO })
 };
+
+/** Los estados en los que el titular todavía puede tocar su expediente. */
+const EDITABLE_STATUSES = [
+  DRIVER_APPLICATION_STATUS.DRAFT,
+  DRIVER_APPLICATION_STATUS.NEEDS_CHANGES,
+  DRIVER_APPLICATION_STATUS.REJECTED
+];
+
+const cleanText = (value, max) => String(value ?? '').replace(/[\u0000-\u001f\u007f<>&"']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
 export function createDriverApplicationsRouter({
   database,
@@ -76,10 +90,29 @@ export function createDriverApplicationsRouter({
     return notification;
   };
 
+  /**
+   * Crea la cuenta (o reutiliza la del pasajero) y el expediente.
+   *
+   * CON O SIN DOCUMENTOS
+   *
+   * Antes exigía todos los documentos en esta misma petición. Eso obligaba a
+   * hacer las once fotos de una vez y sin poder parar. Ahora el expediente
+   * nace como BORRADOR si falta algo, y se completa documento a documento con
+   * `PUT /me/documents/:type` hasta que `POST /me/submit` lo manda a revisión.
+   * Si llega completo y con los datos de envío, entra directamente en
+   * revisión, como antes.
+   */
   router.post('/driver-applications', uploadFields, async (req, res) => {
+    // Un cliente que no declara servicios es de antes de que existieran (el
+    // registro web): su expediente nace con los requisitos de la version 1 y
+    // se postula, como siempre, a llevar personas. Quien declara el campo se
+    // valida estricto: vacio o desconocido es 400.
+    const legacyClient = req.body.servicesAppliedFor === undefined && req.body.requirementsVersion === undefined;
+    if (legacyClient) req.body.servicesAppliedFor = 'PASSENGER_TRANSPORT';
+    const requirementsVersion = legacyClient ? 1 : REQUIREMENTS_VERSION;
     const validation = validateDriverApplicationInput(req.body);
     if (!validation.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: validation.errors });
-    const { personal, vehicle } = validation.normalized;
+    const { personal, vehicle, license, medicalCertificate, servicesAppliedFor } = validation.normalized;
     const phoneKey = personal.phone.replace(/\D/g, '');
     const matchingUsers = database.users.filter(user => user.email?.toLowerCase() === personal.email || String(user.phone || '').replace(/\D/g, '') === phoneKey);
     const existingUser = matchingUsers.length === 1 ? matchingUsers[0] : null;
@@ -92,9 +125,9 @@ export function createDriverApplicationsRouter({
       return res.status(401).json({ error: 'EXISTING_ACCOUNT_AUTH_REQUIRED' });
     }
 
-    const files = Object.entries(req.files || {}).flatMap(([type, items]) => items.map(file => ({ type, file })));
-    const missing = REQUIRED_DRIVER_DOCUMENTS.filter(type => !files.some(item => item.type === type));
-    if (missing.length) return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
+    const files = Object.entries(req.files || {})
+      .filter(([type]) => UPLOADABLE_DOCUMENT_TYPES.includes(type))
+      .flatMap(([type, items]) => items.map(file => ({ type, file })));
 
     const now = new Date().toISOString();
     const userId = existingUser?.id || `passenger_${crypto.randomUUID()}`;
@@ -136,6 +169,7 @@ export function createDriverApplicationsRouter({
       email: personal.email,
       phone: personal.phone,
       cedula: personal.identityNumber,
+      rif: personal.rif || null,
       birthDate: personal.birthDate,
       address: personal.address,
       city: personal.city,
@@ -158,6 +192,7 @@ export function createDriverApplicationsRouter({
         email: personal.email,
         phone: personal.phone,
         cedula: personal.identityNumber,
+        rif: personal.rif || user.rif || null,
         birthDate: personal.birthDate,
         address: personal.address,
         city: personal.city,
@@ -166,34 +201,54 @@ export function createDriverApplicationsRouter({
         updatedAt: now
       });
     }
+
     const application = {
       id: applicationId,
       userId,
-      status: DRIVER_APPLICATION_STATUS.PENDING,
+      requirementsVersion,
+      status: DRIVER_APPLICATION_STATUS.DRAFT,
+      servicesAppliedFor: [...servicesAppliedFor],
       personal,
       vehicle,
-      submittedAt: now,
+      license,
+      medicalCertificate,
+      checkpoints: defaultCheckpoints(),
+      submittedAt: null,
       createdAt: now,
       updatedAt: now,
       reviewedBy: null,
       reviewedAt: null,
       decisionReason: null,
-      requestedChanges: []
+      requestedChanges: [],
+      requestedChangeDetails: [],
+      textualCorrections: null
     };
+
+    // Si llegó completo, entra en revisión directamente.
+    const missing = missingRequiredDocuments(stored, application);
+    const submission = validateApplicationForSubmission(application);
+    const complete = missing.length === 0 && submission.valid;
+    if (complete) {
+      application.status = DRIVER_APPLICATION_STATUS.PENDING;
+      application.submittedAt = now;
+    }
+
     if (!existingUser) database.users.push(user);
     database.driverApplications.push(application);
     database.driverDocuments.push(...stored);
-    const adminNotification = createNotification({
+    const adminNotification = complete ? createNotification({
       targetRole: 'admin',
       title: 'Nuevo conductor esperando aprobación',
       message: `${personal.firstName} ${personal.lastName} envió una solicitud con vehículo ${vehicle.type === 'CAR' ? 'automóvil' : 'moto'}.`
-    });
+    }) : null;
     if (!await persistDatabase()) {
       stored.forEach(document => privateStorage.remove(document.storageKey));
       return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
     }
-    io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
-    io.to('admins').emit('platform:notification', adminNotification);
+    if (complete) {
+      io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
+      io.to('admins').emit('platform:notification', adminNotification);
+    }
     res.status(201).json({
       status: 'created',
       user: publicUser(user),
@@ -208,27 +263,42 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
+  /**
+   * Corrige los datos de un expediente que todavía se puede tocar.
+   *
+   * Lo que no venga en el cuerpo se conserva. Eso incluye el vehículo: se
+   * puede pasar de moto a carro antes de enviar, y entonces cambian los
+   * documentos que faltan.
+   */
   router.patch('/driver-applications/me', requireAuth, limitadores.expedientes, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
-    if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
-      return res.status(409).json({ error: 'APPLICATION_LOCKED' });
-    }
+    if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
+    const stored = normalizeStoredApplication(application);
     const merged = {
-      ...application.personal,
-      ...application.vehicle,
+      ...stored.personal,
       ...req.body,
-      vehicleType: req.body.vehicleType || application.vehicle.type,
-      vehicleBrand: req.body.vehicleBrand || application.vehicle.brand,
-      vehicleModel: req.body.vehicleModel || application.vehicle.model,
-      vehicleYear: req.body.vehicleYear || application.vehicle.year,
-      vehicleColor: req.body.vehicleColor || application.vehicle.color,
-      vehiclePlate: req.body.vehiclePlate || application.vehicle.plate
+      servicesAppliedFor: req.body.servicesAppliedFor ?? stored.servicesAppliedFor,
+      rif: req.body.rif ?? stored.personal.rif,
+      vehicleType: req.body.vehicleType || stored.vehicle.type,
+      vehicleBrand: req.body.vehicleBrand || stored.vehicle.brand,
+      vehicleModel: req.body.vehicleModel || stored.vehicle.model,
+      vehicleYear: req.body.vehicleYear || stored.vehicle.year,
+      vehicleColor: req.body.vehicleColor || stored.vehicle.color,
+      vehiclePlate: req.body.vehiclePlate || stored.vehicle.plate,
+      vehicleLegalDocumentType: req.body.vehicleLegalDocumentType || stored.vehicle.legalDocumentType,
+      vehicleAdditionalInfo: req.body.vehicleAdditionalInfo ?? stored.vehicle.additionalInfo,
+      licenseGrade: req.body.licenseGrade ?? stored.license.grade ?? '',
+      licenseExpiration: req.body.licenseExpiration ?? stored.license.expiration ?? '',
+      medicalCertificateExpiration: req.body.medicalCertificateExpiration ?? stored.medicalCertificate.expiration ?? ''
     };
     const validation = validateDriverApplicationInput(merged, { requirePassword: false });
     if (!validation.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: validation.errors });
     application.personal = validation.normalized.personal;
     application.vehicle = validation.normalized.vehicle;
+    application.license = validation.normalized.license;
+    application.medicalCertificate = validation.normalized.medicalCertificate;
+    application.servicesAppliedFor = [...validation.normalized.servicesAppliedFor];
     application.status = DRIVER_APPLICATION_STATUS.DRAFT;
     application.updatedAt = new Date().toISOString();
     if (!await persistDatabase()) return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
@@ -238,10 +308,8 @@ export function createDriverApplicationsRouter({
   router.put('/driver-applications/me/documents/:type', requireAuth, limitadores.subidas, singleDocumentUpload, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
-    if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
-      return res.status(409).json({ error: 'APPLICATION_LOCKED' });
-    }
-    if (!DRIVER_DOCUMENT_TYPES.includes(req.params.type) || !req.file) return res.status(400).json({ error: 'INVALID_DOCUMENT' });
+    if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
+    if (!UPLOADABLE_DOCUMENT_TYPES.includes(req.params.type) || !req.file) return res.status(400).json({ error: 'INVALID_DOCUMENT' });
     const existing = database.driverDocuments.find(document => document.applicationId === application.id && document.type === req.params.type);
     let storageKey;
     try { storageKey = privateStorage.save(req.file, req.user.id); }
@@ -261,18 +329,31 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
+  /**
+   * Manda el expediente a revisión.
+   *
+   * Vuelve a comprobar los documentos según el vehículo declarado y, en los
+   * expedientes de la versión 2, que estén el RIF y los datos de la licencia.
+   * Las correcciones que administración había pedido se dan por atendidas:
+   * si no lo están, volverá a pedirlas.
+   */
   router.post('/driver-applications/me/submit', requireAuth, limitadores.expedientes, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
-    if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
-      return res.status(409).json({ error: 'APPLICATION_LOCKED' });
-    }
-    const missing = missingRequiredDocuments(getApplicationDocuments(application.id));
+    if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
+    const missing = missingRequiredDocuments(getApplicationDocuments(application.id), application);
     if (missing.length) return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
+    const submission = validateApplicationForSubmission(application);
+    if (!submission.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: submission.errors });
+    const now = new Date().toISOString();
     application.status = DRIVER_APPLICATION_STATUS.PENDING;
-    application.submittedAt = new Date().toISOString();
-    application.updatedAt = application.submittedAt;
+    application.submittedAt = now;
+    application.updatedAt = now;
     application.decisionReason = null;
+    application.requestedChanges = [];
+    application.requestedChangeDetails = [];
+    application.textualCorrections = null;
+    application.checkpoints = { ...normalizeStoredApplication(application).checkpoints, DOCUMENTS_REVIEW: 'PENDING' };
     if (!await persistDatabase()) return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
     io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
@@ -287,7 +368,7 @@ export function createDriverApplicationsRouter({
       .filter(application => {
         if (!query) return true;
         const user = database.users.find(item => item.id === application.userId);
-        return [application.personal.firstName, application.personal.lastName, application.personal.identityNumber, application.personal.phone, application.personal.email, application.vehicle.plate, user?.email]
+        return [application.personal.firstName, application.personal.lastName, application.personal.identityNumber, application.personal.rif, application.personal.phone, application.personal.email, application.vehicle.plate, user?.email]
           .filter(Boolean).some(value => String(value).toLowerCase().includes(query));
       })
       .sort((a, b) => new Date(b.submittedAt || b.createdAt) - new Date(a.submittedAt || a.createdAt))
@@ -308,16 +389,18 @@ export function createDriverApplicationsRouter({
     const user = database.users.find(item => item.id === application.userId);
     if (!user) return res.status(404).json({ error: 'USER_NOT_FOUND' });
     const action = String(req.body.action || '').toLowerCase();
-    const reason = String(req.body.reason || '').replace(/[\u0000-\u001f\u007f<>&"']/g, ' ').trim().slice(0, 600);
+    const reason = cleanText(req.body.reason, 600);
     const now = new Date().toISOString();
     const previousStatus = application.status;
+    const checkpoints = { ...normalizeStoredApplication(application).checkpoints };
     let notificationTitle;
     let notificationMessage;
 
     if (action === 'approve') {
-      const missing = missingRequiredDocuments(getApplicationDocuments(application.id));
+      const missing = missingRequiredDocuments(getApplicationDocuments(application.id), application);
       if (missing.length) return res.status(409).json({ error: 'MISSING_DOCUMENTS', missing });
       application.status = DRIVER_APPLICATION_STATUS.APPROVED;
+      checkpoints.DOCUMENTS_REVIEW = 'PASSED';
       user.role = 'driver';
       user.isVerified = true;
       user.status = 'OFFLINE';
@@ -330,6 +413,7 @@ export function createDriverApplicationsRouter({
         vehicleYear: application.vehicle.year,
         vehicleColor: application.vehicle.color,
         vehiclePlate: application.vehicle.plate,
+        rif: application.personal?.rif || user.rif || null,
         photoStorageKey: selfie ? privateStorage.clone(selfie.storageKey, user.id) : user.photoStorageKey,
         photoMimeType: selfie?.mimeType || user.photoMimeType,
         photoSize: selfie?.size || user.photoSize,
@@ -341,13 +425,20 @@ export function createDriverApplicationsRouter({
     } else if (action === 'reject') {
       if (!reason) return res.status(400).json({ error: 'REASON_REQUIRED' });
       application.status = DRIVER_APPLICATION_STATUS.REJECTED;
+      checkpoints.DOCUMENTS_REVIEW = 'FAILED';
       user.isVerified = false;
       notificationTitle = 'Tu solicitud necesita atención';
       notificationMessage = `La solicitud fue rechazada: ${reason}`;
     } else if (action === 'needs_changes') {
       if (!reason) return res.status(400).json({ error: 'REASON_REQUIRED' });
       application.status = DRIVER_APPLICATION_STATUS.NEEDS_CHANGES;
-      application.requestedChanges = Array.isArray(req.body.requestedChanges) ? req.body.requestedChanges.filter(item => DRIVER_DOCUMENT_TYPES.includes(item)) : [];
+      // Qué documento hay que repetir, y por qué cada uno. Se admite la forma
+      // vieja (solo tipos) y la nueva (tipo y motivo); el motivo general cubre
+      // a los que no traigan el suyo.
+      const details = normalizeRequestedChanges(req.body.requestedChanges, reason);
+      application.requestedChangeDetails = details;
+      application.requestedChanges = details.map(item => item.type);
+      application.textualCorrections = cleanText(req.body.textualCorrections, 600) || null;
       user.isVerified = false;
       notificationTitle = 'Debes actualizar tu solicitud';
       notificationMessage = reason;
@@ -369,6 +460,7 @@ export function createDriverApplicationsRouter({
       return res.status(400).json({ error: 'INVALID_ACTION' });
     }
 
+    application.checkpoints = checkpoints;
     application.reviewedBy = req.user.id;
     application.reviewedAt = now;
     application.updatedAt = now;

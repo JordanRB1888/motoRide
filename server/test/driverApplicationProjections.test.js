@@ -84,7 +84,8 @@ test('driverApplicationListItem devuelve exactamente las claves permitidas', () 
   assert.deepEqual(
     Object.keys(item).sort(),
     ['applicantName', 'createdAt', 'decisionReason', 'documentCount', 'documentsPendingCount',
-     'id', 'status', 'submittedAt', 'updatedAt', 'vehiclePlate', 'vehicleType'].sort()
+     'id', 'missingDocumentCount', 'requirementsVersion', 'servicesAppliedFor',
+     'status', 'submittedAt', 'updatedAt', 'vehiclePlate', 'vehicleType'].sort()
   );
 });
 
@@ -128,16 +129,18 @@ test('driverApplicationAdminDetail entrega el expediente con lista blanca', () =
   const detalle = driverApplicationAdminDetail(fullApplication(), fullDocuments(), applicantUser());
   assert.deepEqual(
     Object.keys(detalle).sort(),
-    ['applicant', 'createdAt', 'decisionReason', 'documents', 'id', 'personal', 'requestedChanges',
-     'reviewedAt', 'reviewedBy', 'status', 'submittedAt', 'updatedAt', 'vehicle'].sort()
+    ['applicant', 'checkpoints', 'createdAt', 'decisionReason', 'documents', 'id', 'license',
+     'medicalCertificate', 'missingDocuments', 'personal', 'requestedChangeDetails', 'requestedChanges',
+     'requirementsVersion', 'reviewedAt', 'reviewedBy', 'servicesAppliedFor', 'status', 'submittedAt',
+     'textualCorrections', 'updatedAt', 'vehicle'].sort()
   );
   assert.deepEqual(
     Object.keys(detalle.personal).sort(),
-    ['address', 'birthDate', 'city', 'email', 'firstName', 'identityNumber', 'lastName', 'phone', 'region'].sort()
+    ['address', 'birthDate', 'city', 'email', 'firstName', 'identityNumber', 'lastName', 'phone', 'region', 'rif'].sort()
   );
   assert.deepEqual(
     Object.keys(detalle.vehicle).sort(),
-    ['additionalInfo', 'brand', 'color', 'model', 'plate', 'type', 'year'].sort()
+    ['additionalInfo', 'brand', 'color', 'legalDocumentType', 'model', 'plate', 'type', 'year'].sort()
   );
   assert.deepEqual(Object.keys(detalle.applicant).sort(), ['accountStatus', 'firstName', 'id', 'lastName']);
 
@@ -158,8 +161,9 @@ test('driverApplicationOwnerView oculta la trazabilidad interna', () => {
   const vista = driverApplicationOwnerView(fullApplication(), fullDocuments());
   assert.deepEqual(
     Object.keys(vista).sort(),
-    ['createdAt', 'decisionReason', 'documents', 'id', 'personal', 'requestedChanges',
-     'status', 'submittedAt', 'updatedAt', 'vehicle'].sort()
+    ['checkpoints', 'createdAt', 'decisionReason', 'documents', 'id', 'license', 'medicalCertificate',
+     'missingDocuments', 'personal', 'requestedChangeDetails', 'requestedChanges', 'requirementsVersion',
+     'servicesAppliedFor', 'status', 'submittedAt', 'textualCorrections', 'updatedAt', 'vehicle'].sort()
   );
   assert.equal(vista.reviewedBy, undefined, 'quién revisó es información administrativa');
   assert.equal(vista.reviewedAt, undefined);
