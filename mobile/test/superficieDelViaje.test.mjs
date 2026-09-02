@@ -279,11 +279,13 @@ test('sigue sin emitirse nada de negocio', () => {
 
 test('no entra un segundo proveedor de mapas', () => {
   const dependencias = Object.keys(JSON.parse(leer('package.json')).dependencies ?? {});
-  // `react-native-maps` sale de la lista en MAP-INTEGRATION-1: el dueño
-  // eligió Google y lo autorizó. El resto sigue prohibido.
+  // `expo-location` sale de la lista en LOCATION-INTEGRATION-1A: el dueño
+  // lo autorizó y la aplicación ya usa la ubicación en primer plano. El
+  // resto sigue prohibido, y `expo-task-manager` en especial: es lo que
+  // hace falta para seguir midiendo con la aplicación cerrada.
   for (const prohibida of [
-    'expo-location', 'expo-maps', '@react-native-community/netinfo',
-    'expo-notifications', 'expo-image-picker'
+    'expo-maps', '@react-native-community/netinfo',
+    'expo-notifications', 'expo-image-picker', 'expo-task-manager'
   ]) {
     assert.equal(dependencias.includes(prohibida), false, `se instaló ${prohibida}`);
   }

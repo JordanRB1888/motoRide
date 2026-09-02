@@ -18,7 +18,7 @@
  * fallo de red— sería mentirle a alguien que va montado en la moto.
  */
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 
@@ -27,6 +27,7 @@ import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { useViajeActivo } from '../realtime/ViajeActivo';
+import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
 import { mapaDelViaje } from '../domain/mapaDelViaje';
 import {
   datosDelViaje,
@@ -38,6 +39,29 @@ export default function PantallaDelViajeActivo() {
   const tema = useTema();
   const { sesion } = useSesion();
   const { estado, viaje } = useViajeActivo();
+  const { estado: ubicacion, pedirUbicacion, refrescar } = useUbicacion();
+
+  // Se pide el permiso AQUI y no al abrir la aplicacion.
+  //
+  // Con un viaje en curso, ver donde estas respecto a la moto es justo lo que
+  // hace falta, asi que el momento se explica solo. Un permiso que salta nada
+  // mas abrir, sin nada en pantalla que lo justifique, se deniega casi
+  // siempre — y una vez denegado el sistema deja de preguntar.
+  useEffect(() => { void pedirUbicacion(); }, [pedirUbicacion]);
+
+  // CENTRAR ES UN EVENTO, NO UN MODO
+  //
+  // Se guarda la posicion del INSTANTE en que se pulsa. Mientras no se vuelva
+  // a pulsar, ese valor no cambia y la camara se queda donde este: si siguiera
+  // a la posicion viva, el mapa se moveria solo cada dos pasos y le quitaria
+  // el mapa de las manos a quien lo esta arrastrando para mirar otra calle.
+  const [centrarEn, setCentrarEn] = useState<{ lat: number; lng: number } | null>(null);
+
+  const centrar = useCallback(() => {
+    void refrescar();
+    const donde = ubicacion.posicion;
+    if (donde !== null) setCentrarEn({ lat: donde.lat, lng: donde.lng });
+  }, [refrescar, ubicacion.posicion]);
 
   // Cuando el servidor deja de dar el viaje —completado, cancelado, o fuera de
   // su ventana— esta pantalla ya no tiene nada que enseñar. Se vuelve al
@@ -60,7 +84,15 @@ export default function PantallaDelViajeActivo() {
 
   // El mapa REAL, con las coordenadas que traiga el viaje. Sin conductor
   // todavía: su posición no viaja en `/api/trips/active/me`.
-  const mapa = mapaDelViaje(viaje);
+  //
+  // La tuya sí, cuando el GPS la sepa. Si no hay permiso o todavía no llegó,
+  // `posicion` es null y el marcador sencillamente no se pinta.
+  const mapa = mapaDelViaje(viaje, {
+    usuarioEn: ubicacion.posicion === null
+      ? null
+      : { lat: ubicacion.posicion.lat, lng: ubicacion.posicion.lng },
+    centrarEn
+  });
 
   if (viaje.estado === 'SEARCHING') {
     return (
@@ -82,7 +114,7 @@ export default function PantallaDelViajeActivo() {
 
   return (
     <ProveedorDeNavegacion ir={irA}>
-      <C2Viaje datos={datos} mapa={mapa} />
+      <C2Viaje datos={datos} mapa={mapa} onCentrar={centrar} />
     </ProveedorDeNavegacion>
   );
 }

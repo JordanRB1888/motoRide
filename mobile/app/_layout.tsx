@@ -34,6 +34,7 @@ import { configuracion } from '../config/environment';
 import { ProveedorDeSesion } from '../context/AuthContext';
 import { ProveedorDeTiempoReal } from '../realtime/ProveedorDeTiempoReal';
 import { ProveedorDeViajeActivo } from '../realtime/ViajeActivo';
+import { ProveedorDeUbicacion } from '../ubicacion/UbicacionDelDispositivo';
 import { ProveedorDeTema } from '../theme/ThemeContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
@@ -112,6 +113,16 @@ export default function DisposicionRaiz() {
               y en sus eventos. Y una sola vez, como él: dos autoridades del
               mismo viaje acabarían discrepando. */}
           <ProveedorDeViajeActivo>
+          {/* El GPS del telefono, uno para toda la aplicacion.
+
+              Va aqui dentro para que solo exista con sesion: no tiene sentido
+              pedirle la ubicacion a alguien que todavia no ha entrado, y en el
+              recorrido de diseño no se monta.
+
+              No pide permiso al arrancar. Espera a que una pantalla lo pida,
+              cuando el usuario esta haciendo algo que lo justifica: un permiso
+              que salta nada mas abrir la aplicacion se deniega casi siempre. */}
+          <ProveedorDeUbicacion>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -123,6 +134,7 @@ export default function DisposicionRaiz() {
               animation: 'slide_from_right'
             }}
           />
+          </ProveedorDeUbicacion>
           </ProveedorDeViajeActivo>
           </ProveedorDeTiempoReal>
         </ProveedorDeSesion>

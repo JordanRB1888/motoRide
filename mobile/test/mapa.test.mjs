@@ -457,17 +457,29 @@ test('el logotipo de Google no queda bajo la hoja', () => {
 // Lo que esta fase NO hace
 // ---------------------------------------------------------------------------
 
-test('no se pide ubicación ni se instala GPS', () => {
+test('el punto azul de Google sigue apagado: manda nuestro marcador', () => {
+  // Esta prueba decía «no se pide ubicación ni se instala GPS». La ubicación
+  // ya existe, autorizada por el dueño, pero la decisión de fondo no cambia:
+  // UNA sola autoridad visual.
+  //
+  // `showsUserLocation` dibujaría el punto azul de Google Y pediría el
+  // permiso por su cuenta, saltandose las reglas de calidad. Serían dos
+  // puntos posibles sobre el mismo mapa y dos caminos hacia el permiso.
+  // El marcador propio además funciona igual en el navegador, donde esa
+  // propiedad ni existe.
   const nativo = sinComentarios('mapa/MapaDeMovilidad.native.tsx');
   assert.match(nativo, /showsUserLocation=\{false\}/);
-  assert.equal(/requestPermission|Location\./.test(nativo), false);
+  assert.equal(/Location\./.test(nativo), false,
+    'el adaptador del mapa habla con el GPS por su cuenta');
 
-  const dependencias = Object.keys(JSON.parse(leer('package.json')).dependencies ?? {});
-  assert.equal(dependencias.includes('expo-location'), false);
+  // El permiso lo pide la capa de ubicación, no el mapa.
+  const capa = sinComentarios('ubicacion/UbicacionDelDispositivo.tsx');
+  assert.match(capa, /requestForegroundPermissionsAsync/);
 
+  // Y sigue sin haber permiso de segundo plano en la configuración.
   const app = JSON.parse(leer('app.json'));
   const permisos = JSON.stringify(app.expo.android?.permissions ?? []);
-  assert.equal(/LOCATION/.test(permisos), false, 'se declaró un permiso de ubicación');
+  assert.equal(/BACKGROUND_LOCATION/.test(permisos), false);
 });
 
 test('el paquete WEB no incluye react-native-maps', () => {

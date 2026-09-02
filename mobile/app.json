@@ -35,6 +35,16 @@
       "expo-router",
       "expo-secure-store",
       "react-native-maps",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "+58Express usa tu ubicación para mostrar dónde estás y ayudarte a solicitar o realizar un viaje.",
+          "locationWhenInUsePermission": "+58Express usa tu ubicación para mostrar dónde estás y ayudarte a solicitar o realizar un viaje.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
       "./plugins/rutaCortaDeCmake"
     ],
     "experiments": {

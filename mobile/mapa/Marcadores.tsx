@@ -27,6 +27,8 @@ import type { Marcador } from './modelo';
  */
 export function tamanoDelMarcador(marcador: Marcador): number {
   if (marcador.clase === 'origen' || marcador.clase === 'destino') return 22;
+  // El punto del usuario cuenta con su anillo: es lo que ocupa en pantalla.
+  if (marcador.clase === 'usuario') return 26;
   return marcador.destacado === true ? 62 : 42;
 }
 
@@ -37,6 +39,34 @@ export function tamanoDelMarcador(marcador: Marcador): number {
  */
 export function PiezaDelMarcador({ marcador }: { readonly marcador: Marcador }) {
   const tema = useTema();
+
+  // DÓNDE ESTÁS TÚ
+  //
+  // El punto de toda la vida: un círculo con anillo que lo despega del mapa.
+  // No lleva vehículo —quien mira no conduce nada— ni estrena un color: usa el
+  // acento de la marca. Y es más pequeño que la moto a propósito: es una
+  // referencia, no el protagonista de la pantalla.
+  if (marcador.clase === 'usuario') {
+    return (
+      <View style={{
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: `${tema.color.acento}33`
+      }}>
+        <View style={{
+          width: 14,
+          height: 14,
+          borderRadius: 7,
+          backgroundColor: tema.color.acento,
+          borderWidth: 2.5,
+          borderColor: tema.color.fondo
+        }} />
+      </View>
+    );
+  }
 
   if (marcador.clase === 'origen' || marcador.clase === 'destino') {
     const esOrigen = marcador.clase === 'origen';

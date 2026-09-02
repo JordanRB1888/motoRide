@@ -217,6 +217,18 @@ export interface PropiedadesDelLienzo {
   /** Controles flotantes sobre el mapa (recentrar, capas). */
   readonly conControles?: boolean;
   /**
+   * Qué hace el botón de centrar.
+   *
+   * El botón ya existía dibujado y sin conectar. Se le pasa la acción desde
+   * fuera en vez de que él pida la ubicación por su cuenta: el lienzo pinta
+   * mapas, no decide sobre permisos del sistema.
+   *
+   * Sin acción el botón sigue ahí, igual que estaba en el diseño aprobado:
+   * quitarlo del recorrido de maqueta por una razón técnica sería cambiar una
+   * pantalla que ya se dio por buena.
+   */
+  readonly onCentrar?: () => void;
+  /**
    * El mapa REAL.
    *
    * Con modelo se pinta Google Maps; sin él, el lienzo dibujado de siempre.
@@ -240,6 +252,7 @@ export function LienzoDeMapa({
   conRuta = false,
   eligiendoPunto = false,
   conControles = true,
+  onCentrar,
   modelo,
   children
 }: PropiedadesDelLienzo) {
@@ -316,7 +329,11 @@ export function LienzoDeMapa({
           solapaba con la pastilla de la tasa, que ocupa la esquina derecha. */}
       {conControles ? (
         <View style={{ position: 'absolute', right: 14, top: 92 + arriba, gap: 10 }}>
-          <BotonDeMapa icono="destino" etiqueta="Centrar en mi ubicación" />
+          {/* El boton estaba aqui desde el diseño, dibujado y sin conectar.
+              Ahora recibe su accion desde fuera; donde no la haya sigue
+              exactamente igual que antes. Quitarlo alli seria cambiar una
+              pantalla aprobada por una razon tecnica. */}
+          <BotonDeMapa icono="destino" etiqueta="Centrar en mi ubicación" onPress={onCentrar} />
         </View>
       ) : null}
 

@@ -161,9 +161,15 @@ test('NO se piden permisos al arrancar', () => {
 });
 
 test('no hay GPS en segundo plano ni registro de notificaciones', () => {
+  // Esta prueba prohibía `expo-location` entero. Ya no: el dueño autorizó
+  // la ubicación en primer plano, que es la que se ve y se explica sola.
+  //
+  // Lo que sigue vedado es medir con la aplicación cerrada, que es donde
+  // están la batería y el consentimiento de verdad: `expo-task-manager` es
+  // la pieza que hace falta para eso, y no está.
   const paquete = JSON.parse(fs.readFileSync(path.join(raizMovil, 'package.json'), 'utf8'));
   const dependencias = Object.keys(paquete.dependencies ?? {});
-  for (const nombre of ['expo-location', 'expo-notifications', 'expo-task-manager']) {
+  for (const nombre of ['expo-notifications', 'expo-task-manager', 'expo-background-fetch']) {
     assert.equal(dependencias.includes(nombre), false,
       `${nombre} no corresponde a esta fase`);
   }

@@ -30,13 +30,15 @@
  * mapa de noche.
  */
 
+import { useCallback, useEffect, useState } from 'react';
 import { Redirect, useGlobalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import { LienzoDeMapa } from '../ui/Mapa';
 import { Txt } from '../ui/componentes';
 import { ProveedorDeTema, useTema } from '../theme/ThemeContext';
-import { camaraQueAbarca, type ModeloDelMapa } from '../mapa/modelo';
+import { camaraQueAbarca, type Coordenada, type ModeloDelMapa } from '../mapa/modelo';
+import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -95,10 +97,42 @@ export default function ValidacionDelMapa() {
 
 function Pantalla() {
   const tema = useTema();
+  const { estado, pedirUbicacion, refrescar } = useUbicacion();
+
+  // Aqui SI se pide el permiso al entrar: esta pantalla existe justamente
+  // para mirar el mapa y la ubicacion, asi que el momento se explica solo.
+  useEffect(() => { void pedirUbicacion(); }, [pedirUbicacion]);
+
+  // Centrar es un evento: se guarda la posicion del instante en que se pulsa,
+  // no se sigue a la posicion viva.
+  const [centrarEn, setCentrarEn] = useState<Coordenada | null>(null);
+  const centrar = useCallback(() => {
+    void refrescar();
+    if (estado.posicion !== null) {
+      setCentrarEn({ lat: estado.posicion.lat, lng: estado.posicion.lng });
+    }
+  }, [refrescar, estado.posicion]);
+
+  const yo = estado.posicion;
+  const modelo: ModeloDelMapa = {
+    ...MODELO,
+    camara: centrarEn === null ? MODELO.camara : camaraQueAbarca([centrarEn]),
+    marcadores: yo === null
+      ? MODELO.marcadores
+      : [
+          ...MODELO.marcadores,
+          {
+            clave: 'usuario',
+            clase: 'usuario' as const,
+            en: { lat: yo.lat, lng: yo.lng },
+            rumbo: null
+          }
+        ]
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
-      <LienzoDeMapa modelo={MODELO} conControles={false} />
+      <LienzoDeMapa modelo={modelo} onCentrar={centrar} />
 
       {/* Una etiqueta discreta, para no confundir esta pantalla con una de la
           aplicación al mirar una captura suelta. */}
@@ -114,7 +148,10 @@ function Pantalla() {
           borderRadius: 8
         }}
       >
-        <Txt nivel="etiqueta" tono="tenue">VALIDACIÓN DEL MAPA · datos fijos</Txt>
+        <Txt nivel="etiqueta" tono="tenue">
+          {`VALIDACIÓN · ${estado.fase}`}
+          {estado.fueraDelArea === true ? ' · FUERA DE ZONA' : ''}
+        </Txt>
       </View>
     </View>
   );

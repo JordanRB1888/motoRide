@@ -894,10 +894,12 @@ const VIAJE_EN_BLANCO: DatosDelViajeEnCurso = {
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
 
-export function C2Viaje({ datos, mapa }: {
+export function C2Viaje({ datos, mapa, onCentrar }: {
   readonly datos?: DatosDelViajeEnCurso;
   /** Con modelo se pinta Google; sin él, el lienzo dibujado del recorrido. */
   readonly mapa?: ModeloDelMapa;
+  /** Qué hace el botón de centrar, que ya estaba dibujado en esta pantalla. */
+  readonly onCentrar?: () => void;
 } = {}) {
   const tema = useTema();
   const viaje = datos ?? (EN_DESARROLLO ? VIAJE_DE_EJEMPLO : VIAJE_EN_BLANCO);
@@ -913,6 +915,7 @@ export function C2Viaje({ datos, mapa }: {
         hitos={HITOS_DE_VIAJE}
         conRuta
         modelo={mapa}
+        onCentrar={onCentrar}
       >
         {/* La hoja se ajusta a lo que ocupa.
             Estaba en «media» con cada bloque separado por dieciséis puntos, y en

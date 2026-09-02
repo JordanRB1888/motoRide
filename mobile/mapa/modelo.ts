@@ -57,7 +57,14 @@ export const CAMARA_DE_MARACAIBO: Camara = Object.freeze({
   abarca: ZOOM_DE_CIUDAD
 });
 
-export type ClaseDeMarcador = 'moto' | 'auto' | 'origen' | 'destino';
+/**
+ * `usuario` es dónde estás tú.
+ *
+ * No es un vehículo: no se inventa una moto para el usuario, ni se le pinta
+ * con el mismo lenguaje que los conductores. Es el punto discreto de siempre,
+ * el que cualquiera reconoce en un mapa.
+ */
+export type ClaseDeMarcador = 'moto' | 'auto' | 'origen' | 'destino' | 'usuario';
 
 export interface Marcador {
   readonly clave: string;

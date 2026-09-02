@@ -52,6 +52,18 @@ export function mapaDelViaje(
   opciones: {
     readonly conductorEn?: Coordenada | null;
     readonly rumboDelConductor?: number | null;
+    /** Dónde está quien mira la pantalla, si el GPS lo sabe. */
+    readonly usuarioEn?: Coordenada | null;
+    /**
+     * Llevar la cámara aquí.
+     *
+     * Es una FOTO del momento en que alguien pulsó «centrar», no un
+     * seguimiento: mientras no vuelva a pulsar, este valor no cambia y la
+     * cámara se queda quieta. Si siguiera a la posición viva, el mapa se
+     * movería solo cada vez que el usuario diera dos pasos, y pelearía con
+     * quien esté arrastrando para mirar otra calle.
+     */
+    readonly centrarEn?: Coordenada | null;
     readonly eligiendoPunto?: boolean;
     readonly aireInferior?: number;
   } = {}
@@ -97,9 +109,37 @@ export function mapaDelViaje(
     puntos.push(conductorEn);
   }
 
+  // DONDE ESTA QUIEN MIRA
+  //
+  // Va al final para quedar por encima del resto: si coincide con el origen,
+  // lo que interesa ver es que ese punto eres tu.
+  //
+  // NO entra en el encuadre. Si entrara, el mapa se alejaria para abarcarte a
+  // ti y al viaje, y con el conductor a dos calles la vista se abriria a media
+  // ciudad sin que nadie lo haya pedido. Para ir a tu posicion esta el boton
+  // de centrar.
+  const usuarioEn = opciones.usuarioEn ?? null;
+  if (usuarioEn !== null) {
+    marcadores.push({
+      clave: 'usuario',
+      clase: 'usuario',
+      en: usuarioEn,
+      rumbo: null
+    });
+  }
+
+  // Un centrado pedido a mano manda sobre todo lo demás: es lo único que el
+  // usuario ha pedido explícitamente.
+  const centrarEn = opciones.centrarEn ?? null;
+
   return {
+    camara: centrarEn !== null ? camaraQueAbarca([centrarEn]) :
     // Sin ningún punto válido, la ciudad. Nunca una vista del océano.
-    camara: puntos.length === 0 ? CAMARA_DE_MARACAIBO : camaraQueAbarca(puntos),
+    puntos.length === 0
+      // Sin viaje pero con GPS, la vista arranca donde estas: es mejor
+      // respuesta que la ciudad entera, y no obliga a buscarte.
+      ? (usuarioEn === null ? CAMARA_DE_MARACAIBO : camaraQueAbarca([usuarioEn]))
+      : camaraQueAbarca(puntos),
     marcadores,
     // Pendiente: el servidor no publica geometría de ruta.
     ruta: [],
