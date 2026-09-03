@@ -51,7 +51,10 @@ test('entrar como pasajera lleva al inicio real', () => {
 
 test('el inicio real monta el HUB aprobado, no una tarjeta de espera', () => {
   const inicio = sinComentarios('app/pasajero.tsx');
-  assert.match(inicio, /<C2InicioPasajera datos=\{datos\} modeloDelMapa=\{MAPA_DEL_HOME\} \/>/);
+  // El HUB se monta con los datos reales y el mapa. Desde D4 lleva además el
+  // aviso de la postulación, que es una tarjeta más dentro del HUB, no otra
+  // pantalla: por eso se comprueba el montaje, no la línea entera.
+  assert.match(inicio, /<C2InicioPasajera datos=\{datos\} modeloDelMapa=\{MAPA_DEL_HOME\}/);
   assert.match(inicio, /<ProveedorDeNavegacion ir=\{irA\}>/);
   // La tarjeta que decía que Pedir llegaría después se fue con la entrega.
   assert.equal(/siguiente entrega/.test(inicio), false, 'el inicio sigue prometiendo Pedir para luego');

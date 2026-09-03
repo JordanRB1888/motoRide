@@ -19,6 +19,17 @@
  * Con guardia de sesión: sin sesión confirmada por el backend aquí no se
  * entra. La comprobación mira el ESTADO real, no la ruta ni la preferencia
  * guardada — un enlace profundo no puede saltársela.
+ *
+ * EL AVISO DE LA POSTULACIÓN
+ *
+ * Quien mandó una solicitud para conducir se enteraba de la respuesta sólo si
+ * se le ocurría entrar al perfil y tocar «Cambiar de modo». Ahora el inicio se
+ * lo dice, en la tarjeta que Antigravity dejó preparada bajo el buscador.
+ *
+ * Esa tarjeta NO bloquea nada. El inicio se pinta entero aunque la consulta
+ * tarde o falle: si no hay respuesta, no hay tarjeta, y el mapa, el buscador y
+ * los servicios siguen ahí. Un expediente es una noticia, no un requisito para
+ * pedir una carrera.
  */
 
 import { useEffect, useMemo } from 'react';
@@ -30,6 +41,19 @@ import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { useViajeActivo } from '../realtime/ViajeActivo';
+import { useEstadoDePostulacion } from '../context/EstadoDePostulacion';
+import { avisoDePostulacion } from '../domain/avisoDePostulacion';
+import { expedienteParaElInicio } from '../services/postulacion';
+import { CAMARA_DE_MARACAIBO, type ModeloDelMapa } from '../mapa/modelo';
+
+/** Modelo estable: evita reconstruir el mapa cada vez que cambia la hoja. */
+const MAPA_DEL_HOME: ModeloDelMapa = Object.freeze({
+  camara: CAMARA_DE_MARACAIBO,
+  marcadores: Object.freeze([]),
+  ruta: Object.freeze([]),
+  eligiendoPunto: false,
+  aireInferior: 96
+});
 
 /**
  * De clave a ruta REAL.
@@ -57,7 +81,7 @@ function inicialesDe(nombre: string, apellido: string): string {
 
 export default function InicioDePasajera() {
   const tema = useTema();
-  const { sesion } = useSesion();
+  const { sesion, revalidar } = useSesion();
   const { estado: viajeActivo } = useViajeActivo();
 
   /**
@@ -74,6 +98,43 @@ export default function InicioDePasajera() {
   }, [viajeActivo.fase]);
 
   const usuario = sesion.estado === 'AUTENTICADO' ? sesion.usuario : null;
+  // Sólo se pregunta con sesión confirmada: el expediente es de alguien.
+  const { solicitud } = useEstadoDePostulacion({ activo: usuario !== null });
+
+  /**
+   * Qué decir de la postulación, si hay algo que decir.
+   *
+   * La traducción de estado a palabras vive en el dominio, y el destino de cada
+   * botón sale de `destinoDePostulacion`. Aquí no se decide nada: se pinta lo
+   * que sale de ahí y se conecta la navegación.
+   */
+  const avisoPostulacion = useMemo(() => {
+    const aviso = avisoDePostulacion(expedienteParaElInicio(solicitud), { rolReal: usuario?.role ?? null });
+    if (aviso === null) return null;
+
+    const abrir = () => {
+      // Al aprobarse, primero se le vuelve a preguntar al servidor quién es
+      // esta persona. El rol lo concede el backend; la aplicación no se lo
+      // escribe a sí misma. La pantalla de estado lleva a conducir en cuanto
+      // el backend lo reconoce, y si todavía no, deja ver el estado.
+      if (aviso.revalidarLaSesion) {
+        void revalidar().finally(() => { router.push(aviso.destino); });
+        return;
+      }
+      router.push(aviso.destino);
+    };
+
+    return {
+      variante: aviso.variante,
+      titulo: aviso.titulo,
+      descripcion: aviso.descripcion,
+      etiqueta: aviso.etiqueta,
+      ...(aviso.textoCTA === null ? { mostrarCTA: false } : { textoCTA: aviso.textoCTA, mostrarCTA: true }),
+      onPress: abrir,
+      testID: aviso.testID
+    };
+  }, [solicitud, usuario, revalidar]);
+
 
   // Sólo lo que es de verdad. La tasa, las campañas, los aliados y los sitios
   // guardados no tienen todavía una fuente real: no se inventan.
@@ -105,7 +166,7 @@ export default function InicioDePasajera() {
 
   return (
     <ProveedorDeNavegacion ir={irA}>
-      <C2InicioPasajera datos={datos} />
+      <C2InicioPasajera datos={datos} modeloDelMapa={MAPA_DEL_HOME} avisoPostulacion={avisoPostulacion} />
     </ProveedorDeNavegacion>
   );
 }

@@ -12,7 +12,7 @@
  * usa el resto de la aplicación.
  */
 
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -25,10 +25,18 @@ export interface PropiedadesDeFormulario {
   /** Las acciones. Fijas abajo; sin ellas, el cuerpo llega al final. */
   readonly pie?: ReactNode;
   readonly children: ReactNode;
+  /**
+   * Para llevar la vista a un sitio concreto al abrir.
+   *
+   * Lo usa el paso de documentos cuando administración pidió repetir algo que
+   * está a mitad de una lista de doce: dejar a la persona buscándolo sería
+   * hacerle perder el tiempo en lo único que tenía que hacer.
+   */
+  readonly refDelCuerpo?: RefObject<ScrollView | null>;
   readonly testID?: string;
 }
 
-export function Formulario({ cabecera, pie, children, testID }: PropiedadesDeFormulario) {
+export function Formulario({ cabecera, pie, children, refDelCuerpo, testID }: PropiedadesDeFormulario) {
   const tema = useTema();
   return (
     <View style={[estilos.raiz, { backgroundColor: tema.color.fondo }]} testID={testID}>
@@ -40,6 +48,7 @@ export function Formulario({ cabecera, pie, children, testID }: PropiedadesDeFor
         >
           {cabecera}
           <ScrollView
+            ref={refDelCuerpo}
             style={estilos.cuerpo}
             contentContainerStyle={estilos.contenido}
             keyboardShouldPersistTaps="handled"

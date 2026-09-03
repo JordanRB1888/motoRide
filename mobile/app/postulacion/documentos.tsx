@@ -25,8 +25,8 @@
  */
 
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { Boton } from '../../components/Boton';
 import { CabeceraDePasos } from '../../components/CabeceraDePasos';
@@ -127,6 +127,11 @@ export default function PasoDeDocumentos() {
   // El vídeo grabado y todavía no subido. Vive sólo mientras dura la pantalla:
   // no se guarda en disco ni se recuerda entre sesiones.
   const [videoGrabado, setVideoGrabado] = useState<VideoCapturado | null>(null);
+  // Para colocarse en el documento que hay que repetir. Se guarda dónde quedó
+  // cada tarjeta y se salta una sola vez, al llegar.
+  const cuerpo = useRef<ScrollView | null>(null);
+  const alturas = useRef(new Map<string, number>());
+  const yaSeColoco = useRef(false);
 
   const recargar = useCallback(async () => {
     const lectura = await leerMiPostulacion();
@@ -157,6 +162,21 @@ export default function PasoDeDocumentos() {
     if (!respuesta.ok) { if (!alPerderLaSesion(respuesta.motivo)) setAviso(MENSAJES[respuesta.motivo]); return; }
     fijarSolicitud(respuesta.solicitud);
   };
+
+  /**
+   * Lleva la vista al primer documento con corrección.
+   *
+   * Sólo una vez por visita y sólo si administración pidió algo: si no, la
+   * pantalla se queda arriba, que es donde debe empezar quien viene a subir
+   * sus fotos por primera vez.
+   */
+  const irALaCorreccion = useCallback((tipo: string) => {
+    if (yaSeColoco.current) return;
+    const altura = alturas.current.get(tipo);
+    if (altura === undefined || cuerpo.current === null) return;
+    yaSeColoco.current = true;
+    cuerpo.current.scrollTo({ y: Math.max(0, altura - 12), animated: true });
+  }, []);
 
   const grabar = async (modo: ModoDeVideo) => {
     setAviso(null);
@@ -206,6 +226,7 @@ export default function PasoDeDocumentos() {
 
   return (
     <Formulario
+      refDelCuerpo={cuerpo}
       testID="postulacion-documentos"
       cabecera={<CabeceraDePasos paso="documentos" hechos={['personal', 'vehiculo']} onCerrar={() => { router.replace('/pasajero'); }} />}
       pie={(
@@ -245,6 +266,10 @@ export default function PasoDeDocumentos() {
             const hecho = entregados.has(tipo) && !faltan.has(tipo);
             const motivo = porRepetir.get(tipo);
             const ocupado = ocupadoCon === tipo;
+            const alMedir = (evento: LayoutChangeEvent) => {
+              alturas.current.set(tipo, evento.nativeEvent.layout.y);
+              if (motivo) irALaCorreccion(tipo);
+            };
 
             if (documento?.medio === 'video') {
               const estado = estadoDelVideo({ motivo, subiendo: ocupado, entregado: hecho, grabado: videoGrabado });
@@ -253,6 +278,7 @@ export default function PasoDeDocumentos() {
                 <View
                   key={tipo}
                   style={[estilos.tarjeta, motivo ? estilos.tarjetaConCorreccion : estado === 'SUBIDO' ? estilos.tarjetaHecha : null]}
+                  onLayout={alMedir}
                   testID={`documento-${tipo}`}
                 >
                   <Text style={estilos.tarjetaTitulo}>{documento.titulo}{estado === 'SUBIDO' ? ' · listo' : ''}</Text>
@@ -288,7 +314,7 @@ export default function PasoDeDocumentos() {
             }
 
             return (
-              <View key={tipo} style={[estilos.tarjeta, motivo ? estilos.tarjetaConCorreccion : hecho ? estilos.tarjetaHecha : null]} testID={`documento-${tipo}`}>
+              <View key={tipo} style={[estilos.tarjeta, motivo ? estilos.tarjetaConCorreccion : hecho ? estilos.tarjetaHecha : null]} onLayout={alMedir} testID={`documento-${tipo}`}>
                 <Text style={estilos.tarjetaTitulo}>{documento?.titulo ?? tipo}{hecho && !motivo ? ' · listo' : ''}</Text>
                 <Text style={estilos.tarjetaDetalle}>{motivo ? `Repetir: ${motivo}` : documento?.instruccion ?? ''}</Text>
                 {bloqueada ? null : (
