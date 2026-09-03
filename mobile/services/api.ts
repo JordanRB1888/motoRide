@@ -102,26 +102,85 @@ export async function llamar<T>(ruta: string, opciones: OpcionesDePeticion = {})
     clearTimeout(temporizador);
   }
 
+  return resultadoDesde<T>(respuesta.status, respuesta.status === 204 ? '' : await respuesta.text());
+}
+
+/** Traduce el estado HTTP y el cuerpo a un `Resultado`, venga de donde venga. */
+function resultadoDesde<T>(estado: number, texto: string): Resultado<T> {
   // 204 y compañía: correcto y sin cuerpo.
-  if (respuesta.status === 204) return { ok: true, datos: undefined as T };
+  if (estado === 204) return { ok: true, datos: undefined as T };
+  const correcto = estado >= 200 && estado < 300;
 
   let cuerpo: unknown;
   try {
-    cuerpo = await respuesta.json();
+    cuerpo = JSON.parse(texto);
   } catch {
-    if (respuesta.ok) return fallo('RESPUESTA_INVALIDA', 'El servidor respondió algo que no es JSON.');
+    if (correcto) return fallo('RESPUESTA_INVALIDA', 'El servidor respondió algo que no es JSON.');
     cuerpo = {};
   }
 
-  if (respuesta.ok) return { ok: true, datos: cuerpo as T };
+  if (correcto) return { ok: true, datos: cuerpo as T };
 
   // El contrato de error del backend: `{ error: CÓDIGO }` más el estado HTTP.
   const codigo = leerCodigoDeError(cuerpo);
 
-  if (respuesta.status === 401) {
+  if (estado === 401) {
     return fallo('NO_AUTENTICADO', 'La sesión no es válida o caducó.', codigo, cuerpo, 401);
   }
-  return fallo('ERROR_DEL_SERVIDOR', codigo ?? `El servidor respondió ${respuesta.status}.`, codigo, cuerpo, respuesta.status);
+  return fallo('ERROR_DEL_SERVIDOR', codigo ?? `El servidor respondió ${estado}.`, codigo, cuerpo, estado);
+}
+
+/** Un archivo del teléfono, por su ruta. Ni bytes ni base64: eso lo lee nativo. */
+export interface ArchivoParaSubir {
+  readonly uri: string;
+  readonly nombre: string;
+  /** `image/jpeg`, `image/png`… */
+  readonly tipo: string;
+}
+
+/**
+ * Sube un archivo como multipart, por `XMLHttpRequest`.
+ *
+ * ¿POR QUÉ NO `fetch`? Desde el SDK 57 el `fetch` global es el de Expo
+ * (`expo/fetch`), que arma el multipart en JavaScript y sólo admite partes
+ * `Blob` o con `bytes()`; una parte `{ uri }` termina en «Unsupported
+ * FormDataPart implementation». Leer la foto a memoria para envolverla en un
+ * Blob es pasar varios megas por el puente de JavaScript. El `XMLHttpRequest`
+ * de React Native, en cambio, manda la parte `{ uri }` desde nativo y en
+ * streaming: sin base64, sin copias y sin cargar la foto en JavaScript. Es el
+ * camino que React Native documenta para subir archivos.
+ *
+ * Mismo token, mismos códigos de error y mismo `Resultado` que `llamar()`.
+ */
+export async function subirArchivo<T>(
+  ruta: string,
+  campo: string,
+  archivo: ArchivoParaSubir,
+  { metodo = 'PUT', tiempoMaximoMs = 60_000 }: { readonly metodo?: 'POST' | 'PUT'; readonly tiempoMaximoMs?: number } = {}
+): Promise<Resultado<T>> {
+  if (!configuracion.ok) {
+    return fallo('SIN_CONFIGURACION', configuracion.detalle, configuracion.motivo);
+  }
+  // Se lee fuera de la promesa: dentro del cierre TypeScript ya no sabe que
+  // la configuración es válida.
+  const urlBase = configuracion.urlBase;
+  const token = await leerToken();
+
+  return new Promise<Resultado<T>>(resolve => {
+    const peticion = new XMLHttpRequest();
+    peticion.open(metodo, `${urlBase}${ruta}`);
+    peticion.timeout = tiempoMaximoMs;
+    peticion.setRequestHeader('accept', 'application/json');
+    if (token) peticion.setRequestHeader('authorization', `Bearer ${token}`);
+    peticion.onload = () => { resolve(resultadoDesde<T>(peticion.status, peticion.responseText ?? '')); };
+    peticion.onerror = () => { resolve(fallo('SIN_RED', 'No hay conexión con el servidor.')); };
+    peticion.ontimeout = () => { resolve(fallo('TIEMPO_AGOTADO', 'El servidor tardó demasiado en responder.')); };
+
+    const formulario = new FormData();
+    // La forma que React Native entiende para un archivo por ruta.
+    formulario.append(campo, { uri: archivo.uri, name: archivo.nombre, type: archivo.tipo } as unknown as Blob);
+    peticion.send(formulario);
+  });
 }
 
 /** Saca el código del cuerpo de error sin asumir que venga bien formado. */

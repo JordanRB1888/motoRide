@@ -20,20 +20,52 @@ import { usePostulacion } from '../../context/PostulacionContext';
 import {
   DOCUMENTOS_LEGALES_DEL_VEHICULO,
   GRADOS_DE_LICENCIA,
+  VEHICULOS_DESCRITOS,
   describirPaso,
+  esDocumentoLegal,
   pasoCompleto,
   validarCertificadoMedico,
   validarLicencia,
   validarVehiculo,
+  type DatosDeLicencia,
+  type DatosDelCertificadoMedico,
   type DatosDelVehiculo,
-  type ErroresDePaso
+  type ErroresDePaso,
+  type TipoDeVehiculo
 } from '../../domain/postulacion';
 import {
   actualizarMiPostulacion,
   camposDelServidor,
   crearPostulacion,
-  type MotivoDePostulacion
+  type MotivoDePostulacion,
+  type SolicitudPropia
 } from '../../services/postulacion';
+
+/** Lo que el servidor ya tiene del vehículo, en la forma de los campos. */
+function desdeLaSolicitud(solicitud: SolicitudPropia): {
+  readonly datos: DatosDelVehiculo;
+  readonly licencia: DatosDeLicencia;
+  readonly certificado: DatosDelCertificadoMedico;
+} {
+  const vehiculo = solicitud.vehicle ?? {};
+  const texto = (valor: unknown) => (typeof valor === 'string' ? valor : typeof valor === 'number' ? String(valor) : '');
+  return {
+    datos: {
+      tipo: solicitud.vehicleType,
+      marca: texto(vehiculo.brand),
+      modelo: texto(vehiculo.model),
+      ano: texto(vehiculo.year),
+      color: texto(vehiculo.color),
+      placa: texto(vehiculo.plate),
+      documentoLegal: esDocumentoLegal(vehiculo.legalDocumentType) ? vehiculo.legalDocumentType : 'CIRCULATION_CARD'
+    },
+    licencia: {
+      grado: solicitud.license.grade === null ? '' : String(solicitud.license.grade),
+      vencimiento: solicitud.license.expiration ?? ''
+    },
+    certificado: { vencimiento: solicitud.medicalCertificate.expiration ?? '' }
+  };
+}
 import { useTema } from '../../theme/ThemeContext';
 import { espaciado, tipografia } from '../../theme/tokens';
 
@@ -55,10 +87,19 @@ export default function PasoDeVehiculo() {
   const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   const { entrar } = useSesion();
   const { borrador, actualizar, solicitud, fijarSolicitud } = usePostulacion();
-  const tipo = borrador.vehiculo ?? borrador.datosDelVehiculo.tipo;
-  const [datos, setDatos] = useState<DatosDelVehiculo>({ ...borrador.datosDelVehiculo, tipo });
-  const [licencia, setLicencia] = useState(borrador.licencia);
-  const [certificado, setCertificado] = useState(borrador.certificadoMedico);
+  // Al corregir un expediente que ya existe, lo que se enseña es lo que tiene
+  // el servidor, no el borrador (que tras reabrir la aplicación está vacío).
+  const guardado = solicitud ? desdeLaSolicitud(solicitud) : null;
+  const tipo = guardado?.datos.tipo ?? borrador.vehiculo ?? borrador.datosDelVehiculo.tipo;
+  const [datos, setDatos] = useState<DatosDelVehiculo>(guardado?.datos ?? { ...borrador.datosDelVehiculo, tipo });
+  const [licencia, setLicencia] = useState(guardado?.licencia ?? borrador.licencia);
+  const [certificado, setCertificado] = useState(guardado?.certificado ?? borrador.certificadoMedico);
+
+  const cambiarTipo = (nuevo: TipoDeVehiculo) => {
+    setDatos(actual => ({ ...actual, tipo: nuevo }));
+    // Un grado que no sirve para el vehículo nuevo se borra, no se arrastra.
+    setLicencia(actual => (GRADOS_DE_LICENCIA[nuevo].includes(Number.parseInt(actual.grado, 10)) ? actual : { ...actual, grado: '' }));
+  };
   const [errores, setErrores] = useState<ErroresDePaso>({});
   const [erroresDeLicencia, setErroresDeLicencia] = useState<ErroresDePaso>({});
   const [errorDeCertificado, setErrorDeCertificado] = useState<ErroresDePaso>({});
@@ -91,8 +132,12 @@ export default function PasoDeVehiculo() {
     setGuardando(true);
 
     if (solicitud !== null) {
-      // Ya hay expediente: se corrige lo que cambió.
-      const respuesta = await actualizarMiPostulacion(camposDelServidor(completo));
+      // Ya hay expediente: se corrige lo del vehículo, la licencia y el
+      // certificado. Los datos personales no salen de esta pantalla.
+      const soloVehiculo = Object.fromEntries(
+        Object.entries(camposDelServidor(completo)).filter(([campo]) => /^(vehicle|license|medical)/.test(campo))
+      );
+      const respuesta = await actualizarMiPostulacion(soloVehiculo);
       setGuardando(false);
       if (!respuesta.ok) { setAviso(MENSAJES[respuesta.motivo]); return; }
       fijarSolicitud(respuesta.solicitud);
@@ -126,6 +171,15 @@ export default function PasoDeVehiculo() {
         <Text style={estilos.paso}>Paso 3 de 5</Text>
         <Text style={estilos.titulo}>{paso.titulo}</Text>
         <Text style={estilos.detalle}>{datos.tipo === 'MOTO' ? 'Tu moto.' : 'Tu carro.'} {paso.detalle}</Text>
+
+        {solicitud ? (
+          <>
+            <Text style={estilos.seccion}>Tu vehículo (cambiarlo cambia los documentos que se piden)</Text>
+            {VEHICULOS_DESCRITOS.map(item => (
+              <Opcion key={item.tipo} titulo={item.titulo} detalle={item.detalle} elegida={datos.tipo === item.tipo} onElegir={() => cambiarTipo(item.tipo)} testID={`vehiculo-${item.tipo}`} />
+            ))}
+          </>
+        ) : null}
 
         <CampoDeTexto etiqueta="Marca" valor={datos.marca} onCambiar={cambiar('marca')} error={errores.marca} ejemplo="Bera" capitalizar="words" testID="campo-marca" />
         <CampoDeTexto etiqueta="Modelo" valor={datos.modelo} onCambiar={cambiar('modelo')} error={errores.modelo} ejemplo="SBR" capitalizar="characters" testID="campo-modelo" />

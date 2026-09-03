@@ -321,6 +321,14 @@ export function createDriverApplicationsRouter({
       database.driverDocuments.push({ id: `driver_document_${crypto.randomUUID()}`, applicationId: application.id, userId: req.user.id, type: req.params.type, storageKey, originalName: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size, status: 'pending', uploadedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     }
     application.status = DRIVER_APPLICATION_STATUS.DRAFT;
+    // Repetir el documento atiende la correccion que administracion pidio
+    // sobre el: deja de figurar como pendiente. El motivo global y las
+    // correcciones de texto siguen hasta el reenvio; si el nuevo tampoco
+    // sirve, administracion volvera a pedirlo.
+    const pendientes = normalizeStoredApplication(application).requestedChangeDetails
+      .filter(detail => detail.type !== req.params.type);
+    application.requestedChangeDetails = pendientes;
+    application.requestedChanges = pendientes.map(detail => detail.type);
     application.updatedAt = new Date().toISOString();
     if (!await persistDatabase()) {
       privateStorage.remove(storageKey);

@@ -41,7 +41,7 @@
  * almacenamiento de la aplicación es una cédula que se filtra con el teléfono.
  */
 
-import { llamar } from './api';
+import { llamar, subirArchivo } from './api';
 import type { Resultado } from '../domain/apiResult';
 import type { EstadoDeSolicitud } from '../domain/driverApplication';
 import type {
@@ -351,6 +351,20 @@ export async function actualizarMiPostulacion(
 }
 
 /**
+ * La subida arranca justo cuando la aplicación vuelve de la cámara o del
+ * selector, y en ese instante Android está reasignando la red al proceso:
+ * las conexiones abiertas se cortan y la primera petición puede caer en el
+ * hueco (visto en el emulador: «Software caused connection abort» al
+ * reanudar y `requestNetwork` cinco segundos después). Por eso «sin red» se
+ * reintenta unas pocas veces, con pausa. Sólo «sin red»: un 400 o un 413 no
+ * mejoran por insistir. Y acotado: nada de bucles.
+ */
+const INTENTOS_DE_SUBIDA = 3;
+const PAUSA_ENTRE_INTENTOS_MS = 2000;
+
+const pausa = (ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms); });
+
+/**
  * Sube un documento. Sustituye al anterior de ese tipo, si lo había.
  *
  * El tiempo máximo sube a un minuto: una foto por una red móvil venezolana no
@@ -364,18 +378,19 @@ export async function subirDocumento(
     return { ok: false, motivo: 'ARCHIVO_DEMASIADO_GRANDE' };
   }
 
-  const formulario = new FormData();
-  // React Native manda archivos con esta forma; no es un `Blob` del navegador.
-  formulario.append('file', {
-    uri: foto.uri,
-    name: foto.nombre,
-    type: foto.tipo
-  } as unknown as Blob);
-
-  return interpretar(await llamar<unknown>(
-    `/api/driver-applications/me/documents/${encodeURIComponent(tipo)}`,
-    { metodo: 'PUT', cuerpo: formulario, tiempoMaximoMs: 60_000 }
-  ));
+  for (let intento = 1; ; intento += 1) {
+    // Por ruta y desde nativo: `subirArchivo` explica por qué no es `fetch`.
+    const respuesta = await subirArchivo<unknown>(
+      `/api/driver-applications/me/documents/${encodeURIComponent(tipo)}`,
+      'file',
+      { uri: foto.uri, nombre: foto.nombre, tipo: foto.tipo },
+      { metodo: 'PUT', tiempoMaximoMs: 60_000 }
+    );
+    if (respuesta.ok || respuesta.motivo !== 'SIN_RED' || intento >= INTENTOS_DE_SUBIDA) {
+      return interpretar(respuesta);
+    }
+    await pausa(PAUSA_ENTRE_INTENTOS_MS);
+  }
 }
 
 /**

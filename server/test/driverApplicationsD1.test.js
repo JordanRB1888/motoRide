@@ -222,8 +222,14 @@ test('administración ve vehículo y servicios, pide cambios por documento con m
   assert.deepEqual(owner.requestedChanges, ['plate_photo', 'car_rear_interior']);
   assert.equal(owner.textualCorrections, 'La placa declarada no coincide con la foto.');
 
+  // Repetir un documento atiende SU corrección: la otra sigue pendiente, y el
+  // motivo global y la corrección de texto se conservan hasta el reenvío.
+  const afterPlate = await (await uploadDocument(api, token, 'plate_photo')).json();
+  assert.equal(afterPlate.status, 'draft');
+  assert.deepEqual(afterPlate.requestedChangeDetails, [{ type: 'car_rear_interior', reason: 'Revisa dos fotos y la placa declarada.' }]);
+  assert.deepEqual(afterPlate.requestedChanges, ['car_rear_interior']);
+  assert.equal(afterPlate.textualCorrections, 'La placa declarada no coincide con la foto.');
   // Corregir y reenviar limpia lo pedido.
-  assert.equal((await uploadDocument(api, token, 'plate_photo')).status, 200);
   assert.equal((await uploadDocument(api, token, 'car_rear_interior')).status, 200);
   const resubmitted = await (await fetch(`${api}/driver-applications/me/submit`, { method: 'POST', ...auth(token) })).json();
   assert.equal(resubmitted.status, 'pending');
