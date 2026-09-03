@@ -111,17 +111,30 @@ export function credencialesParaEntrar(credenciales: CredencialesConIntencion): 
 }
 
 /**
- * A dónde se va después de entrar. Lo decide la cuenta REAL.
+ * A dónde se va después de entrar.
  *
- * La intención se recibe como segundo argumento para que quede escrito que se
- * IGNORA: `destinoTrasEntrar(cuentaDeConductor, 'passenger')` es el inicio de
- * conductor.
+ * EL ROL LO DA LA CUENTA; LA INTENCIÓN SÓLO ELIGE PUERTA
+ *
+ * Quien tiene cuenta de conductor va al inicio de conductor, haya pulsado lo
+ * que haya pulsado: `destinoTrasEntrar(cuentaDeConductor, 'passenger')` sigue
+ * siendo `/conductor`. Eso no cambia, y es lo que impide que una tarjeta de la
+ * bienvenida conceda nada.
+ *
+ * Lo que sí decide la intención es a qué puerta llega quien NO es conductor:
+ * si vino por «Conductor», lo suyo es la postulación, no el inicio de
+ * pasajera. Postularse no le da el rol —eso lo decide administración— pero
+ * mandarlo a pedir un viaje cuando lo que quiere es trabajar era hacerle
+ * buscar la entrada a mano.
  */
 export function destinoTrasEntrar(
   usuario: Parameters<typeof experienciaDeLaIdentidad>[0],
-  _intencion?: IntencionDeEntrada | null
-): '/conductor' | '/pasajero' {
-  return experienciaDeLaIdentidad(usuario) === 'driver' ? '/conductor' : '/pasajero';
+  intencion?: IntencionDeEntrada | null
+): '/conductor' | '/pasajero' | '/postulacion' {
+  if (experienciaDeLaIdentidad(usuario) === 'driver') return '/conductor';
+  // Sólo una cuenta de pasajera puede postularse: administración y cualquier
+  // otro papel se quedan en lo suyo.
+  if (intencion === 'driver' && usuario.role === 'passenger') return '/postulacion';
+  return '/pasajero';
 }
 
 // ---------------------------------------------------------------------------

@@ -43,12 +43,15 @@ test('entrar como pasajera lleva al inicio real', () => {
   // Las dos puertas de arranque —sesión guardada y acceso recién hecho— van a
   // `/pasajero`, no al laboratorio.
   assert.match(sinComentarios('app/index.tsx'), /'\/pasajero'/);
-  assert.match(sinComentarios('app/acceso.tsx'), /'\/pasajero'/);
+  // El acceso ya no escribe el destino: lo pide al dominio, y es ahí donde
+  // `/pasajero` sigue siendo la puerta de quien entra como pasajera.
+  assert.match(sinComentarios('app/acceso.tsx'), /destinoTrasEntrar/);
+  assert.match(sinComentarios('domain/entrada.ts'), /'\/pasajero'/);
 });
 
 test('el inicio real monta el HUB aprobado, no una tarjeta de espera', () => {
   const inicio = sinComentarios('app/pasajero.tsx');
-  assert.match(inicio, /<C2InicioPasajera datos=\{datos\} \/>/);
+  assert.match(inicio, /<C2InicioPasajera datos=\{datos\} modeloDelMapa=\{MAPA_DEL_HOME\} \/>/);
   assert.match(inicio, /<ProveedorDeNavegacion ir=\{irA\}>/);
   // La tarjeta que decía que Pedir llegaría después se fue con la entrega.
   assert.equal(/siguiente entrega/.test(inicio), false, 'el inicio sigue prometiendo Pedir para luego');
@@ -64,10 +67,12 @@ test('Inicio → Pedir resuelve a app/pedir.tsx, no al laboratorio', () => {
   // Nunca a `/diseno`.
   assert.equal(/diseno/.test(inicio), false, 'el inicio real navega al laboratorio');
 
-  // El disco central del HUB emite exactamente esa clave.
+  // El campo conserva la puerta directa al flujo real. El disco central ahora
+  // despliega el catálogo sobre el mapa y la card Viajes mantiene la otra puerta.
   const hub = sinComentarios('preview/pantallaInicioPasajera.tsx');
   assert.match(hub, /<CampoDeDestino onPress=\{\(\) => ir\('pedir'\)\} \/>/);
-  assert.match(hub, /control=\{<ControlDePedido abierto=\{false\} \/>\}/);
+  assert.match(hub, /abierto=\{hojaAbierta\}/);
+  assert.match(hub, /onAlternar=\{hojaAbierta \? cerrarHoja : abrirHoja\}/);
   const barra = sinComentarios('ui/Navegacion.tsx');
   assert.match(barra, /ir\(abierto \? 'inicio' : 'pedir'\)/);
 });

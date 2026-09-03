@@ -81,8 +81,10 @@ test('el acceso NO manda ningún rol al backend', () => {
 
 test('tras entrar, se va a donde diga la cuenta', () => {
   const acceso = sinComentarios('app/acceso.tsx');
-  assert.match(acceso, /experienciaDeLaIdentidad\(resultado\.usuario\)/);
-  assert.match(acceso, /router\.replace\(destino === 'driver' \? '\/conductor' : '\/pasajero'\)/);
+  // El destino lo calcula el dominio con la identidad real; la pantalla no
+  // vuelve a decidirlo por su cuenta.
+  assert.match(acceso, /destinoTrasEntrar\(resultado\.usuario/);
+  assert.match(acceso, /router\.replace\(destino\)/);
 });
 
 test('el acceso es el aprobado, sin puertas de desarrollo', () => {

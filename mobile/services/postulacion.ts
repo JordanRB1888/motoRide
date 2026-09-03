@@ -53,6 +53,7 @@ import type {
   TipoDeVehiculo
 } from '../domain/postulacion';
 import { normalizarCedula, normalizarPlaca, normalizarRif, regionDeLaCiudad } from '../domain/postulacion';
+import type { RetratoDelExpediente } from '../domain/postulacion';
 
 /** Un archivo tal como lo entrega React Native: una ruta, no un `Blob`. */
 export interface FotoParaSubir {
@@ -415,4 +416,24 @@ export async function enviarARevision(): Promise<ResultadoDeSolicitud> {
 /** La ruta protegida de un documento. Sólo con sesión; nunca una URL pública. */
 export function rutaDelDocumento(id: string): string {
   return `/api/driver-documents/${encodeURIComponent(id)}/content`;
+}
+
+/**
+ * El expediente, reducido a lo que hace falta para decidir a dónde ir.
+ *
+ * Lo traduce el servicio porque es quien conoce la forma que devuelve el
+ * backend; quien DECIDE con él es `destinoDePostulacion`, en el dominio.
+ */
+export function retratoDelExpediente(solicitud: SolicitudPropia): RetratoDelExpediente {
+  const vehiculo = solicitud.vehicle ?? {};
+  const placa = typeof vehiculo.plate === 'string' ? vehiculo.plate : '';
+  const rif = typeof solicitud.personal?.rif === 'string' ? solicitud.personal.rif : '';
+  return {
+    estado: solicitud.status,
+    documentosQueFaltan: solicitud.missingDocuments,
+    correccionesPendientes: solicitud.requestedChangeDetails.length,
+    tieneRif: rif !== '',
+    tieneLicencia: solicitud.license.grade !== null && solicitud.license.expiration !== null,
+    tienePlaca: placa !== ''
+  };
 }

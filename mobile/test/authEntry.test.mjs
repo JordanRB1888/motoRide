@@ -91,8 +91,14 @@ test('el rol del backend gana: intención pasajero + cuenta conductor → conduc
   assert.equal(destinoTrasEntrar(cuenta({ role: 'driver' }), 'passenger'), '/conductor');
 });
 
-test('el rol del backend gana: intención conductor + cuenta pasajero → pasajero', () => {
-  assert.equal(destinoTrasEntrar(cuenta({ role: 'passenger' }), 'driver'), '/pasajero');
+test('el rol del backend gana: intención conductor + cuenta pasajero NO abre conductor', () => {
+  // La intención sí elige puerta —quien vino por «Conductor» entra a su
+  // postulación en vez de al inicio de pasajera—, pero lo que NUNCA hace es
+  // conceder el rol: el inicio de conductor sigue cerrado hasta que el backend
+  // diga que esa persona es conductora.
+  const destino = destinoTrasEntrar(cuenta({ role: 'passenger' }), 'driver');
+  assert.equal(destino, '/postulacion');
+  assert.notEqual(destino, '/conductor');
 });
 
 test('sin intención, el destino es el mismo: lo decide la cuenta', () => {
@@ -104,8 +110,11 @@ test('sin intención, el destino es el mismo: lo decide la cuenta', () => {
 
 test('tras entrar, el acceso navega por la identidad REAL y no por lo pulsado', () => {
   const acceso = sinComentarios('app/acceso.tsx');
-  assert.match(acceso, /experienciaDeLaIdentidad\(resultado\.usuario\)/);
-  assert.match(acceso, /router\.replace\(destino === 'driver' \? '\/conductor' : '\/pasajero'\)/);
+  // La decisión vive en el dominio —`destinoTrasEntrar`, con la identidad real
+  // como primer argumento—, y la pantalla sólo la obedece. Que esté en un solo
+  // sitio es justamente lo que impide que alguien la reescriba aquí a mano.
+  assert.match(acceso, /destinoTrasEntrar\(resultado\.usuario/);
+  assert.match(acceso, /router\.replace\(destino\)/);
   // La intención sólo se ENSEÑA, en el subtítulo. Nunca decide.
   assert.match(acceso, /Entras como \$\{intencion\.titulo\.toLowerCase\(\)\}/);
   assert.equal(/intencion[^\n]*\?[^\n]*'\/conductor'/.test(acceso), false,

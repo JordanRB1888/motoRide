@@ -12,6 +12,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../../components/Boton';
 import { Pantalla } from '../../components/Pantalla';
+import { useSesion } from '../../context/AuthContext';
 import { usePostulacion } from '../../context/PostulacionContext';
 import { describirDocumento } from '../../domain/postulacion';
 import { leerMiPostulacion, type SolicitudPropia } from '../../services/postulacion';
@@ -39,21 +40,40 @@ const DETALLES: Readonly<Record<SolicitudPropia['status'], string>> = {
 export default function EstadoDePostulacion() {
   const tema = useTema();
   const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
+  const { sesion, revalidar } = useSesion();
   const { solicitud, fijarSolicitud } = usePostulacion();
   const [cargando, setCargando] = useState(solicitud === null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let vigente = true;
-    void leerMiPostulacion().then(lectura => {
+    void leerMiPostulacion().then(async lectura => {
       if (!vigente) return;
       setCargando(false);
       if (!lectura.ok) { setError('No pudimos consultar tu postulación. Inténtalo de nuevo.'); return; }
       if (lectura.solicitud === null) { router.replace('/postulacion'); return; }
       fijarSolicitud(lectura.solicitud);
+
+      // APROBADA: la identidad se pide otra vez AL BACKEND.
+      //
+      // Aquí no se escribe `role = 'driver'`: el permiso no se concede desde el
+      // teléfono. Se revalida la sesión, y si el backend ya dice que esta
+      // persona es conductora, entonces —y sólo entonces— se abre su inicio.
+      // Si todavía no lo dice, se queda mirando el estado, que es la verdad.
+      if (lectura.solicitud.status === 'approved') {
+        await revalidar();
+      }
     });
     return () => { vigente = false; };
-  }, [fijarSolicitud]);
+  }, [fijarSolicitud, revalidar]);
+
+  // El rol ya refrescado manda: en cuanto el backend reconoce a la conductora,
+  // su sitio es el inicio de conductor.
+  useEffect(() => {
+    if (sesion.estado === 'AUTENTICADO' && sesion.usuario.role === 'driver') {
+      router.replace('/conductor');
+    }
+  }, [sesion]);
 
   if (cargando || solicitud === null) {
     return (

@@ -392,7 +392,7 @@ test('la pantalla de acceso REAL conserva su lógica', () => {
   assert.match(acceso, /useSesion/, 'sigue usando el contexto de sesión real');
   assert.match(acceso, /secureTextEntry/);
   assert.match(acceso, /setContrasena\(''\)/, 'sigue limpiando la contraseña');
-  assert.match(acceso, /experienciaDeLaIdentidad/, 'el destino lo decide el backend');
+  assert.match(acceso, /destinoTrasEntrar/, 'el destino lo decide el dominio con la identidad del backend');
   // Y no se ha colado ningún dato de demostración en la pantalla real.
   assert.equal(/preview\/fixtures/.test(acceso), false);
 });

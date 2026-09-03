@@ -27,6 +27,7 @@ import { usePostulacion } from '../../context/PostulacionContext';
 import {
   CIUDADES,
   describirPaso,
+  destinoDePostulacion,
   pasoCompleto,
   regionDeLaCiudad,
   validarContrasena,
@@ -34,16 +35,16 @@ import {
   type DatosPersonales,
   type ErroresDePaso
 } from '../../domain/postulacion';
-import { leerMiPostulacion } from '../../services/postulacion';
+import { leerMiPostulacion, retratoDelExpediente } from '../../services/postulacion';
 import { useTema } from '../../theme/ThemeContext';
 import { espaciado, tipografia } from '../../theme/tokens';
-
-const EDITABLES = ['draft', 'needs_changes', 'rejected'];
 
 export default function PasoPersonal() {
   const tema = useTema();
   const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   const { sesion } = useSesion();
+  // El rol REAL, del backend. La intención de la bienvenida no pinta aquí.
+  const rol = sesion.estado === 'AUTENTICADO' ? sesion.usuario.role : null;
   const { borrador, actualizar, solicitud, fijarSolicitud } = usePostulacion();
   const [datos, setDatos] = useState<DatosPersonales>(borrador.personales);
   const [contrasena, setContrasena] = useState(borrador.contrasena);
@@ -59,7 +60,10 @@ export default function PasoPersonal() {
   // volver aquí desde un paso posterior no debe repetir el formulario.
   useEffect(() => {
     if (solicitud !== null) {
-      router.replace(EDITABLES.includes(solicitud.status) ? '/postulacion/documentos' : '/postulacion/estado');
+      const destino = destinoDePostulacion(retratoDelExpediente(solicitud), { rolReal: rol });
+      // El propio paso 1 es un destino válido: quien tiene el expediente a
+      // medias por aquí se queda, y rellena lo que le falta.
+      if (destino !== '/postulacion') router.replace(destino);
       return;
     }
     if (sesion.estado !== 'AUTENTICADO') { setConsultando(false); return; }
@@ -68,7 +72,9 @@ export default function PasoPersonal() {
       if (!vigente) return;
       if (lectura.ok && lectura.solicitud) {
         fijarSolicitud(lectura.solicitud);
-        router.replace(EDITABLES.includes(lectura.solicitud.status) ? '/postulacion/documentos' : '/postulacion/estado');
+        const destino = destinoDePostulacion(retratoDelExpediente(lectura.solicitud), { rolReal: rol });
+        if (destino !== '/postulacion') { router.replace(destino); return; }
+        setConsultando(false);
         return;
       }
       // Si la consulta falló, la persona puede tener ya un expediente que no

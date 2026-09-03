@@ -32,14 +32,14 @@
 
 import { forwardRef, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Alert, Pressable, TextInput, View } from 'react-native';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import type { ReactNode } from 'react';
 import type { TextInputProps } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Pantalla } from '../components/Pantalla';
-import { Boton, Txt } from '../ui/componentes';
+import { Boton } from '../ui/componentes';
 import { LogoEncendido } from '../ui/Marca';
 import { HeroDeMarca, LemaConFilos, PlacaDeMarca } from '../ui/HeroDeMarca';
 import { DiscoDeMarca, LogoDeApple, LogoDeGoogle } from '../ui/MarcasDeTerceros';
@@ -48,12 +48,12 @@ import { useMovimientoReducido } from '../ui/movimiento';
 import { useTema } from '../theme/ThemeContext';
 import { espaciado } from '../theme/tokens';
 import { useSesion } from '../context/AuthContext';
-import { experienciaDeLaIdentidad } from '../domain/authState';
 import {
   AVISO_DE_NO_DISPONIBLE,
   ENTRADA_SOCIAL,
   LEMA,
   describirIntencion,
+  destinoTrasEntrar,
   esIntencionDeEntrada
 } from '../domain/entrada';
 import type { MotivoDeLogin } from '../services/auth';
@@ -117,12 +117,14 @@ export default function Acceso() {
     setContrasena('');
     setALaVista(false);
 
-    // A dónde se va lo decide la identidad REAL del backend, no lo elegido.
-    const destino = experienciaDeLaIdentidad(resultado.usuario);
+    // El rol lo decide la identidad REAL del backend. La intención elegida en
+    // la bienvenida sólo elige la puerta de quien todavía no es conductor:
+    // quien vino por «Conductor» entra a su postulación.
+    const destino = destinoTrasEntrar(resultado.usuario, intencion?.intencion ?? null);
     // La bienvenida y el acceso no se quedan debajo de la casa: volver atrás
     // desde el inicio no debe enseñar la entrada con la sesión ya abierta.
     if (router.canDismiss()) router.dismissAll();
-    router.replace(destino === 'driver' ? '/conductor' : '/pasajero');
+    router.replace(destino);
   };
 
   return (
@@ -130,50 +132,69 @@ export default function Acceso() {
     // encarga del hueco de la barra de estado. Abajo sí, que es donde está el
     // gesto del sistema.
     <Pantalla desplazable bordes={['bottom']} testID="acceso">
-      {/* Sobre amarillo, los iconos del sistema van oscuros. */}
       <StatusBar style="dark" />
 
       <HeroDeMarca variante="acceso" insetSuperior={insets.top} sangrado={espaciado.xl} quieto={quieto}>
-        <PlacaDeMarca ancho={330}>
+        <PlacaDeMarca ancho={352}>
           {/* Llega de la bienvenida: por la izquierda, y frena. */}
-          <LogoEncendido ancho={228} llegada="frenazo" />
+          <LogoEncendido ancho={284} llegada="frenazo" />
         </PlacaDeMarca>
-        <LemaConFilos texto={LEMA} />
+        <View style={{ alignItems: 'center', marginTop: 18, marginBottom: 4 }}>
+          <LemaConFilos texto={LEMA} />
+        </View>
       </HeroDeMarca>
 
       {/* LA HOJA DEL FORMULARIO
-          Recoge todo lo que hay que rellenar. Antes los campos iban sueltos
-          sobre el fondo y la pantalla se leía como dos mitades sin relación. */}
+          Recoge todo lo que hay que rellenar con diseño nítido y moderno. */}
       <View
         testID="hoja-de-acceso"
         style={{
           backgroundColor: tema.color.superficieElevada,
-          borderRadius: 26,
-          paddingHorizontal: 20,
-          paddingTop: 22,
-          paddingBottom: 22,
-          gap: 18,
-          ...tema.superficie.sombra
+          borderTopLeftRadius: 36,
+          borderTopRightRadius: 36,
+          borderBottomLeftRadius: 0,
+          borderBottomRightRadius: 0,
+          marginTop: -16,
+          paddingHorizontal: 28,
+          paddingTop: 32,
+          paddingBottom: 28,
+          gap: 22,
+          shadowColor: '#000000',
+          shadowOpacity: 0.08,
+          shadowRadius: 24,
+          shadowOffset: { width: 0, height: -4 },
+          elevation: 6
         }}
       >
         <View style={{ gap: 4 }}>
-          <Txt nivel="titulo" accessibilityRole="header">Entra a tu cuenta</Txt>
+          <Text
+            accessibilityRole="header"
+            style={{
+              fontSize: 28,
+              fontWeight: '800',
+              letterSpacing: -0.6,
+              color: tema.color.textoPrimario,
+              lineHeight: 34
+            }}
+          >
+            Entra a tu cuenta
+          </Text>
           {/* El contexto que trae la bienvenida. Es una pista de a qué venía,
               no una promesa: a dónde va lo dirá su cuenta. */}
           <View testID="acceso-intencion">
-            <Txt nivel="cuerpo" tono="secundario">
+            <Text style={{ fontSize: 15, color: tema.color.textoSecundario, fontWeight: '400', marginTop: 2 }}>
               {intencion === null
-                ? 'Entra con la cuenta que ya tienes.'
+                ? 'Entras como pasajero.'
                 : `Entras como ${intencion.titulo.toLowerCase()}.`}
-            </Txt>
+            </Text>
           </View>
         </View>
 
-        <View style={{ gap: 12 }}>
+        <View style={{ gap: 18 }}>
           <CampoDeTexto
             etiqueta="Correo o teléfono"
             placeholder="Correo o teléfono"
-            icono={<IconoDeCorreo color={tema.color.textoTenue} />}
+            icono={<IconoDeCorreo tamano={20} color="#9CA3AF" />}
             value={identificador}
             onChangeText={setIdentificador}
             autoCapitalize="none"
@@ -190,7 +211,7 @@ export default function Acceso() {
             ref={campoContrasena}
             etiqueta="Contraseña"
             placeholder="Contraseña"
-            icono={<IconoDeCandado color={tema.color.textoTenue} />}
+            icono={<IconoDeCandado tamano={20} color="#9CA3AF" />}
             value={contrasena}
             onChangeText={setContrasena}
             secureTextEntry={!aLaVista}
@@ -211,7 +232,7 @@ export default function Acceso() {
                 hitSlop={10}
                 testID="ver-contrasena"
               >
-                <IconoDeOjo color={tema.color.textoTenue} tachado={aLaVista} />
+                <IconoDeOjo tamano={20} color="#9CA3AF" tachado={aLaVista} />
               </Pressable>
             }
           />
@@ -225,15 +246,20 @@ export default function Acceso() {
           cargando={enviando}
           deshabilitado={!puedeEnviar}
           sufijo={<FlechaDerecha color={tema.color.sobreAcento} />}
+          estilo={{
+            minHeight: 56,
+            borderRadius: 28,
+            opacity: 1,
+            shadowColor: '#D97706',
+            shadowOpacity: 0.35,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 6
+          } as never}
           testID="boton-entrar"
         />
 
         <EntradaSocial />
-
-        {/* Sin «Cambiar de modo» ni atajos al laboratorio: cambiar de modo es
-            volver a la bienvenida, y ninguna puerta de desarrollo pertenece a
-            la entrada. El selector de desarrollo sigue en `/rol`, sólo en
-            desarrollo y sólo yendo a él a propósito. */}
       </View>
     </Pantalla>
   );
@@ -258,10 +284,12 @@ function ContrasenaOlvidada() {
       accessibilityRole="button"
       accessibilityLabel="¿Olvidaste tu contraseña?"
       hitSlop={8}
-      style={{ alignSelf: 'flex-end' }}
+      style={{ alignSelf: 'flex-end', marginTop: -4 }}
       testID="contrasena-olvidada"
     >
-      <Txt nivel="pie" tono="acento">¿Olvidaste tu contraseña?</Txt>
+      <Text style={{ fontSize: 13.5, fontWeight: '600', color: '#E68A00' }}>
+        ¿Olvidaste tu contraseña?
+      </Text>
     </Pressable>
   );
 }
@@ -279,13 +307,12 @@ function ContrasenaOlvidada() {
  * pantalla. Un icono apagado sin explicación se lee como una avería.
  */
 function EntradaSocial() {
-  const tema = useTema();
   const google = ENTRADA_SOCIAL.google;
   const apple = ENTRADA_SOCIAL.apple;
   const alguno = google.disponible || apple.disponible;
 
   return (
-    <View style={{ gap: 12 }} testID="entrada-social">
+    <View style={{ gap: 16 }} testID="entrada-social">
       <Separador texto="o entra con" />
 
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 14 }}>
@@ -299,9 +326,11 @@ function EntradaSocial() {
       </View>
 
       {alguno ? null : (
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-          <IconoDeCandado tamano={14} color={tema.color.textoTenue} />
-          <Txt nivel="pie" tono="tenue">{AVISO_DE_NO_DISPONIBLE}</Txt>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 4 }}>
+          <IconoDeCandado tamano={14} color="#9CA3AF" />
+          <Text style={{ fontSize: 12.5, color: '#9CA3AF', fontWeight: '500' }}>
+            {AVISO_DE_NO_DISPONIBLE}
+          </Text>
         </View>
       )}
     </View>
@@ -310,13 +339,12 @@ function EntradaSocial() {
 
 /** La línea con una palabra en medio. */
 function Separador({ texto }: { readonly texto: string }) {
-  const tema = useTema();
-  const linea = { flex: 1, height: 1, backgroundColor: tema.color.borde };
+  const linea = { flex: 1, height: 1, backgroundColor: '#E5E7EB' };
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 2 }}>
       <View style={linea} />
-      <Txt nivel="pie" tono="tenue">{texto}</Txt>
+      <Text style={{ fontSize: 13, color: '#9CA3AF', fontWeight: '500' }}>{texto}</Text>
       <View style={linea} />
     </View>
   );
@@ -343,18 +371,18 @@ function BotonDeMarca({ nombre, disponible, onPress, testID, children }: {
       accessibilityState={{ disabled: !disponible }}
       testID={testID}
       style={({ pressed }) => ({
-        width: 116,
-        height: 52,
+        flex: 1,
+        height: 54,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: tema.radio.boton,
-        borderWidth: 1,
-        borderColor: tema.color.borde,
-        backgroundColor: pressed && disponible ? tema.color.superficieElevada : tema.color.superficie,
-        opacity: disponible ? 1 : 0.75
+        borderRadius: 16,
+        borderWidth: 1.2,
+        borderColor: '#E5E7EB',
+        backgroundColor: pressed && disponible ? tema.color.superficieElevada : tema.color.superficieElevada,
+        opacity: 1
       })}
     >
-      <DiscoDeMarca apagado={!disponible}>{children}</DiscoDeMarca>
+      <DiscoDeMarca>{children}</DiscoDeMarca>
     </Pressable>
   );
 }
@@ -375,20 +403,22 @@ const CampoDeTexto = forwardRef<TextInput, TextInputProps & {
 
   return (
     <View style={{ gap: 6 }}>
-      <Txt nivel="etiqueta" tono="secundario">{etiqueta}</Txt>
+      <Text style={{ fontSize: 14, fontWeight: '600', color: tema.color.textoPrimario }}>
+        {etiqueta}
+      </Text>
 
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        minHeight: 50,
-        paddingHorizontal: 14,
-        borderRadius: tema.radio.campo,
-        backgroundColor: tema.color.superficie,
-        borderWidth: 1,
+        gap: 12,
+        minHeight: 56,
+        paddingHorizontal: 16,
+        borderRadius: 16,
+        backgroundColor: tema.color.superficieElevada,
+        borderWidth: 1.2,
         borderColor: hayError
           ? tema.color.peligro
-          : enfocado ? tema.color.acento : tema.color.borde
+          : enfocado ? tema.color.acento : '#E5E7EB'
       }}>
         {icono}
 
@@ -399,13 +429,13 @@ const CampoDeTexto = forwardRef<TextInput, TextInputProps & {
           // a quien usa un lector de pantalla.
           accessibilityLabel={hayError ? `${etiqueta}. Error: ${error}` : etiqueta}
           accessibilityState={{ disabled: resto.editable === false }}
-          placeholderTextColor={tema.color.textoTenue}
+          placeholderTextColor="#9CA3AF"
           onFocus={evento => { setEnfocado(true); resto.onFocus?.(evento); }}
           onBlur={evento => { setEnfocado(false); resto.onBlur?.(evento); }}
           style={{
             flex: 1,
-            paddingVertical: 12,
-            fontSize: tema.texto.cuerpo.tamano,
+            paddingVertical: 14,
+            fontSize: 16,
             color: tema.color.textoPrimario
           }}
         />
@@ -414,10 +444,12 @@ const CampoDeTexto = forwardRef<TextInput, TextInputProps & {
       </View>
 
       {hayError && (
-        <Txt nivel="pie" tono="primario" estilo={{ color: tema.color.peligro } as never}
-          accessibilityRole="text">
+        <Text
+          style={{ fontSize: 12.5, color: tema.color.peligro, fontWeight: '500' }}
+          accessibilityRole="text"
+        >
           {error}
-        </Txt>
+        </Text>
       )}
     </View>
   );

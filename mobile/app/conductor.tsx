@@ -117,8 +117,10 @@ export default function InicioDeConductor() {
   const operativo = puedeOperarComoConductor(sesion);
 
   // Alguien con sesión de pasajera que llega aquí —por un enlace, o volviendo
-  // atrás— no ve nada de conductor. Se le manda a lo suyo.
-  if (usuario.role !== 'driver') return <Redirect href="/pasajero" />;
+  // atrás— no ve nada de conductor: se le manda a la postulación, que es el
+  // camino real para llegar a serlo. Allí se consulta al servidor y se decide
+  // si empieza, continúa o mira el estado de lo que ya mandó.
+  if (usuario.role !== 'driver') return <Redirect href="/postulacion" />;
 
   // APROBADO: su pantalla de verdad.
   //

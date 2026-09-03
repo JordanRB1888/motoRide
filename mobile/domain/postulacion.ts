@@ -472,3 +472,89 @@ export function avanceDeLaPostulacion(estado: EstadoDeLaPostulacion, ahora: Date
     listaParaEnviar
   });
 }
+
+// ---------------------------------------------------------------------------
+// A dónde se va: una sola función, y el servidor manda
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que hace falta saber para decidir el destino. Todo sale del servidor.
+ *
+ * Es un retrato mínimo del expediente a propósito: si esta función pidiera el
+ * objeto entero, cualquier campo nuevo del backend se convertiría en una razón
+ * para tocarla.
+ */
+export interface RetratoDelExpediente {
+  readonly estado: string;
+  /** Qué documentos obligatorios faltan, según el servidor. */
+  readonly documentosQueFaltan: readonly string[];
+  /** Cuántas correcciones pidió administración y siguen sin atender. */
+  readonly correccionesPendientes: number;
+  /** `true` si el RIF ya está: es lo único de la persona que el envío exige. */
+  readonly tieneRif: boolean;
+  /** `true` si la licencia está completa (grado y vencimiento). */
+  readonly tieneLicencia: boolean;
+  /** `true` si el vehículo tiene placa: sin ella no hay expediente que enviar. */
+  readonly tienePlaca: boolean;
+}
+
+/** Las rutas del flujo. Se nombran aquí para no repartir cadenas por las pantallas. */
+export const RUTAS_DE_POSTULACION = Object.freeze({
+  personal: '/postulacion',
+  vehiculo: '/postulacion/vehiculo',
+  documentos: '/postulacion/documentos',
+  confirmacion: '/postulacion/confirmacion',
+  estado: '/postulacion/estado',
+  conductor: '/conductor'
+} as const);
+export type RutaDePostulacion = (typeof RUTAS_DE_POSTULACION)[keyof typeof RUTAS_DE_POSTULACION];
+
+/** Los estados en los que el titular todavía puede tocar su expediente. */
+const ESTADOS_EDITABLES = ['draft', 'needs_changes', 'rejected'];
+
+export function esExpedienteEditable(estado: string): boolean {
+  return ESTADOS_EDITABLES.includes(estado);
+}
+
+/**
+ * A dónde llevar a alguien que quiere conducir.
+ *
+ * UNA SOLA AUTORIDAD, UN SOLO SITIO
+ *
+ * El progreso NO lo guarda el teléfono. Se pregunta al servidor y se decide
+ * aquí, con esta función y sólo con esta: repartir la decisión en `if` por las
+ * pantallas es cómo se llega a dos criterios distintos que un día discrepan y
+ * dejan a alguien dando vueltas entre dos pasos.
+ *
+ *   - Quien ya es conductor no se vuelve a postular: va a lo suyo.
+ *   - Sin expediente, se empieza por el principio.
+ *   - Con expediente editable, se cae en el primer paso al que le falte algo.
+ *   - En revisión o ya decidido, se ve el estado; no se toca nada.
+ *
+ * `rolReal` es el del backend, nunca una intención de la persona: pulsar
+ * «Conductor» en la bienvenida no adelanta a nadie por esta cola.
+ */
+export function destinoDePostulacion(
+  expediente: RetratoDelExpediente | null,
+  { rolReal }: { readonly rolReal?: string | null } = {}
+): RutaDePostulacion {
+  // Ya es conductor: su sitio es el inicio de conductor, esté como esté el
+  // expediente. Suspendido incluido: qué se hace con una suspensión ya está
+  // decidido allí, y no se inventa aquí.
+  if (rolReal === 'driver') return RUTAS_DE_POSTULACION.conductor;
+
+  if (expediente === null) return RUTAS_DE_POSTULACION.personal;
+
+  // En revisión, aprobado sin que el rol se haya refrescado todavía, o
+  // suspendido: se mira, no se toca.
+  if (!esExpedienteEditable(expediente.estado)) return RUTAS_DE_POSTULACION.estado;
+
+  // Editable: al primer paso con algo pendiente, en el orden del formulario.
+  // Lo que falta lo dice el servidor.
+  if (!expediente.tieneRif) return RUTAS_DE_POSTULACION.personal;
+  if (!expediente.tienePlaca || !expediente.tieneLicencia) return RUTAS_DE_POSTULACION.vehiculo;
+  if (expediente.documentosQueFaltan.length > 0 || expediente.correccionesPendientes > 0) {
+    return RUTAS_DE_POSTULACION.documentos;
+  }
+  return RUTAS_DE_POSTULACION.confirmacion;
+}
