@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { videoDurationSeconds } from '../services/privateStorage.js';
+import { hasValidSignature, videoDurationSeconds } from '../services/privateStorage.js';
 import {
   driverApplicationListItem,
   driverApplicationAdminDetail,
@@ -473,10 +473,31 @@ export function createDriverApplicationsRouter({
       if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
       if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
 
-      // La duración, leída del propio fichero. Si no se puede determinar no se
-      // rechaza: no poder medir no es medir mal, y el tamaño ya tiene tope.
+      // Primero, que sea un vídeo. Después, cuánto dura.
+      //
+      // El orden importa por lo que se le dice a la persona: un texto renombrado
+      // a `.mp4` no es un vídeo que no sepamos medir, es que no es un vídeo. Dos
+      // problemas distintos merecen dos respuestas distintas.
+      if (!hasValidSignature(req.file.buffer, req.file.mimetype)) {
+        return res.status(415).json({ error: 'INVALID_FILE_TYPE', accepted: VIDEO_MIME_TYPES });
+      }
+
+      // La duración se lee del propio fichero, y el fichero es la autoridad.
+      //
+      // Lo que declara el teléfono sirve para avisar antes de gastar la red,
+      // pero no decide nada: es un número que cualquiera puede escribir. Y si
+      // el fichero no deja medirse, se RECHAZA. Dejarlo pasar convertía el
+      // tope de treinta segundos en una recomendación: bastaba con subir algo
+      // que no supiéramos leer. Antes de guardar un vídeo cuya duración no
+      // podemos certificar, preferimos pedir otro.
       const duracion = videoDurationSeconds(req.file.buffer);
-      if (duracion !== null && duracion > VIDEO_MAX_DURATION_SECONDS + 0.5) {
+      if (duracion === null) {
+        return res.status(422).json({
+          error: 'VIDEO_DURATION_UNVERIFIABLE',
+          maxSeconds: VIDEO_MAX_DURATION_SECONDS
+        });
+      }
+      if (duracion > VIDEO_MAX_DURATION_SECONDS + 0.5) {
         return res.status(400).json({
           error: 'VIDEO_TOO_LONG',
           maxSeconds: VIDEO_MAX_DURATION_SECONDS,

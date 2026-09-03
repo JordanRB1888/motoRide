@@ -131,12 +131,17 @@ test('treinta segundos justos pasan, aunque el teléfono los declare con decimal
   assert.equal(interpretarVideo(activo({ duration: 30_400 })).ok, true);
 });
 
-test('si el teléfono no sabe la duración, no se rechaza: no poder medir no es medir mal', () => {
+test('si el teléfono no sabe la duración deja pasar; quien decide es el servidor', () => {
   const resultado = interpretarVideo(activo({ duration: null }));
   assert.equal(resultado.ok, true);
   assert.equal(resultado.video.duracion, null);
-  // Y el servidor, que sí lee los bytes, tiene la última palabra.
-  assert.match(leerServidor('routes/driverApplications.js'), /VIDEO_TOO_LONG/);
+  // El teléfono no rechaza porque su número es sólo una cortesía para no gastar
+  // la red en balde. El servidor, que lee los bytes, sí rechaza lo que no puede
+  // medir: si no supiera medirlo, el tope de treinta segundos sería opcional.
+  const ruta = leerServidor('routes/driverApplications.js');
+  assert.match(ruta, /VIDEO_TOO_LONG/);
+  assert.match(ruta, /VIDEO_DURATION_UNVERIFIABLE/);
+  assert.match(ruta, /duracion === null/);
 });
 
 test('en web la duración viene en segundos, y se interpreta como tal', () => {
@@ -301,4 +306,39 @@ test('con una corrección pendiente, lo recién grabado se puede subir', () => {
   assert.ok(posicionDeLoGrabado < posicionDeLaCorreccion, 'lo grabado debe ganar a la corrección');
   // Y el motivo se sigue viendo, con su borde de aviso.
   assert.match(pantalla, /motivo \? estilos\.tarjetaConCorreccion/);
+});
+
+// ---------------------------------------------------------------------------
+// Cuando el servidor no puede certificar la duración
+// ---------------------------------------------------------------------------
+
+test('el 422 del servidor se traduce a un mensaje que se entiende', () => {
+  const servicio = sinComentarios('services/postulacion.ts');
+  assert.match(servicio, /VIDEO_DURATION_UNVERIFIABLE: 'VIDEO_SIN_DURACION'/);
+
+  // Las tres pantallas que traducen motivos lo cubren, y ninguna enseña el
+  // código del servidor ni un rastro técnico.
+  for (const relativa of ['app/postulacion/documentos.tsx', 'app/postulacion/confirmacion.tsx', 'app/postulacion/vehiculo.tsx']) {
+    const pantalla = leer(relativa);
+    const linea = pantalla.split('\n').find(item => item.includes('VIDEO_SIN_DURACION:'));
+    assert.ok(linea, `${relativa} no traduce el motivo`);
+    assert.match(linea, /No pudimos verificar la duración/);
+    assert.equal(/VIDEO_DURATION_UNVERIFIABLE|422|stack|Error:/.test(linea), false, `${relativa} enseña algo técnico`);
+  }
+});
+
+test('un vídeo que el servidor no puede medir no se reintenta solo', () => {
+  // Insistir con el mismo fichero da el mismo 422. Sólo se reintenta la red.
+  const servicio = sinComentarios('services/postulacion.ts');
+  const cuerpo = servicio.slice(servicio.indexOf('export async function subirVideoDePresentacion'));
+  assert.match(cuerpo, /respuesta\.motivo !== 'SIN_RED'/);
+});
+
+test('la duración que manda el teléfono no es la que se guarda', () => {
+  // El servidor mide los bytes y guarda ESA duración; lo que declare el cliente
+  // no entra en el expediente.
+  const ruta = leerServidor('routes/driverApplications.js');
+  const bloque = ruta.slice(ruta.indexOf("router.put('/driver-applications/me/video'"));
+  assert.match(bloque, /durationSeconds: duracion/);
+  assert.equal(/req\.body\.duration/.test(bloque), false, 'el servidor no lee la duración del cuerpo');
 });

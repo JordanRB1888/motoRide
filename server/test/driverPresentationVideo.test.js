@@ -45,6 +45,30 @@ const mp4De = (segundos, relleno = 4096) => Buffer.concat([
   caja('mdat', Buffer.alloc(relleno, 7))
 ]);
 
+// --- Ficheros con la firma correcta y la duración fuera de alcance ---------
+//
+// Los tres pasan la comprobación de firma --empiezan por un `ftyp` de verdad--
+// pero no hay forma de saber cuánto duran. Un fichero así no se guarda.
+const ftyp = caja('ftyp', Buffer.from('isomiso2avc1mp41', 'latin1'));
+const mdat = (relleno = 4096) => caja('mdat', Buffer.alloc(relleno, 7));
+
+/** Sin `moov`: sólo datos, sin ninguna cabecera que leer. */
+const mp4SinMoov = () => Buffer.concat([ftyp, mdat()]);
+
+/** Con `moov`, pero la duración de la película viene a cero. */
+const mp4ConDuracionCero = () => Buffer.concat([ftyp, caja('moov', mvhd(0)), mdat()]);
+
+/** Con `moov`, pero la duración está marcada como desconocida por el formato. */
+const mp4ConDuracionDesconocida = () => {
+  const cuerpo = Buffer.alloc(100);
+  cuerpo.writeUInt32BE(0, 0);
+  cuerpo.writeUInt32BE(600, 12);
+  cuerpo.writeUInt32BE(0xffffffff, 16);
+  return Buffer.concat([ftyp, caja('moov', caja('mvhd', cuerpo)), mdat()]);
+};
+
+const ficherosMp4 = uploads => fs.readdirSync(uploads, { recursive: true }).map(String).filter(nombre => nombre.endsWith('.mp4'));
+
 async function start(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'plus58-video-'));
   // Bloque propio (21500-21898): testPortRanges.test.js vigila que no se solape.
@@ -346,4 +370,108 @@ test('sin expediente no hay dónde guardar un vídeo', async t => {
   const respuesta = await subirVideo(api, sola.token);
   assert.equal(respuesta.status, 404);
   assert.equal((await respuesta.json()).error, 'APPLICATION_NOT_FOUND');
+});
+
+// ---------------------------------------------------------------------------
+// La duración la certifica el servidor, o no se guarda
+// ---------------------------------------------------------------------------
+
+test('un vídeo que no se deja medir se rechaza, y no toca el disco', async t => {
+  const { api, uploads } = await start(t);
+  const { token } = await crearPostulante(api);
+
+  // Los tres tienen la firma de un MP4 y ninguno dice cuánto dura.
+  for (const [nombre, cuerpo] of [
+    ['sin moov', mp4SinMoov()],
+    ['duración cero', mp4ConDuracionCero()],
+    ['duración desconocida', mp4ConDuracionDesconocida()]
+  ]) {
+    const respuesta = await subirVideo(api, token, { cuerpo });
+    assert.equal(respuesta.status, 422, nombre);
+    const detalle = await respuesta.json();
+    assert.equal(detalle.error, 'VIDEO_DURATION_UNVERIFIABLE', nombre);
+    assert.equal(detalle.maxSeconds, 30, nombre);
+  }
+
+  // Nada de eso llegó al almacén privado.
+  assert.deepEqual(ficherosMp4(uploads), [], 'un rechazo no deja fichero en disco');
+  const solicitud = await (await fetch(`${api}/driver-applications/me`, auth(token))).json();
+  assert.equal(solicitud.documents.filter(item => item.type === 'presentation_video').length, 0);
+});
+
+test('un fichero manipulado --cajas que se salen del final-- tampoco se mide', async t => {
+  const { api, uploads } = await start(t);
+  const { token } = await crearPostulante(api);
+
+  // Un MP4 correcto al que se le infla el tamaño declarado del `moov` para que
+  // se solape con lo que viene detrás. Dentro sigue habiendo un `mvhd` legible,
+  // pero la estructura ya no cuadra y no sabemos a qué corresponde.
+  const cuerpo = mp4De(10);
+  const posicion = cuerpo.indexOf(Buffer.from('moov', 'latin1')) - 4;
+  cuerpo.writeUInt32BE(cuerpo.readUInt32BE(posicion) * 4, posicion);
+
+  const respuesta = await subirVideo(api, token, { cuerpo });
+  assert.equal(respuesta.status, 422);
+  assert.equal((await respuesta.json()).error, 'VIDEO_DURATION_UNVERIFIABLE');
+  assert.deepEqual(ficherosMp4(uploads), []);
+});
+
+test('mandan los bytes, no lo que diga el cliente: ni para rechazar ni para aceptar', async t => {
+  const { api } = await start(t);
+  const { token } = await crearPostulante(api);
+
+  // El cliente jura que son diez segundos; el fichero dice treinta y cinco.
+  const largo = await fetch(`${api}/driver-applications/me/video`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${token}` },
+    body: (() => {
+      const form = new FormData();
+      form.append('durationSeconds', '10');
+      form.append('file', new Blob([mp4De(35)], { type: 'video/mp4' }), 'presentacion.mp4');
+      return form;
+    })()
+  });
+  assert.equal(largo.status, 400, 'la palabra del cliente no salva un vídeo largo');
+  const detalle = await largo.json();
+  assert.equal(detalle.error, 'VIDEO_TOO_LONG');
+  assert.equal(detalle.seconds, 35, 'los segundos que se reportan son los del fichero');
+
+  // Y al revés: el cliente dice sesenta, el fichero dice veinte. Se guarda.
+  const corto = await fetch(`${api}/driver-applications/me/video`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${token}` },
+    body: (() => {
+      const form = new FormData();
+      form.append('durationSeconds', '60');
+      form.append('file', new Blob([mp4De(20)], { type: 'video/mp4' }), 'presentacion.mp4');
+      return form;
+    })()
+  });
+  assert.equal(corto.status, 200, 'un vídeo corto no se rechaza porque el cliente se equivoque');
+  const guardado = videoDe(await corto.json());
+  assert.equal(guardado.durationSeconds, 20, 'la duración guardada es la medida, no la declarada');
+});
+
+test('un reemplazo rechazado deja intacto el vídeo que ya estaba', async t => {
+  const { api, uploads } = await start(t);
+  const { token } = await crearPostulante(api);
+
+  assert.equal((await subirVideo(api, token, { cuerpo: mp4De(12, 2048) })).status, 200);
+  const bueno = videoDe(await (await fetch(`${api}/driver-applications/me`, auth(token))).json());
+  const ficheros = ficherosMp4(uploads);
+  assert.equal(ficheros.length, 1);
+
+  // Dos intentos que el servidor no puede certificar.
+  assert.equal((await subirVideo(api, token, { cuerpo: mp4SinMoov() })).status, 422);
+  assert.equal((await subirVideo(api, token, { cuerpo: mp4De(95) })).status, 400);
+
+  // El de antes sigue ahí, con su mismo fichero, y se puede seguir viendo.
+  const despues = videoDe(await (await fetch(`${api}/driver-applications/me`, auth(token))).json());
+  assert.equal(despues.id, bueno.id);
+  assert.equal(despues.size, bueno.size);
+  assert.equal(despues.durationSeconds, 12);
+  assert.deepEqual(ficherosMp4(uploads), ficheros, 'ni se borró el bueno ni se coló uno nuevo');
+
+  const contenido = await fetch(`${api}/driver-documents/${bueno.id}/content`, auth(token));
+  assert.equal(contenido.status, 200);
 });

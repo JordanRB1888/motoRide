@@ -56,6 +56,7 @@ import { espaciado, radios, tipografia } from '../../theme/tokens';
 
 const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
   VIDEO_DEMASIADO_LARGO: 'El vídeo dura más de 30 segundos. Grábalo más corto.',
+  VIDEO_SIN_DURACION: 'No pudimos verificar la duración de este vídeo. Graba uno nuevo o elige otro archivo.',
   SESION_CADUCADA: 'Tu sesión caducó. Vuelve a entrar para seguir con tu solicitud.',
   DEMASIADOS_INTENTOS: 'Demasiados intentos seguidos. Espera un momento y vuelve a probar.',
   DATOS_INVALIDOS: 'Falta algún dato del expediente. Revisa los pasos anteriores.',

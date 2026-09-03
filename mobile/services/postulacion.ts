@@ -178,6 +178,7 @@ function leerSolicitud(datos: unknown): SolicitudPropia | null {
 /** Qué salió mal, en el idioma de la persona. */
 export type MotivoDePostulacion =
   | 'VIDEO_DEMASIADO_LARGO'
+  | 'VIDEO_SIN_DURACION'
   | 'SESION_CADUCADA'
   | 'DEMASIADOS_INTENTOS'
   | 'DATOS_INVALIDOS'
@@ -212,6 +213,9 @@ function traducirFallo(respuesta: Extract<Resultado<unknown>, { ok: false }>): F
 
   const porCodigo: Readonly<Record<string, MotivoDePostulacion>> = {
     VIDEO_TOO_LONG: 'VIDEO_DEMASIADO_LARGO',
+    // El servidor no pudo certificar cuánto dura. No es culpa de quien lo sube
+    // y no se arregla insistiendo: hace falta otro vídeo.
+    VIDEO_DURATION_UNVERIFIABLE: 'VIDEO_SIN_DURACION',
     VALIDATION_FAILED: 'DATOS_INVALIDOS',
     MISSING_DOCUMENTS: 'FALTAN_DOCUMENTOS',
     DRIVER_APPLICATION_EXISTS: 'YA_TIENE_SOLICITUD',
