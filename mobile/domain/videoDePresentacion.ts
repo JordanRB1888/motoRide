@@ -59,6 +59,7 @@ export type MotivoDeVideo =
   | 'TIPO_NO_ADMITIDO'
   | 'DEMASIADO_LARGO'
   | 'DEMASIADO_GRANDE'
+  | 'ARCHIVO_ILEGIBLE'
   | 'NO_DISPONIBLE';
 
 export type ResultadoDeVideo =
@@ -158,5 +159,6 @@ export const MENSAJES_DE_VIDEO: Readonly<Record<MotivoDeVideo, string>> = Object
   TIPO_NO_ADMITIDO: 'Ese archivo no es un vídeo que podamos usar. Graba uno con la cámara o elige un MP4.',
   DEMASIADO_LARGO: `El vídeo dura más de ${DURACION_MAXIMA_EN_SEGUNDOS} segundos. Grábalo más corto.`,
   DEMASIADO_GRANDE: 'El vídeo pesa demasiado. Grábalo más corto y vuelve a intentarlo.',
+  ARCHIVO_ILEGIBLE: 'No pudimos leer ese vídeo. Elige otro o grábalo con la cámara.',
   NO_DISPONIBLE: 'No pudimos abrir la cámara en este teléfono. Prueba a elegir un vídeo de la galería.'
 });

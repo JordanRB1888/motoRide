@@ -71,6 +71,15 @@ const OPCIONES: ImagePicker.ImagePickerOptions = {
   base64: false
 };
 
+/**
+ * Qué se le dice a la persona cuando el módulo nativo no devuelve nada útil.
+ *
+ * Desde aquí, «no hay cámara» y «este archivo no se puede leer» tienen la misma
+ * pinta: una excepción o una lista vacía. Lo que las distingue es de dónde venía
+ * la persona, y eso sí lo sabemos.
+ */
+const falloDe = (deLaCamara: boolean): 'NO_DISPONIBLE' | 'ARCHIVO_ILEGIBLE' => (deLaCamara ? 'NO_DISPONIBLE' : 'ARCHIVO_ILEGIBLE');
+
 /** Si hace falta pedir el permiso de almacenamiento para la galería. */
 function laGaleriaNecesitaPermiso(): boolean {
   // Android 13 (API 33) trae el selector de fotos del sistema, que no pide
@@ -100,13 +109,14 @@ export async function capturar(modo: ModoDeCaptura): Promise<ResultadoDeCaptura>
 
     if (resultado.canceled) return { ok: false, motivo: 'CANCELADO' };
     const activo = resultado.assets?.[0];
-    if (!activo) return { ok: false, motivo: 'NO_DISPONIBLE' };
+    if (!activo) return { ok: false, motivo: falloDe(modo === 'TAKE_PHOTO') };
 
     return interpretarActivo(activo);
   } catch {
-    // Sin cámara (un emulador sin cámara virtual, un dispositivo raro): no es
-    // un fallo de la persona y no se registra nada de lo que llevaba.
-    return { ok: false, motivo: 'NO_DISPONIBLE' };
+    // Dos cosas distintas con la misma pinta desde aquí: que no haya cámara, o
+    // que el archivo elegido no se pueda leer. A quien acaba de elegir una foto
+    // de su galería no se le dice que falló la cámara: no la tocó.
+    return { ok: false, motivo: falloDe(modo === 'TAKE_PHOTO') };
   }
 }
 
@@ -154,9 +164,9 @@ export async function capturarVideo(modo: ModoDeVideo): Promise<ResultadoDeVideo
     if (resultado.canceled) return { ok: false, motivo: 'CANCELADO' };
 
     const activo = resultado.assets?.[0];
-    if (!activo) return { ok: false, motivo: 'NO_DISPONIBLE' };
+    if (!activo) return { ok: false, motivo: falloDe(modo === 'TAKE_VIDEO') };
     return interpretarVideo(activo, UNIDAD_DE_DURACION);
   } catch {
-    return { ok: false, motivo: 'NO_DISPONIBLE' };
+    return { ok: false, motivo: falloDe(modo === 'TAKE_VIDEO') };
   }
 }

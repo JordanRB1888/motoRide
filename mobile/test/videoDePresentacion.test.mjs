@@ -213,7 +213,7 @@ test('la cámara corta sola a los treinta segundos y no se pide base64 ni exif',
 test('capturarVideo nunca lanza: todo lo que falla vuelve como motivo', () => {
   const captura = sinComentarios('media/captura.ts');
   const cuerpo = captura.slice(captura.indexOf('export async function capturarVideo'));
-  assert.match(cuerpo, /catch \{\s*return \{ ok: false, motivo: 'NO_DISPONIBLE' \};/);
+  assert.match(cuerpo, /catch \{\s*return \{ ok: false, motivo: falloDe\(modo === 'TAKE_VIDEO'\) \};/);
 });
 
 // ---------------------------------------------------------------------------
@@ -341,4 +341,17 @@ test('la duración que manda el teléfono no es la que se guarda', () => {
   const bloque = ruta.slice(ruta.indexOf("router.put('/driver-applications/me/video'"));
   assert.match(bloque, /durationSeconds: duracion/);
   assert.equal(/req\.body\.duration/.test(bloque), false, 'el servidor no lee la duración del cuerpo');
+});
+
+test('un vídeo de la galería que no se puede leer no culpa a la cámara', () => {
+  // Mismo hallazgo que con las fotos: el mensaje llegaba a decirle a alguien que
+  // acababa de elegir un vídeo de su galería que «pruebe a elegir un vídeo de la
+  // galería».
+  const captura = sinComentarios('media/captura.ts');
+  const cuerpo = captura.slice(captura.indexOf('export async function capturarVideo'));
+  assert.match(cuerpo, /falloDe\(modo === 'TAKE_VIDEO'\)/);
+  const linea = leer('domain/videoDePresentacion.ts').split('\n').find(item => item.includes('ARCHIVO_ILEGIBLE:'));
+  assert.ok(linea, 'falta el mensaje del archivo ilegible');
+  assert.equal(/abrir la cámara/.test(linea), false);
+  assert.match(linea, /Elige otro/);
 });

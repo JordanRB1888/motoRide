@@ -146,7 +146,10 @@ test('sin EXIF, sin base64, sin edición, una sola foto', () => {
 
 test('la captura nunca lanza y nunca registra lo que lleva', () => {
   const captura = sinComentarios('media/captura.ts');
-  assert.match(captura, /catch \{\s*return \{ ok: false, motivo: 'NO_DISPONIBLE' \};/);
+  // Sigue sin lanzar; lo que cambia es qué motivo devuelve, según de dónde
+  // venía la persona: la cámara que no abre y el archivo que no se puede leer
+  // son dos problemas distintos y merecen dos mensajes distintos.
+  assert.match(captura, /catch \{[\s\S]{0,240}return \{ ok: false, motivo: falloDe\(modo === 'TAKE_PHOTO'\) \};/);
   for (const fichero of ['media/captura.ts', 'domain/fotoDeDocumento.ts', 'services/postulacion.ts']) {
     const codigo = sinComentarios(fichero);
     assert.equal(/console\.(log|warn|error|info)/.test(codigo), false, `${fichero} escribe en el registro`);
@@ -159,4 +162,18 @@ test('el servicio manda el archivo por multipart al endpoint privado, sin base64
   assert.match(servicio, /new FormData\(\)/);
   assert.match(servicio, /\/api\/driver-applications\/me\/documents\//);
   assert.equal(/base64/.test(servicio), false);
+});
+
+test('un archivo de la galería que no se puede leer no culpa a la cámara', () => {
+  // Salió en la certificación E2E: al elegir una imagen que el sistema no podía
+  // decodificar, la aplicación decía «No pudimos abrir la cámara en este
+  // teléfono», y quien la leía no había tocado la cámara.
+  const captura = sinComentarios('media/captura.ts');
+  assert.match(captura, /const falloDe = \(deLaCamara: boolean\)/);
+  assert.match(captura, /deLaCamara \? 'NO_DISPONIBLE' : 'ARCHIVO_ILEGIBLE'/);
+  const mensajes = leer('domain/fotoDeDocumento.ts');
+  const linea = mensajes.split('\n').find(item => item.includes('ARCHIVO_ILEGIBLE:'));
+  assert.ok(linea, 'falta el mensaje del archivo ilegible');
+  assert.equal(/cámara en este teléfono/.test(linea), false, 'el mensaje sigue culpando a la cámara');
+  assert.match(linea, /Elige otra/);
 });

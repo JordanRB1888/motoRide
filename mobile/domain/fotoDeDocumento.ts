@@ -45,6 +45,7 @@ export type MotivoDeCaptura =
   | 'CANCELADO'
   | 'TIPO_NO_ADMITIDO'
   | 'DEMASIADO_GRANDE'
+  | 'ARCHIVO_ILEGIBLE'
   | 'NO_DISPONIBLE';
 
 export type ResultadoDeCaptura =
@@ -112,5 +113,6 @@ export const MENSAJES_DE_CAPTURA: Readonly<Record<MotivoDeCaptura, string>> = Ob
   CANCELADO: '',
   TIPO_NO_ADMITIDO: 'Ese archivo no es una foto. Usa JPG, PNG o WebP.',
   DEMASIADO_GRANDE: 'La foto pesa más de 5 MB. Vuelve a tomarla.',
+  ARCHIVO_ILEGIBLE: 'No pudimos leer esa imagen. Elige otra o toma la foto con la cámara.',
   NO_DISPONIBLE: 'No pudimos abrir la cámara en este teléfono. Prueba con la galería.'
 });
