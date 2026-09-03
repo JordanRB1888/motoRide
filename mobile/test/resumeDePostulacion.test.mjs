@@ -183,3 +183,17 @@ test('la aprobación se refresca contra el backend, no se concede en el teléfon
   assert.equal(/role\s*=\s*['"]driver['"]/.test(estado), false, 'se concede el rol desde la aplicación');
   assert.match(estado, /usuario\.role === 'driver'/, 'sólo con el rol ya refrescado se abre conductor');
 });
+
+test('volver atrás desde el vehículo no tira lo escrito', () => {
+  // Salió en la certificación E2E: se rellenaba el vehículo, se volvía al paso
+  // anterior a corregir una errata de la cédula, y al regresar estaba todo en
+  // blanco. El paso sólo guardaba al avanzar.
+  const pantalla = leer('app/postulacion/vehiculo.tsx');
+  assert.match(pantalla, /const volver = \(\) => \{[\s\S]{0,300}actualizar\(\{[\s\S]{0,200}router\.back\(\)/);
+  assert.match(pantalla, /titulo="←  Atrás"[^>]*onPress=\{volver\}/);
+  // Y lo que guarda es TODO lo del paso, no sólo el tipo de vehículo.
+  const cuerpo = pantalla.slice(pantalla.indexOf('const volver'), pantalla.indexOf('const cambiar'));
+  for (const campo of ['vehiculo:', 'servicios', 'datosDelVehiculo:', 'licencia', 'certificadoMedico:']) {
+    assert.ok(cuerpo.includes(campo), `volver no guarda ${campo}`);
+  }
+});

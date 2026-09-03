@@ -117,6 +117,27 @@ export default function PasoDeVehiculo() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
+  /**
+   * Volver al paso anterior sin perder lo escrito.
+   *
+   * Retroceder NO valida nada —quien vuelve a corregir su cédula no tiene por
+   * qué haber terminado esta pantalla— pero sí guarda. Sin esto, quien se
+   * daba cuenta de una errata en el paso anterior volvía, la corregía, y se
+   * encontraba el vehículo entero en blanco: los dos servicios, la marca, el
+   * modelo, el año, el color, la placa, el documento, el grado y las dos
+   * fechas. Trece campos por una letra.
+   */
+  const volver = () => {
+    actualizar({
+      vehiculo: datos.tipo,
+      servicios,
+      datosDelVehiculo: datos,
+      licencia,
+      certificadoMedico: certificado
+    });
+    router.back();
+  };
+
   const cambiar = (campo: keyof DatosDelVehiculo) => (valor: string) => {
     setDatos(actual => ({ ...actual, [campo]: valor }));
   };
@@ -197,7 +218,7 @@ export default function PasoDeVehiculo() {
           {aviso ? <Text style={estilos.aviso}>{aviso}</Text> : null}
           <View style={estilos.acciones}>
             <View style={estilos.mitad}>
-              <Boton titulo="←  Atrás" variante="secundario" onPress={() => { router.back(); }} deshabilitado={guardando} />
+              <Boton titulo="←  Atrás" variante="secundario" onPress={volver} deshabilitado={guardando} testID="postulacion-volver" />
             </View>
             <View style={estilos.mitad}>
               <Boton titulo={solicitud ? 'Guardar  →' : 'Siguiente  →'} onPress={() => { void continuar(); }} cargando={guardando} deshabilitado={guardando} testID="postulacion-continuar" />
