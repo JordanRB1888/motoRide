@@ -132,7 +132,10 @@ export function avisoDePostulacion(
         ...comun,
         variante: 'changes_required',
         etiqueta: 'Requiere cambios',
-        titulo: 'Tu solicitud necesita una corrección',
+        // El mismo texto que la tarjeta trae por defecto: está calibrado para
+        // caber en una línea junto a su insignia, y decir eso mismo con más
+        // palabras la empujaba fuera del borde.
+        titulo: 'Solicitud requiere cambios',
         descripcion: resumirCorrecciones(expediente),
         textoCTA: 'Revisar cambios',
         testID: 'aviso-postulacion-needs-changes'
@@ -169,7 +172,7 @@ export function avisoDePostulacion(
         ...comun,
         variante: 'review',
         etiqueta: 'Suspendida',
-        titulo: 'Tu cuenta de conductor está suspendida',
+        titulo: 'Cuenta suspendida',
         descripcion: expediente.motivoDeLaDecision ?? 'Toca para ver los detalles.',
         textoCTA: null,
         testID: 'aviso-postulacion-suspended'

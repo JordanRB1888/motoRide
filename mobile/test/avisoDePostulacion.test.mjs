@@ -96,7 +96,7 @@ test('requiere cambios: dice qué documento y por qué, y lleva a corregirlo', (
   }));
   assert.equal(aviso.variante, 'changes_required');
   assert.equal(aviso.etiqueta, 'Requiere cambios');
-  assert.match(aviso.titulo, /necesita una corrección/);
+  assert.match(aviso.titulo, /Solicitud requiere cambios/);
   // El documento con su nombre de verdad y el motivo que escribió administración.
   assert.equal(aviso.descripcion, 'Placa: No se distingue el último carácter.');
   assert.equal(aviso.textoCTA, 'Revisar cambios');
