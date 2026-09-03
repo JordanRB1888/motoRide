@@ -42,8 +42,10 @@
  */
 
 import { llamar, subirArchivo } from './api';
+import { avisarDeCambioDelExpediente } from './expedienteCambiado';
 import type { Resultado } from '../domain/apiResult';
 import type { EstadoDeSolicitud } from '../domain/driverApplication';
+import type { ExpedienteEnElInicio } from '../domain/avisoDePostulacion';
 import type {
   ClaveDeServicio,
   DatosDeLicencia,
@@ -252,6 +254,10 @@ export type LecturaDeSolicitud =
 function interpretar(respuesta: Resultado<unknown>): ResultadoDeSolicitud {
   if (!respuesta.ok) return traducirFallo(respuesta);
   const solicitud = leerSolicitud(respuesta.datos);
+  // Todo lo que cambia el expediente pasa por aquí. Avisar en este punto, y no
+  // en cada función, es lo que impide que alguien añada una mutación nueva y se
+  // olvide de que el inicio está enseñando lo de antes.
+  if (solicitud !== null) avisarDeCambioDelExpediente();
   return solicitud === null
     ? { ok: false, motivo: 'ERROR_DEL_SERVIDOR' }
     : { ok: true, solicitud };
@@ -455,6 +461,26 @@ export async function subirVideoDePresentacion(video: FotoParaSubir): Promise<Re
     }
     await pausa(PAUSA_ENTRE_INTENTOS_MS);
   }
+}
+
+/**
+ * Lo que el inicio necesita del expediente, y nada más.
+ *
+ * Se queda fuera todo lo que identifica a la persona: la cédula, el teléfono,
+ * las claves de los ficheros. Lo que sale de aquí acaba pintado en una tarjeta
+ * sobre el mapa, a la vista de quien mire el teléfono por encima del hombro.
+ */
+export function expedienteParaElInicio(solicitud: SolicitudPropia | null): ExpedienteEnElInicio | null {
+  if (solicitud === null) return null;
+  return {
+    retrato: retratoDelExpediente(solicitud),
+    correcciones: solicitud.requestedChangeDetails.map(detalle => ({
+      tipo: detalle.type,
+      motivo: detalle.reason
+    })),
+    motivoDeLaDecision: solicitud.decisionReason,
+    correccionEscrita: solicitud.textualCorrections
+  };
 }
 
 /** La ruta protegida de un documento. Sólo con sesión; nunca una URL pública. */
