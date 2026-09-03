@@ -36,20 +36,42 @@ const upload = multer({
 const uploadFields = upload.fields(UPLOADABLE_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
 const singleDocumentUpload = upload.single('file');
 
-import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from '../services/httpRateLimit.js';
+import { addressKey, createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from '../services/httpRateLimit.js';
 
 // El limitador de /api/driver-applications no alcanza a todas estas rutas:
 // el router se monta en /api, de modo que /api/admin/driver-applications,
 // /api/admin/actions y /api/driver-documents/:id/content quedaban sin cubrir
 // pese a parecer que estaban dentro.
+// Cada operacion cuesta lo suyo, y por eso cada una tiene su propio techo. Los
+// de aqui van SIEMPRE detras de `requireAuth`, de modo que cuentan por cuenta:
+// dos personas que comparten la direccion de su operador no se restan.
 const limitadores = {
   // Lee un documento de disco en cada peticion.
   documentos: createIdentityLimiter({ name: 'documentos', limit: 120, windowMs: MINUTO }),
-  // Subir cedula, licencia o RCV: caro y poco frecuente.
-  subidas: createIdentityLimiter({ name: 'subidas-documento', limit: 40, windowMs: CUARTO_DE_HORA }),
-  // Revision de expedientes desde administracion.
+  // Subir cedula, licencia o RCV: caro y poco frecuente. Un expediente completo
+  // son once fotos; con repeticiones y las correcciones que pida administracion,
+  // sesenta por cuenta y cuarto de hora deja sitio de sobra para el uso honrado
+  // y sigue siendo un techo real --sesenta ficheros de cinco megas--.
+  subidas: createIdentityLimiter({ name: 'subidas-documento', limit: 60, windowMs: CUARTO_DE_HORA }),
+  // Leer y corregir el expediente, propio o desde administracion.
   expedientes: createIdentityLimiter({ name: 'expedientes', limit: 240, windowMs: MINUTO })
 };
+
+/**
+ * El alta: lo unico que no lleva sesion y si cuesta.
+ *
+ * Crea una cuenta y calcula un hash de contrasena, asi que cuenta tambien los
+ * aciertos y se agrupa por direccion --no hay cuenta todavia que usar como
+ * clave--. Veinte por cuarto de hora es el mismo techo que el registro normal
+ * de la aplicacion: dar de alta veinte conductores distintos desde la misma
+ * conexion en quince minutos no es un caso legitimo.
+ */
+const limitadorDeAlta = createIdentityLimiter({
+  name: 'postulacion-alta',
+  limit: 20,
+  windowMs: CUARTO_DE_HORA,
+  keyGenerator: addressKey
+});
 
 /** Los estados en los que el titular todavía puede tocar su expediente. */
 const EDITABLE_STATUSES = [
@@ -102,7 +124,7 @@ export function createDriverApplicationsRouter({
    * Si llega completo y con los datos de envío, entra directamente en
    * revisión, como antes.
    */
-  router.post('/driver-applications', uploadFields, async (req, res) => {
+  router.post('/driver-applications', limitadorDeAlta, uploadFields, async (req, res) => {
     // Un cliente que no declara servicios es de antes de que existieran (el
     // registro web): su expediente nace con los requisitos de la version 1 y
     // se postula, como siempre, a llevar personas. Quien declara el campo se
@@ -117,9 +139,19 @@ export function createDriverApplicationsRouter({
     const matchingUsers = database.users.filter(user => user.email?.toLowerCase() === personal.email || String(user.phone || '').replace(/\D/g, '') === phoneKey);
     const existingUser = matchingUsers.length === 1 ? matchingUsers[0] : null;
     if (matchingUsers.length > 1 || (existingUser && existingUser.role !== 'passenger')) return res.status(409).json({ error: 'USER_EXISTS' });
-    if (existingUser?.driverApplicationId) {
-      const existingApplication = database.driverApplications.find(item => item.id === existingUser.driverApplicationId);
-      return res.status(409).json({ error: 'DRIVER_APPLICATION_EXISTS', applicationStatus: existingApplication?.status || 'pending' });
+    // Un expediente por persona, y la comprobacion no se fia de un solo dato.
+    //
+    // El puntero `driverApplicationId` del usuario es lo primero que se mira,
+    // pero si por lo que sea no se hubiera escrito --una escritura a medias, un
+    // dato importado-- el expediente seguiria existiendo en su coleccion. Por
+    // eso se busca tambien por `userId`: es la misma pregunta hecha por el otro
+    // lado, y es la que impide que tocar dos veces el boton deje a alguien con
+    // dos expedientes vivos que administracion tendria que desempatar a mano.
+    const existingApplication = existingUser
+      ? database.driverApplications.find(item => item.userId === existingUser.id || item.id === existingUser.driverApplicationId)
+      : null;
+    if (existingApplication) {
+      return res.status(409).json({ error: 'DRIVER_APPLICATION_EXISTS', applicationStatus: existingApplication.status || 'pending' });
     }
     if (existingUser && (!existingUser.passwordHash || !await bcrypt.compare(String(req.body.password || ''), existingUser.passwordHash))) {
       return res.status(401).json({ error: 'EXISTING_ACCOUNT_AUTH_REQUIRED' });
@@ -257,7 +289,7 @@ export function createDriverApplicationsRouter({
     });
   });
 
-  router.get('/driver-applications/me', requireAuth, (req, res) => {
+  router.get('/driver-applications/me', requireAuth, limitadores.expedientes, (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));

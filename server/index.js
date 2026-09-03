@@ -208,7 +208,40 @@ const guardiaMedios = createIdentityLimiter({
   skipSuccessfulRequests: true
 });
 app.use('/api/chat-media', guardiaMedios);
-app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
+
+/**
+ * La guardia de entrada de los expedientes de conductor.
+ *
+ * Antes aquí había un tope de veinte peticiones por dirección cada quince
+ * minutos, y contaba TODO: postularse cuesta una creación, once subidas de
+ * documento, alguna corrección y el envío. Catorce peticiones para el
+ * recorrido más corto. Detrás del NAT de un operador venezolano, donde
+ * cientos de personas comparten dirección, la segunda persona del día se
+ * quedaba fuera sin haber hecho nada malo.
+ *
+ * Ahora se separa lo que protege cada cosa:
+ *
+ *   - Esta guardia, por dirección, sólo cuenta lo que FALLA (peticiones sin
+ *     sesión válida, cuerpos rechazados). Es la red contra el abuso que ni
+ *     siquiera llega a autenticarse, y por eso puede ser amplia.
+ *   - Lo que ya está autenticado tiene su techo POR CUENTA dentro del router
+ *     del expediente (`documentos`, `subidas`, `expedientes`), donde compartir
+ *     dirección con otra persona no resta a nadie.
+ *   - Crear un expediente, que es lo único que no lleva sesión y sí cuesta
+ *     (una cuenta nueva y un hash de contraseña), tiene su propio tope por
+ *     dirección en la ruta, contando también los aciertos.
+ */
+const TOPE_GUARDIA_EXPEDIENTES = /^[1-9]\d*$/.test(String(process.env.DRIVER_APPLICATION_GUARD_LIMIT ?? ''))
+  ? Number(process.env.DRIVER_APPLICATION_GUARD_LIMIT)
+  : 300;
+const guardiaExpedientes = createIdentityLimiter({
+  name: 'expedientes-previa',
+  limit: TOPE_GUARDIA_EXPEDIENTES,
+  windowMs: CUARTO_DE_HORA,
+  keyGenerator: addressKey,
+  skipSuccessfulRequests: true
+});
+app.use('/api/driver-applications', guardiaExpedientes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
