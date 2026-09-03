@@ -14,6 +14,14 @@
  * foto», nunca al abrir la pantalla. La foto que devuelve se sube y se
  * olvida: no se guarda en el teléfono, no se muestra en grande, no se
  * reutiliza. Para verla luego hay que pedírsela al servidor con sesión.
+ *
+ * EL VÍDEO SE GRABA Y SE SUBE APARTE
+ *
+ * El vídeo de presentación está en la misma lista que las fotos porque el
+ * servidor lo pide igual que a ellas, pero tiene su propia tarjeta: pesa diez
+ * veces más y por eso no se sube solo al grabarlo. Primero se graba, se ve que
+ * quedó bien, y entonces se pulsa subir. En una red móvil venezolana, gastar
+ * cuarenta megas sin querer no es un detalle.
  */
 
 import { router } from 'expo-router';
@@ -26,16 +34,28 @@ import { Formulario } from '../../components/Formulario';
 import { Pantalla } from '../../components/Pantalla';
 import { usePostulacion } from '../../context/PostulacionContext';
 import { describirDocumento, describirPaso, documentosRequeridos } from '../../domain/postulacion';
-import { MENSAJES_DE_CAPTURA, capturar, nombreDeArchivo, type ModoDeCaptura } from '../../media/captura';
+import {
+  MENSAJES_DE_CAPTURA,
+  MENSAJES_DE_VIDEO,
+  capturar,
+  capturarVideo,
+  nombreDeArchivo,
+  nombreDelVideo,
+  type ModoDeCaptura,
+  type ModoDeVideo,
+  type VideoCapturado
+} from '../../media/captura';
 import {
   leerMiPostulacion,
   subirDocumento,
+  subirVideoDePresentacion,
   type MotivoDePostulacion
 } from '../../services/postulacion';
 import { useTema } from '../../theme/ThemeContext';
 import { espaciado, radios, tipografia } from '../../theme/tokens';
 
 const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
+  VIDEO_DEMASIADO_LARGO: 'El vídeo dura más de 30 segundos. Grábalo más corto.',
   SESION_CADUCADA: 'Tu sesión caducó. Vuelve a entrar para seguir con tu solicitud.',
   DEMASIADOS_INTENTOS: 'Demasiados intentos seguidos. Espera un momento y vuelve a probar.',
   DATOS_INVALIDOS: 'Falta algún dato del expediente. Revisa los pasos anteriores.',
@@ -49,6 +69,33 @@ const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
   SIN_CONEXION: 'Sin conexión. Revisa tu red e inténtalo de nuevo.',
   ERROR_DEL_SERVIDOR: 'No pudimos guardar. Inténtalo de nuevo en un momento.'
 };
+
+/**
+ * En qué punto está el vídeo.
+ *
+ * Los cinco estados salen de lo que sabe el servidor —si el documento está
+ * entregado, si administración pidió repetirlo— más el único paso que sólo
+ * conoce el teléfono: haberlo grabado y no haberlo subido aún. No hay estados
+ * inventados por encima de eso.
+ */
+/** El tipo del vídeo, tal como lo llama el servidor. */
+const TIPO_DEL_VIDEO = 'presentation_video';
+
+type EstadoDelVideo = 'SIN_VIDEO' | 'LISTO' | 'SUBIENDO' | 'SUBIDO' | 'REPETIR';
+
+function estadoDelVideo(entrada: {
+  readonly motivo: string | null | undefined;
+  readonly subiendo: boolean;
+  readonly entregado: boolean;
+  readonly grabado: VideoCapturado | null;
+}): EstadoDelVideo {
+  if (entrada.subiendo) return 'SUBIENDO';
+  // La corrección manda sobre lo demás: hay un vídeo, pero no sirve.
+  if (entrada.motivo) return 'REPETIR';
+  if (entrada.grabado !== null) return 'LISTO';
+  if (entrada.entregado) return 'SUBIDO';
+  return 'SIN_VIDEO';
+}
 
 /**
  * La sesion caduco: se vuelve al acceso.
@@ -70,6 +117,9 @@ export default function PasoDeDocumentos() {
   const [cargando, setCargando] = useState(solicitud === null);
   const [ocupadoCon, setOcupadoCon] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  // El vídeo grabado y todavía no subido. Vive sólo mientras dura la pantalla:
+  // no se guarda en disco ni se recuerda entre sesiones.
+  const [videoGrabado, setVideoGrabado] = useState<VideoCapturado | null>(null);
 
   const recargar = useCallback(async () => {
     const lectura = await leerMiPostulacion();
@@ -98,6 +148,33 @@ export default function PasoDeDocumentos() {
     });
     setOcupadoCon(null);
     if (!respuesta.ok) { if (!alPerderLaSesion(respuesta.motivo)) setAviso(MENSAJES[respuesta.motivo]); return; }
+    fijarSolicitud(respuesta.solicitud);
+  };
+
+  const grabar = async (modo: ModoDeVideo) => {
+    setAviso(null);
+    const captura = await capturarVideo(modo);
+    if (!captura.ok) {
+      if (captura.motivo !== 'CANCELADO') setAviso(MENSAJES_DE_VIDEO[captura.motivo]);
+      return;
+    }
+    // Grabado, no subido: la persona decide cuándo gastar sus megas.
+    setVideoGrabado(captura.video);
+  };
+
+  const subirElVideo = async (video: VideoCapturado) => {
+    setAviso(null);
+    setOcupadoCon(TIPO_DEL_VIDEO);
+    const respuesta = await subirVideoDePresentacion({
+      uri: video.uri,
+      nombre: nombreDelVideo(video.mimeType),
+      tipo: video.mimeType,
+      tamano: video.tamano
+    });
+    setOcupadoCon(null);
+    if (!respuesta.ok) { if (!alPerderLaSesion(respuesta.motivo)) setAviso(MENSAJES[respuesta.motivo]); return; }
+    // Ya está en el servidor: la copia local sobra y se suelta.
+    setVideoGrabado(null);
     fijarSolicitud(respuesta.solicitud);
   };
 
@@ -161,6 +238,48 @@ export default function PasoDeDocumentos() {
             const hecho = entregados.has(tipo) && !faltan.has(tipo);
             const motivo = porRepetir.get(tipo);
             const ocupado = ocupadoCon === tipo;
+
+            if (documento?.medio === 'video') {
+              const estado = estadoDelVideo({ motivo, subiendo: ocupado, entregado: hecho, grabado: videoGrabado });
+              const duracion = videoGrabado?.duracion;
+              return (
+                <View
+                  key={tipo}
+                  style={[estilos.tarjeta, estado === 'REPETIR' ? estilos.tarjetaConCorreccion : estado === 'SUBIDO' ? estilos.tarjetaHecha : null]}
+                  testID={`documento-${tipo}`}
+                >
+                  <Text style={estilos.tarjetaTitulo}>{documento.titulo}{estado === 'SUBIDO' ? ' · listo' : ''}</Text>
+                  <Text style={estilos.tarjetaDetalle}>{motivo ? `Repetir: ${motivo}` : documento.instruccion}</Text>
+                  <Text style={estilos.estadoDelVideo} testID="estado-video">
+                    {estado === 'SUBIENDO' ? 'Subiendo el vídeo…'
+                      : estado === 'LISTO' ? `Grabado${typeof duracion === 'number' ? `, ${Math.round(duracion)} segundos` : ''}. Falta subirlo.`
+                      : estado === 'SUBIDO' ? 'Subido. Sólo administración puede verlo.'
+                      : estado === 'REPETIR' ? 'Hay que grabarlo otra vez.'
+                      : 'Todavía no has grabado el vídeo.'}
+                  </Text>
+                  {bloqueada ? null : estado === 'LISTO' && videoGrabado !== null ? (
+                    <View style={estilos.acciones}>
+                      <View style={estilos.mitad}>
+                        <Boton titulo="Subir vídeo" onPress={() => { void subirElVideo(videoGrabado); }} deshabilitado={ocupadoCon !== null} testID="subir-video" />
+                      </View>
+                      <View style={estilos.mitad}>
+                        <Boton titulo="Repetir" variante="secundario" onPress={() => { void grabar('TAKE_VIDEO'); }} deshabilitado={ocupadoCon !== null} testID="repetir-video" />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={estilos.acciones}>
+                      <View style={estilos.mitad}>
+                        <Boton titulo={estado === 'SUBIDO' ? 'Grabar otro' : 'Grabar vídeo'} onPress={() => { void grabar('TAKE_VIDEO'); }} cargando={ocupado} deshabilitado={ocupadoCon !== null} testID="grabar-video" />
+                      </View>
+                      <View style={estilos.mitad}>
+                        <Boton titulo="Galería" variante="secundario" onPress={() => { void grabar('CHOOSE_VIDEO'); }} deshabilitado={ocupadoCon !== null} testID="elegir-video" />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            }
+
             return (
               <View key={tipo} style={[estilos.tarjeta, motivo ? estilos.tarjetaConCorreccion : hecho ? estilos.tarjetaHecha : null]} testID={`documento-${tipo}`}>
                 <Text style={estilos.tarjetaTitulo}>{documento?.titulo ?? tipo}{hecho && !motivo ? ' · listo' : ''}</Text>
@@ -202,6 +321,7 @@ const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.crea
   tarjetaConCorreccion: { borderColor: c.aviso },
   tarjetaTitulo: { color: c.textoPrimario, fontSize: tipografia.cuerpoFuerte.tamano, fontWeight: '600' },
   tarjetaDetalle: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
+  estadoDelVideo: { color: c.textoPrimario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto, fontWeight: '600' },
   acciones: { flexDirection: 'row', gap: espaciado.md },
   mitad: { flex: 1, minWidth: 0 },
   aviso: { color: c.peligro, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto, marginBottom: espaciado.sm },

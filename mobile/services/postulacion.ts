@@ -53,6 +53,7 @@ import type {
   TipoDeVehiculo
 } from '../domain/postulacion';
 import { normalizarCedula, normalizarPlaca, normalizarRif, regionDeLaCiudad } from '../domain/postulacion';
+import { TAMANO_MAXIMO_DE_VIDEO } from '../domain/videoDePresentacion';
 import type { RetratoDelExpediente } from '../domain/postulacion';
 
 /** Un archivo tal como lo entrega React Native: una ruta, no un `Blob`. */
@@ -176,6 +177,7 @@ function leerSolicitud(datos: unknown): SolicitudPropia | null {
 
 /** Qué salió mal, en el idioma de la persona. */
 export type MotivoDePostulacion =
+  | 'VIDEO_DEMASIADO_LARGO'
   | 'SESION_CADUCADA'
   | 'DEMASIADOS_INTENTOS'
   | 'DATOS_INVALIDOS'
@@ -209,6 +211,7 @@ function traducirFallo(respuesta: Extract<Resultado<unknown>, { ok: false }>): F
   if (respuesta.estadoHttp === 429) return { ok: false, motivo: 'DEMASIADOS_INTENTOS' };
 
   const porCodigo: Readonly<Record<string, MotivoDePostulacion>> = {
+    VIDEO_TOO_LONG: 'VIDEO_DEMASIADO_LARGO',
     VALIDATION_FAILED: 'DATOS_INVALIDOS',
     MISSING_DOCUMENTS: 'FALTAN_DOCUMENTOS',
     DRIVER_APPLICATION_EXISTS: 'YA_TIENE_SOLICITUD',
@@ -411,6 +414,43 @@ export async function enviarARevision(): Promise<ResultadoDeSolicitud> {
   return interpretar(await llamar<unknown>('/api/driver-applications/me/submit', {
     metodo: 'POST'
   }));
+}
+
+/**
+ * Sube el vídeo de presentación.
+ *
+ * POR SU PROPIA RUTA, Y POR XMLHttpRequest
+ *
+ * La ruta es otra porque el servidor lo trata distinto: otro tope de tamaño y
+ * una comprobación de duración que las fotos no necesitan. El transporte es el
+ * mismo que aprendimos con las fotos: `XMLHttpRequest`, que manda el fichero
+ * desde nativo y en flujo. Con `fetch` habría que cargar cincuenta megas en
+ * memoria para envolverlos, y en un teléfono modesto eso es cerrar la
+ * aplicación.
+ *
+ * El tiempo máximo sube a tres minutos: cincuenta megas por una red móvil
+ * venezolana no caben en uno.
+ */
+export async function subirVideoDePresentacion(video: FotoParaSubir): Promise<ResultadoDeSolicitud> {
+  if (typeof video.tamano === 'number' && video.tamano > TAMANO_MAXIMO_DE_VIDEO) {
+    return { ok: false, motivo: 'ARCHIVO_DEMASIADO_GRANDE' };
+  }
+
+  for (let intento = 1; ; intento += 1) {
+    const respuesta = await subirArchivo<unknown>(
+      '/api/driver-applications/me/video',
+      'file',
+      { uri: video.uri, nombre: video.nombre, tipo: video.tipo },
+      { metodo: 'PUT', tiempoMaximoMs: 180_000 }
+    );
+    // Igual que con las fotos: sólo se reintenta la falta de red, que es lo
+    // único que puede arreglarse solo. Un 400, un 413 o un 429 no mejoran
+    // porque se insista.
+    if (respuesta.ok || respuesta.motivo !== 'SIN_RED' || intento >= INTENTOS_DE_SUBIDA) {
+      return interpretar(respuesta);
+    }
+    await pausa(PAUSA_ENTRE_INTENTOS_MS);
+  }
 }
 
 /** La ruta protegida de un documento. Sólo con sesión; nunca una URL pública. */

@@ -140,6 +140,16 @@ export function esDocumentoLegal(valor: unknown): valor is DocumentoLegalDelVehi
  * un documento y la aplicación no se entera, alguien enviaría una solicitud
  * incompleta y se la rechazarían sin saber por qué.
  */
+/**
+ * La versión de requisitos que rige hoy. Espejo de `REQUIREMENTS_VERSION`.
+ *
+ * 1: los siete documentos de siempre. 2: los once del expediente completo.
+ * 3: los doce, con el vídeo de presentación. Un expediente creado bajo una
+ * versión anterior se sigue evaluando con la suya, y por eso no se vuelve
+ * incompleto cuando el catálogo crece.
+ */
+export const VERSION_DE_REQUISITOS = 3;
+
 export interface DocumentoPedido {
   readonly tipo: string;
   readonly titulo: string;
@@ -148,8 +158,10 @@ export interface DocumentoPedido {
   /** A quién se le exige. `comun`: a todos. `MOTO`/`CAR`: solo a ese vehículo. */
   readonly requisito: 'comun' | TipoDeVehiculo | 'opcional' | 'heredado';
   readonly medio: 'imagen' | 'video';
-  /** Si hoy se puede subir. El vídeo todavía no. */
+  /** Si hoy se puede subir. */
   readonly subible: boolean;
+  /** Desde qué versión de requisitos se pide. Sin valor: desde siempre. */
+  readonly desdeVersion?: number;
 }
 
 export const DOCUMENTOS: readonly DocumentoPedido[] = Object.freeze([
@@ -167,7 +179,7 @@ export const DOCUMENTOS: readonly DocumentoPedido[] = Object.freeze([
   Object.freeze({ tipo: 'car_rear_interior', titulo: 'Asientos traseros', instruccion: 'El interior de atrás, donde va tu pasajera. Limpio y con luz.', requisito: 'CAR', medio: 'imagen', subible: true }),
   Object.freeze({ tipo: 'vehicle_insurance', titulo: 'Póliza de seguro (RCV)', instruccion: 'Si la tienes, adjúntala. No es obligatoria para postularte.', requisito: 'opcional', medio: 'imagen', subible: true }),
   Object.freeze({ tipo: 'vehicle_photo', titulo: 'Foto del vehículo', instruccion: 'De una postulación anterior. Vale como la foto de frente.', requisito: 'heredado', medio: 'imagen', subible: true }),
-  Object.freeze({ tipo: 'presentation_video', titulo: 'Vídeo de presentación', instruccion: 'Un vídeo corto presentándote. Todavía no se puede subir.', requisito: 'opcional', medio: 'video', subible: false })
+  Object.freeze({ tipo: 'presentation_video', titulo: 'Vídeo de presentación', instruccion: 'Máximo 30 segundos, con tu cara y tu voz: di tu nombre y con qué trabajas. Con luz y sin ruido de fondo.', requisito: 'comun', medio: 'video', subible: true, desdeVersion: 3 })
 ] as const);
 
 /** Otros tipos que cuentan como este. Espejo de `satisfiedBy` en el servidor. */
@@ -180,19 +192,21 @@ export function describirDocumento(tipo: string): DocumentoPedido | null {
 }
 
 /** Los obligatorios para un vehículo. Versión 1: los siete de antes. */
-export function documentosRequeridos(vehiculo: TipoDeVehiculo, version = 2): readonly string[] {
+export function documentosRequeridos(vehiculo: TipoDeVehiculo, version = VERSION_DE_REQUISITOS): readonly string[] {
   if (version < 2) {
     return Object.freeze(['identity_front', 'identity_back', 'driver_license', 'vehicle_registration', 'vehicle_photo', 'plate_photo', 'driver_selfie']);
   }
   return Object.freeze(
     DOCUMENTOS
       .filter(documento => documento.requisito === 'comun' || documento.requisito === vehiculo)
+      // Lo que nació después no se le pide a quien se postuló antes.
+      .filter(documento => documento.desdeVersion === undefined || version >= documento.desdeVersion)
       .map(documento => documento.tipo)
   );
 }
 
 /** Qué obligatorios faltan todavía, para ese vehículo. */
-export function documentosQueFaltan(entregados: readonly string[], vehiculo: TipoDeVehiculo, version = 2): readonly string[] {
+export function documentosQueFaltan(entregados: readonly string[], vehiculo: TipoDeVehiculo, version = VERSION_DE_REQUISITOS): readonly string[] {
   const hay = new Set(entregados);
   return documentosRequeridos(vehiculo, version).filter(tipo =>
     !hay.has(tipo) && !(EQUIVALENTES[tipo] ?? []).some(equivalente => hay.has(equivalente))
@@ -427,7 +441,7 @@ export interface EstadoDeLaPostulacion {
 /**
  * Cuánto se lleva hecho.
  *
- * Los documentos pesan lo que son —once de las quince cosas que se piden—,
+ * Los documentos pesan lo que son —doce de las dieciséis cosas que se piden—,
  * así que la barra no salta del 40 % al 100 % con una sola foto ni se queda
  * pegada mientras se hacen todas.
  */

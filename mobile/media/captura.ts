@@ -35,11 +35,20 @@ import {
   interpretarActivo,
   type ResultadoDeCaptura
 } from '../domain/fotoDeDocumento';
+import {
+  CALIDAD_DE_VIDEO,
+  DURACION_MAXIMA_EN_SEGUNDOS,
+  interpretarVideo,
+  type ResultadoDeVideo
+} from '../domain/videoDePresentacion';
 
 export type { FotoCapturada, MotivoDeCaptura, ResultadoDeCaptura } from '../domain/fotoDeDocumento';
 export { MENSAJES_DE_CAPTURA, nombreDeArchivo } from '../domain/fotoDeDocumento';
+export type { MotivoDeVideo, ResultadoDeVideo, VideoCapturado } from '../domain/videoDePresentacion';
+export { MENSAJES_DE_VIDEO, nombreDelVideo } from '../domain/videoDePresentacion';
 
 export type ModoDeCaptura = 'TAKE_PHOTO' | 'CHOOSE_PHOTO';
+export type ModoDeVideo = 'TAKE_VIDEO' | 'CHOOSE_VIDEO';
 
 const OPCIONES: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
@@ -87,6 +96,57 @@ export async function capturar(modo: ModoDeCaptura): Promise<ResultadoDeCaptura>
   } catch {
     // Sin cámara (un emulador sin cámara virtual, un dispositivo raro): no es
     // un fallo de la persona y no se registra nada de lo que llevaba.
+    return { ok: false, motivo: 'NO_DISPONIBLE' };
+  }
+}
+
+/**
+ * El vídeo de presentación: se graba o se elige de la galería.
+ *
+ * MISMA PUERTA, OTRO MEDIO
+ *
+ * Está aquí, junto a la foto, porque la regla es la misma: NADIE fuera de este
+ * fichero importa `expo-image-picker`. Si mañana hay que cambiar de librería,
+ * se cambia en un sitio y las pantallas ni se enteran.
+ *
+ * Al grabar se le pide a la cámara que corte sola a los treinta segundos, que
+ * es más amable que dejar grabar dos minutos y rechazarlo después. Y se pide
+ * calidad media: 720p basta para ver una cara, y ahorra megas del plan de
+ * datos de quien lo sube.
+ *
+ * Nunca lanza: todo lo que puede salir mal vuelve como motivo.
+ */
+export async function capturarVideo(modo: ModoDeVideo): Promise<ResultadoDeVideo> {
+  const opciones: ImagePicker.ImagePickerOptions = {
+    mediaTypes: ['videos'],
+    allowsEditing: false,
+    allowsMultipleSelection: false,
+    // La cámara corta sola: mejor que grabar de más y perder el intento.
+    videoMaxDuration: DURACION_MAXIMA_EN_SEGUNDOS,
+    quality: CALIDAD_DE_VIDEO,
+    exif: false,
+    base64: false
+  };
+
+  try {
+    if (modo === 'TAKE_VIDEO') {
+      // El permiso se pide AL PULSAR grabar, nunca al abrir la pantalla.
+      const permiso = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permiso.granted) return { ok: false, motivo: 'PERMISO_DENEGADO' };
+    } else if (laGaleriaNecesitaPermiso()) {
+      const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permiso.granted) return { ok: false, motivo: 'PERMISO_DENEGADO' };
+    }
+
+    const resultado = modo === 'TAKE_VIDEO'
+      ? await ImagePicker.launchCameraAsync(opciones)
+      : await ImagePicker.launchImageLibraryAsync(opciones);
+    if (resultado.canceled) return { ok: false, motivo: 'CANCELADO' };
+
+    const activo = resultado.assets?.[0];
+    if (!activo) return { ok: false, motivo: 'NO_DISPONIBLE' };
+    return interpretarVideo(activo);
+  } catch {
     return { ok: false, motivo: 'NO_DISPONIBLE' };
   }
 }

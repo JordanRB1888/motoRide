@@ -17,6 +17,7 @@ import {
   describirServicio,
   documentosQueFaltan,
   documentosRequeridos,
+  VERSION_DE_REQUISITOS,
   edadEn,
   esCiudadCubierta,
   normalizarCedula,
@@ -109,11 +110,11 @@ test('el catálogo de documentos es el del servidor, tipo por tipo', () => {
   );
 });
 
-test('la moto pide los cascos; el carro, el interior trasero; los dos, once', () => {
+test('la moto pide los cascos; el carro, el interior trasero; los dos, doce', () => {
   const moto = documentosRequeridos('MOTO');
   const carro = documentosRequeridos('CAR');
-  assert.equal(moto.length, 11);
-  assert.equal(carro.length, 11);
+  assert.equal(moto.length, 12);
+  assert.equal(carro.length, 12);
   assert.ok(moto.includes('moto_helmets'));
   assert.equal(moto.includes('car_rear_interior'), false);
   assert.ok(carro.includes('car_rear_interior'));
@@ -123,12 +124,29 @@ test('la moto pide los cascos; el carro, el interior trasero; los dos, once', ()
   }
 });
 
-test('el seguro y el vídeo no se exigen; el vídeo no se puede subir todavía', () => {
+test('el seguro sigue siendo opcional', () => {
   assert.equal(documentosRequeridos('MOTO').includes('vehicle_insurance'), false);
-  assert.equal(documentosRequeridos('MOTO').includes('presentation_video'), false);
+});
+
+test('la versión de requisitos es la del servidor', () => {
+  const bloque = servidor.match(/REQUIREMENTS_VERSION = (\d+)/);
+  assert.ok(bloque, 'no encuentro REQUIREMENTS_VERSION en el servidor');
+  assert.equal(VERSION_DE_REQUISITOS, Number(bloque[1]));
+});
+
+test('el vídeo se exige desde la versión 3, y no antes', () => {
   const video = DOCUMENTOS.find(d => d.tipo === 'presentation_video');
-  assert.equal(video.subible, false);
   assert.equal(video.medio, 'video');
+  assert.equal(video.subible, true);
+  assert.equal(video.desdeVersion, 3);
+  // Quien se postuló con el catálogo anterior no ve aparecer un requisito nuevo.
+  assert.equal(documentosRequeridos('MOTO', 2).includes('presentation_video'), false);
+  assert.equal(documentosRequeridos('MOTO', 2).length, 11);
+  assert.ok(documentosRequeridos('MOTO', 3).includes('presentation_video'));
+  assert.ok(documentosRequeridos('CAR', 3).includes('presentation_video'));
+  // Y por eso su expediente no se vuelve incompleto de un día para otro.
+  assert.deepEqual([...documentosQueFaltan(documentosRequeridos('MOTO', 2), 'MOTO', 2)], []);
+  assert.deepEqual([...documentosQueFaltan(documentosRequeridos('MOTO', 2), 'MOTO', 3)], ['presentation_video']);
 });
 
 test('la versión 1 sigue siendo los siete de antes', () => {
@@ -265,7 +283,7 @@ test('sin nada hecho, el avance es cero y el siguiente paso es el primero', () =
   assert.equal(avance.porcentaje, 0);
   assert.equal(avance.siguiente, 'personal');
   assert.equal(avance.listaParaEnviar, false);
-  assert.equal(avance.documentosQueFaltan.length, 11);
+  assert.equal(avance.documentosQueFaltan.length, 12);
 });
 
 test('los documentos pesan lo que son: la barra no salta con una foto', () => {

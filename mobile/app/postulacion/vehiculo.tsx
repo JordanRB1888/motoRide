@@ -82,6 +82,7 @@ function desdeLaSolicitud(solicitud: SolicitudPropia): {
 }
 
 const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
+  VIDEO_DEMASIADO_LARGO: 'El vídeo dura más de 30 segundos. Grábalo más corto.',
   SESION_CADUCADA: 'Tu sesión caducó. Vuelve a entrar para seguir con tu solicitud.',
   DEMASIADOS_INTENTOS: 'Demasiados intentos seguidos. Espera un momento y vuelve a probar.',
   DATOS_INVALIDOS: 'El servidor no aceptó algún dato. Revisa el paso anterior.',
