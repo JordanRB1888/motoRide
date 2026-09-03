@@ -48,9 +48,9 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "+58Express usa la cámara para fotografiar tus documentos y tu vehículo cuando te postulas como conductor.",
-          "photosPermission": "+58Express accede a tus fotos para adjuntar tus documentos cuando te postulas como conductor.",
-          "microphonePermission": false
+          "cameraPermission": "+58Express usa la cámara para fotografiar tus documentos y tu vehículo y para grabar tu vídeo de presentación cuando te postulas como conductor.",
+          "photosPermission": "+58Express accede a tus fotos y vídeos para adjuntar tus documentos cuando te postulas como conductor.",
+          "microphonePermission": "+58Express usa el micrófono para grabar el sonido de tu vídeo de presentación. Sin él, el vídeo saldría mudo."
         }
       ],
       "./plugins/rutaCortaDeCmake"

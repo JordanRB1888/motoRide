@@ -139,6 +139,26 @@ test('si el teléfono no sabe la duración, no se rechaza: no poder medir no es 
   assert.match(leerServidor('routes/driverApplications.js'), /VIDEO_TOO_LONG/);
 });
 
+test('en web la duración viene en segundos, y se interpreta como tal', () => {
+  // `HTMLMediaElement.duration` son segundos; el módulo nativo da milisegundos.
+  // Dar por hecha una de las dos convierte dos minutos en 0,12 segundos.
+  assert.equal(interpretarVideo(activo({ duration: 12 }), 'SEGUNDOS').video.duracion, 12);
+  assert.deepEqual(
+    interpretarVideo(activo({ duration: 120 }), 'SEGUNDOS'),
+    { ok: false, motivo: 'DEMASIADO_LARGO' }
+  );
+  // Y con la unidad equivocada, ese mismo vídeo de dos minutos se colaría.
+  assert.equal(interpretarVideo(activo({ duration: 120 })).ok, true);
+});
+
+test('la unidad la decide la capa que conoce la plataforma, no el dominio', () => {
+  const captura = sinComentarios('media/captura.ts');
+  assert.match(captura, /Platform[.]OS === 'web' [?] 'SEGUNDOS' : 'MILISEGUNDOS'/);
+  assert.match(captura, /interpretarVideo[(]activo, UNIDAD_DE_DURACION[)]/);
+  // El dominio no pregunta en qué plataforma corre.
+  assert.equal(/react-native/.test(sinComentarios('domain/videoDePresentacion.ts')), false);
+});
+
 test('pasado el peso máximo se rechaza aquí también', () => {
   assert.deepEqual(
     interpretarVideo(activo({ fileSize: TAMANO_MAXIMO_DE_VIDEO + 1 })),

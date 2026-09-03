@@ -39,7 +39,8 @@ import {
   CALIDAD_DE_VIDEO,
   DURACION_MAXIMA_EN_SEGUNDOS,
   interpretarVideo,
-  type ResultadoDeVideo
+  type ResultadoDeVideo,
+  type UnidadDeDuracion
 } from '../domain/videoDePresentacion';
 
 export type { FotoCapturada, MotivoDeCaptura, ResultadoDeCaptura } from '../domain/fotoDeDocumento';
@@ -49,6 +50,15 @@ export { MENSAJES_DE_VIDEO, nombreDelVideo } from '../domain/videoDePresentacion
 
 export type ModoDeCaptura = 'TAKE_PHOTO' | 'CHOOSE_PHOTO';
 export type ModoDeVideo = 'TAKE_VIDEO' | 'CHOOSE_VIDEO';
+
+/**
+ * En qué unidad viene la duración de esta plataforma.
+ *
+ * En Android e iOS, el módulo nativo la da en milisegundos. En web la mide con
+ * un elemento de vídeo, y `HTMLMediaElement.duration` son segundos. Saberlo es
+ * asunto de esta capa: el dominio no debe preguntar en qué plataforma corre.
+ */
+const UNIDAD_DE_DURACION: UnidadDeDuracion = Platform.OS === 'web' ? 'SEGUNDOS' : 'MILISEGUNDOS';
 
 const OPCIONES: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
@@ -145,7 +155,7 @@ export async function capturarVideo(modo: ModoDeVideo): Promise<ResultadoDeVideo
 
     const activo = resultado.assets?.[0];
     if (!activo) return { ok: false, motivo: 'NO_DISPONIBLE' };
-    return interpretarVideo(activo);
+    return interpretarVideo(activo, UNIDAD_DE_DURACION);
   } catch {
     return { ok: false, motivo: 'NO_DISPONIBLE' };
   }

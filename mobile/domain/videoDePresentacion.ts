@@ -69,7 +69,15 @@ export type ResultadoDeVideo =
 export interface ActivoDeVideo {
   readonly uri?: string;
   readonly mimeType?: string | null;
-  /** El selector la da en MILISEGUNDOS. */
+  /**
+   * Cuánto dura, en la unidad que use la plataforma.
+   *
+   * En Android e iOS el selector la da en MILISEGUNDOS. En web la calcula con
+   * un elemento de vídeo, y ahí `duration` son SEGUNDOS, como en toda la API
+   * del navegador. Dar por hecha una de las dos convierte un vídeo de dos
+   * minutos en uno de 0,12 segundos, que pasaría el filtro local para que el
+   * servidor lo rechace después de subirlo.
+   */
   readonly duration?: number | null;
   readonly fileSize?: number | null;
   readonly width?: number;
@@ -106,7 +114,12 @@ export function nombreDelVideo(mimeType: TipoDeVideo): string {
  * declararse como 30,04, y rechazarla por eso sería incomprensible para quien
  * acaba de contar hasta treinta.
  */
-export function interpretarVideo(activo: ActivoDeVideo): ResultadoDeVideo {
+export type UnidadDeDuracion = 'MILISEGUNDOS' | 'SEGUNDOS';
+
+export function interpretarVideo(
+  activo: ActivoDeVideo,
+  unidad: UnidadDeDuracion = 'MILISEGUNDOS'
+): ResultadoDeVideo {
   const uri = typeof activo.uri === 'string' ? activo.uri : '';
   if (!uri) return { ok: false, motivo: 'NO_DISPONIBLE' };
 
@@ -114,9 +127,9 @@ export function interpretarVideo(activo: ActivoDeVideo): ResultadoDeVideo {
   const mimeType = esTipoDeVideo(declarado) ? declarado : tipoDeVideoPorExtension(uri);
   if (!esTipoDeVideo(mimeType)) return { ok: false, motivo: 'TIPO_NO_ADMITIDO' };
 
-  // El selector da milisegundos; aquí se trabaja en segundos.
+  // Aquí se trabaja siempre en segundos, venga como venga.
   const duracion = typeof activo.duration === 'number' && Number.isFinite(activo.duration)
-    ? activo.duration / 1000
+    ? activo.duration / (unidad === 'SEGUNDOS' ? 1 : 1000)
     : null;
   if (duracion !== null && duracion > DURACION_MAXIMA_EN_SEGUNDOS + 0.5) {
     return { ok: false, motivo: 'DEMASIADO_LARGO' };
