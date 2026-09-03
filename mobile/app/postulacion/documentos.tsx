@@ -1,5 +1,5 @@
 /**
- * PASOS 4 y 5 — Tus documentos: foto a foto, y enviar.
+ * PASO 3 — Tus documentos: foto a foto.
  *
  * LA LISTA LA MANDA EL SERVIDOR
  *
@@ -21,12 +21,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../../components/Boton';
+import { CabeceraDePasos } from '../../components/CabeceraDePasos';
+import { Formulario } from '../../components/Formulario';
 import { Pantalla } from '../../components/Pantalla';
 import { usePostulacion } from '../../context/PostulacionContext';
-import { describirDocumento, documentosRequeridos } from '../../domain/postulacion';
+import { describirDocumento, describirPaso, documentosRequeridos } from '../../domain/postulacion';
 import { MENSAJES_DE_CAPTURA, capturar, nombreDeArchivo, type ModoDeCaptura } from '../../media/captura';
 import {
-  enviarARevision,
   leerMiPostulacion,
   subirDocumento,
   type MotivoDePostulacion
@@ -35,6 +36,8 @@ import { useTema } from '../../theme/ThemeContext';
 import { espaciado, radios, tipografia } from '../../theme/tokens';
 
 const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
+  SESION_CADUCADA: 'Tu sesión caducó. Vuelve a entrar para seguir con tu solicitud.',
+  DEMASIADOS_INTENTOS: 'Demasiados intentos seguidos. Espera un momento y vuelve a probar.',
   DATOS_INVALIDOS: 'Falta algún dato del expediente. Revisa los pasos anteriores.',
   FALTAN_DOCUMENTOS: 'Todavía faltan documentos.',
   YA_TIENE_SOLICITUD: 'Ya tienes una postulación.',
@@ -47,19 +50,31 @@ const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
   ERROR_DEL_SERVIDOR: 'No pudimos guardar. Inténtalo de nuevo en un momento.'
 };
 
+/**
+ * La sesion caduco: se vuelve al acceso.
+ *
+ * Un aviso rojo en una pantalla vacia deja a la persona sin salida; lo que
+ * necesita es volver a entrar. El expediente sigue en el servidor y al
+ * regresar continua donde estaba.
+ */
+function alPerderLaSesion(motivo: MotivoDePostulacion): boolean {
+  if (motivo !== 'SESION_CADUCADA') return false;
+  router.replace('/acceso');
+  return true;
+}
+
 export default function PasoDeDocumentos() {
   const tema = useTema();
   const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   const { solicitud, fijarSolicitud } = usePostulacion();
   const [cargando, setCargando] = useState(solicitud === null);
   const [ocupadoCon, setOcupadoCon] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
   const recargar = useCallback(async () => {
     const lectura = await leerMiPostulacion();
     setCargando(false);
-    if (!lectura.ok) { setAviso(MENSAJES[lectura.motivo]); return; }
+    if (!lectura.ok) { if (!alPerderLaSesion(lectura.motivo)) setAviso(MENSAJES[lectura.motivo]); return; }
     if (lectura.solicitud === null) { router.replace('/postulacion'); return; }
     fijarSolicitud(lectura.solicitud);
   }, [fijarSolicitud]);
@@ -82,22 +97,8 @@ export default function PasoDeDocumentos() {
       tamano: captura.foto.tamano
     });
     setOcupadoCon(null);
-    if (!respuesta.ok) { setAviso(MENSAJES[respuesta.motivo]); return; }
+    if (!respuesta.ok) { if (!alPerderLaSesion(respuesta.motivo)) setAviso(MENSAJES[respuesta.motivo]); return; }
     fijarSolicitud(respuesta.solicitud);
-  };
-
-  const enviar = async () => {
-    setAviso(null);
-    setEnviando(true);
-    const respuesta = await enviarARevision();
-    setEnviando(false);
-    if (!respuesta.ok) {
-      const faltan = respuesta.faltan?.map(tipo => describirDocumento(tipo)?.titulo ?? tipo).join(', ');
-      setAviso(faltan ? `Faltan: ${faltan}.` : MENSAJES[respuesta.motivo]);
-      return;
-    }
-    fijarSolicitud(respuesta.solicitud);
-    router.replace('/postulacion/estado');
   };
 
   if (cargando || solicitud === null) {
@@ -110,66 +111,85 @@ export default function PasoDeDocumentos() {
     );
   }
 
+  const paso = describirPaso('documentos');
   const pedidos = documentosRequeridos(solicitud.vehicleType, solicitud.requirementsVersion);
   const entregados = new Set(solicitud.documents.map(documento => documento.type));
   const faltan = new Set(solicitud.missingDocuments);
   const porRepetir = new Map(solicitud.requestedChangeDetails.map(cambio => [cambio.type, cambio.reason]));
-  const listaParaEnviar = faltan.size === 0 && porRepetir.size === 0 && ocupadoCon === null;
+  const listos = pedidos.length - faltan.size;
+  const puedeSeguir = faltan.size === 0 && porRepetir.size === 0 && ocupadoCon === null;
   const bloqueada = solicitud.status === 'pending' || solicitud.status === 'approved' || solicitud.status === 'suspended';
 
   return (
-    <Pantalla desplazable testID="postulacion-documentos">
-      <View style={estilos.contenido}>
-        <Text style={estilos.paso}>Paso 4 de 5</Text>
-        <Text style={estilos.titulo}>Tus documentos</Text>
-        <Text style={estilos.detalle}>
-          {solicitud.vehicleType === 'MOTO' ? 'Para tu moto' : 'Para tu carro'}: {pedidos.length} fotos.
-          {' '}{faltan.size === 0 ? 'Ya están todas.' : `Faltan ${faltan.size}.`}
-        </Text>
-        {solicitud.textualCorrections ? <Text style={estilos.correccion}>Además: {solicitud.textualCorrections}</Text> : null}
-        {aviso ? <Text style={estilos.aviso} testID="postulacion-aviso">{aviso}</Text> : null}
-
-        {pedidos.map(tipo => {
-          const documento = describirDocumento(tipo);
-          const hecho = entregados.has(tipo) && !faltan.has(tipo);
-          const motivo = porRepetir.get(tipo);
-          const ocupado = ocupadoCon === tipo;
-          return (
-            <View key={tipo} style={[estilos.tarjeta, motivo ? estilos.tarjetaConCorreccion : hecho ? estilos.tarjetaHecha : null]} testID={`documento-${tipo}`}>
-              <Text style={estilos.tarjetaTitulo}>{documento?.titulo ?? tipo}{hecho && !motivo ? ' · listo' : ''}</Text>
-              <Text style={estilos.tarjetaDetalle}>{motivo ? `Repetir: ${motivo}` : documento?.instruccion ?? ''}</Text>
-              {bloqueada ? null : (
-                <View style={estilos.acciones}>
-                  <Boton titulo={hecho ? 'Repetir foto' : 'Tomar foto'} onPress={() => { void adjuntar(tipo, 'TAKE_PHOTO'); }} cargando={ocupado} deshabilitado={ocupadoCon !== null} testID={`tomar-${tipo}`} />
-                  <Boton titulo="Elegir de la galería" variante="secundario" onPress={() => { void adjuntar(tipo, 'CHOOSE_PHOTO'); }} deshabilitado={ocupadoCon !== null} testID={`elegir-${tipo}`} />
-                </View>
-              )}
+    <Formulario
+      testID="postulacion-documentos"
+      cabecera={<CabeceraDePasos paso="documentos" hechos={['personal', 'vehiculo']} onCerrar={() => { router.replace('/pasajero'); }} />}
+      pie={(
+        <View style={estilos.pie}>
+          {aviso ? <Text style={estilos.aviso} testID="postulacion-aviso">{aviso}</Text> : null}
+          {bloqueada ? (
+            <Boton titulo="Ver estado" onPress={() => { router.replace('/postulacion/estado'); }} />
+          ) : (
+            <View style={estilos.acciones}>
+              <View style={estilos.mitad}>
+                <Boton titulo="←  Atrás" variante="secundario" onPress={() => { router.push('/postulacion/vehiculo'); }} deshabilitado={ocupadoCon !== null} testID="postulacion-cambiar-vehiculo" />
+              </View>
+              <View style={estilos.mitad}>
+                <Boton
+                  titulo="Siguiente  →"
+                  onPress={() => { router.push('/postulacion/confirmacion'); }}
+                  deshabilitado={!puedeSeguir}
+                  descripcion={puedeSeguir ? 'Revisa y envía tu solicitud.' : 'Se activa cuando estén todas las fotos.'}
+                  testID="postulacion-continuar"
+                />
+              </View>
             </View>
-          );
-        })}
+          )}
+        </View>
+      )}
+    >
+      {(
+        <View style={estilos.contenido}>
+          <Text style={estilos.titulo}>{paso.titulo}</Text>
+          <Text style={estilos.detalle}>
+            {solicitud.vehicleType === 'MOTO' ? 'Para tu moto' : 'Para tu carro'}: {listos} de {pedidos.length} listas.
+          </Text>
+          {solicitud.textualCorrections ? <Text style={estilos.correccion}>Además: {solicitud.textualCorrections}</Text> : null}
 
-        {bloqueada ? (
-          <Boton titulo="Ver estado" onPress={() => { router.replace('/postulacion/estado'); }} />
-        ) : (
-          <>
-            <Text style={estilos.paso}>Paso 5 de 5</Text>
-            <Boton titulo="Enviar a revisión" onPress={() => { void enviar(); }} cargando={enviando} deshabilitado={!listaParaEnviar || enviando} descripcion={listaParaEnviar ? 'Lo revisamos y te avisamos.' : 'Se activa cuando estén todas las fotos.'} testID="postulacion-enviar" />
-            <Boton titulo={`Cambiar vehículo o datos (${solicitud.vehicleType === 'MOTO' ? 'moto' : 'carro'})`} variante="secundario" onPress={() => { router.push('/postulacion/vehiculo'); }} deshabilitado={ocupadoCon !== null} testID="postulacion-cambiar-vehiculo" />
-          </>
-        )}
-        <Boton titulo="Seguir más tarde" variante="secundario" onPress={() => { router.replace('/pasajero'); }} deshabilitado={ocupadoCon !== null || enviando} />
-      </View>
-    </Pantalla>
+          {pedidos.map(tipo => {
+            const documento = describirDocumento(tipo);
+            const hecho = entregados.has(tipo) && !faltan.has(tipo);
+            const motivo = porRepetir.get(tipo);
+            const ocupado = ocupadoCon === tipo;
+            return (
+              <View key={tipo} style={[estilos.tarjeta, motivo ? estilos.tarjetaConCorreccion : hecho ? estilos.tarjetaHecha : null]} testID={`documento-${tipo}`}>
+                <Text style={estilos.tarjetaTitulo}>{documento?.titulo ?? tipo}{hecho && !motivo ? ' · listo' : ''}</Text>
+                <Text style={estilos.tarjetaDetalle}>{motivo ? `Repetir: ${motivo}` : documento?.instruccion ?? ''}</Text>
+                {bloqueada ? null : (
+                  <View style={estilos.acciones}>
+                    <View style={estilos.mitad}>
+                      <Boton titulo={hecho ? 'Repetir' : 'Tomar foto'} onPress={() => { void adjuntar(tipo, 'TAKE_PHOTO'); }} cargando={ocupado} deshabilitado={ocupadoCon !== null} testID={`tomar-${tipo}`} />
+                    </View>
+                    <View style={estilos.mitad}>
+                      <Boton titulo="Galería" variante="secundario" onPress={() => { void adjuntar(tipo, 'CHOOSE_PHOTO'); }} deshabilitado={ocupadoCon !== null} testID={`elegir-${tipo}`} />
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </Formulario>
   );
 }
 
 const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   centro: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: espaciado.lg },
   contenido: { padding: espaciado.lg, gap: espaciado.md },
-  paso: { color: c.textoTenue, fontSize: tipografia.pie.tamano },
-  titulo: { color: c.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
-  detalle: { color: c.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
-  correccion: { color: c.aviso, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
+  titulo: { color: c.textoPrimario, fontSize: tipografia.subtitulo.tamano, lineHeight: tipografia.subtitulo.alto, fontWeight: '700' },
+  detalle: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
+  correccion: { color: c.aviso, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
   tarjeta: {
     gap: espaciado.sm,
     padding: espaciado.lg,
@@ -182,6 +202,14 @@ const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.crea
   tarjetaConCorreccion: { borderColor: c.aviso },
   tarjetaTitulo: { color: c.textoPrimario, fontSize: tipografia.cuerpoFuerte.tamano, fontWeight: '600' },
   tarjetaDetalle: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
-  acciones: { gap: espaciado.sm, marginTop: espaciado.xs },
-  aviso: { color: c.peligro, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto }
+  acciones: { flexDirection: 'row', gap: espaciado.md },
+  mitad: { flex: 1, minWidth: 0 },
+  aviso: { color: c.peligro, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto, marginBottom: espaciado.sm },
+  pie: {
+    borderTopWidth: 1,
+    borderTopColor: c.borde,
+    backgroundColor: c.superficieHundida,
+    paddingHorizontal: espaciado.lg,
+    paddingVertical: espaciado.md
+  }
 });

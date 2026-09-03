@@ -263,7 +263,7 @@ const completa = Object.freeze({
 test('sin nada hecho, el avance es cero y el siguiente paso es el primero', () => {
   const avance = avanceDeLaPostulacion(vacia, AHORA);
   assert.equal(avance.porcentaje, 0);
-  assert.equal(avance.siguiente, 'servicio');
+  assert.equal(avance.siguiente, 'personal');
   assert.equal(avance.listaParaEnviar, false);
   assert.equal(avance.documentosQueFaltan.length, 11);
 });
@@ -279,7 +279,7 @@ test('los documentos pesan lo que son: la barra no salta con una foto', () => {
 test('con todo entregado se puede enviar, y sólo entonces', () => {
   const avance = avanceDeLaPostulacion(completa, AHORA);
   assert.equal(avance.listaParaEnviar, true);
-  assert.equal(avance.siguiente, 'envio');
+  assert.equal(avance.siguiente, 'confirmacion');
   assert.deepEqual([...avance.documentosQueFaltan], []);
   // Sin una foto, no; sin RIF, no; con la licencia mal, no.
   assert.equal(avanceDeLaPostulacion({ ...completa, documentosEntregados: documentosRequeridos('MOTO').slice(1) }, AHORA).listaParaEnviar, false);
@@ -308,7 +308,7 @@ test('no hay vídeo tutorial ni entrega de kit', () => {
   const dominio = fs.readFileSync(path.join(raizMovil, 'domain/postulacion.ts'), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   assert.equal(/tutorial|\bkit\b/i.test(dominio), false);
-  assert.deepEqual([...PASOS], ['servicio', 'identidad', 'vehiculo', 'documentos', 'envio']);
+  assert.deepEqual([...PASOS], ['personal', 'vehiculo', 'documentos', 'confirmacion']);
 });
 
 test('el dominio no decide aprobaciones ni despacha delivery: eso es del backend', () => {

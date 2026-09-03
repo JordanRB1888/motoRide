@@ -371,7 +371,7 @@ export function pasoCompleto(errores: ErroresDePaso): boolean {
 // Los pasos y el avance
 // ---------------------------------------------------------------------------
 
-export const PASOS = ['servicio', 'identidad', 'vehiculo', 'documentos', 'envio'] as const;
+export const PASOS = ['personal', 'vehiculo', 'documentos', 'confirmacion'] as const;
 export type Paso = (typeof PASOS)[number];
 
 export interface TituloDePaso {
@@ -388,11 +388,10 @@ export interface TituloDePaso {
  * que nadie va a cumplir deja la barra clavada en el 80 % para siempre.
  */
 export const TITULOS: readonly TituloDePaso[] = Object.freeze([
-  Object.freeze({ paso: 'servicio', titulo: 'Qué vas a hacer', detalle: 'Tu vehículo, tu servicio y tu ciudad.' }),
-  Object.freeze({ paso: 'identidad', titulo: 'Quién eres', detalle: 'Tus datos, como aparecen en la cédula.' }),
-  Object.freeze({ paso: 'vehiculo', titulo: 'Tu vehículo', detalle: 'Marca, modelo, placa y licencia.' }),
+  Object.freeze({ paso: 'personal', titulo: 'Información personal', detalle: 'Estos datos deben coincidir con tus documentos.' }),
+  Object.freeze({ paso: 'vehiculo', titulo: 'Tu vehículo', detalle: 'Con qué trabajas, para qué y sus datos.' }),
   Object.freeze({ paso: 'documentos', titulo: 'Tus documentos', detalle: 'Once fotos. Puedes hacerlas ahora o después.' }),
-  Object.freeze({ paso: 'envio', titulo: 'Enviar a revisión', detalle: 'Lo revisamos y te avisamos.' })
+  Object.freeze({ paso: 'confirmacion', titulo: 'Confirmación', detalle: 'Revisa lo que enviarás y mándalo.' })
 ] as const);
 
 export function describirPaso(paso: Paso): TituloDePaso {
@@ -439,19 +438,20 @@ export function avanceDeLaPostulacion(estado: EstadoDeLaPostulacion, ahora: Date
     : documentosQueFaltan(estado.documentosEntregados, vehiculo);
   const hechos: Paso[] = [];
 
-  const servicioHecho = estado.vehiculo !== null && estado.servicios.length > 0
-    && estado.personales !== null && esCiudadCubierta(estado.personales.ciudad);
-  const identidadHecha = estado.personales !== null
+  // Personal: los datos de la persona, con su ciudad entre las que se cubren.
+  const personalHecho = estado.personales !== null
+    && esCiudadCubierta(estado.personales.ciudad)
     && pasoCompleto(validarPersonales(estado.personales, { paraEnvio: true, ahora }));
-  const vehiculoHecho = estado.datosDelVehiculo !== null && estado.licencia !== null
+  // Vehículo: con qué se trabaja, para qué, y los datos del vehículo.
+  const vehiculoHecho = estado.vehiculo !== null && estado.servicios.length > 0
+    && estado.datosDelVehiculo !== null && estado.licencia !== null
     && pasoCompleto(validarVehiculo(estado.datosDelVehiculo, ahora))
     && pasoCompleto(validarLicencia(estado.licencia, estado.datosDelVehiculo.tipo, { paraEnvio: true, ahora }));
 
-  if (servicioHecho) hechos.push('servicio');
-  if (identidadHecha) hechos.push('identidad');
+  if (personalHecho) hechos.push('personal');
   if (vehiculoHecho) hechos.push('vehiculo');
   if (estado.vehiculo !== null && faltan.length === 0) hechos.push('documentos');
-  if (estado.enviada) hechos.push('envio');
+  if (estado.enviada) hechos.push('confirmacion');
 
   // Cada paso vale uno, salvo documentos, que vale por sus fotos.
   const pesoDeDocumentos = documentosRequeridos(vehiculo).length;
@@ -461,7 +461,7 @@ export function avanceDeLaPostulacion(estado: EstadoDeLaPostulacion, ahora: Date
   const fraccion = Math.min(1, ganado / total);
 
   const siguiente = PASOS.find(paso => !hechos.includes(paso)) ?? null;
-  const listaParaEnviar = servicioHecho && identidadHecha && vehiculoHecho && faltan.length === 0 && !estado.enviada;
+  const listaParaEnviar = personalHecho && vehiculoHecho && faltan.length === 0 && !estado.enviada;
 
   return Object.freeze({
     fraccion,

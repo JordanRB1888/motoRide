@@ -175,6 +175,8 @@ function leerSolicitud(datos: unknown): SolicitudPropia | null {
 
 /** Qué salió mal, en el idioma de la persona. */
 export type MotivoDePostulacion =
+  | 'SESION_CADUCADA'
+  | 'DEMASIADOS_INTENTOS'
   | 'DATOS_INVALIDOS'
   | 'FALTAN_DOCUMENTOS'
   | 'YA_TIENE_SOLICITUD'
@@ -200,6 +202,10 @@ function traducirFallo(respuesta: Extract<Resultado<unknown>, { ok: false }>): F
   const detalle = objeto((respuesta as unknown as { datos?: unknown }).datos) ?? {};
 
   if (respuesta.motivo === 'SIN_RED') return { ok: false, motivo: 'SIN_CONEXION' };
+  // Dos casos que no son «un error del servidor» y que la persona puede
+  // resolver: la sesión caducó, o el servidor está limitando las peticiones.
+  if (respuesta.motivo === 'NO_AUTENTICADO') return { ok: false, motivo: 'SESION_CADUCADA' };
+  if (respuesta.estadoHttp === 429) return { ok: false, motivo: 'DEMASIADOS_INTENTOS' };
 
   const porCodigo: Readonly<Record<string, MotivoDePostulacion>> = {
     VALIDATION_FAILED: 'DATOS_INVALIDOS',

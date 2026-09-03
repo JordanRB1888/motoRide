@@ -23,17 +23,24 @@ export interface PropiedadesDeCampo {
   readonly teclado?: KeyboardTypeOptions;
   readonly secreto?: boolean;
   readonly capitalizar?: 'none' | 'sentences' | 'words' | 'characters';
+  /** Marca el campo como obligatorio con un asterisco, como en el formulario. */
+  readonly obligatorio?: boolean;
+  /** Dentro de una `Pareja`, para que los dos campos repartan la fila. */
+  readonly enPareja?: boolean;
   readonly testID?: string;
 }
 
 export function CampoDeTexto({
-  etiqueta, valor, onCambiar, error = null, ayuda, ejemplo, teclado = 'default', secreto = false, capitalizar = 'sentences', testID
+  etiqueta, valor, onCambiar, error = null, ayuda, ejemplo, teclado = 'default', secreto = false, capitalizar = 'sentences', obligatorio = false, enPareja = false, testID
 }: PropiedadesDeCampo) {
   const tema = useTema();
   const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   return (
-    <View style={estilos.bloque}>
-      <Text style={estilos.etiqueta}>{etiqueta}</Text>
+    <View style={[estilos.bloque, enPareja ? estilos.enPareja : null]}>
+      <Text style={estilos.etiqueta}>
+        {etiqueta}
+        {obligatorio ? <Text style={estilos.asterisco}> *</Text> : null}
+      </Text>
       <TextInput
         value={valor}
         onChangeText={onCambiar}
@@ -54,6 +61,8 @@ export function CampoDeTexto({
 
 const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   bloque: { gap: espaciado.xs },
+  enPareja: { flex: 1, minWidth: 0 },
+  asterisco: { color: c.acento },
   etiqueta: {
     color: c.textoSecundario,
     fontSize: tipografia.pie.tamano,
