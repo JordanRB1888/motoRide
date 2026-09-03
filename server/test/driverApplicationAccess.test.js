@@ -124,7 +124,7 @@ test('el detalle administrativo entrega el expediente sin contentUrl', async (t)
   assert.equal(detalle.personal.identityNumber, 'V-11111111');
   // Los documentos solo llevan metadatos.
   for (const documento of detalle.documents) {
-    assert.deepEqual(Object.keys(documento).sort(), ['id', 'mimeType', 'size', 'status', 'type', 'updatedAt']);
+    assert.deepEqual(Object.keys(documento).sort(), ['durationSeconds', 'id', 'mimeType', 'size', 'status', 'type', 'updatedAt']);
     assert.equal(documento.contentUrl, undefined);
     assert.equal(documento.storageKey, undefined);
     assert.equal(documento.originalName, undefined);

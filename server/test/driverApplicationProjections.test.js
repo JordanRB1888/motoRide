@@ -66,7 +66,16 @@ const PROHIBIDOS_EN_LISTADO = [
 
 test('driverDocumentMetadata devuelve exactamente las claves permitidas', () => {
   const meta = driverDocumentMetadata(fullDocuments()[0]);
-  assert.deepEqual(Object.keys(meta).sort(), ['id', 'mimeType', 'size', 'status', 'type', 'updatedAt']);
+  assert.deepEqual(Object.keys(meta).sort(), ['durationSeconds', 'id', 'mimeType', 'size', 'status', 'type', 'updatedAt']);
+});
+
+test('la duracion solo aparece cuando el contenedor la traia', () => {
+  const foto = driverDocumentMetadata(fullDocuments()[0]);
+  assert.equal(foto.durationSeconds, null, 'una foto no dura');
+  const video = driverDocumentMetadata({ id: 'v1', type: 'presentation_video', mimeType: 'video/mp4', size: 1024, durationSeconds: 12 });
+  assert.equal(video.durationSeconds, 12);
+  const sinMedir = driverDocumentMetadata({ id: 'v2', type: 'presentation_video', mimeType: 'video/mp4', size: 1024, durationSeconds: null });
+  assert.equal(sinMedir.durationSeconds, null, 'no poder medir no se convierte en cero');
 });
 
 test('driverDocumentMetadata no expone almacenamiento ni nombre original', () => {

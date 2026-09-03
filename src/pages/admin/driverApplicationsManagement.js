@@ -4,6 +4,20 @@ import { showToast } from '../../components/toast.js';
 import { createPrivateDocumentViewer } from './privateDocumentViewer.js';
 
 /**
+ * Cuánto ocupa y, si es un vídeo, cuánto dura.
+ *
+ * «51200 KB» no le dice nada a nadie: por encima del mega se cuenta en megas.
+ * La duración llega con los metadatos, así que se sabe sin descargar nada.
+ */
+const describirPeso = doc => {
+  const kb = Math.round((doc.size || 0) / 1024);
+  const peso = kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
+  return typeof doc.durationSeconds === 'number' && doc.durationSeconds > 0
+    ? `${peso} · ${Math.round(doc.durationSeconds)} s`
+    : peso;
+};
+
+/**
  * Los eventos de Socket.IO vuelven a montar esta pantalla sobre el mismo
  * contenedor. Sin registro, cada remontaje abandonaría las Blob URLs y los
  * controladores de la instancia anterior, que ya nadie podría revocar.
@@ -135,7 +149,7 @@ export function renderDriverApplicationsManagement(container) {
     <header><div><small>EXPEDIENTE ${escape(app.id.slice(-8).toUpperCase())}</small><h2>${escape(app.personal.firstName)} ${escape(app.personal.lastName)}</h2><span class="application-status-badge ${app.status}">${STATUS[app.status]}</span></div><button data-close-application>${icon('close',20)}</button></header>
     <div class="application-review-scroll"><section><h3>Información personal</h3><div class="review-data-grid">${[['Cédula',app.personal.identityNumber],['Nacimiento',app.personal.birthDate],['Teléfono',app.personal.phone],['Correo',app.personal.email],['Dirección',app.personal.address],['Ciudad / región',`${app.personal.city}, ${app.personal.region}`]].map(([a,b])=>`<label><small>${a}</small><strong>${escape(b)}</strong></label>`).join('')}</div></section>
     <section><h3>Vehículo</h3><div class="review-data-grid">${[['Tipo',app.vehicle.type],['Servicios',servicesLabel(app.servicesAppliedFor)],['Marca / modelo',`${app.vehicle.brand} ${app.vehicle.model}`],['Año',app.vehicle.year],['Color',app.vehicle.color],['Placa',app.vehicle.plate],['Documento legal',LEGAL_DOCS[app.vehicle.legalDocumentType]||app.vehicle.legalDocumentType||'—'],['Licencia',app.license?.grade?`${app.license.grade}.º grado · vence ${app.license.expiration||'—'}`:'—'],['Certificado médico',app.medicalCertificate?.expiration?`vence ${app.medicalCertificate.expiration}`:'—'],['RIF',app.personal?.rif||'—'],['Información adicional',app.vehicle.additionalInfo||'—']].map(([a,b])=>`<label><small>${a}</small><strong>${escape(b)}</strong></label>`).join('')}</div></section>
-    <section><h3>Documentos privados</h3><p class="security-note">${icon('shield',14)} Solo administradores autorizados y el propietario pueden abrir estos archivos.</p><div class="private-documents-grid">${app.documents.map(doc=>`<label class="private-document-card"><input type="checkbox" data-doc-change value="${doc.type}"><button type="button" class="private-document-open" data-private-document="${escape(doc.id)}" data-mime="${escape(doc.mimeType)}">Ver documento protegido</button><span>${escape(DOCS[doc.type]||doc.type)}</span><small>${Math.round(doc.size/1024)} KB · ${escape(doc.status)}</small></label>`).join('')}</div></section>
+    <section><h3>Documentos privados</h3><p class="security-note">${icon('shield',14)} Solo administradores autorizados y el propietario pueden abrir estos archivos.</p><div class="private-documents-grid">${app.documents.map(doc=>`<label class="private-document-card"><input type="checkbox" data-doc-change value="${doc.type}"><button type="button" class="private-document-open" data-private-document="${escape(doc.id)}" data-mime="${escape(doc.mimeType)}">Ver documento protegido</button><span>${escape(DOCS[doc.type]||doc.type)}</span><small>${describirPeso(doc)} · ${escape(doc.status)}</small></label>`).join('')}</div></section>
     ${app.decisionReason?`<section class="previous-decision"><h3>Última observación</h3><p>${escape(app.decisionReason)}</p></section>`:''}</div>
     <footer>${app.status==='suspended'?`<button class="approve" data-decision="reactivate">Reactivar conductor</button>`:`<button class="approve" data-decision="approve">${icon('check',16)} Aprobar conductor</button><button class="changes" data-decision="needs_changes">Solicitar cambios</button><button class="reject" data-decision="reject">Rechazar</button>${app.status==='approved'?'<button class="reject" data-decision="suspend">Suspender</button>':''}`}</footer>
   </article></div>`;

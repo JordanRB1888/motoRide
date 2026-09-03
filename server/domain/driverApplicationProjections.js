@@ -39,6 +39,9 @@ export function driverDocumentMetadata(document) {
     status: text(document.status) || 'pending',
     mimeType: text(document.mimeType),
     size: numeric(document.size),
+    // Sólo la tienen los vídeos, y sólo cuando se pudo leer del contenedor.
+    // Va aquí para que el revisor sepa cuánto dura antes de descargar 50 MB.
+    durationSeconds: typeof document.durationSeconds === 'number' && Number.isFinite(document.durationSeconds) ? document.durationSeconds : null,
     updatedAt: isoOrNull(document.updatedAt)
   };
 }

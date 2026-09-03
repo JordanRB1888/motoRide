@@ -27,6 +27,9 @@ import {
 import { useTema } from '../../theme/ThemeContext';
 import { espaciado, radios, tipografia } from '../../theme/tokens';
 
+/** El tipo del vídeo, tal como lo llama el servidor. */
+const TIPO_DEL_VIDEO = 'presentation_video';
+
 const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
   VIDEO_DEMASIADO_LARGO: 'El vídeo dura más de 30 segundos. Grábalo más corto.',
   SESION_CADUCADA: 'Tu sesión caducó. Vuelve a entrar para seguir con tu solicitud.',
@@ -105,6 +108,11 @@ export default function PasoDeConfirmacion() {
   const personal = solicitud.personal ?? {};
   const vehiculo = solicitud.vehicle ?? {};
   const listo = solicitud.missingDocuments.length === 0 && solicitud.requestedChangeDetails.length === 0;
+  // El vídeo se cuenta aparte: decir «doce fotos» cuando una es un vídeo de
+  // medio minuto haría dudar a cualquiera de si subió lo que le pidieron.
+  const fotosSubidas = solicitud.documents.filter(documento => documento.type !== TIPO_DEL_VIDEO).length;
+  const videoSubido = solicitud.documents.some(documento => documento.type === TIPO_DEL_VIDEO);
+  const videoPedido = solicitud.requirementsVersion >= 3;
 
   return (
     <Formulario
@@ -167,13 +175,16 @@ export default function PasoDeConfirmacion() {
               <Text style={estilos.tarjetaTitulo}>Documentos</Text>
               <Boton titulo="Editar" variante="secundario" onPress={() => { router.push('/postulacion/documentos'); }} testID="editar-documentos" />
             </View>
-            <Fila etiqueta="Subidos" valor={`${solicitud.documents.length} fotos`} estilos={estilos} />
+            <Fila etiqueta="Subidos" valor={`${fotosSubidas} fotos`} estilos={estilos} />
+            {videoPedido ? (
+              <Fila etiqueta="Vídeo" valor={videoSubido ? 'Grabado y subido' : 'Todavía sin grabar'} estilos={estilos} />
+            ) : null}
             {solicitud.missingDocuments.length > 0 ? (
               <Text style={estilos.faltan}>
                 Faltan: {solicitud.missingDocuments.map(tipo => describirDocumento(tipo)?.titulo ?? tipo).join(', ')}.
               </Text>
             ) : (
-              <Text style={estilos.completo}>Están todas.</Text>
+              <Text style={estilos.completo}>Está todo.</Text>
             )}
           </View>
 
