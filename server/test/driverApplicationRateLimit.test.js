@@ -61,6 +61,31 @@ function applicantForm(overrides = {}) {
   return form;
 }
 
+// El vídeo de presentación forma parte del recorrido honrado desde la versión
+// 3: sin él no hay envío, así que la prueba de límites tiene que subirlo.
+const caja = (tipo, cuerpo) => {
+  const c = Buffer.concat([Buffer.alloc(4), Buffer.from(tipo, 'latin1'), cuerpo]);
+  c.writeUInt32BE(c.length, 0);
+  return c;
+};
+const mp4 = (() => {
+  const mvhd = Buffer.alloc(100);
+  mvhd.writeUInt32BE(0, 0);
+  mvhd.writeUInt32BE(600, 12);
+  mvhd.writeUInt32BE(600 * 8, 16);
+  return Buffer.concat([
+    caja('ftyp', Buffer.from('isomiso2avc1mp41', 'latin1')),
+    caja('moov', caja('mvhd', mvhd)),
+    caja('mdat', Buffer.alloc(1024))
+  ]);
+})();
+
+async function subirVideo(api, token) {
+  const form = new FormData();
+  form.append('file', new Blob([mp4], { type: 'video/mp4' }), 'presentacion.mp4');
+  return fetch(`${api}/driver-applications/me/video`, { method: 'PUT', headers: { authorization: `Bearer ${token}` }, body: form });
+}
+
 async function uploadDocument(api, token, type) {
   const form = new FormData();
   form.append('file', new Blob([png], { type: 'image/png' }), `${type}.png`);
@@ -75,6 +100,7 @@ async function recorridoCompleto(api, datos) {
   for (const type of MOTO_DOCS) {
     assert.equal((await uploadDocument(api, token, type)).status, 200, `${datos.email} subiendo ${type}`);
   }
+  assert.equal((await subirVideo(api, token)).status, 200, `${datos.email} subiendo el vídeo`);
   // Repetir una foto y tocar un dato: parte del uso normal.
   assert.equal((await uploadDocument(api, token, 'plate_photo')).status, 200);
   assert.equal((await fetch(`${api}/driver-applications/me`, json(token, { vehicleColor: 'Azul' }, 'PATCH'))).status, 200);

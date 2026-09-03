@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { videoDurationSeconds } from '../services/privateStorage.js';
 import {
   driverApplicationListItem,
   driverApplicationAdminDetail,
@@ -11,6 +12,9 @@ import {
 import {
   DRIVER_APPLICATION_STATUS,
   REQUIREMENTS_VERSION,
+  VIDEO_MAX_DURATION_SECONDS,
+  VIDEO_MAX_FILE_SIZE,
+  VIDEO_MIME_TYPES,
   UPLOADABLE_DOCUMENT_TYPES,
   defaultCheckpoints,
   missingRequiredDocuments,
@@ -36,6 +40,27 @@ const upload = multer({
 const uploadFields = upload.fields(UPLOADABLE_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
 const singleDocumentUpload = upload.single('file');
 
+/**
+ * El video va por su propia puerta.
+ *
+ * Cincuenta megas frente a los cinco de una foto: mezclarlos en el mismo
+ * `multer` significaria abrir ese techo para cualquier documento, y entonces
+ * una cedula de cuarenta megas pasaria sin que nadie lo hubiera decidido.
+ */
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: VIDEO_MAX_FILE_SIZE, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    if (VIDEO_MIME_TYPES.includes(String(file.mimetype || '').toLowerCase().split(';')[0])) {
+      callback(null, true);
+      return;
+    }
+    const error = new Error('INVALID_FILE_TYPE');
+    error.code = 'INVALID_FILE_TYPE';
+    callback(error);
+  }
+}).single('file');
+
 import { addressKey, createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from '../services/httpRateLimit.js';
 
 // El limitador de /api/driver-applications no alcanza a todas estas rutas:
@@ -54,7 +79,11 @@ const limitadores = {
   // y sigue siendo un techo real --sesenta ficheros de cinco megas--.
   subidas: createIdentityLimiter({ name: 'subidas-documento', limit: 60, windowMs: CUARTO_DE_HORA }),
   // Leer y corregir el expediente, propio o desde administracion.
-  expedientes: createIdentityLimiter({ name: 'expedientes', limit: 240, windowMs: MINUTO })
+  expedientes: createIdentityLimiter({ name: 'expedientes', limit: 240, windowMs: MINUTO }),
+  // El video pesa diez veces mas que una foto y solo hay uno por expediente.
+  // Diez por cuarto de hora deja repetirlo las veces que haga falta --grabar
+  // uno bueno cuesta varios intentos-- sin abrir la puerta a medio giga.
+  video: createIdentityLimiter({ name: 'subida-video', limit: 10, windowMs: CUARTO_DE_HORA })
 };
 
 /**
@@ -81,6 +110,47 @@ const EDITABLE_STATUSES = [
 ];
 
 const cleanText = (value, max) => String(value ?? '').replace(/[\u0000-\u001f\u007f<>&"']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+
+/**
+ * Qué trozo del fichero pide una cabecera `Range`.
+ *
+ * Devuelve `null` cuando no hay que servir un trozo —sin cabecera, o con una
+ * que no se entiende, que por norma se ignora y se manda el fichero entero— y
+ * la cadena `'INVALIDO'` cuando el rango se entiende pero cae fuera del
+ * fichero, que es lo que merece un 416.
+ *
+ * Sólo se admite un rango simple: `bytes=inicio-fin`, `bytes=inicio-` o
+ * `bytes=-ultimos`. Los rangos múltiples exigirían respuesta multiparte, y
+ * ningún reproductor los necesita para esto.
+ */
+function leerRango(cabecera, tamano) {
+  if (typeof cabecera !== 'string') return null;
+  const partes = /^bytes=(\d*)-(\d*)$/.exec(cabecera.trim());
+  if (!partes) return null;
+
+  const [, inicioBruto, finBruto] = partes;
+  if (inicioBruto === '' && finBruto === '') return null;
+  if (tamano === 0) return 'INVALIDO';
+
+  let desde;
+  let hasta;
+  if (inicioBruto === '') {
+    // `bytes=-500`: los últimos quinientos bytes.
+    const ultimos = Number(finBruto);
+    if (!Number.isFinite(ultimos) || ultimos <= 0) return 'INVALIDO';
+    desde = Math.max(0, tamano - ultimos);
+    hasta = tamano - 1;
+  } else {
+    desde = Number(inicioBruto);
+    hasta = finBruto === '' ? tamano - 1 : Number(finBruto);
+    if (!Number.isFinite(desde) || !Number.isFinite(hasta)) return 'INVALIDO';
+    // Un final más allá del fichero se recorta; un principio, no: eso es pedir
+    // algo que no existe.
+    hasta = Math.min(hasta, tamano - 1);
+    if (desde > hasta || desde >= tamano) return 'INVALIDO';
+  }
+  return { desde, hasta };
+}
 
 export function createDriverApplicationsRouter({
   database,
@@ -370,6 +440,106 @@ export function createDriverApplicationsRouter({
   });
 
   /**
+   * El vídeo de presentación.
+   *
+   * TIENE SU PROPIA RUTA, Y NO ES CAPRICHO
+   *
+   * Pesa diez veces más que una foto, dura lo que dura y se valida distinto.
+   * Meterlo en la ruta de los documentos habría significado subir el tope de
+   * tamaño para todos y colar la comprobación de duración en un camino que no
+   * la necesita. Aparte del contenedor, todo lo demás es igual: mismo
+   * expediente, mismo almacén privado, misma corrección por documento.
+   *
+   * LO QUE DICE EL CLIENTE NO CUENTA
+   *
+   * El teléfono manda un tipo y una duración. Aquí se comprueban los BYTES:
+   * que sean un contenedor ISO-BMFF de verdad y, cuando se puede leer, que la
+   * duración que trae dentro no pase del máximo. Un fichero de texto renombrado
+   * a `.mp4` no llega a guardarse.
+   */
+  router.put('/driver-applications/me/video', requireAuth, limitadores.video, (req, res) => {
+    videoUpload(req, res, async error => {
+      if (error) {
+        // Demasiado grande y tipo no admitido son cosas distintas para quien
+        // lo está subiendo: una se arregla grabando más corto y la otra no.
+        if (error.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: 'FILE_TOO_LARGE', maxBytes: VIDEO_MAX_FILE_SIZE });
+        }
+        return res.status(415).json({ error: error.code || 'INVALID_FILE_TYPE', accepted: VIDEO_MIME_TYPES });
+      }
+      if (!req.file) return res.status(400).json({ error: 'INVALID_DOCUMENT' });
+
+      const application = database.driverApplications.find(item => item.userId === req.user.id);
+      if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
+      if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
+
+      // La duración, leída del propio fichero. Si no se puede determinar no se
+      // rechaza: no poder medir no es medir mal, y el tamaño ya tiene tope.
+      const duracion = videoDurationSeconds(req.file.buffer);
+      if (duracion !== null && duracion > VIDEO_MAX_DURATION_SECONDS + 0.5) {
+        return res.status(400).json({
+          error: 'VIDEO_TOO_LONG',
+          maxSeconds: VIDEO_MAX_DURATION_SECONDS,
+          seconds: Math.round(duracion)
+        });
+      }
+
+      const existing = database.driverDocuments.find(document => document.applicationId === application.id && document.type === 'presentation_video');
+      let storageKey;
+      // `save` vuelve a comprobar la firma antes de escribir un solo byte.
+      try { storageKey = privateStorage.save(req.file, req.user.id); }
+      catch (fallo) { return res.status(415).json({ error: fallo.code || 'INVALID_FILE_TYPE' }); }
+
+      const ahora = new Date().toISOString();
+      const anterior = existing?.storageKey ?? null;
+      if (existing) {
+        Object.assign(existing, {
+          storageKey,
+          originalName: String(req.file.originalname || 'presentacion').slice(0, 180),
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+          durationSeconds: duracion,
+          status: 'pending',
+          updatedAt: ahora
+        });
+      } else {
+        database.driverDocuments.push({
+          id: `driver_document_${crypto.randomUUID()}`,
+          applicationId: application.id,
+          userId: req.user.id,
+          type: 'presentation_video',
+          storageKey,
+          originalName: String(req.file.originalname || 'presentacion').slice(0, 180),
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+          durationSeconds: duracion,
+          status: 'pending',
+          uploadedAt: ahora,
+          updatedAt: ahora
+        });
+      }
+
+      application.status = DRIVER_APPLICATION_STATUS.DRAFT;
+      const pendientes = normalizeStoredApplication(application).requestedChangeDetails
+        .filter(detail => detail.type !== 'presentation_video');
+      application.requestedChangeDetails = pendientes;
+      application.requestedChanges = pendientes.map(detail => detail.type);
+      application.updatedAt = ahora;
+
+      if (!await persistDatabase()) {
+        // Lo que no se pudo registrar no se queda en disco.
+        privateStorage.remove(storageKey);
+        return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+      }
+      // El anterior se borra DESPUÉS de que el nuevo esté registrado: si la
+      // escritura falla, la persona conserva el vídeo que ya tenía.
+      if (anterior && anterior !== storageKey) privateStorage.remove(anterior);
+
+      res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
+    });
+  });
+
+  /**
    * Manda el expediente a revisión.
    *
    * Vuelve a comprobar los documentos según el vehículo declarado y, en los
@@ -538,15 +708,42 @@ export function createDriverApplicationsRouter({
 
     const document = database.driverDocuments.find(item => item.id === req.params.id);
     if (!document) return documentNotAvailable();
+    // LA AUTORIZACIÓN VA ANTES QUE CUALQUIER BYTE, también en una petición
+    // parcial: pedir un rango no es una puerta de servicio.
     if (req.user.role !== 'admin' && document.userId !== req.user.id) return documentNotAvailable();
-    const absolutePath = privateStorage.resolve(document.storageKey);
-    if (!absolutePath) return documentNotAvailable();
-    res.setHeader('Content-Type', document.mimeType);
-    res.setHeader('Content-Length', String(document.size));
+
+    const fichero = privateStorage.abrirParaServir(document.storageKey, document.mimeType);
+    if (!fichero) return documentNotAvailable();
+
+    res.setHeader('Content-Type', fichero.mimeType);
     res.setHeader('Content-Disposition', `inline; filename="${String(document.originalName).replace(/["\r\n]/g, '_')}"`);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    fs.createReadStream(absolutePath).pipe(res);
+    // Se anuncia siempre: es lo que le dice al reproductor que puede pedir
+    // trozos en vez de tragarse cincuenta megas para enseñar el primer
+    // fotograma.
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    const tramo = leerRango(req.headers.range, fichero.size);
+    if (tramo === 'INVALIDO') {
+      // Un rango que no cabe en el fichero. Lo estándar es contestar 416 con
+      // el tamaño real, y no revelar nada más.
+      res.setHeader('Content-Range', `bytes */${fichero.size}`);
+      return res.status(416).json({ error: 'RANGE_NOT_SATISFIABLE' });
+    }
+
+    if (tramo === null) {
+      // Sin cabecera `Range`, o una que no se entiende: el fichero entero, como
+      // siempre. Una cabecera rara nunca es un error; simplemente se ignora.
+      res.setHeader('Content-Length', String(fichero.size));
+      fichero.crear().pipe(res);
+      return;
+    }
+
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${tramo.desde}-${tramo.hasta}/${fichero.size}`);
+    res.setHeader('Content-Length', String(tramo.hasta - tramo.desde + 1));
+    fichero.crear(tramo.desde, tramo.hasta).pipe(res);
   });
 
   return router;

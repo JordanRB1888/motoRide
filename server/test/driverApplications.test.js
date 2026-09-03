@@ -10,6 +10,16 @@ const serverDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const png=Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0,0,0,0,0,0,0,0]);
 // Version 2 de requisitos: once documentos para una moto.
 const requiredDocs=['identity_front','identity_back','rif','driver_license','medical_certificate','vehicle_registration','vehicle_front','vehicle_rear','plate_photo','driver_selfie','moto_helmets'];
+// El vídeo no viaja en el alta multipart: tiene su propia ruta, y por eso el
+// expediente nace como borrador hasta que se sube.
+const VIDEO_APARTE=['presentation_video'];
+// Un MP4 minimo pero de verdad: cabecera ISO-BMFF con `ftyp` y un `moov` que
+// declara ocho segundos. El servidor comprueba los bytes, no la extension.
+const caja=(tipo,cuerpo)=>{const c=Buffer.concat([Buffer.alloc(4),Buffer.from(tipo,'latin1'),cuerpo]);c.writeUInt32BE(c.length,0);return c;};
+const mvhd=segundos=>{const cuerpo=Buffer.alloc(100);cuerpo.writeUInt32BE(0,0);cuerpo.writeUInt32BE(600,12);cuerpo.writeUInt32BE(600*segundos,16);return caja('mvhd',cuerpo);};
+const mp4De=segundos=>Buffer.concat([caja('ftyp',Buffer.from('isomiso2avc1mp41','latin1')),caja('moov',mvhd(segundos)),caja('mdat',Buffer.alloc(1024))]);
+const subirVideo=async(api,token,segundos=8)=>{const form=new FormData();form.append('file',new Blob([mp4De(segundos)],{type:'video/mp4'}),'presentacion.mp4');return fetch(`${api}/driver-applications/me/video`,{method:'PUT',headers:{authorization:`Bearer ${token}`},body:form});};
+
 
 async function start(t){const dir=await mkdtemp(path.join(tmpdir(),'plus58-driver-app-'));const port=17700+Math.floor(Math.random()*399);const child=spawn(process.execPath,['index.js'],{cwd:serverDir,env:{...process.env,PORT:String(port),DATA_FILE:path.join(dir,'db.sqlite'),UPLOAD_DIR:path.join(dir,'uploads'),JWT_SECRET:'test-secret'},stdio:['ignore','pipe','pipe']});t.after(()=>child.kill());await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('server timeout')),15000);child.stdout.on('data',chunk=>{if(chunk.toString().includes('Running')){clearTimeout(timer);resolve();}});child.once('exit',code=>reject(new Error(`exit ${code}`)));});return `http://127.0.0.1:${port}/api`;}
 async function login(api,identifier,password,role){const response=await fetch(`${api}/auth/login`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier,password,role})});assert.equal(response.status,200);return response.json();}
@@ -17,9 +27,9 @@ function applicationForm(email='+58driver@example.com',phone='+584120009999',ove
 
 test('solicitud real: documentos privados, correcciones, auditoría y aprobación',async t=>{const api=await start(t);const admin=await login(api,'admin@58express.com','admin','admin');
   const incomplete=await fetch(`${api}/driver-applications`,{method:'POST',body:new FormData()});assert.equal(incomplete.status,400);
-  const createdResponse=await fetch(`${api}/driver-applications`,{method:'POST',body:applicationForm()});assert.equal(createdResponse.status,201);const created=await createdResponse.json();assert.equal(created.application.status,'pending');assert.equal(created.application.personal.identityNumber,'V-24680135');assert.equal(created.user.role,'passenger');assert.equal(created.application.documents.length,requiredDocs.length);
+  const createdResponse=await fetch(`${api}/driver-applications`,{method:'POST',body:applicationForm()});assert.equal(createdResponse.status,201);const created=await createdResponse.json();assert.equal(created.application.status,'draft');assert.equal(created.application.personal.identityNumber,'V-24680135');assert.equal(created.user.role,'passenger');assert.equal(created.application.documents.length,requiredDocs.length);
   const wrongPassword=await fetch(`${api}/auth/login`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'+58driver@example.com',password:'incorrecta',role:'driver'})});assert.equal(wrongPassword.status,401);
-  const pendingDriverLogin=await fetch(`${api}/auth/login`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'+58driver@example.com',password:'ClaveSegura123',role:'driver'})});assert.equal(pendingDriverLogin.status,403);assert.equal((await pendingDriverLogin.json()).applicationStatus,'pending');
+  const pendingDriverLogin=await fetch(`${api}/auth/login`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'+58driver@example.com',password:'ClaveSegura123',role:'driver'})});assert.equal(pendingDriverLogin.status,403);assert.equal((await pendingDriverLogin.json()).applicationStatus,'draft');
   const forbiddenList=await fetch(`${api}/admin/driver-applications`,{headers:{authorization:`Bearer ${created.token}`}});assert.equal(forbiddenList.status,403);
   const privateDocument=created.application.documents[0];const ownerFile=await fetch(`${api}/driver-documents/${privateDocument.id}/content`,{headers:{authorization:`Bearer ${created.token}`}});assert.equal(ownerFile.status,200);assert.equal(ownerFile.headers.get('cache-control'),'private, no-store, max-age=0');
   const strangerResponse=await fetch(`${api}/auth/register`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'stranger@example.com',phone:'+584120008888',password:'ClaveSegura123',role:'passenger',firstName:'Otra',lastName:'Persona'})});const stranger=await strangerResponse.json();const stolen=await fetch(`${api}/driver-documents/${privateDocument.id}/content`,{headers:{authorization:`Bearer ${stranger.token}`}});// Un documento ajeno responde igual que uno inexistente: sin 403 que
@@ -28,6 +38,10 @@ test('solicitud real: documentos privados, correcciones, auditoría y aprobació
   const adminFile=await fetch(`${api}/driver-documents/${privateDocument.id}/content`,{headers:{authorization:`Bearer ${admin.token}`}});assert.equal(adminFile.status,200);
   const needsChanges=await fetch(`${api}/admin/driver-applications/${created.application.id}/decision`,{method:'PATCH',headers:{'content-type':'application/json',authorization:`Bearer ${admin.token}`},body:JSON.stringify({action:'needs_changes',reason:'La licencia debe verse con mayor nitidez.',requestedChanges:['driver_license']})});assert.equal(needsChanges.status,200);assert.equal((await needsChanges.json()).application.status,'needs_changes');
   const replacement=new FormData();replacement.append('file',new Blob([png],{type:'image/png'}),'licencia-nueva.png');const replaced=await fetch(`${api}/driver-applications/me/documents/driver_license`,{method:'PUT',headers:{authorization:`Bearer ${created.token}`},body:replacement});assert.equal(replaced.status,200);
+  // Version 3: sin el video de presentacion el envio no procede.
+  const sinVideo=await fetch(`${api}/driver-applications/me/submit`,{method:'POST',headers:{authorization:`Bearer ${created.token}`}});
+  assert.equal(sinVideo.status,400);assert.deepEqual((await sinVideo.json()).missing,VIDEO_APARTE);
+  assert.equal((await subirVideo(api,created.token)).status,200);
   const submitted=await fetch(`${api}/driver-applications/me/submit`,{method:'POST',headers:{authorization:`Bearer ${created.token}`}});assert.equal(submitted.status,200);assert.equal((await submitted.json()).status,'pending');
   const approval=await fetch(`${api}/admin/driver-applications/${created.application.id}/decision`,{method:'PATCH',headers:{'content-type':'application/json',authorization:`Bearer ${admin.token}`},body:JSON.stringify({action:'approve'})});assert.equal(approval.status,200);assert.equal((await approval.json()).user.role,'driver');
   const me=await fetch(`${api}/auth/me`,{headers:{authorization:`Bearer ${created.token}`}});const approvedUser=await me.json();assert.equal(approvedUser.role,'driver');assert.equal(approvedUser.isVerified,true);
@@ -40,6 +54,11 @@ test('un pasajero existente puede solicitar ser conductor con su misma cuenta',a
   assert.equal(registration.status,201);const passenger=await registration.json();
   const wrongPassword=await fetch(`${api}/driver-applications`,{method:'POST',body:applicationForm('pedro@example.com','+584141112233',{password:'OtraClave123'})});assert.equal(wrongPassword.status,401);assert.equal((await wrongPassword.json()).error,'EXISTING_ACCOUNT_AUTH_REQUIRED');
   const applicationResponse=await fetch(`${api}/driver-applications`,{method:'POST',body:applicationForm('pedro@example.com','+584141112233')});assert.equal(applicationResponse.status,201);const application=await applicationResponse.json();
-  assert.equal(application.user.id,passenger.user.id);assert.equal(application.application.status,'pending');
+  assert.equal(application.user.id,passenger.user.id);
+  // Nace en borrador porque le falta el video, que va por su propia ruta.
+  assert.equal(application.application.status,'draft');
+  assert.deepEqual(application.application.missingDocuments,VIDEO_APARTE);
+  assert.equal((await subirVideo(api,application.token)).status,200);
+  assert.equal((await fetch(`${api}/driver-applications/me/submit`,{method:'POST',headers:{authorization:`Bearer ${application.token}`}})).status,200);
   const duplicateApplication=await fetch(`${api}/driver-applications`,{method:'POST',body:applicationForm('pedro@example.com','+584141112233')});assert.equal(duplicateApplication.status,409);assert.equal((await duplicateApplication.json()).error,'DRIVER_APPLICATION_EXISTS');
 });

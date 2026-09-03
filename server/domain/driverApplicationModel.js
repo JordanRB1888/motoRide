@@ -24,7 +24,9 @@
 // les asigna `requirementsVersion: 1` al leerlos y se evalúan con la lista
 // que regía cuando se crearon. Un expediente creado hoy es versión 2. Así un
 // conductor aprobado ayer no aparece de pronto «incompleto», y uno pendiente
-// no recibe una petición de documentos que nadie le pidió al postularse.
+// no recibe una petición de documentos que nadie le pidió al postularse. Lo
+// mismo vale para el vídeo de presentación, que se exige desde la versión 3. Lo
+// mismo vale para el vídeo de presentación, que se exige desde la versión 3.
 //
 // La persistencia guarda cada expediente como un JSON en una fila, así que
 // añadir campos no exige migración de esquema; la compatibilidad se resuelve
@@ -90,8 +92,33 @@ export const ADMIN_CHECKPOINTS = Object.freeze([
 
 export const CHECKPOINT_STATUS = Object.freeze(['NOT_REQUIRED', 'PENDING', 'PASSED', 'FAILED']);
 
-/** La versión de requisitos con la que nace un expediente creado hoy. */
-export const REQUIREMENTS_VERSION = 2;
+/**
+ * La versión de requisitos con la que nace un expediente creado hoy.
+ *
+ *   1  los siete documentos de siempre
+ *   2  once, con RIF, certificado médico y la pieza propia de cada vehículo
+ *   3  los once anteriores más el vídeo de presentación
+ *
+ * Subirla es lo que permite exigir algo nuevo sin volver incompleta ni una
+ * sola solicitud ya entregada: cada expediente se evalúa con la versión que
+ * regía cuando se creó, y quien mandó el suyo ayer no se encuentra hoy con un
+ * requisito que nadie le pidió.
+ */
+export const REQUIREMENTS_VERSION = 3;
+
+/**
+ * Lo que se le pide al vídeo de presentación.
+ *
+ * Medio minuto es una presentación, no una entrevista: quien revisa ve
+ * decenas al día, y el aspirante graba desde su teléfono con el plan de datos
+ * que tiene. Los cincuenta megas son el techo técnico de esa media hora de
+ * grabación en la peor calidad razonable; el que manda para la persona es la
+ * duración, porque es lo que ella controla.
+ */
+export const VIDEO_MAX_DURATION_SECONDS = 30;
+export const VIDEO_MAX_FILE_SIZE = 50 * 1024 * 1024;
+/** Los que graban Android e iOS. WebM queda fuera: Safari no lo reproduce. */
+export const VIDEO_MIME_TYPES = Object.freeze(['video/mp4', 'video/quicktime']);
 
 /**
  * El catálogo de documentos.
@@ -101,7 +128,9 @@ export const REQUIREMENTS_VERSION = 2;
  *                optional  se acepta, no se exige
  *                legacy    de la versión 1; sigue leyéndose y aceptándose
  *   kind         image     fotografía o PDF por el almacenamiento privado
- *                video     PRESENTATION_VIDEO: modelado, todavía sin subida
+ *                video     PRESENTATION_VIDEO: MP4 o QuickTime, hasta media
+ *                          minuto, por el mismo almacén privado
+ *   sinceVersion  desde qué versión de requisitos se pide
  *   satisfiedBy  otros tipos que cuentan como este (compatibilidad v1)
  */
 export const DRIVER_DOCUMENT_CATALOG = Object.freeze([
@@ -121,15 +150,30 @@ export const DRIVER_DOCUMENT_CATALOG = Object.freeze([
   Object.freeze({ type: 'car_rear_interior', kind: 'image', requirement: 'CAR' }),
   Object.freeze({ type: 'vehicle_insurance', kind: 'image', requirement: 'optional' }),
   Object.freeze({ type: 'vehicle_photo', kind: 'image', requirement: 'legacy' }),
-  Object.freeze({ type: 'presentation_video', kind: 'video', requirement: 'optional', uploadEnabled: false })
+  // El vídeo de presentación. `sinceVersion` es lo que lo mantiene fuera de
+  // los expedientes anteriores: se exige a los nuevos y a nadie más.
+  Object.freeze({ type: 'presentation_video', kind: 'video', requirement: 'common', sinceVersion: 3 })
 ]);
 
 /** Todos los tipos conocidos, incluidos los heredados. */
 export const DRIVER_DOCUMENT_TYPES = Object.freeze(DRIVER_DOCUMENT_CATALOG.map(item => item.type));
 
-/** Los que se pueden subir hoy. El vídeo no: el almacenamiento no lo admite. */
+/**
+ * Los que se suben por la ruta de documentos: fotografías y PDF.
+ *
+ * El vídeo NO está aquí, y no por no admitirse: tiene su propia ruta, con su
+ * propio tope de tamaño y su comprobación de duración. Si estuviera en esta
+ * lista, el tope de cinco megas de las fotos tendría que subir a cincuenta
+ * para todos, y una cédula de cuarenta megas pasaría sin que nadie lo hubiera
+ * decidido.
+ */
 export const UPLOADABLE_DOCUMENT_TYPES = Object.freeze(
-  DRIVER_DOCUMENT_CATALOG.filter(item => item.uploadEnabled !== false).map(item => item.type)
+  DRIVER_DOCUMENT_CATALOG.filter(item => item.kind === 'image').map(item => item.type)
+);
+
+/** Los que se suben por la ruta del vídeo. Hoy, uno. */
+export const UPLOADABLE_VIDEO_TYPES = Object.freeze(
+  DRIVER_DOCUMENT_CATALOG.filter(item => item.kind === 'video').map(item => item.type)
 );
 
 /** Los obligatorios de la versión 1. Se conservan para evaluar expedientes viejos. */
@@ -145,11 +189,14 @@ export const REQUIRED_DRIVER_DOCUMENTS = Object.freeze([
 
 /** Los obligatorios de la versión 2, según el vehículo. */
 export function requiredDocumentsFor({ vehicleType = 'MOTO', requirementsVersion = REQUIREMENTS_VERSION } = {}) {
-  if (Number(requirementsVersion) < 2) return REQUIRED_DRIVER_DOCUMENTS;
+  const version = Number(requirementsVersion);
+  if (version < 2) return REQUIRED_DRIVER_DOCUMENTS;
   const vehicle = VEHICLE_TYPES.includes(vehicleType) ? vehicleType : 'MOTO';
   return Object.freeze(
     DRIVER_DOCUMENT_CATALOG
-      .filter(item => item.requirement === 'common' || item.requirement === vehicle)
+      .filter(item => (item.requirement === 'common' || item.requirement === vehicle)
+        // Lo que se añadió después no se le exige a quien empezó antes.
+        && (item.sinceVersion === undefined || version >= item.sinceVersion))
       .map(item => item.type)
   );
 }

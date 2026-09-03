@@ -11,6 +11,7 @@ import {
   REQUIREMENTS_VERSION,
   REQUIRED_DRIVER_DOCUMENTS,
   UPLOADABLE_DOCUMENT_TYPES,
+  UPLOADABLE_VIDEO_TYPES,
   VEHICLE_LEGAL_DOCUMENT_TYPES,
   VEHICLE_TYPES,
   defaultCheckpoints,
@@ -96,7 +97,9 @@ test('el tronco común es el mismo para moto y carro', () => {
   const comunes = DRIVER_DOCUMENT_CATALOG.filter(item => item.requirement === 'common').map(item => item.type);
   assert.deepEqual(comunes, [
     'identity_front', 'identity_back', 'rif', 'driver_license', 'medical_certificate',
-    'vehicle_registration', 'vehicle_front', 'vehicle_rear', 'plate_photo', 'driver_selfie'
+    'vehicle_registration', 'vehicle_front', 'vehicle_rear', 'plate_photo', 'driver_selfie',
+    // El vídeo de presentación se pide a todos, pero sólo desde la versión 3.
+    'presentation_video'
   ]);
   for (const vehicleType of VEHICLE_TYPES) {
     for (const type of comunes) assert.ok(requiredDocumentsFor({ vehicleType }).includes(type), `${vehicleType} sin ${type}`);
@@ -110,19 +113,36 @@ test('la moto exige los cascos; el carro, el interior trasero', () => {
   assert.equal(moto.includes('car_rear_interior'), false);
   assert.ok(car.includes('car_rear_interior'));
   assert.equal(car.includes('moto_helmets'), false);
-  assert.equal(moto.length, 11);
-  assert.equal(car.length, 11);
+  // Doce en la versión vigente: los diez comunes, la pieza del vehículo y el
+  // vídeo de presentación.
+  assert.equal(moto.length, 12);
+  assert.equal(car.length, 12);
+  // Y en la versión 2, los once de entonces: sin vídeo.
+  assert.equal(requiredDocumentsFor({ vehicleType: 'MOTO', requirementsVersion: 2 }).length, 11);
+  assert.equal(requiredDocumentsFor({ vehicleType: 'MOTO', requirementsVersion: 2 }).includes('presentation_video'), false);
 });
 
-test('el seguro y el vídeo no se exigen, y el vídeo todavía no se puede subir', () => {
+test('el seguro sigue siendo opcional; el vídeo ya se exige y se puede subir', () => {
   for (const vehicleType of VEHICLE_TYPES) {
     const required = requiredDocumentsFor({ vehicleType });
-    assert.equal(required.includes('vehicle_insurance'), false);
-    assert.equal(required.includes('presentation_video'), false);
+    assert.equal(required.includes('vehicle_insurance'), false, 'el RCV sigue sin exigirse');
+    assert.ok(required.includes('presentation_video'), 'el vídeo se pide en la versión vigente');
   }
-  assert.ok(DRIVER_DOCUMENT_TYPES.includes('presentation_video'), 'el vídeo está modelado');
-  assert.equal(UPLOADABLE_DOCUMENT_TYPES.includes('presentation_video'), false, 'el vídeo se puede subir sin almacenamiento que lo admita');
+  assert.ok(DRIVER_DOCUMENT_TYPES.includes('presentation_video'));
+  // El vídeo no está entre los subibles por la ruta de documentos: tiene la
+  // suya, con otro tope de tamaño y su comprobación de duración.
+  assert.equal(UPLOADABLE_DOCUMENT_TYPES.includes('presentation_video'), false);
+  assert.deepEqual([...UPLOADABLE_VIDEO_TYPES], ['presentation_video']);
   assert.ok(UPLOADABLE_DOCUMENT_TYPES.includes('vehicle_insurance'));
+});
+
+test('lo que se añadió después no se le exige a quien empezó antes', () => {
+  // Ésta es la garantía que protege a cada persona que ya mandó su solicitud:
+  // subir la versión de requisitos no vuelve incompleto ningún expediente.
+  const docs = requiredDocumentsFor({ vehicleType: 'MOTO', requirementsVersion: 2 }).map(type => ({ type }));
+  assert.deepEqual(missingRequiredDocuments(docs, { requirementsVersion: 2, vehicle: { type: 'MOTO' } }), []);
+  // Y al mismo expediente, evaluado como versión 3, sí le falta el vídeo.
+  assert.deepEqual(missingRequiredDocuments(docs, { requirementsVersion: 3, vehicle: { type: 'MOTO' } }), ['presentation_video']);
 });
 
 test('faltan los que faltan, según el vehículo del expediente', () => {
@@ -266,6 +286,6 @@ test('las correcciones por documento conservan el motivo de cada una', () => {
   assert.equal(normalizeRequestedChanges(['rif', 'rif']).length, 1);
 });
 
-test('la versión de requisitos vigente es la 2', () => {
-  assert.equal(REQUIREMENTS_VERSION, 2);
+test('la versión de requisitos vigente es la 3', () => {
+  assert.equal(REQUIREMENTS_VERSION, 3);
 });

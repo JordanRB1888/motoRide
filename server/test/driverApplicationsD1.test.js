@@ -20,6 +20,32 @@ const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0
 const MOTO_DOCS = ['identity_front', 'identity_back', 'rif', 'driver_license', 'medical_certificate', 'vehicle_registration', 'vehicle_front', 'vehicle_rear', 'plate_photo', 'driver_selfie', 'moto_helmets'];
 const CAR_DOCS = [...MOTO_DOCS.filter(type => type !== 'moto_helmets'), 'car_rear_interior'];
 
+// El vídeo de presentación, que desde la versión 3 también se exige. Va por su
+// propia ruta porque pesa diez veces más que una foto y se valida distinto.
+const caja = (tipo, cuerpo) => {
+  const c = Buffer.concat([Buffer.alloc(4), Buffer.from(tipo, 'latin1'), cuerpo]);
+  c.writeUInt32BE(c.length, 0);
+  return c;
+};
+const mvhd = segundos => {
+  const cuerpo = Buffer.alloc(100);
+  cuerpo.writeUInt32BE(0, 0);
+  cuerpo.writeUInt32BE(600, 12);
+  cuerpo.writeUInt32BE(600 * segundos, 16);
+  return caja('mvhd', cuerpo);
+};
+const mp4De = segundos => Buffer.concat([
+  caja('ftyp', Buffer.from('isomiso2avc1mp41', 'latin1')),
+  caja('moov', mvhd(segundos)),
+  caja('mdat', Buffer.alloc(1024))
+]);
+
+async function subirVideo(api, token, { segundos = 8, mime = 'video/mp4', cuerpo = null, nombre = 'presentacion.mp4' } = {}) {
+  const form = new FormData();
+  form.append('file', new Blob([cuerpo ?? mp4De(segundos)], { type: mime }), nombre);
+  return fetch(`${api}/driver-applications/me/video`, { method: 'PUT', headers: { authorization: `Bearer ${token}` }, body: form });
+}
+
 async function start(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'plus58-d1-'));
   // Bloque propio (20200-20598): testPortRanges.test.js vigila que no se solape.
@@ -76,12 +102,12 @@ test('un expediente nace como borrador, guarda vehículo y servicios, y sobreviv
   assert.equal(created.status, 201);
   const creation = await created.json();
   assert.equal(creation.application.status, 'draft');
-  assert.equal(creation.application.requirementsVersion, 2);
   assert.deepEqual(creation.application.servicesAppliedFor, ['PASSENGER_TRANSPORT', 'DELIVERY']);
   assert.equal(creation.application.vehicle.type, 'MOTO');
   assert.equal(creation.application.personal.rif, 'V-19876543-2');
   assert.deepEqual(creation.application.license, { grade: 2, expiration: '2028-06-30' });
-  assert.deepEqual(creation.application.missingDocuments, MOTO_DOCS);
+  assert.equal(creation.application.requirementsVersion, 3);
+  assert.deepEqual(creation.application.missingDocuments, [...MOTO_DOCS, 'presentation_video']);
   assert.equal(creation.application.checkpoints.DOCUMENTS_REVIEW, 'PENDING');
   assert.equal(creation.application.checkpoints.ORIENTATION_TUTORIAL, 'NOT_REQUIRED');
 
@@ -96,7 +122,7 @@ test('un expediente nace como borrador, guarda vehículo y servicios, y sobreviv
   // No se puede enviar sin documentos, y se dice cuáles faltan.
   const early = await fetch(`${api}/driver-applications/me/submit`, { method: 'POST', ...auth(session.token) });
   assert.equal(early.status, 400);
-  assert.deepEqual((await early.json()).missing, MOTO_DOCS);
+  assert.deepEqual((await early.json()).missing, [...MOTO_DOCS, 'presentation_video']);
 
   // 7-8: cambiar a CAR antes de enviar cambia los documentos condicionales.
   const toCar = await fetch(`${api}/driver-applications/me`, json(session.token, { vehicleType: 'CAR', licenseGrade: '3' }, 'PATCH'));
@@ -149,9 +175,10 @@ test('los documentos se suben uno a uno, privados, se reemplazan y se envían', 
     const response = await uploadDocument(api, token, type);
     assert.equal(response.status, 200, type);
   }
+  assert.equal((await subirVideo(api, token)).status, 200);
   const complete = await (await fetch(`${api}/driver-applications/me`, auth(token))).json();
   assert.deepEqual(complete.missingDocuments, []);
-  assert.equal(complete.documents.length, MOTO_DOCS.length);
+  assert.equal(complete.documents.length, MOTO_DOCS.length + 1, 'los once documentos y el vídeo');
 
   // Privados: el dueño y administración los ven; un tercero recibe 404, y en
   // disco no hay nada público ni con el nombre original.
@@ -186,6 +213,7 @@ test('administración ve vehículo y servicios, pide cambios por documento con m
   const creation = await (await fetch(`${api}/driver-applications`, { method: 'POST', body: applicantForm({ vehicleType: 'CAR', licenseGrade: '4', vehiclePlate: 'D1CAR01' }) })).json();
   const token = creation.token;
   for (const type of CAR_DOCS) assert.equal((await uploadDocument(api, token, type)).status, 200, type);
+  assert.equal((await subirVideo(api, token)).status, 200);
   assert.equal((await fetch(`${api}/driver-applications/me/submit`, { method: 'POST', ...auth(token) })).status, 200);
 
   const admin = await login(api, 'admin@58express.com', 'admin');
