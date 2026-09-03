@@ -101,7 +101,7 @@ const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
 export default function PasoDeVehiculo() {
   const tema = useTema();
   const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
-  const { entrar } = useSesion();
+  const { sesion, entrar } = useSesion();
   const { borrador, actualizar, solicitud, fijarSolicitud } = usePostulacion();
   // Al corregir un expediente que ya existe, lo que se enseña es lo que tiene
   // el servidor, no el borrador (que tras reabrir la aplicación está vacío).
@@ -196,13 +196,21 @@ export default function PasoDeVehiculo() {
       if (creacion.motivo === 'YA_TIENE_SOLICITUD') router.replace('/postulacion/estado');
       return;
     }
-    // La sesión se abre por el camino de siempre: el contexto y su almacén.
-    const acceso = await entrar({ identificador: creacion.correo, contrasena: borrador.contrasena });
-    setGuardando(false);
-    if (!acceso.ok) {
-      setAviso('Tu expediente se creó, pero no pudimos abrir la sesión. Entra con tu correo y contraseña para seguir.');
-      return;
+    // Quien llegó aquí con sesión abierta no tiene que volver a entrar: nadie le
+    // pidió su contraseña, y el servidor ya aceptó su sesión como prueba de que
+    // la cuenta es suya. Intentarlo con una contraseña vacía sólo serviría para
+    // dejarle fuera de su propio expediente recién creado.
+    const yaHabiaSesion = sesion.estado === 'AUTENTICADO';
+    if (!yaHabiaSesion) {
+      // La sesión se abre por el camino de siempre: el contexto y su almacén.
+      const acceso = await entrar({ identificador: creacion.correo, contrasena: borrador.contrasena });
+      if (!acceso.ok) {
+        setGuardando(false);
+        setAviso('Tu expediente se creó, pero no pudimos abrir la sesión. Entra con tu correo y contraseña para seguir.');
+        return;
+      }
     }
+    setGuardando(false);
     fijarSolicitud(creacion.solicitud);
     actualizar({ contrasena: '' });
     router.replace('/postulacion/documentos');

@@ -158,6 +158,7 @@ export function createDriverApplicationsRouter({
   publicUser,
   signToken,
   requireAuth,
+  sesionOpcional,
   requireRole,
   io,
   bcrypt,
@@ -194,7 +195,7 @@ export function createDriverApplicationsRouter({
    * Si llega completo y con los datos de envío, entra directamente en
    * revisión, como antes.
    */
-  router.post('/driver-applications', limitadorDeAlta, uploadFields, async (req, res) => {
+  router.post('/driver-applications', sesionOpcional, limitadorDeAlta, uploadFields, async (req, res) => {
     // Un cliente que no declara servicios es de antes de que existieran (el
     // registro web): su expediente nace con los requisitos de la version 1 y
     // se postula, como siempre, a llevar personas. Quien declara el campo se
@@ -202,7 +203,9 @@ export function createDriverApplicationsRouter({
     const legacyClient = req.body.servicesAppliedFor === undefined && req.body.requirementsVersion === undefined;
     if (legacyClient) req.body.servicesAppliedFor = 'PASSENGER_TRANSPORT';
     const requirementsVersion = legacyClient ? 1 : REQUIREMENTS_VERSION;
-    const validation = validateDriverApplicationInput(req.body);
+    // La contrasena se comprueba mas abajo, cuando ya se sabe a que cuenta va
+    // el expediente: a quien llega con sesion propia no se le vuelve a pedir.
+    const validation = validateDriverApplicationInput(req.body, { requirePassword: false });
     if (!validation.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: validation.errors });
     const { personal, vehicle, license, medicalCertificate, servicesAppliedFor } = validation.normalized;
     const phoneKey = personal.phone.replace(/\D/g, '');
@@ -223,7 +226,19 @@ export function createDriverApplicationsRouter({
     if (existingApplication) {
       return res.status(409).json({ error: 'DRIVER_APPLICATION_EXISTS', applicationStatus: existingApplication.status || 'pending' });
     }
-    if (existingUser && (!existingUser.passwordHash || !await bcrypt.compare(String(req.body.password || ''), existingUser.passwordHash))) {
+    // La sesion vale como prueba de identidad, y solo para su propia cuenta:
+    // quien viene autenticado pero declara el correo de otra persona sigue
+    // teniendo que demostrar que esa cuenta es suya.
+    const laSesionEsDeEstaPersona = Boolean(req.user && existingUser && req.user.id === existingUser.id);
+
+    if (!laSesionEsDeEstaPersona && String(req.body.password || '').length < 8) {
+      return res.status(400).json({
+        error: 'VALIDATION_FAILED',
+        fields: { password: 'La contrasena debe tener al menos 8 caracteres.' }
+      });
+    }
+    if (existingUser && !laSesionEsDeEstaPersona
+      && (!existingUser.passwordHash || !await bcrypt.compare(String(req.body.password || ''), existingUser.passwordHash))) {
       return res.status(401).json({ error: 'EXISTING_ACCOUNT_AUTH_REQUIRED' });
     }
 

@@ -310,3 +310,92 @@ test('el despacho de delivery NO existe todavía', () => {
   const pricing = fs.readFileSync(path.join(serverDir, 'domain', 'pricingService.js'), 'utf8');
   assert.equal(/DELIVERY|parcel|package/i.test(pricing), false);
 });
+
+// ---------------------------------------------------------------------------
+// Postularse desde la aplicación, con la sesión ya abierta
+// ---------------------------------------------------------------------------
+
+test('la sesion vale como prueba de identidad: quien ya entro no repite su contrasena', async t => {
+  const { api } = await start(t);
+
+  // Una cuenta de pasajera cualquiera, creada por el camino normal.
+  const registro = await fetch(`${api}/auth/register`, json(null, {
+    email: 'con.sesion@example.com', phone: '04141900011', password: 'ClaveSegura123',
+    firstName: 'Rosa', lastName: 'Pasajera'
+  }));
+  assert.equal(registro.status, 201);
+  const acceso = await fetch(`${api}/auth/login`, json(null, { identifier: 'con.sesion@example.com', password: 'ClaveSegura123' }));
+  const { token } = await acceso.json();
+
+  // Se postula desde la aplicación: entró con su contraseña hace un momento y
+  // nadie se la volvió a pedir, así que el formulario no la lleva.
+  const form = applicantForm({ email: 'con.sesion@example.com', phone: '04141900011', password: undefined, vehiclePlate: 'SES001' });
+  const alta = await fetch(`${api}/driver-applications`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: form
+  });
+  assert.equal(alta.status, 201, 'con sesion propia el alta debe pasar sin contrasena');
+  const creada = await alta.json();
+  assert.equal(creada.application.status, 'draft');
+
+  // Y el expediente es de esa persona: se lee con su misma sesión.
+  const mio = await fetch(`${api}/driver-applications/me`, { headers: { authorization: `Bearer ${token}` } });
+  assert.equal(mio.status, 200);
+  assert.equal((await mio.json()).id, creada.application.id);
+});
+
+test('sin sesion sigue haciendo falta la contrasena', async t => {
+  const { api } = await start(t);
+  const sinNada = await fetch(`${api}/driver-applications`, {
+    method: 'POST',
+    body: applicantForm({ email: 'nueva.sin.clave@example.com', phone: '04141900022', password: undefined, vehiclePlate: 'SES002' })
+  });
+  assert.equal(sinNada.status, 400);
+  const detalle = await sinNada.json();
+  assert.equal(detalle.error, 'VALIDATION_FAILED');
+  assert.ok(detalle.fields.password, 'debe decir que falta la contrasena');
+});
+
+test('una sesion NO sirve para postularse en nombre de otra persona', async t => {
+  const { api } = await start(t);
+
+  // Dos cuentas distintas.
+  for (const [email, phone] of [['una@example.com', '04141900033'], ['otra@example.com', '04141900044']]) {
+    assert.equal((await fetch(`${api}/auth/register`, json(null, {
+      email, phone, password: 'ClaveSegura123', firstName: 'Ana', lastName: 'Prueba'
+    }))).status, 201);
+  }
+  const { token } = await (await fetch(`${api}/auth/login`, json(null, { identifier: 'una@example.com', password: 'ClaveSegura123' }))).json();
+
+  // Con la sesión de la primera, se intenta abrir expediente a nombre de la
+  // segunda y sin su contraseña.
+  const intruso = await fetch(`${api}/driver-applications`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: applicantForm({ email: 'otra@example.com', phone: '04141900044', password: undefined, vehiclePlate: 'SES003' })
+  });
+  assert.equal(intruso.status, 400, 'la cuenta ajena sigue exigiendo su contrasena');
+  assert.ok((await intruso.json()).fields.password);
+
+  // Y con una contraseña equivocada, tampoco.
+  const conClaveMala = await fetch(`${api}/driver-applications`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: applicantForm({ email: 'otra@example.com', phone: '04141900044', password: 'OtraClaveDistinta9', vehiclePlate: 'SES004' })
+  });
+  assert.equal(conClaveMala.status, 401);
+  assert.equal((await conClaveMala.json()).error, 'EXISTING_ACCOUNT_AUTH_REQUIRED');
+});
+
+test('un token invalido no abre la puerta: la ruta sigue siendo publica', async t => {
+  const { api } = await start(t);
+  const conBasura = await fetch(`${api}/driver-applications`, {
+    method: 'POST',
+    headers: { authorization: 'Bearer esto-no-es-un-token' },
+    body: applicantForm({ email: 'token.malo@example.com', phone: '04141900055', password: undefined, vehiclePlate: 'SES005' })
+  });
+  // Como si no trajera nada: se le pide la contrasena, no se le deja pasar.
+  assert.equal(conBasura.status, 400);
+  assert.ok((await conBasura.json()).fields.password);
+});

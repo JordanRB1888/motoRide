@@ -673,6 +673,29 @@ function requireAuth(req, res, next) {
   }
 }
 
+/**
+ * Resuelve la sesion si la hay, sin exigirla.
+ *
+ * Postularse a conductor es una ruta PUBLICA a proposito: alguien que todavia
+ * no tiene cuenta tiene que poder hacerlo, y para eso manda una contrasena con
+ * la que se le crea. Pero quien ya entro en la aplicacion no tiene su
+ * contrasena a mano --nadie se la pidio-- y volver a pedirsela para algo que
+ * la sesion ya demuestra es friccion inutil.
+ *
+ * Un token invalido o caducado es como no traer ninguno: la ruta sigue siendo
+ * publica y quien llame tendra que identificarse por el otro camino.
+ */
+function sesionOpcional(req, _res, next) {
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+  if (!token) return next();
+  try {
+    const payload = jwt.verify(token, jwtSecret);
+    const user = database.users.find(item => item.id === payload.sub);
+    if (user && user.accountStatus !== 'DISABLED') req.user = user;
+  } catch { /* Sin sesion utilizable: se sigue como visitante. */ }
+  next();
+}
+
 function requireRole(role) {
   return (req, res, next) => req.user?.role === role
     ? next()
@@ -769,6 +792,7 @@ app.use('/api', createDriverApplicationsRouter({
   publicUser,
   signToken,
   requireAuth,
+  sesionOpcional,
   requireRole,
   io,
   bcrypt,
