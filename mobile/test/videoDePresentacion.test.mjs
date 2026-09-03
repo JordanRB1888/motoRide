@@ -288,3 +288,17 @@ test('al subirse, la copia local se suelta y manda lo que diga el servidor', () 
   assert.match(subir, /setVideoGrabado\(null\)/);
   assert.match(subir, /fijarSolicitud\(respuesta\.solicitud\)/);
 });
+
+test('con una corrección pendiente, lo recién grabado se puede subir', () => {
+  // Regresión encontrada en el emulador: administración pidió repetir el
+  // vídeo, la persona lo grabó, y la tarjeta seguía diciendo «hay que grabarlo
+  // otra vez» sin ofrecer nunca el botón de subir. Un callejón sin salida.
+  const pantalla = sinComentarios('app/postulacion/documentos.tsx');
+  const cuerpo = pantalla.slice(pantalla.indexOf('function estadoDelVideo'), pantalla.indexOf('function alPerderLaSesion'));
+  const posicionDeLoGrabado = cuerpo.indexOf("return 'LISTO'");
+  const posicionDeLaCorreccion = cuerpo.indexOf("return 'REPETIR'");
+  assert.ok(posicionDeLoGrabado > 0 && posicionDeLaCorreccion > 0, 'faltan los estados');
+  assert.ok(posicionDeLoGrabado < posicionDeLaCorreccion, 'lo grabado debe ganar a la corrección');
+  // Y el motivo se sigue viendo, con su borde de aviso.
+  assert.match(pantalla, /motivo \? estilos\.tarjetaConCorreccion/);
+});

@@ -90,9 +90,15 @@ function estadoDelVideo(entrada: {
   readonly grabado: VideoCapturado | null;
 }): EstadoDelVideo {
   if (entrada.subiendo) return 'SUBIENDO';
-  // La corrección manda sobre lo demás: hay un vídeo, pero no sirve.
-  if (entrada.motivo) return 'REPETIR';
+  // Lo recién grabado va PRIMERO, incluso con una corrección encima.
+  //
+  // Al revés se llega a un callejón sin salida: administración pide repetir el
+  // vídeo, la persona lo graba, y la tarjeta sigue diciendo «hay que grabarlo
+  // otra vez» sin ofrecer nunca el botón de subir. El motivo de la corrección
+  // se sigue viendo en el texto de la tarjeta; lo que cambia es que ahora hay
+  // algo que subir.
   if (entrada.grabado !== null) return 'LISTO';
+  if (entrada.motivo) return 'REPETIR';
   if (entrada.entregado) return 'SUBIDO';
   return 'SIN_VIDEO';
 }
@@ -245,7 +251,7 @@ export default function PasoDeDocumentos() {
               return (
                 <View
                   key={tipo}
-                  style={[estilos.tarjeta, estado === 'REPETIR' ? estilos.tarjetaConCorreccion : estado === 'SUBIDO' ? estilos.tarjetaHecha : null]}
+                  style={[estilos.tarjeta, motivo ? estilos.tarjetaConCorreccion : estado === 'SUBIDO' ? estilos.tarjetaHecha : null]}
                   testID={`documento-${tipo}`}
                 >
                   <Text style={estilos.tarjetaTitulo}>{documento.titulo}{estado === 'SUBIDO' ? ' · listo' : ''}</Text>
