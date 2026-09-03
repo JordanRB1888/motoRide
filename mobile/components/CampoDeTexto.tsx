@@ -7,9 +7,11 @@
  * (sin autocorrección en cédulas, placas ni correos).
  */
 
+import { useMemo } from 'react';
 import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
 
-import { colores, espaciado, radios, tipografia } from '../theme/tokens';
+import { useTema } from '../theme/ThemeContext';
+import { espaciado, radios, tipografia } from '../theme/tokens';
 
 export interface PropiedadesDeCampo {
   readonly etiqueta: string;
@@ -27,6 +29,8 @@ export interface PropiedadesDeCampo {
 export function CampoDeTexto({
   etiqueta, valor, onCambiar, error = null, ayuda, ejemplo, teclado = 'default', secreto = false, capitalizar = 'sentences', testID
 }: PropiedadesDeCampo) {
+  const tema = useTema();
+  const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   return (
     <View style={estilos.bloque}>
       <Text style={estilos.etiqueta}>{etiqueta}</Text>
@@ -34,7 +38,7 @@ export function CampoDeTexto({
         value={valor}
         onChangeText={onCambiar}
         placeholder={ejemplo}
-        placeholderTextColor={colores.textoTenue}
+        placeholderTextColor={tema.color.textoTenue}
         keyboardType={teclado}
         secureTextEntry={secreto}
         autoCapitalize={capitalizar}
@@ -48,10 +52,10 @@ export function CampoDeTexto({
   );
 }
 
-const estilos = StyleSheet.create({
+const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   bloque: { gap: espaciado.xs },
   etiqueta: {
-    color: colores.textoSecundario,
+    color: c.textoSecundario,
     fontSize: tipografia.pie.tamano,
     lineHeight: tipografia.pie.alto,
     fontWeight: '600'
@@ -59,14 +63,14 @@ const estilos = StyleSheet.create({
   entrada: {
     minHeight: 48,
     borderWidth: 1,
-    borderColor: colores.borde,
+    borderColor: c.borde,
     borderRadius: radios.md,
-    backgroundColor: colores.superficie,
-    color: colores.textoPrimario,
+    backgroundColor: c.superficie,
+    color: c.textoPrimario,
     paddingHorizontal: espaciado.md,
     fontSize: tipografia.cuerpo.tamano
   },
-  entradaConError: { borderColor: colores.peligro },
-  error: { color: colores.peligro, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
-  ayuda: { color: colores.textoTenue, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto }
+  entradaConError: { borderColor: c.peligro },
+  error: { color: c.peligro, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
+  ayuda: { color: c.textoTenue, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto }
 });

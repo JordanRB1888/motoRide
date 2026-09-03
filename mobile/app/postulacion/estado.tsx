@@ -7,7 +7,7 @@
  */
 
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../../components/Boton';
@@ -15,7 +15,8 @@ import { Pantalla } from '../../components/Pantalla';
 import { usePostulacion } from '../../context/PostulacionContext';
 import { describirDocumento } from '../../domain/postulacion';
 import { leerMiPostulacion, type SolicitudPropia } from '../../services/postulacion';
-import { colores, espaciado, tipografia } from '../../theme/tokens';
+import { useTema } from '../../theme/ThemeContext';
+import { espaciado, tipografia } from '../../theme/tokens';
 
 const TITULOS: Readonly<Record<SolicitudPropia['status'], string>> = {
   draft: 'Tu expediente está a medias',
@@ -36,6 +37,8 @@ const DETALLES: Readonly<Record<SolicitudPropia['status'], string>> = {
 };
 
 export default function EstadoDePostulacion() {
+  const tema = useTema();
+  const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   const { solicitud, fijarSolicitud } = usePostulacion();
   const [cargando, setCargando] = useState(solicitud === null);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +59,7 @@ export default function EstadoDePostulacion() {
     return (
       <Pantalla testID="postulacion-estado-cargando">
         <View style={estilos.centro}>
-          {error ? <Text style={estilos.aviso}>{error}</Text> : <ActivityIndicator color={colores.acento} size="large" />}
+          {error ? <Text style={estilos.aviso}>{error}</Text> : <ActivityIndicator color={tema.color.acento} size="large" />}
         </View>
       </Pantalla>
     );
@@ -97,17 +100,17 @@ export default function EstadoDePostulacion() {
   );
 }
 
-const estilos = StyleSheet.create({
+const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   centro: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: espaciado.lg },
   contenido: { padding: espaciado.lg, gap: espaciado.md },
-  titulo: { color: colores.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
-  detalle: { color: colores.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
-  motivo: { color: colores.aviso, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
+  titulo: { color: c.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
+  detalle: { color: c.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
+  motivo: { color: c.aviso, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
   lista: { gap: espaciado.sm },
-  seccion: { color: colores.textoSecundario, fontSize: tipografia.pie.tamano, fontWeight: '600', marginTop: espaciado.sm },
+  seccion: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, fontWeight: '600', marginTop: espaciado.sm },
   fila: { gap: 2 },
-  filaTitulo: { color: colores.textoPrimario, fontSize: tipografia.cuerpoFuerte.tamano, fontWeight: '600' },
-  filaDetalle: { color: colores.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
-  pie: { color: colores.textoTenue, fontSize: tipografia.pie.tamano, marginTop: espaciado.sm },
-  aviso: { color: colores.peligro, fontSize: tipografia.cuerpo.tamano, textAlign: 'center' }
+  filaTitulo: { color: c.textoPrimario, fontSize: tipografia.cuerpoFuerte.tamano, fontWeight: '600' },
+  filaDetalle: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
+  pie: { color: c.textoTenue, fontSize: tipografia.pie.tamano, marginTop: espaciado.sm },
+  aviso: { color: c.peligro, fontSize: tipografia.cuerpo.tamano, textAlign: 'center' }
 });

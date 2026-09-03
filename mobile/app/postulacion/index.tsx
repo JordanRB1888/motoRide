@@ -7,7 +7,7 @@
  */
 
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../../components/Boton';
@@ -24,11 +24,14 @@ import {
   type TipoDeVehiculo
 } from '../../domain/postulacion';
 import { leerMiPostulacion } from '../../services/postulacion';
-import { colores, espaciado, tipografia } from '../../theme/tokens';
+import { useTema } from '../../theme/ThemeContext';
+import { espaciado, tipografia } from '../../theme/tokens';
 
 const EDITABLES = ['draft', 'needs_changes', 'rejected'];
 
 export default function PasoDeServicio() {
+  const tema = useTema();
+  const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   const { sesion } = useSesion();
   const { borrador, actualizar, fijarSolicitud } = usePostulacion();
   const [vehiculo, setVehiculo] = useState<TipoDeVehiculo | null>(borrador.vehiculo);
@@ -76,7 +79,7 @@ export default function PasoDeServicio() {
   if (consultando) {
     return (
       <Pantalla testID="postulacion-consultando">
-        <View style={estilos.centro}><ActivityIndicator color={colores.acento} size="large" /></View>
+        <View style={estilos.centro}><ActivityIndicator color={tema.color.acento} size="large" /></View>
       </Pantalla>
     );
   }
@@ -134,12 +137,12 @@ export default function PasoDeServicio() {
   );
 }
 
-const estilos = StyleSheet.create({
+const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   centro: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   contenido: { padding: espaciado.lg, gap: espaciado.md },
-  paso: { color: colores.textoTenue, fontSize: tipografia.pie.tamano },
-  titulo: { color: colores.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
-  detalle: { color: colores.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
-  seccion: { color: colores.textoSecundario, fontSize: tipografia.pie.tamano, fontWeight: '600', marginTop: espaciado.md },
-  aviso: { color: colores.peligro, fontSize: tipografia.pie.tamano }
+  paso: { color: c.textoTenue, fontSize: tipografia.pie.tamano },
+  titulo: { color: c.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
+  detalle: { color: c.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
+  seccion: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, fontWeight: '600', marginTop: espaciado.md },
+  aviso: { color: c.peligro, fontSize: tipografia.pie.tamano }
 });

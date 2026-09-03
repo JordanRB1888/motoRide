@@ -17,7 +17,7 @@
  */
 
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../../components/Boton';
@@ -31,7 +31,8 @@ import {
   subirDocumento,
   type MotivoDePostulacion
 } from '../../services/postulacion';
-import { colores, espaciado, radios, tipografia } from '../../theme/tokens';
+import { useTema } from '../../theme/ThemeContext';
+import { espaciado, radios, tipografia } from '../../theme/tokens';
 
 const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
   DATOS_INVALIDOS: 'Falta algún dato del expediente. Revisa los pasos anteriores.',
@@ -47,6 +48,8 @@ const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
 };
 
 export default function PasoDeDocumentos() {
+  const tema = useTema();
+  const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   const { solicitud, fijarSolicitud } = usePostulacion();
   const [cargando, setCargando] = useState(solicitud === null);
   const [ocupadoCon, setOcupadoCon] = useState<string | null>(null);
@@ -101,7 +104,7 @@ export default function PasoDeDocumentos() {
     return (
       <Pantalla testID="postulacion-documentos-cargando">
         <View style={estilos.centro}>
-          {aviso ? <Text style={estilos.aviso}>{aviso}</Text> : <ActivityIndicator color={colores.acento} size="large" />}
+          {aviso ? <Text style={estilos.aviso}>{aviso}</Text> : <ActivityIndicator color={tema.color.acento} size="large" />}
         </View>
       </Pantalla>
     );
@@ -124,6 +127,7 @@ export default function PasoDeDocumentos() {
           {' '}{faltan.size === 0 ? 'Ya están todas.' : `Faltan ${faltan.size}.`}
         </Text>
         {solicitud.textualCorrections ? <Text style={estilos.correccion}>Además: {solicitud.textualCorrections}</Text> : null}
+        {aviso ? <Text style={estilos.aviso} testID="postulacion-aviso">{aviso}</Text> : null}
 
         {pedidos.map(tipo => {
           const documento = describirDocumento(tipo);
@@ -144,8 +148,6 @@ export default function PasoDeDocumentos() {
           );
         })}
 
-        {aviso ? <Text style={estilos.aviso} testID="postulacion-aviso">{aviso}</Text> : null}
-
         {bloqueada ? (
           <Boton titulo="Ver estado" onPress={() => { router.replace('/postulacion/estado'); }} />
         ) : (
@@ -161,25 +163,25 @@ export default function PasoDeDocumentos() {
   );
 }
 
-const estilos = StyleSheet.create({
+const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   centro: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: espaciado.lg },
   contenido: { padding: espaciado.lg, gap: espaciado.md },
-  paso: { color: colores.textoTenue, fontSize: tipografia.pie.tamano },
-  titulo: { color: colores.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
-  detalle: { color: colores.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
-  correccion: { color: colores.aviso, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
+  paso: { color: c.textoTenue, fontSize: tipografia.pie.tamano },
+  titulo: { color: c.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
+  detalle: { color: c.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
+  correccion: { color: c.aviso, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
   tarjeta: {
     gap: espaciado.sm,
     padding: espaciado.lg,
     borderRadius: radios.md,
     borderWidth: 1,
-    borderColor: colores.borde,
-    backgroundColor: colores.superficie
+    borderColor: c.borde,
+    backgroundColor: c.superficie
   },
-  tarjetaHecha: { borderColor: colores.exito },
-  tarjetaConCorreccion: { borderColor: colores.aviso },
-  tarjetaTitulo: { color: colores.textoPrimario, fontSize: tipografia.cuerpoFuerte.tamano, fontWeight: '600' },
-  tarjetaDetalle: { color: colores.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
+  tarjetaHecha: { borderColor: c.exito },
+  tarjetaConCorreccion: { borderColor: c.aviso },
+  tarjetaTitulo: { color: c.textoPrimario, fontSize: tipografia.cuerpoFuerte.tamano, fontWeight: '600' },
+  tarjetaDetalle: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto },
   acciones: { gap: espaciado.sm, marginTop: espaciado.xs },
-  aviso: { color: colores.peligro, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto }
+  aviso: { color: c.peligro, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto }
 });

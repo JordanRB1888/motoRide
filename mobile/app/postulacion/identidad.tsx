@@ -8,7 +8,7 @@
  */
 
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../../components/Boton';
@@ -23,9 +23,12 @@ import {
   type DatosPersonales,
   type ErroresDePaso
 } from '../../domain/postulacion';
-import { colores, espaciado, tipografia } from '../../theme/tokens';
+import { useTema } from '../../theme/ThemeContext';
+import { espaciado, tipografia } from '../../theme/tokens';
 
 export default function PasoDeIdentidad() {
+  const tema = useTema();
+  const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   const { borrador, actualizar, solicitud } = usePostulacion();
   const [datos, setDatos] = useState<DatosPersonales>(borrador.personales);
   const [contrasena, setContrasena] = useState(borrador.contrasena);
@@ -83,9 +86,9 @@ export default function PasoDeIdentidad() {
   );
 }
 
-const estilos = StyleSheet.create({
+const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   contenido: { padding: espaciado.lg, gap: espaciado.md },
-  paso: { color: colores.textoTenue, fontSize: tipografia.pie.tamano },
-  titulo: { color: colores.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
-  detalle: { color: colores.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto }
+  paso: { color: c.textoTenue, fontSize: tipografia.pie.tamano },
+  titulo: { color: c.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
+  detalle: { color: c.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto }
 });

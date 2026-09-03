@@ -8,7 +8,7 @@
  */
 
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../../components/Boton';
@@ -34,7 +34,8 @@ import {
   crearPostulacion,
   type MotivoDePostulacion
 } from '../../services/postulacion';
-import { colores, espaciado, tipografia } from '../../theme/tokens';
+import { useTema } from '../../theme/ThemeContext';
+import { espaciado, tipografia } from '../../theme/tokens';
 
 const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
   DATOS_INVALIDOS: 'El servidor no aceptó algún dato. Revisa los pasos anteriores.',
@@ -50,6 +51,8 @@ const MENSAJES: Readonly<Record<MotivoDePostulacion, string>> = {
 };
 
 export default function PasoDeVehiculo() {
+  const tema = useTema();
+  const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   const { entrar } = useSesion();
   const { borrador, actualizar, solicitud, fijarSolicitud } = usePostulacion();
   const tipo = borrador.vehiculo ?? borrador.datosDelVehiculo.tipo;
@@ -166,11 +169,11 @@ export default function PasoDeVehiculo() {
   );
 }
 
-const estilos = StyleSheet.create({
+const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   contenido: { padding: espaciado.lg, gap: espaciado.md },
-  paso: { color: colores.textoTenue, fontSize: tipografia.pie.tamano },
-  titulo: { color: colores.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
-  detalle: { color: colores.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
-  seccion: { color: colores.textoSecundario, fontSize: tipografia.pie.tamano, fontWeight: '600', marginTop: espaciado.md },
-  aviso: { color: colores.peligro, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto }
+  paso: { color: c.textoTenue, fontSize: tipografia.pie.tamano },
+  titulo: { color: c.textoPrimario, fontSize: tipografia.titulo.tamano, lineHeight: tipografia.titulo.alto, fontWeight: '700' },
+  detalle: { color: c.textoSecundario, fontSize: tipografia.cuerpo.tamano, lineHeight: tipografia.cuerpo.alto },
+  seccion: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, fontWeight: '600', marginTop: espaciado.md },
+  aviso: { color: c.peligro, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto }
 });

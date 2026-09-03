@@ -351,9 +351,13 @@ test('esta fase tampoco instala nada nativo', () => {
   // servicio, y esa es la pieza oficial que lo hace posible. Lo que se
   // protege ahora no es que no exista, sino que solo exista trabajando
   // —eso lo vigila `seguimientoEnSegundoPlano.test.mjs`—.
+  // `expo-image-picker` sale de la lista en DRIVER-APPLICATION-D1: el dueno
+  // autorizo la captura de documentos para la postulacion de conductor. Lo
+  // que se vigila ahora es que solo lo importe `media/captura.ts` —eso lo
+  // hace `fotoDeDocumento.test.mjs`—.
   for (const prohibida of [
     'expo-maps', '@react-native-community/netinfo',
-    'expo-notifications', 'expo-image-picker', 'expo-background-fetch'
+    'expo-notifications', 'expo-background-fetch'
   ]) {
     assert.equal(dependencias.includes(prohibida), false, `se instaló ${prohibida}`);
   }

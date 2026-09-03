@@ -5,9 +5,11 @@
  * tocar. Accesible como casilla o botón de radio según el caso.
  */
 
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colores, espaciado, radios, tipografia } from '../theme/tokens';
+import { useTema } from '../theme/ThemeContext';
+import { espaciado, radios, tipografia } from '../theme/tokens';
 
 export interface PropiedadesDeOpcion {
   readonly titulo: string;
@@ -21,6 +23,8 @@ export interface PropiedadesDeOpcion {
 }
 
 export function Opcion({ titulo, detalle, elegida, onElegir, tipo = 'radio', deshabilitada = false, testID }: PropiedadesDeOpcion) {
+  const tema = useTema();
+  const estilos = useMemo(() => crearEstilos(tema.color), [tema.color]);
   return (
     <Pressable
       onPress={onElegir}
@@ -45,7 +49,7 @@ export function Opcion({ titulo, detalle, elegida, onElegir, tipo = 'radio', des
   );
 }
 
-const estilos = StyleSheet.create({
+const crearEstilos = (c: ReturnType<typeof useTema>['color']) => StyleSheet.create({
   caja: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -55,21 +59,21 @@ const estilos = StyleSheet.create({
     paddingHorizontal: espaciado.lg,
     borderRadius: radios.md,
     borderWidth: 1,
-    borderColor: colores.borde,
-    backgroundColor: colores.superficie
+    borderColor: c.borde,
+    backgroundColor: c.superficie
   },
-  cajaElegida: { borderColor: colores.acento },
-  cajaPresionada: { backgroundColor: colores.superficieElevada },
+  cajaElegida: { borderColor: c.acento },
+  cajaPresionada: { backgroundColor: c.superficieElevada },
   cajaDeshabilitada: { opacity: 0.5 },
   marca: {
     width: 18,
     height: 18,
     borderRadius: radios.completo,
     borderWidth: 2,
-    borderColor: colores.textoTenue
+    borderColor: c.textoTenue
   },
-  marcaElegida: { borderColor: colores.acento, backgroundColor: colores.acento },
+  marcaElegida: { borderColor: c.acento, backgroundColor: c.acento },
   textos: { flex: 1, gap: 2 },
-  titulo: { color: colores.textoPrimario, fontSize: tipografia.cuerpoFuerte.tamano, fontWeight: '600' },
-  detalle: { color: colores.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto }
+  titulo: { color: c.textoPrimario, fontSize: tipografia.cuerpoFuerte.tamano, fontWeight: '600' },
+  detalle: { color: c.textoSecundario, fontSize: tipografia.pie.tamano, lineHeight: tipografia.pie.alto }
 });

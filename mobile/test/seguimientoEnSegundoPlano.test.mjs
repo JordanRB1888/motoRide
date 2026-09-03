@@ -841,15 +841,21 @@ test('el manifiesto pide lo del segundo plano y NADA ajeno', () => {
 
   // Un permiso que la aplicación no usa es una pregunta que no hay que
   // hacerle a nadie, y en la ficha de la tienda queda escrito.
+  //
+  // `CAMERA` sale de la lista en DRIVER-APPLICATION-D1: la postulación de
+  // conductor fotografía documentos (la declara el módulo de expo-image-picker
+  // y se fusiona al compilar). Y una línea con `tools:node="remove"` es lo
+  // contrario de pedir un permiso: así deja fuera el complemento al
+  // micrófono y al almacenamiento antiguo. Esas líneas no cuentan.
+  const pedidos = xml.split('\n').filter(linea => !linea.includes('tools:node="remove"')).join('\n');
   for (const ajeno of [
-    'android.permission.CAMERA',
     'android.permission.READ_CONTACTS',
     'android.permission.RECORD_AUDIO',
     'android.permission.READ_SMS',
     'android.permission.READ_CALL_LOG',
     'android.permission.BODY_SENSORS'
   ]) {
-    assert.equal(xml.includes(ajeno), false, `el manifiesto pide ${ajeno}, que no se usa`);
+    assert.equal(pedidos.includes(ajeno), false, `el manifiesto pide ${ajeno}, que no se usa`);
   }
 });
 

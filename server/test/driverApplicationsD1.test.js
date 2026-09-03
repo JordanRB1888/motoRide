@@ -22,7 +22,8 @@ const CAR_DOCS = [...MOTO_DOCS.filter(type => type !== 'moto_helmets'), 'car_rea
 
 async function start(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'plus58-d1-'));
-  const port = 18100 + Math.floor(Math.random() * 399);
+  // Bloque propio (20200-20598): testPortRanges.test.js vigila que no se solape.
+  const port = 20200 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: { ...process.env, PORT: String(port), DATA_FILE: path.join(dir, 'db.sqlite'), UPLOAD_DIR: path.join(dir, 'uploads'), JWT_SECRET: 'test-secret' },
