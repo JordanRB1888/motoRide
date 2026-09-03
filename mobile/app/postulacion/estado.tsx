@@ -4,18 +4,27 @@
  * Se vuelve a pedir cada vez: no hay copia local que pueda quedarse vieja. Si
  * administración pidió cambios, aquí se ven, documento por documento y con
  * su motivo, y desde aquí se va a corregirlos.
+ *
+ * Y SE VUELVE A PEDIR AL VOLVER
+ *
+ * Esta es la pantalla donde alguien se queda mirando a ver si le contestan.
+ * Preguntar sólo al abrirla dejaba a quien la tenía abierta viendo «estamos
+ * revisando» después de que administración hubiera decidido: al volver la
+ * aplicación del segundo plano se pregunta otra vez. Es la misma consulta que
+ * usa el inicio, así que abrir las dos no son dos peticiones.
  */
 
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, AppState, StyleSheet, Text, View, type AppStateStatus } from 'react-native';
 
 import { Boton } from '../../components/Boton';
 import { Pantalla } from '../../components/Pantalla';
 import { useSesion } from '../../context/AuthContext';
 import { usePostulacion } from '../../context/PostulacionContext';
 import { describirDocumento } from '../../domain/postulacion';
-import { leerMiPostulacion, type SolicitudPropia } from '../../services/postulacion';
+import { consultarEstadoDePostulacion } from '../../services/estadoDePostulacion';
+import { type SolicitudPropia } from '../../services/postulacion';
 import { useTema } from '../../theme/ThemeContext';
 import { espaciado, tipografia } from '../../theme/tokens';
 
@@ -45,12 +54,13 @@ export default function EstadoDePostulacion() {
   const [cargando, setCargando] = useState(solicitud === null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const consultar = useCallback(() => {
     let vigente = true;
-    void leerMiPostulacion().then(async lectura => {
+    void consultarEstadoDePostulacion({ forzar: true }).then(async lectura => {
       if (!vigente) return;
       setCargando(false);
       if (!lectura.ok) { setError('No pudimos consultar tu postulación. Inténtalo de nuevo.'); return; }
+      setError(null);
       if (lectura.solicitud === null) { router.replace('/postulacion'); return; }
       fijarSolicitud(lectura.solicitud);
 
@@ -66,6 +76,16 @@ export default function EstadoDePostulacion() {
     });
     return () => { vigente = false; };
   }, [fijarSolicitud, revalidar]);
+
+  useEffect(() => consultar(), [consultar]);
+
+  // Volver del segundo plano es cuando alguien viene a ver si le contestaron.
+  useEffect(() => {
+    const suscripcion = AppState.addEventListener('change', (siguiente: AppStateStatus) => {
+      if (siguiente === 'active') consultar();
+    });
+    return () => { suscripcion.remove(); };
+  }, [consultar]);
 
   // El rol ya refrescado manda: en cuanto el backend reconoce a la conductora,
   // su sitio es el inicio de conductor.

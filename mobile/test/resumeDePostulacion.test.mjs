@@ -197,3 +197,15 @@ test('volver atrás desde el vehículo no tira lo escrito', () => {
     assert.ok(cuerpo.includes(campo), `volver no guarda ${campo}`);
   }
 });
+
+test('la pantalla de estado se entera de las novedades al volver', () => {
+  // Salió en la certificación E2E: con la pantalla de estado abierta,
+  // administración pedía cambios y la persona seguía leyendo «estamos
+  // revisando tu postulación» hasta que cerraba y volvía a abrir.
+  const pantalla = leer('app/postulacion/estado.tsx');
+  assert.match(pantalla, /AppState\.addEventListener\('change'/);
+  assert.match(pantalla, /siguiente === 'active'\) consultar\(\)/);
+  // Y usa la misma consulta que el inicio: dos pantallas abiertas no son dos
+  // peticiones.
+  assert.match(pantalla, /consultarEstadoDePostulacion\(\{ forzar: true \}\)/);
+});
