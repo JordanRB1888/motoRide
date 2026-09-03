@@ -40,7 +40,8 @@ import { Icono, type NombreDeIcono } from '../ui/Icono';
 import { Separador } from '../ui/HojaInferior';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { EntradaDeTransporteSeguro } from '../ui/Servicio';
-import { useTema } from '../theme/ThemeContext';
+import { useEsquema, useTema } from '../theme/ThemeContext';
+import { useMovimientoReducido } from '../ui/movimiento';
 import { useAireDeArriba } from '../ui/seguro';
 import { useIr } from '../ui/navegar';
 import { CabeceraAmarilla } from './pantallasSaldo';
@@ -87,25 +88,21 @@ export function Campana({ sinLeer = 0, onPress, sobreElAmarillo = false }: {
       accessibilityRole="button"
       accessibilityLabel={sinLeer > 0 ? `Avisos: ${sinLeer} sin leer` : 'Avisos'}
       style={({ pressed }) => ({
-        width: 40, height: 40, borderRadius: 20,
+        width: 44, height: 44, borderRadius: 22,
         alignItems: 'center', justifyContent: 'center',
         backgroundColor: pressed ? tema.color.superficieElevada : 'transparent'
       })}
     >
       <Icono
         nombre="campana"
-        color={sobreElAmarillo ? tema.color.sobreAcento : tema.color.textoSecundario}
-        tamano={22}
+        color={sobreElAmarillo ? tema.color.sobreAcento : tema.color.textoPrimario}
+        tamano={25}
       />
       {sinLeer > 0 ? (
         <View style={{
-          position: 'absolute', top: 7, right: 9,
+          position: 'absolute', top: 6, right: 7,
           width: 9, height: 9, borderRadius: 5,
-          // Sobre el amarillo, el punto va en grafito: el amarillo sobre
-          // amarillo no marca nada.
           backgroundColor: sobreElAmarillo ? tema.color.sobreAcento : tema.color.acento,
-          // El aro del color del fondo separa el punto de la campana; sin él
-          // se leen como una sola forma.
           borderWidth: 2,
           borderColor: sobreElAmarillo ? tema.color.acento : tema.color.fondo
         }} />
@@ -203,30 +200,51 @@ function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
   readonly onPress?: () => void;
 }) {
   const tema = useTema();
-  const color = tono === 'peligro' ? tema.color.peligro : tema.color.textoSecundario;
+  const esquema = useEsquema();
+  const esNoche = esquema === 'oscuro';
+  const quieto = useMovimientoReducido();
+  const color = tono === 'peligro'
+    ? tema.color.peligro
+    : (esNoche ? tema.color.acento : tema.color.textoPrimario);
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={detalle ? `${titulo}. ${detalle}` : titulo}
+      pressRetentionOffset={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      hitSlop={4}
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 13,
+        gap: 14,
         paddingVertical: 13,
-        opacity: pressed ? 0.65 : 1
+        opacity: pressed ? 0.72 : 1,
+        transform: [{ scale: pressed && !quieto ? 0.985 : 1 }]
       })}
     >
       <View style={{
-        width: 36, height: 36, borderRadius: 18,
-        alignItems: 'center', justifyContent: 'center',
-        backgroundColor: tono === 'peligro' ? `${tema.color.peligro}1f` : tema.color.superficieElevada
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        position: 'relative',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        backgroundColor: tono === 'peligro'
+          ? (esNoche ? 'rgba(239, 68, 68, 0.16)' : `${tema.color.peligro}1f`)
+          : (esNoche ? 'rgba(245, 158, 11, 0.12)' : tema.color.superficieElevada),
+        borderWidth: 1,
+        borderColor: tono === 'peligro'
+          ? (esNoche ? 'rgba(239, 68, 68, 0.35)' : 'transparent')
+          : (esNoche ? 'rgba(245, 158, 11, 0.22)' : '#E5E7EB')
       }}>
-        <Icono nombre={icono} color={color} tamano={18} />
+        <Icono nombre={icono} color={color} tamano={20} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Txt nivel="cuerpo" tono={tono === 'peligro' ? 'secundario' : 'primario'}>{titulo}</Txt>
+        <Txt nivel="cuerpo" tono={tono === 'peligro' ? 'secundario' : 'primario'} estilo={{ fontWeight: '600' }}>
+          {titulo}
+        </Txt>
         {detalle ? <Txt nivel="pie" tono="tenue">{detalle}</Txt> : null}
       </View>
       {derecha}
@@ -446,7 +464,7 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
               onPress={onFila === undefined ? undefined : () => onFila('datos')}
             />
             <Separador />
-            <Fila icono="inicio" titulo="Direcciones guardadas" detalle="Casa, trabajo y las que añadas" />
+            <Fila icono="destino" titulo="Direcciones guardadas" detalle="Casa, trabajo y las que añadas" />
             <Separador />
             <Fila icono="escudo" titulo="Seguridad de la cuenta" detalle="Contraseña y sesiones abiertas" />
           </Grupo>
@@ -466,38 +484,28 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
               onPress={onFila === undefined ? undefined : () => onFila('configuracion')}
             />
             <Separador />
-            <Fila icono="moto" titulo="Cambiar de modo" detalle="Pasar a conductor" />
+            <Fila
+              icono="volante"
+              titulo="Cambiar de modo"
+              detalle="Pasar a conductor"
+              onPress={onFila === undefined ? undefined : () => onFila('conductor')}
+            />
           </Grupo>
 
           <Grupo titulo="Dinero">
-            <Fila icono="rayo" titulo="Tu saldo" detalle="Todavía no está activo" />
+            <Fila icono="dolar" titulo="Tu saldo" detalle="Todavía no está activo" />
           </Grupo>
 
           <Grupo titulo="Ayuda">
-            <Fila icono="viajes" titulo="Soporte" detalle="Escríbenos si algo no cuadra" />
+            <Fila icono="mensaje" titulo="Soporte" detalle="Escríbenos si algo no cuadra" />
           </Grupo>
 
           <View style={{ marginTop: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
-            {/* Sin manejador —en el recorrido de diseño— no hace nada. En la
-                ruta protegida cierra la sesión de verdad.
-
-                `cargando` es lo que impide el doble toque: cerrar sesión dos
-                veces no rompe nada, pero deja ver el botón vivo mientras ya se
-                está saliendo, y eso se lee como que no funcionó. */}
             <Boton
               titulo="Cerrar sesión"
               variante="secundario"
               cargando={cerrando}
               onPress={onCerrarSesion ?? (() => undefined)}
-            />
-
-            {/* Lo que no tiene vuelta atrás, separado y en rojo. */}
-            <Separador />
-            <Fila
-              icono="perfil"
-              titulo="Eliminar cuenta"
-              detalle="Esta acción no se puede deshacer"
-              tono="peligro"
             />
           </View>
         </View>

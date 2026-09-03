@@ -150,6 +150,11 @@ function abrir(clave: string) {
   if (clave === 'datos') router.push('/perfil-datos');
   if (clave === 'avisos') router.push('/avisos');
   if (clave === 'configuracion') router.push('/configuracion');
+  // «Cambiar de modo» es la puerta de quien ya tiene sesión abierta: la
+  // bienvenida sólo se ve al entrar, y sin esto una persona con una solicitud
+  // a medias no tendría por dónde volver a ella. Lleva a la postulación, que
+  // pregunta al servidor y decide si empieza, continúa o enseña el estado.
+  if (clave === 'conductor') router.push('/postulacion');
 }
 
 /**
