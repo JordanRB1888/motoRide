@@ -322,11 +322,15 @@ export async function crearPostulacion(datos: DatosParaPostularse): Promise<Resu
   for (const [campo, valor] of Object.entries(camposDelServidor(datos))) {
     if (valor !== '') formulario.append(campo, valor);
   }
-  formulario.append('password', datos.contrasena);
+  // La contraseña sólo viaja cuando la hay: quien se postula desde una sesión
+  // abierta nunca la escribió, porque nadie se la pidió.
+  if (datos.contrasena !== '') formulario.append('password', datos.contrasena);
 
+  // El alta sigue siendo pública —quien no tiene cuenta se postula igual— pero
+  // si hay sesión se manda. Al servidor le vale como prueba de identidad, y es
+  // lo que evita pedirle la contraseña a quien acaba de entrar.
   const respuesta = await llamar<unknown>('/api/driver-applications', {
     metodo: 'POST',
-    conSesion: false,
     cuerpo: formulario,
     tiempoMaximoMs: 60_000
   });
