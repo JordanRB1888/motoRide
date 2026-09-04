@@ -48,6 +48,7 @@ import { crearProveedores, describirConfiguracion } from './services/verificatio
 import { crearTransporteHttp, TIMEOUT_POR_OMISION_MS } from './services/verificationTransport.js';
 import { crearVerificadorSocial } from './services/socialTokenVerifier.js';
 import { normalizarTelefono } from './domain/contactos.js';
+import { ESTADO_BORRADO, tokenSigueValiendo } from './domain/borradoDeCuenta.js';
 import { createPushRouter } from './routes/push.js';
 import { createTripOfflineEventsRouter } from './routes/tripOfflineEvents.js';
 import { createTransportSubscriptionsRouter } from './routes/transportSubscriptions.js';
@@ -145,7 +146,10 @@ const credenciales = {
   verificacion: createIdentityLimiter({ name: 'verificacion', limit: 30, windowMs: CUARTO_DE_HORA }),
   // Entrar con Google o Apple es un intento de credenciales como el login.
   social: createIdentityLimiter({ name: 'social', limit: 30, windowMs: CUARTO_DE_HORA }),
-  identidades: createIdentityLimiter({ name: 'identidades', limit: 60, windowMs: MINUTO })
+  identidades: createIdentityLimiter({ name: 'identidades', limit: 60, windowMs: MINUTO }),
+  // AUTH-FINAL-4. Borrar una cuenta es irreversible y no se hace en rafaga:
+  // un tope bajo y propio, que no comparte cubo con nada.
+  borrado: createIdentityLimiter({ name: 'borrado', limit: 5, windowMs: CUARTO_DE_HORA })
 };
 
 /**
@@ -722,7 +726,16 @@ function requireAuth(req, res, next) {
     const payload = jwt.verify(token, jwtSecret);
     const user = database.users.find(item => item.id === payload.sub);
     if (!user) return res.status(401).json({ error: 'INVALID_SESSION' });
+    // Una cuenta eliminada no entra, y no se le dice que esta «desactivada»:
+    // ya no existe como cuenta.
+    if (user.accountStatus === ESTADO_BORRADO) return res.status(401).json({ error: 'INVALID_SESSION' });
     if (user.accountStatus === 'DISABLED') return res.status(403).json({ error: 'ACCOUNT_DISABLED' });
+    // AUTH-FINAL-4: un token firmado ANTES de que cambiaran las credenciales
+    // deja de valer. Sin lista negra ni Redis: `requireAuth` ya recarga al
+    // usuario en cada peticion, asi que basta comparar con su marca.
+    if (!tokenSigueValiendo(user, payload.iat)) {
+      return res.status(401).json({ error: 'SESSION_EXPIRED' });
+    }
     req.user = user;
     next();
   } catch {
@@ -748,7 +761,11 @@ function sesionOpcional(req, _res, next) {
   try {
     const payload = jwt.verify(token, jwtSecret);
     const user = database.users.find(item => item.id === payload.sub);
-    if (user && user.accountStatus !== 'DISABLED') req.user = user;
+    const utilizable = user
+      && user.accountStatus !== 'DISABLED'
+      && user.accountStatus !== ESTADO_BORRADO
+      && tokenSigueValiendo(user, payload.iat);
+    if (utilizable) req.user = user;
   } catch { /* Sin sesion utilizable: se sigue como visitante. */ }
   next();
 }
@@ -873,10 +890,12 @@ app.use('/api', createAuthRouter({
     desafio: credenciales.desafio,
     verificacion: credenciales.verificacion,
     social: credenciales.social,
-    identidades: credenciales.identidades
+    identidades: credenciales.identidades,
+    borrado: credenciales.borrado
   },
   bcrypt,
-  sanitizeText
+  sanitizeText,
+  privateStorage
 }));
 
 // SAFE-TRANSPORT-1E: el puente al MOTOR DE VIAJES existente. El traslado
@@ -1165,6 +1184,9 @@ app.post('/api/auth/login', credenciales.login, async (req, res) => {
     [item.email, item.phone].filter(Boolean).some(value => String(value).trim().toLowerCase() === loginId)
   );
   if (identityUser?.accountStatus === 'DISABLED') return res.status(403).json({ error: 'ACCOUNT_DISABLED' });
+  // Una cuenta eliminada no se distingue de una que no existe: decir «esta
+  // eliminada» confirmaria que ese correo estuvo registrado.
+  if (identityUser?.accountStatus === ESTADO_BORRADO) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
   if (!identityUser || !identityUser.passwordHash || !await bcrypt.compare(String(password || ''), identityUser.passwordHash)) {
     return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
   }

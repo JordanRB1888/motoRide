@@ -32,6 +32,15 @@ import { PROPOSITOS, TIPO_DE_CONTACTO_POR_CANAL, RESULTADO } from '../domain/otp
 import { normalizarCorreo, normalizarTelefono, valorNormalizadoDeContacto } from '../domain/contactos.js';
 import { contactoPublico, identidadPublica } from '../domain/authIdentity.js';
 import { DECISION, ROL_DE_USUARIO_SOCIAL_NUEVO, decidirVinculacion } from '../domain/accountLinking.js';
+import {
+  ESTADO_BORRADO,
+  TABLAS_QUE_SE_BORRAN,
+  expedienteAnonimizado,
+  metodosDeEntrada,
+  planDeBorrado,
+  sePuedeDesvincular,
+  usuarioAnonimizado
+} from '../domain/borradoDeCuenta.js';
 
 /** Los propositos que solo tienen sentido con sesion. */
 const PROPOSITOS_CON_SESION = Object.freeze(['CHANGE_PHONE', 'CHANGE_EMAIL', 'ACCOUNT_LINK', 'SENSITIVE_ACTION']);
@@ -58,7 +67,9 @@ export function createAuthRouter({
   verificadorSocial,
   limitadores,
   bcrypt,
-  sanitizeText
+  sanitizeText,
+  /** Para borrar los ficheros privados al eliminar una cuenta. */
+  privateStorage = null
 }) {
   const router = express.Router();
 
@@ -182,8 +193,13 @@ export function createAuthRouter({
       if (tipo === 'PHONE') user.phoneVerified = true;
       if (tipo === 'EMAIL') user.emailVerified = true;
       if (purpose === 'PASSWORD_RESET') {
+        const ahora = new Date().toISOString();
         user.passwordHash = hashNuevo;
-        user.updatedAt = new Date().toISOString();
+        user.updatedAt = ahora;
+        // AUTH-FINAL-4: quien cambia su contraseña porque cree que alguien la
+        // sabe, espera que ese alguien deje de estar dentro. Todo token
+        // firmado antes de esta marca deja de valer en la siguiente peticion.
+        user.credentialsChangedAt = ahora;
         identidad.identidades.asegurarDeContrasena(user);
       }
       if (!await persistir(res)) return;
@@ -342,6 +358,172 @@ export function createAuthRouter({
   router.post('/auth/identities/link/:provider', requireAuth, limitadores.identidades, (req, res) =>
     conProveedor(req, res, { exigirSesion: true })
   );
+
+  /**
+   * Reautenticacion: demostrar que quien pide algo delicado es el titular.
+   *
+   * Una sesion de siete dias no basta para borrar una cuenta ni para vincular
+   * un proveedor: el telefono pudo quedarse abierto encima de una mesa. Esto
+   * comprueba la contraseña ACTUAL y no emite nada; sirve como paso previo.
+   */
+  async function contrasenaCorrecta(user, contrasena) {
+    if (typeof user?.passwordHash !== 'string' || user.passwordHash === '') return false;
+    return await bcrypt.compare(String(contrasena ?? ''), user.passwordHash);
+  }
+
+  /**
+   * Los metodos con los que esta persona puede entrar.
+   *
+   * Sin `providerSubject` y sin el valor de los contactos: la pantalla necesita
+   * saber QUE tiene vinculado, no los identificadores internos.
+   */
+  router.get('/auth/methods', requireAuth, limitadores.identidades, (req, res) => {
+    const identidades = identidad.identidades.deUsuario(req.user.id);
+    const metodos = metodosDeEntrada({ user: req.user, identidades });
+    res.json({
+      password: metodos.conContrasena,
+      providers: ['GOOGLE', 'APPLE'].map(provider => ({
+        provider,
+        linked: metodos.sociales.includes(provider),
+        // Un proveedor sin configurar no se ofrece como vinculable.
+        available: verificadorSocial.configurado(provider) === true
+      })),
+      total: metodos.total,
+      contacts: identidad.contactos.deUsuario(req.user.id).map(contactoPublico)
+    });
+  });
+
+  /**
+   * Desvincular un proveedor.
+   *
+   * Solo si DESPUES queda al menos un metodo de entrada. La comprobacion vive
+   * aqui y no en el cliente: una guarda de cliente se salta desmontando la
+   * aplicacion, y el resultado seria una cuenta sin puerta.
+   */
+  router.delete('/auth/identities/:provider', requireAuth, limitadores.identidades, async (req, res) => {
+    const provider = PROVEEDOR_POR_RUTA[String(req.params.provider || '').toLowerCase()];
+    if (!provider) return res.status(404).json({ error: 'UNKNOWN_PROVIDER' });
+
+    const identidades = identidad.identidades.deUsuario(req.user.id);
+    if (!identidades.some(i => i.provider === provider)) {
+      return res.status(404).json({ error: 'IDENTITY_NOT_LINKED' });
+    }
+    if (!sePuedeDesvincular({ user: req.user, identidades, provider })) {
+      return res.status(409).json({ error: 'LAST_AUTH_METHOD' });
+    }
+
+    const sobreviven = database.authIdentities.filter(
+      i => !(i.userId === req.user.id && i.provider === provider)
+    );
+    const retirados = database.authIdentities.filter(
+      i => i.userId === req.user.id && i.provider === provider
+    );
+    database.authIdentities = sobreviven;
+    if (!await persistDatabase()) {
+      database.authIdentities = [...sobreviven, ...retirados];
+      return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+    }
+    res.json({
+      status: 'unlinked',
+      provider,
+      identities: identidad.identidades.deUsuario(req.user.id).map(identidadPublica)
+    });
+  });
+
+  /**
+   * Eliminar la cuenta.
+   *
+   * Exige REAUTENTICACION: la contraseña actual, o un codigo ya verificado si
+   * la persona no tiene contraseña. Una sesion abierta no basta para algo
+   * irreversible.
+   *
+   * Borra lo que identifica --credenciales, contactos, desafios, avisos,
+   * ficheros privados-- y ANONIMIZA lo que otras entidades necesitan: un viaje
+   * tiene dos partes, y borrar el del pasajero destruiria el registro de
+   * trabajo del conductor. La contabilidad y la auditoria se conservan sin
+   * poder atribuirse a una persona identificable.
+   *
+   * Es idempotente: sobre una cuenta ya eliminada responde lo mismo sin volver
+   * a hacer nada.
+   */
+  // El limitador propio del borrado. Si quien monta el router no lo pasa se
+  // cae al de identidades en vez de quedarse sin ninguno: una ruta sin
+  // limitador es peor que una con el limitador equivocado.
+  const limitadorDeBorrado = limitadores.borrado ?? limitadores.identidades;
+
+  router.post('/auth/account/delete', requireAuth, limitadorDeBorrado, async (req, res) => {
+    const ahora = new Date().toISOString();
+    const plan = planDeBorrado({ database, userId: req.user.id, ahora });
+    if (!plan.existe) return res.status(404).json({ error: 'ACCOUNT_NOT_FOUND' });
+    if (plan.yaBorrada) return res.json({ status: 'deleted', alreadyDeleted: true });
+
+    // REAUTENTICACION. Con contraseña, la actual. Sin ella --una cuenta creada
+    // con Google-- hace falta un codigo verificado para este proposito.
+    const tieneContrasena = typeof req.user.passwordHash === 'string' && req.user.passwordHash !== '';
+    if (tieneContrasena) {
+      if (!await contrasenaCorrecta(req.user, req.body?.password)) {
+        return res.status(401).json({ error: 'REAUTHENTICATION_REQUIRED' });
+      }
+    } else {
+      const { challengeId, code } = req.body ?? {};
+      if (typeof challengeId !== 'string' || typeof code !== 'string') {
+        return res.status(401).json({ error: 'REAUTHENTICATION_REQUIRED' });
+      }
+      const prueba = verificacion.verifyChallenge({
+        challengeId,
+        code,
+        esperado: { purpose: 'SENSITIVE_ACTION', userId: req.user.id }
+      });
+      if (!prueba.ok) return res.status(401).json({ error: 'REAUTHENTICATION_REQUIRED' });
+    }
+
+    // Una instantanea para poder deshacer si la escritura falla: no puede
+    // quedar una cuenta a medio borrar con la puerta abierta.
+    const antes = {
+      usuario: { ...plan.user },
+      tablas: Object.fromEntries(TABLAS_QUE_SE_BORRAN.map(t => [t, [...(database[t] ?? [])]])),
+      documentos: [...(database.driverDocuments ?? [])],
+      expedientes: (database.driverApplications ?? []).map(e => ({ ...e }))
+    };
+
+    for (const tabla of TABLAS_QUE_SE_BORRAN) {
+      database[tabla] = (database[tabla] ?? []).filter(fila => fila.userId !== req.user.id);
+    }
+    // Los documentos del expediente: se borra la fila y, mas abajo, el fichero.
+    database.driverDocuments = (database.driverDocuments ?? []).filter(doc => doc.userId !== req.user.id);
+    // El expediente se conserva anonimizado: su decision es auditoria.
+    database.driverApplications = (database.driverApplications ?? []).map(
+      expediente => (expediente.userId === req.user.id ? expedienteAnonimizado(expediente, ahora) : expediente)
+    );
+
+    const anonimo = usuarioAnonimizado(plan.user, ahora);
+    const indice = database.users.findIndex(u => u.id === req.user.id);
+    database.users[indice] = anonimo;
+
+    if (!await persistDatabase()) {
+      // Nada de esto llego al disco: se deshace en memoria y la cuenta sigue
+      // como estaba, entera y accesible.
+      database.users[indice] = antes.usuario;
+      for (const tabla of TABLAS_QUE_SE_BORRAN) database[tabla] = antes.tablas[tabla];
+      database.driverDocuments = antes.documentos;
+      database.driverApplications = antes.expedientes;
+      return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+    }
+
+    // Los ficheros, DESPUES de que el borrado este en disco: si se borraran
+    // antes y la escritura fallara, quedaria una cuenta viva sin documentos.
+    for (const clave of plan.ficherosABorrar) {
+      try { privateStorage?.remove?.(clave); } catch { /* un fichero que ya no esta no es un fallo */ }
+    }
+
+    res.json({
+      status: 'deleted',
+      alreadyDeleted: false,
+      // Cuantas cosas, sin sacar ninguna: sirve para el informe y para que la
+      // aplicacion pueda decir que se hizo.
+      removed: plan.cuantos
+    });
+  });
 
   router.get('/auth/identities', requireAuth, limitadores.identidades, (req, res) => {
     res.json({
