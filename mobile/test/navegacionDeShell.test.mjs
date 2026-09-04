@@ -228,8 +228,16 @@ test('Historial y Perfil pintan la barra del ROL, no siempre la de pasajera', ()
   // Y el componente sabe pintar las dos.
   const secciones = leer('preview/pantallasC2Secciones.tsx');
   assert.match(secciones, /barra === 'conductor' \? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA/);
-  // Un conductor no lleva el botón de pedir: no es suyo.
-  assert.match(secciones, /barra === 'conductor' \? undefined : <ControlDePedido abierto=\{false\} \/>/);
+  // El hueco del centro NUNCA se queda vacío. Aquí hubo un `undefined` para el
+  // conductor --razonando que el botón de pedir no es suyo-- y con él se fue su
+  // disco de disponibilidad, que sí lo es. Se afirma la AUSENCIA de ese patrón,
+  // no una forma concreta de rellenarlo: quien pinta el control de cada rol es
+  // `ControlCentralDelRol`, y esta superficie sólo tiene que aceptarlo.
+  assert.ok(
+    !/barra === 'conductor' \? undefined/.test(secciones),
+    'el centro de la barra vuelve a quedarse vacío para el conductor'
+  );
+  assert.match(secciones, /control=\{control/, 'la barra usa el control que le dan desde fuera');
 });
 
 test('el shell compartido elige la navegación por el rol real', () => {

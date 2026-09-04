@@ -451,6 +451,21 @@ export function createAuthRouter({
   // limitador es peor que una con el limitador equivocado.
   const limitadorDeBorrado = limitadores.borrado ?? limitadores.identidades;
 
+  /**
+   * Los borrados que estan a mitad. Es el mismo patron que `enviosEnVuelo`, y
+   * esta por un caso que solo aparece con dos peticiones cruzadas.
+   *
+   * Cada peticion toma una instantanea para poder deshacer si la escritura
+   * falla. Si dos se cruzan y una escribe bien y la otra NO, la que fallo
+   * restaura su instantanea --tomada cuando la cuenta estaba entera-- y
+   * RESUCITA en memoria una cuenta que en disco ya esta borrada. Viva, con sus
+   * credenciales y autenticable, porque `requireAuth` lee de memoria.
+   *
+   * Una sola a la vez y el cruce no existe. El Set se toca sin `await` en
+   * medio, asi que la reserva es atomica.
+   */
+  const borradosEnVuelo = new Set();
+
   router.post('/auth/account/delete', requireAuth, limitadorDeBorrado, async (req, res) => {
     const ahora = new Date().toISOString();
     const plan = planDeBorrado({ database, userId: req.user.id, ahora });
@@ -477,52 +492,74 @@ export function createAuthRouter({
       if (!prueba.ok) return res.status(401).json({ error: 'REAUTHENTICATION_REQUIRED' });
     }
 
-    // Una instantanea para poder deshacer si la escritura falla: no puede
-    // quedar una cuenta a medio borrar con la puerta abierta.
-    const antes = {
-      usuario: { ...plan.user },
-      tablas: Object.fromEntries(TABLAS_QUE_SE_BORRAN.map(t => [t, [...(database[t] ?? [])]])),
-      documentos: [...(database.driverDocuments ?? [])],
-      expedientes: (database.driverApplications ?? []).map(e => ({ ...e }))
-    };
-
-    for (const tabla of TABLAS_QUE_SE_BORRAN) {
-      database[tabla] = (database[tabla] ?? []).filter(fila => fila.userId !== req.user.id);
+    // Desde aqui no puede haber otro borrado de esta misma cuenta a mitad.
+    if (borradosEnVuelo.has(req.user.id)) {
+      return res.status(409).json({ error: 'DELETE_IN_PROGRESS' });
     }
-    // Los documentos del expediente: se borra la fila y, mas abajo, el fichero.
-    database.driverDocuments = (database.driverDocuments ?? []).filter(doc => doc.userId !== req.user.id);
-    // El expediente se conserva anonimizado: su decision es auditoria.
-    database.driverApplications = (database.driverApplications ?? []).map(
-      expediente => (expediente.userId === req.user.id ? expedienteAnonimizado(expediente, ahora) : expediente)
-    );
+    borradosEnVuelo.add(req.user.id);
+    try {
+      // EL PLAN SE REHACE AQUI DENTRO.
+      //
+      // El de arriba se calculo ANTES de comprobar la contraseña, y comprobar
+      // una contraseña es un `await`. En ese hueco la cuenta pudo quedar
+      // borrada por otra peticion, y `plan.user` seguiria apuntando al objeto
+      // entero de antes --el array se reemplaza, la referencia no--. Actuar
+      // sobre el resucitaria la cuenta.
+      const actual = planDeBorrado({ database, userId: req.user.id, ahora });
+      if (!actual.existe) return res.status(404).json({ error: 'ACCOUNT_NOT_FOUND' });
+      if (actual.yaBorrada) return res.json({ status: 'deleted', alreadyDeleted: true });
 
-    const anonimo = usuarioAnonimizado(plan.user, ahora);
-    const indice = database.users.findIndex(u => u.id === req.user.id);
-    database.users[indice] = anonimo;
+      // Una instantanea para poder deshacer si la escritura falla: no puede
+      // quedar una cuenta a medio borrar con la puerta abierta.
+      const antes = {
+        usuario: { ...actual.user },
+        tablas: Object.fromEntries(TABLAS_QUE_SE_BORRAN.map(t => [t, [...(database[t] ?? [])]])),
+        documentos: [...(database.driverDocuments ?? [])],
+        expedientes: (database.driverApplications ?? []).map(e => ({ ...e }))
+      };
 
-    if (!await persistDatabase()) {
-      // Nada de esto llego al disco: se deshace en memoria y la cuenta sigue
-      // como estaba, entera y accesible.
-      database.users[indice] = antes.usuario;
-      for (const tabla of TABLAS_QUE_SE_BORRAN) database[tabla] = antes.tablas[tabla];
-      database.driverDocuments = antes.documentos;
-      database.driverApplications = antes.expedientes;
-      return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+      for (const tabla of TABLAS_QUE_SE_BORRAN) {
+        database[tabla] = (database[tabla] ?? []).filter(fila => fila.userId !== req.user.id);
+      }
+      // Los documentos del expediente: se borra la fila y, mas abajo, el fichero.
+      database.driverDocuments = (database.driverDocuments ?? []).filter(doc => doc.userId !== req.user.id);
+      // El expediente se conserva anonimizado: su decision es auditoria.
+      database.driverApplications = (database.driverApplications ?? []).map(
+        expediente => (expediente.userId === req.user.id ? expedienteAnonimizado(expediente, ahora) : expediente)
+      );
+
+      const anonimo = usuarioAnonimizado(actual.user, ahora);
+      const indice = database.users.findIndex(u => u.id === req.user.id);
+      database.users[indice] = anonimo;
+
+      if (!await persistDatabase()) {
+        // Nada de esto llego al disco: se deshace en memoria y la cuenta sigue
+        // como estaba, entera y accesible.
+        database.users[indice] = antes.usuario;
+        for (const tabla of TABLAS_QUE_SE_BORRAN) database[tabla] = antes.tablas[tabla];
+        database.driverDocuments = antes.documentos;
+        database.driverApplications = antes.expedientes;
+        return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+      }
+
+      // Los ficheros, DESPUES de que el borrado este en disco: si se borraran
+      // antes y la escritura fallara, quedaria una cuenta viva sin documentos.
+      // Se intentan TODOS: uno que no se pueda borrar no detiene a los demas,
+      // y el estado que importa --la cuenta-- ya esta guardado.
+      for (const clave of actual.ficherosABorrar) {
+        try { privateStorage?.remove?.(clave); } catch { /* un fichero que ya no esta no es un fallo */ }
+      }
+
+      res.json({
+        status: 'deleted',
+        alreadyDeleted: false,
+        // Cuantas cosas, sin sacar ninguna: sirve para el informe y para que la
+        // aplicacion pueda decir que se hizo.
+        removed: actual.cuantos
+      });
+    } finally {
+      borradosEnVuelo.delete(req.user.id);
     }
-
-    // Los ficheros, DESPUES de que el borrado este en disco: si se borraran
-    // antes y la escritura fallara, quedaria una cuenta viva sin documentos.
-    for (const clave of plan.ficherosABorrar) {
-      try { privateStorage?.remove?.(clave); } catch { /* un fichero que ya no esta no es un fallo */ }
-    }
-
-    res.json({
-      status: 'deleted',
-      alreadyDeleted: false,
-      // Cuantas cosas, sin sacar ninguna: sirve para el informe y para que la
-      // aplicacion pueda decir que se hizo.
-      removed: plan.cuantos
-    });
   });
 
   router.get('/auth/identities', requireAuth, limitadores.identidades, (req, res) => {

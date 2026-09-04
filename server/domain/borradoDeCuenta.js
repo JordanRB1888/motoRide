@@ -128,9 +128,19 @@ export function planDeBorrado({ database, userId, ahora }) {
  * `iat` viene en segundos; `credentialsChangedAt` es una fecha ISO. Un usuario
  * sin la marca se comporta como siempre: nada caduca de más.
  *
- * El margen de un segundo evita echar a quien acaba de cambiar su contraseña:
- * el token nuevo se firma en el mismo segundo en que se guarda la marca, y sin
- * margen se invalidaría a sí mismo.
+ * POR QUÉ NO HAY MARGEN (AUTH-FINAL-5)
+ *
+ * Aquí hubo un margen de un segundo, puesto por si el token nuevo se firmaba
+ * en el mismo segundo que la marca y se invalidaba a sí mismo. Ese token no
+ * existe: `PASSWORD_RESET` responde sin token —quien cambia su contraseña
+ * vuelve a entrar— y el borrado tampoco emite ninguno. Lo único que el margen
+ * conseguía era dejar vivo un segundo el token de quien ya no debería estar
+ * dentro, que es justo el caso por el que existe esta comprobación.
+ *
+ * Como `iat` sólo tiene resolución de segundo, dentro de ese segundo no se
+ * puede distinguir el token de antes del de después. Se falla del lado seguro:
+ * el empate invalida. El coste es que quien inicie sesión en el mismo segundo
+ * exacto de su reinicio de contraseña tendrá que entrar otra vez.
  */
 export function tokenSigueValiendo(user, emitidoEnSegundos) {
   const marca = user?.credentialsChangedAt;
@@ -138,7 +148,7 @@ export function tokenSigueValiendo(user, emitidoEnSegundos) {
   if (typeof emitidoEnSegundos !== 'number' || !Number.isFinite(emitidoEnSegundos)) return true;
   const cambiadas = Math.floor(new Date(marca).getTime() / 1000);
   if (!Number.isFinite(cambiadas)) return true;
-  return emitidoEnSegundos + 1 >= cambiadas;
+  return emitidoEnSegundos > cambiadas;
 }
 
 /**

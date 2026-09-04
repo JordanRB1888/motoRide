@@ -41,8 +41,9 @@ test('un token firmado ANTES del cambio de credenciales deja de valer', () => {
   const usuario = { credentialsChangedAt: AHORA };
   assert.equal(tokenSigueValiendo(usuario, EN_SEGUNDOS - 3600), false, 'el de hace una hora');
   assert.equal(tokenSigueValiendo(usuario, EN_SEGUNDOS - 10), false);
-  // El que se firma en el mismo segundo del cambio sí vale: es el nuevo.
-  assert.equal(tokenSigueValiendo(usuario, EN_SEGUNDOS), true);
+  // El del mismo segundo tampoco vale: dentro de ese segundo no se puede saber
+  // si se firmó antes o después, y el empate se resuelve del lado seguro.
+  assert.equal(tokenSigueValiendo(usuario, EN_SEGUNDOS), false);
   assert.equal(tokenSigueValiendo(usuario, EN_SEGUNDOS + 60), true);
 });
 
@@ -57,10 +58,11 @@ test('el mecanismo no necesita Redis ni lista negra', () => {
   // marca viaja con el usuario, no en una tabla aparte.
   assert.equal(typeof tokenSigueValiendo, 'function');
   assert.equal(tokenSigueValiendo({ credentialsChangedAt: AHORA }, EN_SEGUNDOS - 2), false);
-  // El margen de un segundo es deliberado: el token nuevo se firma en el
-  // mismo segundo en que se guarda la marca, y sin margen se invalidaria a
-  // si mismo. Un segundo de gracia no abre ninguna ventana util a nadie.
-  assert.equal(tokenSigueValiendo({ credentialsChangedAt: AHORA }, EN_SEGUNDOS - 1), true);
+  // Sin margen: aqui hubo uno de un segundo y AUTH-FINAL-5 lo quito. Ningun
+  // camino firma un token en el segundo de la marca --el reinicio de
+  // contrasena responde sin token--, asi que el margen solo dejaba vivo un
+  // segundo justo al token que se queria echar.
+  assert.equal(tokenSigueValiendo({ credentialsChangedAt: AHORA }, EN_SEGUNDOS - 1), false);
 });
 
 // ---------------------------------------------------------------------------
