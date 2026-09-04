@@ -13,13 +13,14 @@
  * botón.
  */
 
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 
 import { useTema } from '../theme/ThemeContext';
 import { AREA_TACTIL_MINIMA } from '../theme/primitives';
 import { Icono, type NombreDeIcono } from './Icono';
+import { IconoAnimado } from './IconoAnimado';
 
 // ---------------------------------------------------------------------------
 // Texto
@@ -31,15 +32,26 @@ export type Tono =
 export type Nivel = 'display' | 'titulo' | 'encabezado' | 'cuerpo' | 'etiqueta' | 'pie';
 
 export function Txt({
-  children, nivel = 'cuerpo', tono = 'primario', centrado = false, estilo, ...resto
+  children,
+  nivel = 'cuerpo',
+  tono = 'primario',
+  centrado = false,
+  estilo,
+  accessibilityRole,
+  numberOfLines,
+  adjustsFontSizeToFit,
+  minimumFontScale,
+  ...resto
 }: {
   readonly children: ReactNode;
   readonly nivel?: Nivel;
   readonly tono?: Tono;
   readonly centrado?: boolean;
-  readonly estilo?: StyleProp<ViewStyle>;
+  readonly estilo?: StyleProp<TextStyle>;
   readonly accessibilityRole?: 'header' | 'text';
   readonly numberOfLines?: number;
+  readonly adjustsFontSizeToFit?: boolean;
+  readonly minimumFontScale?: number;
 }) {
   const tema = useTema();
   const escala = tema.texto[nivel];
@@ -47,9 +59,6 @@ export function Txt({
     primario: tema.color.textoPrimario,
     secundario: tema.color.textoSecundario,
     tenue: tema.color.textoTenue,
-    // `acentoTexto` y no `acento`: sobre marfil, el amarillo de marca da 1,27:1
-    // y desaparece. En oscuro los dos valen lo mismo, así que esto sólo cambia
-    // algo en modo día — que es donde hacía falta.
     acento: tema.color.acentoTexto,
     sobreAcento: tema.color.sobreAcento,
     // El verde de «en linea». Es un tono del sistema, no un color suelto:
@@ -147,7 +156,7 @@ export function Superficie({
 
 export function Boton({
   titulo, onPress, variante = 'principal', descripcion, sufijo,
-  deshabilitado = false, cargando = false, etiquetaAccesible, estilo, testID
+  icono, deshabilitado = false, cargando = false, etiquetaAccesible, estilo, testID
 }: {
   readonly titulo: string;
   readonly onPress: () => void;
@@ -158,6 +167,7 @@ export function Boton({
    * anuncia, porque lo que se lee en voz alta es el titulo.
    */
   readonly sufijo?: ReactNode;
+  readonly icono?: NombreDeIcono;
   readonly deshabilitado?: boolean;
   readonly cargando?: boolean;
   readonly etiquetaAccesible?: string;
@@ -167,6 +177,7 @@ export function Boton({
   const tema = useTema();
   const inactivo = deshabilitado || cargando;
   const esPrincipal = variante === 'principal';
+  const [reaccionando, setReaccionando] = useState(false);
 
   const fondo = (pulsado: boolean) => {
     if (variante === 'silencioso') return 'transparent';
@@ -178,6 +189,8 @@ export function Boton({
     <Pressable
       testID={testID}
       onPress={onPress}
+      onPressIn={() => { if (!inactivo) setReaccionando(true); }}
+      onPressOut={() => setReaccionando(false)}
       disabled={inactivo}
       accessibilityRole="button"
       accessibilityLabel={etiquetaAccesible ?? titulo}
@@ -204,6 +217,14 @@ export function Boton({
       ) : (
         <View style={estilosBase.centro}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {icono ? (
+              <IconoAnimado
+                nombre={icono}
+                color={esPrincipal ? tema.color.sobreAcento : tema.color.textoSecundario}
+                tamano={21}
+                reaccionando={reaccionando}
+              />
+            ) : null}
             <Txt nivel="cuerpo" tono={esPrincipal ? 'sobreAcento' : 'primario'} centrado
               estilo={{ fontWeight: '600' } as never}>
               {titulo}
@@ -279,11 +300,14 @@ export function TarjetaDeServicio({
   readonly testID?: string;
 }) {
   const tema = useTema();
+  const [reaccionando, setReaccionando] = useState(false);
 
   return (
     <Pressable
       testID={testID}
       onPress={onPress}
+      onPressIn={() => setReaccionando(true)}
+      onPressOut={() => setReaccionando(false)}
       accessibilityRole="button"
       accessibilityState={{ selected: seleccionada }}
       accessibilityLabel={`${titulo}. ${detalle}${precio ? `. ${precio}` : ''}`}
@@ -296,10 +320,11 @@ export function TarjetaDeServicio({
             alignItems: 'center', justifyContent: 'center',
             backgroundColor: seleccionada ? tema.color.acento : tema.color.superficieElevada
           }}>
-            <Icono
+            <IconoAnimado
               nombre={icono}
               color={seleccionada ? tema.color.sobreAcento : tema.color.textoSecundario}
               tamano={24}
+              reaccionando={reaccionando}
             />
           </View>
 

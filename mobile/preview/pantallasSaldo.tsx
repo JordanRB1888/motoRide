@@ -25,9 +25,11 @@
  * con dinero. Hay pruebas que lo comprueban en los dos roles.
  */
 
+import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
+import { IconoAnimado } from '../ui/IconoAnimado';
 import {
   BarraDeNavegacion,
   ControlDeDisponibilidad,
@@ -37,6 +39,7 @@ import {
 } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
 import { useAireDeArriba } from '../ui/seguro';
+import { SaldoPasajero, type EstadoVisualSaldo } from '../ui/SaldoPasajero';
 import {
   GANANCIAS_DEMO,
   MOVIMIENTOS_DEMO,
@@ -151,9 +154,12 @@ function CabeceraDeSaldo({ dato, acciones }: {
 export function BotonDeSaldo({ accion }: { readonly accion: Accion }) {
   const tema = useTema();
   const relleno = accion.principal === true;
+  const [reaccionando, setReaccionando] = useState(false);
 
   return (
     <Pressable
+      onPressIn={() => setReaccionando(true)}
+      onPressOut={() => setReaccionando(false)}
       accessibilityRole="button"
       accessibilityLabel={accion.texto}
       style={{
@@ -170,10 +176,11 @@ export function BotonDeSaldo({ accion }: { readonly accion: Accion }) {
         borderColor: tema.color.sobreAcento
       }}
     >
-      <Icono
+      <IconoAnimado
         nombre={accion.icono}
         color={relleno ? tema.color.acento : tema.color.sobreAcento}
         tamano={17}
+        reaccionando={reaccionando}
       />
       <Txt nivel="etiqueta" tono={relleno ? 'acento' : 'sobreAcento'} numberOfLines={1}>
         {accion.texto}
@@ -337,53 +344,19 @@ function FilaDeMovimiento({ mov, primero }: {
 // Las pantallas
 // ---------------------------------------------------------------------------
 
-export function C2SaldoPasajera() {
+export function C2SaldoPasajera({
+  estadoInicial = 'EMPTY'
+}: {
+  readonly estadoInicial?: EstadoVisualSaldo;
+} = {}) {
   const tema = useTema();
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
-        <CabeceraDeSaldo
-          dato={SALDO_DEMO.pasajera}
-          acciones={[
-            { texto: 'Datos de pago', icono: 'perfil' },
-            { texto: 'Registrar recarga', icono: 'rayo', principal: true }
-          ]}
-        />
-
-        <View style={{ paddingBottom: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
-          <Banda
-            titulo="Movimientos"
-            detalle={`${MOVIMIENTOS_PASAJERA_DEMO.length} registros`}
-            icono="reloj"
-          >
-            <View>
-              {MOVIMIENTOS_PASAJERA_DEMO.map((mov, indice) => (
-                <FilaDeMovimiento key={mov.clave} mov={mov} primero={indice === 0} />
-              ))}
-            </View>
-          </Banda>
-
-          <Banda titulo="Cómo se paga un viaje" icono="escudo">
-            <Txt nivel="cuerpo" tono="secundario">
-              Puedes pagar en efectivo al conductor o con tu saldo. Recargas por Pago
-              Móvil y el importe queda disponible al verificarse.
-            </Txt>
-          </Banda>
-
-          <View style={{
-            flexDirection: 'row',
-            gap: 10,
-            paddingVertical: 14,
-            paddingHorizontal: tema.ritmo.margenPantalla
-          }}>
-            <Icono nombre="rayo" color={tema.color.aviso} tamano={17} />
-            <View style={{ flex: 1 }}>
-              <Txt nivel="pie" tono="tenue">{SALDO_DEMO.pasajera.nota}</Txt>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+      <SaldoPasajero
+        estado={estadoInicial}
+        modoLaboratorio
+      />
 
       <BarraDeNavegacion
         destinos={DESTINOS_DE_PASAJERA}
@@ -403,8 +376,8 @@ export function C2SaldoConductor() {
         <CabeceraDeSaldo
           dato={SALDO_DEMO.conductor}
           acciones={[
-            { texto: 'Solicitar liquidación', icono: 'dolar' },
-            { texto: 'Recargar saldo', icono: 'rayo', principal: true }
+            { texto: 'Solicitar liquidación', icono: 'flecha-arriba' },
+            { texto: 'Recargar saldo', icono: 'flecha-abajo', principal: true }
           ]}
         />
 

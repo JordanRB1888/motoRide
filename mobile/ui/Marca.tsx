@@ -6,8 +6,9 @@
  * de la proporción real del archivo, así que la moto no se puede aplastar
  * aunque alguien pase un alto raro: no hay ningún sitio donde se pueda pedir.
  *
- * Ninguno de estos activos se recolorea, se recorta ni se filtra. Son los
- * oficiales, y valen precisamente porque son reconocibles.
+ * Ningún activo se recorta ni se filtra. El logotipo horizontal conserva su
+ * imagen oficial y repite su propia transparencia en grafito, apenas ampliada,
+ * para formar un contorno de contraste cuando vive sobre amarillo.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -32,15 +33,122 @@ import { useTema } from '../theme/ThemeContext';
  * Se dimensiona por el ancho porque es lo que manda en una pantalla estrecha;
  * el alto sale de la proporción del archivo.
  */
-export function LogoHorizontal({ ancho = 220 }: { readonly ancho?: number }) {
+export function LogoHorizontal({ ancho = 220, destello = true }: {
+  readonly ancho?: number;
+  readonly destello?: boolean;
+}) {
+  const tema = useTema();
+  const alto = ancho / PROPORCION_DEL_LOGO;
+  const quieto = useMovimientoReducido();
+  const brillo = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (quieto || !destello) {
+      brillo.setValue(0);
+      return;
+    }
+    const ciclo = Animated.loop(
+      Animated.sequence([
+        Animated.timing(brillo, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true
+        }),
+        Animated.delay(2800),
+        Animated.timing(brillo, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true
+        })
+      ])
+    );
+    ciclo.start();
+    return () => ciclo.stop();
+  }, [brillo, quieto, destello]);
+
+  const anchoBrillo = Math.max(26, Math.round(ancho * 0.15));
+
   return (
-    <Image
-      source={LOGO_HORIZONTAL}
-      accessibilityLabel="+58 Express"
-      accessibilityRole="image"
-      resizeMode="contain"
-      style={{ width: ancho, height: ancho / PROPORCION_DEL_LOGO }}
-    />
+    <View style={{ width: ancho, height: alto, overflow: 'hidden' }}>
+      {/* La misma silueta, no una placa: añade un filo grafito a las zonas
+          transparentes y evita que el amarillo del logo se pierda en el hero. */}
+      <Image
+        source={LOGO_HORIZONTAL}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+        resizeMode="contain"
+        style={{
+          position: 'absolute',
+          width: ancho,
+          height: alto,
+          tintColor: tema.color.sobreAcento,
+          opacity: 0.34,
+          transform: [
+            { translateY: 1.5 },
+            { scale: 1.025 }
+          ]
+        }}
+      />
+      <Image
+        source={LOGO_HORIZONTAL}
+        accessibilityLabel="+58 Express"
+        accessibilityRole="image"
+        resizeMode="contain"
+        style={{ width: ancho, height: alto }}
+      />
+
+      {/* Destello leve, sutil y limpio ÚNICAMENTE sobre el logotipo principal */}
+      {destello && !quieto ? (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: -alto * 0.4,
+            bottom: -alto * 0.4,
+            width: anchoBrillo,
+            opacity: brillo.interpolate({
+              inputRange: [0, 0.12, 0.5, 0.88, 1],
+              outputRange: [0, 0.14, 0.38, 0.14, 0]
+            }),
+            transform: [
+              { rotate: '20deg' },
+              {
+                translateX: brillo.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-ancho * 0.4, ancho * 1.3]
+                })
+              }
+            ]
+          }}
+        >
+          {/* Halo difuso muy suave */}
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: 'rgba(255, 255, 255, 0.16)',
+              borderRadius: Math.round(anchoBrillo / 2)
+            }}
+          />
+          {/* Destello central limpio y fino */}
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: '32%',
+              width: '36%',
+              backgroundColor: 'rgba(255, 255, 255, 0.45)',
+              borderRadius: 4
+            }}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 

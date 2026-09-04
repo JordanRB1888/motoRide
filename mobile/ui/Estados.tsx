@@ -22,7 +22,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, View } from 'react-native';
 import { Boton, Txt } from './componentes';
-import { Icono } from './Icono';
+import { IconoAnimado } from './IconoAnimado';
 import { MarcadorDePersona } from './Marca';
 import { useTema } from '../theme/ThemeContext';
 import type { TipoDeVehiculo } from '../theme/marca';
@@ -418,7 +418,7 @@ export function PanelDeJornada({ jornada, onAlternar }: {
         <View style={{ flex: 1 }} />
         {jornada.gpsActivo ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Icono nombre="destino" color={tema.color.exito} tamano={14} />
+            <IconoAnimado nombre="destino" color={tema.color.exito} tamano={14} variante="pulso" reaccionando />
             <Txt nivel="etiqueta" tono="exito">GPS activo</Txt>
           </View>
         ) : (

@@ -19,7 +19,13 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
 import { Separador } from '../ui/HojaInferior';
-import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
+import {
+  BarraDeNavegacion,
+  ControlDeDisponibilidad,
+  ControlDePedido,
+  DESTINOS_DE_CONDUCTOR,
+  DESTINOS_DE_PASAJERA
+} from '../ui/Navegacion';
 import { useApariencia, useTema } from '../theme/ThemeContext';
 import { useAireDeArriba } from '../ui/seguro';
 import type { Apariencia } from '../theme/horaVenezuela';
@@ -42,7 +48,7 @@ const OPCIONES: readonly {
   { clave: 'oscuro', titulo: 'Noche', detalle: 'Siempre oscuro', icono: 'inicio' }
 ];
 
-export function C2Configuracion({ real = false }: {
+export function C2Configuracion({ real = false, barra = 'pasajera' }: {
   /**
    * `true` dentro de la aplicación autenticada.
    *
@@ -55,6 +61,8 @@ export function C2Configuracion({ real = false }: {
    * pantalla es una maqueta y se entiende como tal.
    */
   readonly real?: boolean;
+  /** De quién es la barra inferior: pasajera o conductor. */
+  readonly barra?: 'pasajera' | 'conductor';
 } = {}) {
   const tema = useTema();
   const { apariencia, esquema, cambiarApariencia } = useApariencia();
@@ -154,12 +162,38 @@ export function C2Configuracion({ real = false }: {
           <Separador />
           <Fila icono="viajes" titulo="Licencias de terceros" sinDestino={real} />
         </Grupo>
+
+        <Grupo titulo="Zona de riesgo">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Eliminar cuenta. Acción irreversible"
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 13,
+              paddingVertical: 13,
+              opacity: pressed ? 0.65 : 1
+            })}
+          >
+            <View style={{
+              width: 36, height: 36, borderRadius: 18,
+              alignItems: 'center', justifyContent: 'center',
+              backgroundColor: `${tema.color.peligro}1a`
+            }}>
+              <Icono nombre="papelera" color={tema.color.peligro} tamano={18} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Txt nivel="cuerpo" tono="peligro">Eliminar cuenta</Txt>
+              <Txt nivel="pie" tono="tenue">Esta acción es irreversible y borra tus datos</Txt>
+            </View>
+          </Pressable>
+        </Grupo>
       </ScrollView>
 
       <BarraDeNavegacion
-        destinos={DESTINOS_DE_PASAJERA}
+        destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo="perfil"
-        control={<ControlDePedido abierto={false} />}
+        control={barra === 'conductor' ? <ControlDeDisponibilidad enLinea /> : <ControlDePedido abierto={false} />}
       />
     </View>
   );

@@ -12,13 +12,12 @@
  * Google»— y, mientras no haya autenticación real, la razón por la que no se
  * puede pulsar.
  *
- * ESTOS ARCHIVOS NO SON LOS OFICIALES
+ * EL ARCHIVO DE GOOGLE ES EL OFICIAL
  *
- * Google y Apple entregan los suyos y exigen usarlos. Éstos están dibujados
- * con sus formas y colores por `scripts/marcas-de-terceros.py` para poder ver
- * y probar la pantalla, y hay que sustituirlos antes de publicar. Mientras
- * tanto los botones están DESHABILITADOS: nadie llega a un flujo de Google o
- * de Apple detrás de un logotipo que no es el suyo.
+ * Se usa el botón de icono aprobado por Google, sin recortarlo, recolorearlo ni
+ * deformarlo. El activo de Apple sigue siendo el marcador local documentado
+ * en `scripts/marcas-de-terceros.py`; ambos botones permanecen deshabilitados
+ * hasta que exista autenticación social real.
  *
  * LA MANZANA SE TIÑE; LA «G», NO
  *
@@ -34,7 +33,7 @@ import { MARCAS_DE_TERCEROS } from '../theme/marca';
 import { useEsquema, useTema } from '../theme/ThemeContext';
 
 /** La «G» de Google, a color y sobre su propio disco claro. */
-export function LogoDeGoogle({ tamano = 26 }: { readonly tamano?: number }) {
+export function LogoDeGoogle({ tamano = 28 }: { readonly tamano?: number }) {
   return (
     <Image
       source={MARCAS_DE_TERCEROS.google}
@@ -46,7 +45,7 @@ export function LogoDeGoogle({ tamano = 26 }: { readonly tamano?: number }) {
 }
 
 /** El glifo de Apple, teñido según el esquema. */
-export function LogoDeApple({ tamano = 26 }: { readonly tamano?: number }) {
+export function LogoDeApple({ tamano = 28 }: { readonly tamano?: number }) {
   const tema = useTema();
   const esquema = useEsquema();
 
@@ -76,8 +75,8 @@ export function DiscoDeMarca({ children, apagado = false }: {
 }) {
   return (
     <View style={{
-      width: 30,
-      height: 30,
+      width: 44,
+      height: 44,
       alignItems: 'center',
       justifyContent: 'center',
       // El boton ya baja la opacidad cuando no esta disponible. Bajarla

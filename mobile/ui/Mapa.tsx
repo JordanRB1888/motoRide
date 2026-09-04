@@ -20,10 +20,10 @@
  * pasa todo lo demás; el resto flota encima.
  */
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Txt } from './componentes';
-import { Icono } from './Icono';
+import { IconoAnimado } from './IconoAnimado';
 import { MarcadorDeVehiculo } from './Marca';
 import { useEsquema, useTema } from '../theme/ThemeContext';
 import { useAireDeArriba } from './seguro';
@@ -357,10 +357,13 @@ function BotonDeMapa({ icono, etiqueta, onPress }: {
   readonly onPress?: () => void;
 }) {
   const tema = useTema();
+  const [reaccionando, setReaccionando] = useState(false);
 
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => setReaccionando(true)}
+      onPressOut={() => setReaccionando(false)}
       accessibilityRole="button"
       accessibilityLabel={etiqueta}
       style={({ pressed }) => ({
@@ -376,7 +379,13 @@ function BotonDeMapa({ icono, etiqueta, onPress }: {
         elevation: 8
       })}
     >
-      <Icono nombre={icono} color={tema.color.textoSecundario} tamano={20} />
+      <IconoAnimado
+        nombre={icono}
+        color={tema.color.textoSecundario}
+        tamano={20}
+        reaccionando={reaccionando}
+        variante={icono === 'destino' ? 'elevar' : 'pulso'}
+      />
     </Pressable>
   );
 }

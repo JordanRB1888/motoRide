@@ -45,13 +45,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Txt } from './componentes';
-import { Icono } from './Icono';
 import { FlechaDerecha } from './IconosDeCampo';
 import { AvatarDeRol, LogoEncendido } from './Marca';
 import { HeroDeMarca, LemaConFilos, PlacaDeMarca } from './HeroDeMarca';
 import { useMovimientoReducido } from './movimiento';
 import { useTema } from '../theme/ThemeContext';
-import { AMARILLO } from '../theme/primitives';
 import {
   AVISO_LEGAL,
   DOCUMENTOS_LEGALES,
@@ -83,11 +81,29 @@ export function Bienvenida({ onElegir, onAbrirDocumento, testID = 'bienvenida' }
   const desplazamiento = useRef(new Animated.Value(0)).current;
   const presencia = useRef(new Animated.Value(1)).current;
   const estelas = useRef(new Animated.Value(0)).current;
+  const entradaContenido = useRef(new Animated.Value(quieto ? 1 : 0)).current;
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
     if (temporizador.current) clearTimeout(temporizador.current);
   }, []);
+
+  useEffect(() => {
+    if (quieto) {
+      entradaContenido.setValue(1);
+      return;
+    }
+    entradaContenido.setValue(0);
+    const animacion = Animated.timing(entradaContenido, {
+      toValue: 1,
+      duration: 420,
+      delay: 110,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true
+    });
+    animacion.start();
+    return () => animacion.stop();
+  }, [entradaContenido, quieto]);
 
   const elegir = (intencion: IntencionDeEntrada) => {
     if (saliendo !== null) return;
@@ -133,7 +149,6 @@ export function Bienvenida({ onElegir, onAbrirDocumento, testID = 'bienvenida' }
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }} testID={testID}>
-      {/* Iconos oscuros: arriba siempre hay amarillo, de día y de noche. */}
       <StatusBar style="dark" />
 
       <ScrollView
@@ -141,8 +156,8 @@ export function Bienvenida({ onElegir, onAbrirDocumento, testID = 'bienvenida' }
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        <HeroDeMarca variante="bienvenida" insetSuperior={insets.top}>
-          <PlacaDeMarca testID="placa-de-marca" ancho={352}>
+        <HeroDeMarca variante="bienvenida" insetSuperior={insets.top} quieto={quieto}>
+          <PlacaDeMarca testID="placa-de-marca" ancho={330}>
             <Estelas avance={estelas} />
             <Animated.View
               style={{
@@ -153,15 +168,25 @@ export function Bienvenida({ onElegir, onAbrirDocumento, testID = 'bienvenida' }
               <LogoEncendido ancho={ANCHO_DEL_LOGO} enMarcha={saliendo === null} />
             </Animated.View>
           </PlacaDeMarca>
-
-          {/* El lema de la marca, el mismo de la web. */}
-          <LemaConFilos texto={LEMA} />
         </HeroDeMarca>
 
-        <View style={{
+        {/* La firma vive sobre el fondo, como en la referencia: no compite con
+            el logotipo ni queda atrapada dentro del amarillo. */}
+        <View style={{ alignItems: 'center', marginTop: -4, marginBottom: 12 }}>
+          <LemaConFilos texto={LEMA} />
+        </View>
+
+        <Animated.View style={{
           paddingHorizontal: tema.ritmo.margenPantalla,
-          paddingTop: 10,
-          gap: 18
+          paddingTop: 0,
+          gap: 16,
+          opacity: entradaContenido,
+          transform: [{
+            translateY: entradaContenido.interpolate({
+              inputRange: [0, 1],
+              outputRange: [10, 0]
+            })
+          }]
         }}>
           <View style={{ alignItems: 'center', gap: 6 }}>
             <Txt nivel="display" centrado accessibilityRole="header">¿Cómo quieres continuar?</Txt>
@@ -183,7 +208,7 @@ export function Bienvenida({ onElegir, onAbrirDocumento, testID = 'bienvenida' }
           </View>
 
           <AvisoLegal onAbrir={onAbrirDocumento} />
-        </View>
+        </Animated.View>
       </ScrollView>
     </View>
   );
@@ -195,6 +220,7 @@ export function Bienvenida({ onElegir, onAbrirDocumento, testID = 'bienvenida' }
  * compás con la aceleración.
  */
 function Estelas({ avance }: { readonly avance: Animated.Value }) {
+  const tema = useTema();
   const lineas = [
     { top: '34%', alto: 3, retraso: 0, largo: 150 },
     { top: '50%', alto: 4, retraso: 0.08, largo: 190 },
@@ -214,7 +240,7 @@ function Estelas({ avance }: { readonly avance: Animated.Value }) {
             width: linea.largo,
             height: linea.alto,
             borderRadius: linea.alto,
-            backgroundColor: AMARILLO.base,
+            backgroundColor: tema.color.acento,
             opacity: avance.interpolate({
               inputRange: [0, linea.retraso, linea.retraso + 0.25, linea.retraso + 0.7, 1],
               outputRange: [0, 0, 0.95, 0.5, 0]
@@ -264,9 +290,11 @@ function PuertaDeEntrada({ opcion, encendida, bloqueada, onPress }: {
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
-        padding: 14,
-        borderRadius: 22,
+        gap: 13,
+        minHeight: 88,
+        paddingHorizontal: 13,
+        paddingVertical: 10,
+        borderRadius: 20,
         backgroundColor: tema.color.superficieElevada,
         borderWidth: 1.5,
         borderColor: pressed || encendida ? tema.color.acento : tema.color.borde,
@@ -276,15 +304,22 @@ function PuertaDeEntrada({ opcion, encendida, bloqueada, onPress }: {
         ...tema.superficie.sombra
       })}
     >
-      {/* El arte del rol, con el sello de la marca en la esquina. */}
-      <View style={{ width: 84, height: 84, borderRadius: 18, overflow: 'hidden' }}>
-        <AvatarDeRol rol={opcion.avatar} tamano={84} />
-        <View style={{ position: 'absolute', top: 6, right: 6 }}>
-          <Icono nombre="perfil" color={AMARILLO.base} tamano={18} />
-        </View>
+      {/* Ilustración editorial propia, recortada en un disco y sin fondo falso. */}
+      <View style={{
+        width: 68,
+        height: 68,
+        borderRadius: 34,
+        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: tema.color.superficieHundida,
+        borderWidth: 1,
+        borderColor: encendida ? tema.color.acento : tema.color.borde
+      }}>
+        <AvatarDeRol rol={opcion.avatar} tamano={64} />
       </View>
 
-      <View style={{ flex: 1, gap: 3, justifyContent: 'center' }}>
+      <View style={{ flex: 1, gap: 2, justifyContent: 'center' }}>
         <Txt nivel="encabezado">{opcion.titulo}</Txt>
         <Txt nivel="pie" tono="secundario">{opcion.detalle}</Txt>
       </View>

@@ -25,6 +25,7 @@ import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useSesion } from '../context/AuthContext';
 import { useAvisosEnVivo } from '../realtime/avisosEnVivo';
 import { marcarLeido, marcarTodosLeidos, pedirAvisos } from '../services/avisos';
+import { shellDelRol } from '../domain/shellDeRol';
 import {
   conAvisoLeido,
   conTodosLeidos,
@@ -35,6 +36,7 @@ import {
 
 export default function PantallaDeAvisos() {
   const { sesion } = useSesion();
+  const barraDelRol = shellDelRol(sesion.estado === 'AUTENTICADO' ? sesion.usuario.role : null) === 'conductor' ? 'conductor' : 'pasajera';
 
   const [avisos, setAvisos] = useState<readonly Aviso[]>([]);
   const [estado, setEstado] = useState<'cargando' | 'listo' | 'error'>('cargando');
@@ -66,7 +68,7 @@ export default function PantallaDeAvisos() {
   useAvisosEnVivo(() => { void cargar(); });
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
-    return <C2Avisos estado="cargando" />;
+    return <C2Avisos estado="cargando" barra={barraDelRol} />;
   }
   if (sesion.estado !== 'AUTENTICADO') return <Redirect href="/" />;
 
@@ -100,7 +102,6 @@ export default function PantallaDeAvisos() {
   async function leerTodos() {
     if (leyendoTodos.current) return;
     leyendoTodos.current = true;
-
     const antes = avisos;
     // `conTodosLeidos` no depende del estado anterior, así que da igual si
     // llega antes o después de un «marcar uno» que siga en vuelo.
@@ -121,9 +122,17 @@ export default function PantallaDeAvisos() {
     navegable: destinoDeAviso(aviso) !== null
   }));
 
+  function irA(clave: string) {
+    if (clave === 'inicio') router.replace(barraDelRol === 'conductor' ? '/conductor' : '/pasajero');
+    if (clave === 'historial') router.replace('/historial');
+    if (clave === 'saldo') router.replace(barraDelRol === 'conductor' ? '/conductor-saldo' : '/saldo');
+    if (clave === 'perfil') router.replace('/perfil');
+  }
+
   return (
     <ProveedorDeNavegacion ir={irA}>
       <C2Avisos
+        barra={barraDelRol}
         avisos={enPantalla}
         estado={estado}
         // El pie del diseño promete que cada aviso lleva a donde pasó. Con
@@ -136,10 +145,4 @@ export default function PantallaDeAvisos() {
       />
     </ProveedorDeNavegacion>
   );
-}
-
-function irA(clave: string) {
-  if (clave === 'inicio') router.replace('/pasajero');
-  if (clave === 'historial') router.replace('/historial');
-  if (clave === 'perfil') router.replace('/perfil');
 }

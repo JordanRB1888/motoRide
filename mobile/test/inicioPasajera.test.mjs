@@ -13,8 +13,8 @@ import { CAMPANAS_DEMO, SERVICIOS_DE_INICIO } from '../preview/fixtures.ts';
  *
  * Aquí se protegen tres decisiones que, al romperse, no dan ningún error:
  *
- *   - Inicio ya NO lleva mapa, y el conductor SÍ. Son dos oficios distintos:
- *     quien conduce mira dónde hay gente; quien pide, no.
+ *   - Inicio vuelve a ser map-first y el catálogo sólo aparece en una hoja
+ *     inferior, sin perder las cards aprobadas.
  *   - Lo que no está construido lo dice y no se puede pulsar. Un botón de
  *     «Comida» que no lleva a nada es una promesa rota a la primera pulsación.
  *   - Ninguna campaña enseña cifras. Una recaudación inventada en una captura
@@ -33,17 +33,13 @@ const DIBUJO = 'scripts/pantallasWeb.mjs';
 // El mapa cambia de sitio
 // ---------------------------------------------------------------------------
 
-test('el inicio de la pasajera NO lleva mapa', () => {
-  // La decisión grande. En reposo, un mapa de tu propia calle no dice nada que
-  // no sepas, y se estaba gastando en él la pantalla más visitada.
-  //
-  // Sin comentarios: se busca que el lienzo NO esté, y explicarlo obliga a
-  // nombrarlo.
+test('el inicio de la pasajera es map-first y conserva el catálogo en una hoja', () => {
   const movil = despojarComentarios(leer(INICIO));
-  assert.ok(!movil.includes('LienzoDeMapa'), 'el inicio volvió a montar el mapa');
-
-  const dibujo = PANTALLAS.pasajera();
-  assert.ok(!dibujo.includes('class="mapa"'), 'el dibujo del inicio volvió a llevar mapa');
+  assert.ok(movil.includes('LienzoDeMapa'), 'el inicio se quedó sin mapa');
+  assert.match(movil, /hojaMontada/);
+  assert.match(movil, /<ScrollView/);
+  assert.match(movil, /SERVICIOS_DE_INICIO\.map/);
+  assert.match(movil, /onAlternar=\{hojaAbierta \? cerrarHoja : abrirHoja\}/);
 });
 
 test('el mapa sigue estando al pedir', () => {

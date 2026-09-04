@@ -17,7 +17,16 @@
  * lo dice el campo o el botón que los contiene.
  */
 
+import { type ReactNode, useEffect } from 'react';
 import { View } from 'react-native';
+import Reanimated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming
+} from 'react-native-reanimated';
+import { useMovimientoReducido } from './movimiento';
 
 const OCULTO = {
   accessibilityElementsHidden: true,
@@ -151,6 +160,73 @@ export function IconoDeOjo({ tamano = 20, color, tachado = false }: {
   );
 }
 
+/** Transición del ojo: los dos estados se cruzan en vez de cambiar en seco. */
+export function IconoDeOjoAnimado({ tamano = 20, color, abierto }: {
+  readonly tamano?: number;
+  readonly color: string;
+  readonly abierto: boolean;
+}) {
+  const quieto = useMovimientoReducido();
+  const progreso = useSharedValue(abierto ? 1 : 0);
+
+  useEffect(() => {
+    progreso.set(withTiming(abierto ? 1 : 0, {
+      duration: quieto ? 80 : 180,
+      easing: Easing.bezier(0.23, 1, 0.32, 1)
+    }));
+  }, [abierto, progreso, quieto]);
+
+  const cerrado = useAnimatedStyle(() => ({
+    opacity: 1 - progreso.get(),
+    transform: [{ scale: interpolate(progreso.get(), [0, 1], [1, 0.94]) }]
+  }));
+  const visible = useAnimatedStyle(() => ({
+    opacity: progreso.get(),
+    transform: [{ scale: interpolate(progreso.get(), [0, 1], [0.94, 1]) }]
+  }));
+
+  return (
+    <View style={{ width: tamano, height: tamano }}>
+      <Reanimated.View style={[{ position: 'absolute' }, cerrado]}>
+        <IconoDeOjo tamano={tamano} color={color} tachado />
+      </Reanimated.View>
+      <Reanimated.View style={[{ position: 'absolute' }, visible]}>
+        <IconoDeOjo tamano={tamano} color={color} />
+      </Reanimated.View>
+    </View>
+  );
+}
+
+/** Movimiento breve de los adornos cuando su campo obtiene el foco. */
+export function AdornoDeCampoAnimado({ children, activo, tipo }: {
+  readonly children: ReactNode;
+  readonly activo: boolean;
+  readonly tipo: 'correo' | 'candado' | 'usuario' | 'telefono';
+}) {
+  const quieto = useMovimientoReducido();
+  const progreso = useSharedValue(activo ? 1 : 0);
+
+  useEffect(() => {
+    progreso.set(withTiming(activo ? 1 : 0, {
+      duration: quieto ? 80 : 150,
+      easing: Easing.bezier(0.23, 1, 0.32, 1)
+    }));
+  }, [activo, progreso, quieto]);
+
+  const estilo = useAnimatedStyle(() => ({
+    opacity: interpolate(progreso.get(), [0, 1], [0.72, 1]),
+    transform: quieto
+      ? []
+      : tipo === 'correo'
+        ? [{ translateX: interpolate(progreso.get(), [0, 1], [-2, 1]) }]
+        : tipo === 'candado'
+          ? [{ translateY: interpolate(progreso.get(), [0, 1], [0, -2]) }, { scale: interpolate(progreso.get(), [0, 1], [1, 1.04]) }]
+          : [{ translateY: interpolate(progreso.get(), [0, 1], [0, -1.5]) }]
+  }));
+
+  return <Reanimated.View style={estilo}>{children}</Reanimated.View>;
+}
+
 /** La flecha del botón: el asta y la punta. */
 export function FlechaDerecha({ tamano = 18, color }: {
   readonly tamano?: number;
@@ -178,6 +254,71 @@ export function FlechaDerecha({ tamano = 18, color }: {
         borderColor: color,
         transform: [{ rotate: '45deg' }]
       }} />
+    </View>
+  );
+}
+
+/** Icono de usuario / persona para nombre y apellido. */
+export function IconoDeUsuario({ tamano = 20, color }: {
+  readonly tamano?: number;
+  readonly color: string;
+}) {
+  const trazo = Math.max(1.4, tamano / 14);
+  const cabeza = tamano * 0.38;
+  const torsoAncho = tamano * 0.72;
+  const torsoAlto = tamano * 0.36;
+
+  return (
+    <View {...OCULTO} style={{ width: tamano, height: tamano, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Cabeza */}
+      <View style={{
+        width: cabeza,
+        height: cabeza,
+        borderRadius: cabeza / 2,
+        borderWidth: trazo,
+        borderColor: color,
+        marginBottom: 2
+      }} />
+      {/* Hombros / torso */}
+      <View style={{
+        width: torsoAncho,
+        height: torsoAlto,
+        borderTopLeftRadius: torsoAncho / 2,
+        borderTopRightRadius: torsoAncho / 2,
+        borderWidth: trazo,
+        borderBottomWidth: 0,
+        borderColor: color
+      }} />
+    </View>
+  );
+}
+
+/** Icono de teléfono móvil para el campo de número. */
+export function IconoDeTelefono({ tamano = 20, color }: {
+  readonly tamano?: number;
+  readonly color: string;
+}) {
+  const trazo = Math.max(1.4, tamano / 14);
+  const ancho = tamano * 0.58;
+  const alto = tamano * 0.88;
+
+  return (
+    <View {...OCULTO} style={{ width: tamano, height: tamano, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{
+        width: ancho,
+        height: alto,
+        borderWidth: trazo,
+        borderColor: color,
+        borderRadius: 3.5,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 2.5
+      }}>
+        {/* Auricular superior */}
+        <View style={{ width: ancho * 0.35, height: 1.5, borderRadius: 1, backgroundColor: color }} />
+        {/* Botón / barra inferior */}
+        <View style={{ width: 3.5, height: 3.5, borderRadius: 2, backgroundColor: color }} />
+      </View>
     </View>
   );
 }

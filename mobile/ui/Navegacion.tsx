@@ -1,23 +1,15 @@
 /**
- * La barra inferior y el control central.
+ * Las barras inferiores de +58Express.
  *
- * EL CONTROL CENTRAL ES UNA SOLA PIEZA CON DOS SIGNIFICADOS
+ * PASSENGER: CINCO ICONOS Y UNA CURVA QUE VIAJA
  *
- * En el centro de la barra va siempre lo mismo: un disco con la moto de la
- * marca y un aro que dice en qué estás. Lo que cambia es el color del aro y lo
- * que pasa al tocarlo.
+ * Inicio, Historial, Pedir, Saldo y Perfil comparten la misma escala y no
+ * llevan rótulos visibles. Una extensión orgánica de la superficie se desplaza
+ * bajo el destino activo mientras ese icono sube y cambia al amarillo oficial.
+ * La posición anterior se conserva al cambiar de ruta para que el movimiento
+ * no se convierta en «desaparece aquí, aparece allá».
  *
- *   aro amarillo   pasajera        pedir un viaje
- *   aro apagado    conductor       fuera de línea, tocar para conectarse
- *   aro verde      conductor       en línea, con latido
- *
- * Es una decisión de identidad, no una casualidad de implementación: en
- * +58express el disco central **es la acción**, y quien usa la aplicación
- * aprende una sola forma sirva para lo que sirva en su pantalla. Un botón de
- * pedir viaje con forma de coche y otro de disponibilidad con forma de
- * interruptor serían dos aplicaciones dentro de una.
- *
- * EL CONTROL DE DISPONIBILIDAD ES UNA PIEZA HEREDADA
+ * CONDUCTOR: SE CONSERVA EL DISCO DE DISPONIBILIDAD
  *
  * No se inventó aquí. Viene de `src/styles/modern-yellow-lab.css`, donde ya
  * está resuelto y donde el comentario original explica por qué es así: ponerse
@@ -32,7 +24,7 @@
  * al conectarse, el aro verde con fondo muy diluido para que la fotografía no
  * compita contra un fondo saturado, y el latido lento mientras está disponible.
  *
- * EL DISCO MUERDE LA BARRA
+ * EL DISCO DEL CONDUCTOR MUERDE SU BARRA
  *
  * El disco no se apoya sobre la barra: le abre un hueco y sale por él. La barra
  * pinta bajo el disco un círculo del color del FONDO de la pantalla, un poco
@@ -63,30 +55,28 @@
  * el gris se perdió por descuido.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Pressable, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, View, useWindowDimensions } from 'react-native';
+import Reanimated, {
+  Easing as EasingAnimada,
+  Extrapolation,
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withDelay,
+  withRepeat,
+  withSpring,
+  withTiming
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icono, type NombreDeIcono } from './Icono';
 import { Txt } from './componentes';
 import { VEHICULOS } from '../theme/marca';
 import { useTema } from '../theme/ThemeContext';
 import { useIr } from './navegar';
-
-/** Lee la preferencia de movimiento reducido del sistema y se mantiene al día. */
-function useMovimientoReducido(): boolean {
-  const [reducido, setReducido] = useState(false);
-
-  useEffect(() => {
-    let vigente = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then(activo => { if (vigente) setReducido(activo); })
-      .catch(() => { /* si no se puede consultar, se anima: es el caso normal */ });
-    const suscripcion = AccessibilityInfo.addEventListener('reduceMotionChanged', setReducido);
-    return () => { vigente = false; suscripcion.remove(); };
-  }, []);
-
-  return reducido;
-}
+import { useMovimientoReducido } from './movimiento';
 
 // ---------------------------------------------------------------------------
 // El disco: la forma común
@@ -246,7 +236,7 @@ function Aspa({ color }: { readonly color: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Los dos usos
+// Los dos controles centrales
 // ---------------------------------------------------------------------------
 
 /** El control del conductor: conectarse y desconectarse. */
@@ -256,29 +246,54 @@ export function ControlDeDisponibilidad({ enLinea, onAlternar }: {
 }) {
   const tema = useTema();
   const verde = tema.color.exito;
+  const quieto = useMovimientoReducido();
+  const pulsacion = useRef(new Animated.Value(1)).current;
+
+  const presionar = () => {
+    if (quieto) { pulsacion.setValue(0.93); return; }
+    Animated.spring(pulsacion, {
+      toValue: 0.93,
+      speed: 24,
+      bounciness: 0,
+      useNativeDriver: true
+    }).start();
+  };
+
+  const soltar = () => {
+    if (quieto) { pulsacion.setValue(1); return; }
+    Animated.spring(pulsacion, {
+      toValue: 1,
+      speed: 18,
+      bounciness: 8,
+      useNativeDriver: true
+    }).start();
+  };
 
   return (
     <Pressable
       onPress={onAlternar}
+      onPressIn={presionar}
+      onPressOut={soltar}
       accessibilityRole="switch"
       accessibilityState={{ checked: enLinea }}
       accessibilityLabel={enLinea ? 'En línea. Tocar para desconectarse' : 'Fuera de línea. Tocar para conectarse'}
-      style={({ pressed }) => ({
+      style={{
         alignItems: 'center',
         gap: AIRE_DEL_ROTULO,
         // Sobresale por encima de la barra sin hacerla más alta: lo que sube
         // aquí se compensa con el aire del rótulo, y el control acaba midiendo
         // lo mismo que una pestaña normal.
-        marginTop: -SALIENTE,
-        transform: [{ scale: pressed ? 0.94 : 1 }]
-      })}
+        marginTop: -SALIENTE
+      }}
     >
-      <Disco
-        aro={enLinea ? verde : tema.color.borde}
-        fondo={enLinea ? `${verde}38` : tema.color.superficieElevada}
-        moto={enLinea ? 1 : 0.45}
-        latiendo={enLinea}
-      />
+      <Animated.View style={{ transform: [{ scale: pulsacion }] }}>
+        <Disco
+          aro={enLinea ? verde : tema.color.borde}
+          fondo={enLinea ? `${verde}38` : tema.color.superficieElevada}
+          moto={enLinea ? 1 : 0.45}
+          latiendo={enLinea}
+        />
+      </Animated.View>
       <Txt nivel="etiqueta" tono={enLinea ? 'exito' : 'tenue'}>
         {enLinea ? 'En línea' : 'Conectar'}
       </Txt>
@@ -289,8 +304,8 @@ export function ControlDeDisponibilidad({ enLinea, onAlternar }: {
 /**
  * El control de la pasajera: abrir y cerrar la petición de viaje.
  *
- * Mismo disco, aro amarillo. Al abrirse la moto se convierte en aspa: el mismo
- * sitio cierra lo que abrió, sin tener que buscar dónde se cierra.
+ * Ocupa la tercera de las cinco posiciones de Passenger. Al abrirse queda
+ * seleccionado y el mismo sitio cierra lo que abrió.
  *
  * SIN MANEJADOR, NAVEGA
  *
@@ -310,33 +325,86 @@ export function ControlDePedido({ abierto, onAlternar }: {
 }) {
   const tema = useTema();
   const ir = useIr();
-
+  const quieto = useMovimientoReducido();
+  const escala = useSharedValue(1);
+  const anillo = useSharedValue(0);
   // Abierto cierra, cerrado abre: el mismo sitio deshace lo que hizo.
   const alternar = onAlternar ?? (() => ir(abierto ? 'inicio' : 'pedir'));
+
+  useEffect(() => {
+    cancelAnimation(escala);
+    cancelAnimation(anillo);
+    if (quieto) {
+      escala.set(1);
+      anillo.set(0);
+      return;
+    }
+    escala.set(withRepeat(withSequence(
+      withDelay(2300, withTiming(1.035, { duration: 120 })),
+      withTiming(1, { duration: 180 })
+    ), -1, false));
+    anillo.set(withRepeat(withSequence(
+      withDelay(2300, withTiming(1, { duration: 1 })),
+      withTiming(0, { duration: 420 })
+    ), -1, false));
+    return () => {
+      cancelAnimation(escala);
+      cancelAnimation(anillo);
+    };
+  }, [anillo, escala, quieto]);
+
+  const estiloBoton = useAnimatedStyle(() => ({
+    transform: [{ scale: escala.get() }]
+  }));
+  const estiloAnillo = useAnimatedStyle(() => ({
+    opacity: quieto ? 0 : interpolate(anillo.get(), [0, 1], [0, 0.14]),
+    transform: [{ scale: interpolate(anillo.get(), [0, 1], [1.15, 1]) }]
+  }));
+
+  const presionar = () => {
+    cancelAnimation(escala);
+    escala.set(quieto ? 1 : withTiming(0.94, { duration: 100 }));
+  };
+  const soltar = () => {
+    if (quieto) return;
+    escala.set(withSequence(
+      withSpring(1.05, { duration: 150, dampingRatio: 0.86 }),
+      withSpring(1, { duration: 160, dampingRatio: 1 })
+    ));
+  };
 
   return (
     <Pressable
       onPress={alternar}
+      onPressIn={presionar}
+      onPressOut={soltar}
       accessibilityRole="button"
-      accessibilityState={{ expanded: abierto }}
       accessibilityLabel={abierto ? 'Cerrar la petición de viaje' : 'Pedir un viaje'}
-      style={({ pressed }) => ({
-        alignItems: 'center',
-        gap: AIRE_DEL_ROTULO,
-        marginTop: -SALIENTE,
-        transform: [{ scale: pressed ? 0.94 : 1 }]
-      })}
+      accessibilityState={{ expanded: abierto }}
+      hitSlop={8}
+      pressRetentionOffset={16}
+      style={{ width: 68, height: 68, marginTop: -12, alignItems: 'center', justifyContent: 'center' }}
     >
-      <Disco
-        aro={tema.color.acento}
-        fondo={abierto ? tema.color.superficieElevada : `${tema.color.acento}26`}
-        moto={1}
-        latiendo={false}
-        abierto={abierto}
-      />
-      <Txt nivel="etiqueta" tono={abierto ? 'tenue' : 'acento'}>
-        {abierto ? 'Cerrar' : 'Pedir'}
-      </Txt>
+      <Reanimated.View pointerEvents="none" style={[
+        {
+          position: 'absolute', width: 64, height: 64, borderRadius: 32,
+          borderWidth: 2, borderColor: tema.color.acento
+        },
+        estiloAnillo
+      ]} />
+      <Reanimated.View style={[
+        {
+          width: 58, height: 58, borderRadius: 29,
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: tema.color.acento,
+          borderWidth: 2, borderColor: tema.color.acentoPresionado,
+          shadowColor: '#000000', shadowOpacity: 0.28, shadowRadius: 9,
+          shadowOffset: { width: 0, height: 5 }, elevation: 10
+        },
+        estiloBoton
+      ]}>
+        <Icono nombre="servicios" color={tema.color.sobreAcento} tamano={26} activo />
+      </Reanimated.View>
     </Pressable>
   );
 }
@@ -349,6 +417,254 @@ export interface DestinoDeNavegacion {
   readonly clave: string;
   readonly icono: NombreDeIcono;
   readonly etiqueta: string;
+}
+
+// ---------------------------------------------------------------------------
+// Barra curva de la pasajera
+// ---------------------------------------------------------------------------
+
+const CANTIDAD_DE_PESTANAS = 5;
+const ANCHO_DE_LA_CURVA = 58;
+const ALTO_DE_LA_CURVA = 26;
+const INICIO_DE_LA_SUPERFICIE = 18;
+const ALTO_DE_LA_FILA = 58;
+
+/**
+ * La última posición sobrevive al cambio de ruta.
+ *
+ * Cada pantalla monta su propia barra. Sin este dato, al navegar la curva
+ * nacería directamente debajo del destino nuevo y el recorrido se perdería.
+ * Sólo se conserva geometría visual; ninguna navegación ni estado de negocio.
+ */
+let ultimoIndiceDePasajera = 0;
+
+function posicionDeCurva(ancho: number, indice: number): number {
+  return (ancho / CANTIDAD_DE_PESTANAS) * (indice + 0.5) - ANCHO_DE_LA_CURVA / 2;
+}
+
+function indiceDelDestino(clave: string): number {
+  if (clave === 'inicio') return 0;
+  if (clave === 'historial') return 1;
+  if (clave === 'saldo') return 3;
+  if (clave === 'perfil') return 4;
+  return 0;
+}
+
+/**
+ * Icono táctil sin rótulo visible. Los dos dibujos superpuestos permiten que
+ * el color cambie en el hilo de UI por opacidad, sin recalcular el icono en
+ * cada frame ni convertir su prop `color` en estado de React.
+ */
+function PestanaCurva({
+  icono,
+  etiqueta,
+  activa,
+  onPress
+}: {
+  readonly icono: NombreDeIcono;
+  readonly etiqueta: string;
+  readonly activa: boolean;
+  readonly onPress?: () => void;
+}) {
+  const tema = useTema();
+  const quieto = useMovimientoReducido();
+  const seleccion = useSharedValue(activa ? 1 : 0);
+  const pulsacion = useSharedValue(1);
+  const pulso = useSharedValue(1);
+
+  useEffect(() => {
+    seleccion.set(quieto
+      ? withTiming(activa ? 1 : 0, { duration: 100 })
+      : withSpring(activa ? 1 : 0, { duration: 270, dampingRatio: 0.84 }));
+
+    if (activa && !quieto) {
+      pulso.set(withSequence(
+        withTiming(1.10, { duration: 110, easing: EasingAnimada.bezier(0.23, 1, 0.32, 1) }),
+        withSpring(1, { duration: 170, dampingRatio: 0.88 })
+      ));
+    } else {
+      pulso.set(1);
+    }
+  }, [activa, pulso, quieto, seleccion]);
+
+  const estiloDelIcono = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: quieto ? 0 : interpolate(seleccion.get(), [0, 1], [0, -4], Extrapolation.CLAMP) },
+      { scale: pulsacion.get() * pulso.get() }
+    ]
+  }));
+  const estiloInactivo = useAnimatedStyle(() => ({
+    opacity: interpolate(seleccion.get(), [0, 1], [1, 0], Extrapolation.CLAMP)
+  }));
+  const estiloActivo = useAnimatedStyle(() => ({
+    opacity: interpolate(seleccion.get(), [0, 1], [0, 1], Extrapolation.CLAMP)
+  }));
+
+  const presionar = () => {
+    pulsacion.set(withTiming(0.93, {
+      duration: 90,
+      easing: EasingAnimada.bezier(0.23, 1, 0.32, 1)
+    }));
+  };
+  const soltar = () => {
+    pulsacion.set(quieto ? 1 : withSpring(1, { duration: 160, dampingRatio: 1 }));
+  };
+
+  const tamanoDelIcono = 27.5;
+  const iconoInactivo = (
+    <Icono nombre={icono} color={tema.color.textoSecundario} tamano={tamanoDelIcono} />
+  );
+  const iconoActivo = (
+    <Icono
+      nombre={icono}
+      color={tema.color.acento}
+      tamano={tamanoDelIcono}
+      activo={icono !== 'moto'}
+    />
+  );
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={presionar}
+      onPressOut={soltar}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: activa }}
+      accessibilityLabel={etiqueta}
+      hitSlop={8}
+      pressRetentionOffset={16}
+      style={{ flex: 1, minWidth: 48, height: ALTO_DE_LA_FILA, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Reanimated.View style={[{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }, estiloDelIcono]}>
+        <Reanimated.View style={estiloInactivo}>{iconoInactivo}</Reanimated.View>
+        <Reanimated.View style={[{ position: 'absolute' }, estiloActivo]}>{iconoActivo}</Reanimated.View>
+      </Reanimated.View>
+    </Pressable>
+  );
+}
+
+function BarraCurvaDePasajera({
+  destinos,
+  activo,
+  alTocar,
+  control
+}: {
+  readonly destinos: readonly DestinoDeNavegacion[];
+  readonly activo: string;
+  readonly alTocar: (clave: string) => void;
+  readonly control: React.ReactNode;
+}) {
+  const inferior = useSafeAreaInsets().bottom;
+  const { width: ancho } = useWindowDimensions();
+  const tema = useTema();
+  const quieto = useMovimientoReducido();
+  const indiceActivo = indiceDelDestino(activo);
+  const desplazamiento = useSharedValue(posicionDeCurva(ancho, ultimoIndiceDePasajera));
+
+  useEffect(() => {
+    const destino = posicionDeCurva(ancho, indiceActivo);
+    if (quieto) {
+      desplazamiento.set(destino);
+    } else {
+      desplazamiento.set(withSpring(destino, {
+        duration: 270,
+        dampingRatio: 0.84
+      }));
+    }
+    ultimoIndiceDePasajera = indiceActivo;
+  }, [ancho, desplazamiento, indiceActivo, quieto]);
+
+  const estiloDeLaCurva = useAnimatedStyle(() => ({
+    transform: [{ translateX: desplazamiento.get() }]
+  }));
+
+  const [inicio, historial, saldo, perfil] = destinos;
+  if (inicio === undefined || historial === undefined || saldo === undefined || perfil === undefined) return null;
+
+  return (
+    <View style={{
+      height: INICIO_DE_LA_SUPERFICIE + ALTO_DE_LA_FILA + Math.max(inferior, 8),
+      backgroundColor: 'transparent'
+    }}>
+      <View pointerEvents="none" style={{
+        position: 'absolute',
+        top: INICIO_DE_LA_SUPERFICIE,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        backgroundColor: tema.color.superficieElevada,
+        borderTopWidth: 1,
+        borderTopColor: tema.color.borde
+      }} />
+
+      {/* Una extensión elíptica fundida con la superficie, no un círculo
+          añadido. El rectángulo inferior borra su arco de abajo y deja sólo
+          el hombro orgánico que viaja entre las cinco posiciones. */}
+      <Reanimated.View pointerEvents="none" style={[
+        {
+          position: 'absolute',
+          top: INICIO_DE_LA_SUPERFICIE - 8,
+          width: ANCHO_DE_LA_CURVA,
+          height: ALTO_DE_LA_CURVA,
+          borderTopLeftRadius: ANCHO_DE_LA_CURVA / 2,
+          borderTopRightRadius: ANCHO_DE_LA_CURVA / 2,
+          borderBottomLeftRadius: 12,
+          borderBottomRightRadius: 12,
+          backgroundColor: tema.color.superficieElevada,
+          borderWidth: 1,
+          borderColor: tema.color.borde,
+          shadowColor: '#000000',
+          shadowOpacity: 0.16,
+          shadowRadius: 5,
+          shadowOffset: { width: 0, height: -2 },
+          elevation: 4
+        },
+        estiloDeLaCurva
+      ]}>
+        <View style={{
+          position: 'absolute',
+          top: 8,
+          right: -1,
+          bottom: -2,
+          left: -1,
+          backgroundColor: tema.color.superficieElevada
+        }} />
+      </Reanimated.View>
+
+      <View style={{
+        zIndex: 2,
+        flexDirection: 'row',
+        paddingTop: 7,
+        paddingBottom: Math.max(inferior, 8)
+      }}>
+        <PestanaCurva
+          icono={inicio.icono}
+          etiqueta={inicio.etiqueta}
+          activa={indiceActivo === 0}
+          onPress={() => alTocar(inicio.clave)}
+        />
+        <PestanaCurva
+          icono={historial.icono}
+          etiqueta={historial.etiqueta}
+          activa={indiceActivo === 1}
+          onPress={() => alTocar(historial.clave)}
+        />
+        <View style={{ flex: 1, minWidth: 48, alignItems: 'center' }}>{control}</View>
+        <PestanaCurva
+          icono={saldo.icono}
+          etiqueta={saldo.etiqueta}
+          activa={indiceActivo === 3}
+          onPress={() => alTocar(saldo.clave)}
+        />
+        <PestanaCurva
+          icono={perfil.icono}
+          etiqueta={perfil.etiqueta}
+          activa={indiceActivo === 4}
+          onPress={() => alTocar(perfil.clave)}
+        />
+      </View>
+    </View>
+  );
 }
 
 /**
@@ -375,6 +691,24 @@ export function BarraDeNavegacion({ destinos, activo, onSeleccionar, control }: 
   // Asi la barra funciona igual montada dentro del router y suelta en el
   // laboratorio, sin que ninguna pantalla tenga que enterarse.
   const alTocar = onSeleccionar ?? ((clave: string) => ir(clave));
+
+  // La petición sólo cambia la navegación de la pasajera. El conductor
+  // conserva su disco de disponibilidad y toda su semántica de trabajo.
+  const esBarraDePasajera = destinos.length === 4
+    && destinos[0]?.clave === 'inicio'
+    && destinos[1]?.clave === 'historial'
+    && control !== undefined;
+
+  if (esBarraDePasajera) {
+    return (
+      <BarraCurvaDePasajera
+        destinos={destinos}
+        activo={activo}
+        alTocar={alTocar}
+        control={control}
+      />
+    );
+  }
 
   const mitad = Math.ceil(destinos.length / 2);
   const izquierda = control ? destinos.slice(0, mitad) : destinos;
@@ -484,33 +818,119 @@ function Grupo({ destinos, activo, alTocar }: {
   );
 }
 
+/**
+ * Tab de conductor con física Bouncy inspirada en MotionBar.
+ *
+ * Al interactuar, el icono responde con un suave encogimiento inicial,
+ * seguido de una elevación elástica y asentamiento controlado.
+ * Los demás iconos permanecen estables.
+ */
 function Destino({ destino, activo, onPress }: {
   readonly destino: DestinoDeNavegacion;
   readonly activo: boolean;
   readonly onPress?: () => void;
 }) {
   const tema = useTema();
+  const quieto = useMovimientoReducido();
+  const escala = useSharedValue(1);
+  const elevacion = useSharedValue(0);
+  const seleccion = useSharedValue(activo ? 1 : 0);
+
+  useEffect(() => {
+    seleccion.set(
+      quieto
+        ? (activo ? 1 : 0)
+        : withSpring(activo ? 1 : 0, { duration: 250, dampingRatio: 0.82 })
+    );
+
+    if (activo && !quieto) {
+      escala.set(
+        withSequence(
+          withTiming(0.93, { duration: 60, easing: EasingAnimada.bezier(0.25, 1, 0.5, 1) }),
+          withSpring(1.08, { duration: 190, dampingRatio: 0.68 }),
+          withSpring(1.0, { duration: 160, dampingRatio: 0.85 })
+        )
+      );
+      elevacion.set(
+        withSequence(
+          withTiming(1.5, { duration: 60, easing: EasingAnimada.bezier(0.25, 1, 0.5, 1) }),
+          withSpring(-5, { duration: 190, dampingRatio: 0.68 }),
+          withSpring(0, { duration: 160, dampingRatio: 0.85 })
+        )
+      );
+    } else {
+      escala.set(1);
+      elevacion.set(0);
+    }
+  }, [activo, elevacion, escala, quieto, seleccion]);
+
+  const presionar = () => {
+    if (quieto) return;
+    escala.set(withTiming(0.93, { duration: 70, easing: EasingAnimada.bezier(0.2, 0.9, 0.3, 1) }));
+    elevacion.set(withTiming(1.2, { duration: 70 }));
+  };
+
+  const soltar = () => {
+    if (quieto) return;
+    if (!activo) {
+      escala.set(withSpring(1.0, { duration: 160, dampingRatio: 0.9 }));
+      elevacion.set(withSpring(0, { duration: 160, dampingRatio: 0.9 }));
+    }
+  };
+
+  const estiloIcono = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: elevacion.get() },
+      { scale: escala.get() }
+    ]
+  }));
+
+  const estiloPunto = useAnimatedStyle(() => ({
+    opacity: interpolate(seleccion.get(), [0, 1], [0, 1], Extrapolation.CLAMP),
+    transform: [
+      { scale: interpolate(seleccion.get(), [0, 1], [0.3, 1], Extrapolation.CLAMP) }
+    ]
+  }));
 
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={presionar}
+      onPressOut={soltar}
       accessibilityRole="tab"
       accessibilityState={{ selected: activo }}
       accessibilityLabel={destino.etiqueta}
-      style={{ flex: 1, alignItems: 'center', gap: 4, paddingVertical: 2 }}
+      hitSlop={8}
+      pressRetentionOffset={14}
+      style={{
+        flex: 1,
+        minWidth: 48,
+        height: 52,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 3
+      }}
     >
-      <Icono
-        nombre={destino.icono}
-        color={activo ? tema.color.acento : tema.color.textoTenue}
-        tamano={23}
-        activo={activo}
+      <Reanimated.View style={[{ alignItems: 'center', justifyContent: 'center' }, estiloIcono]}>
+        <Icono
+          nombre={destino.icono}
+          color={activo ? tema.color.acento : tema.color.textoTenue}
+          tamano={26}
+          activo={activo}
+        />
+      </Reanimated.View>
+      <Reanimated.View
+        pointerEvents="none"
+        style={[
+          {
+            width: 4.5,
+            height: 4.5,
+            borderRadius: 2.25,
+            backgroundColor: tema.color.acento
+          },
+          estiloPunto
+        ]}
       />
-      <Txt
-        nivel="etiqueta"
-        tono={activo ? 'primario' : 'tenue'}
-      >
-        {destino.etiqueta}
-      </Txt>
     </Pressable>
   );
 }

@@ -127,8 +127,8 @@ function Cabecera({ datos }: { readonly datos: DatosDelInicio }) {
       gap: 12,
       paddingHorizontal: tema.ritmo.margenPantalla,
       // Sin este aire, el saludo se mete bajo la hora y la batería.
-      paddingTop: 18 + arriba,
-      paddingBottom: tema.ritmo.entreElementos
+      paddingTop: 12 + arriba,
+      paddingBottom: 8
     }}>
       <View style={{
         width: 46,
@@ -187,10 +187,11 @@ function RotuloPronto() {
       borderWidth: 1,
       borderColor: tema.color.borde,
       borderRadius: 6,
-      paddingHorizontal: 7,
-      paddingVertical: 2
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      backgroundColor: tema.color.superficieHundida
     }}>
-      <Txt nivel="etiqueta" tono="tenue">PRONTO</Txt>
+      <Txt nivel="etiqueta" tono="tenue" estilo={{ fontSize: 9.5, fontWeight: '700', letterSpacing: 0.5 }}>PRONTO</Txt>
     </View>
   );
 }
@@ -277,30 +278,33 @@ function Voluta({ retraso, tamano, opacidad, color }: {
 function CasillaAncha({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
   const ir = useIr();
+  const quieto = useMovimientoReducido();
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={dato.titulo}
       onPress={() => ir('servicio', { servicio: dato.clave })}
-      style={{
+      style={({ pressed }) => ({
         width: '100%',
-        height: 124,
-        padding: tema.ritmo.dentroDeTarjeta,
+        height: 126,
+        padding: 16,
         borderRadius: tema.radio.tarjeta,
-        backgroundColor: tema.color.superficie,
+        backgroundColor: tema.color.superficieElevada,
         overflow: 'hidden',
         borderWidth: 1,
         borderColor: tema.color.borde,
+        transform: [{ scale: pressed && !quieto ? 0.985 : 1 }],
+        opacity: pressed ? 0.92 : 1,
         ...tema.superficie.sombra
-      }}
+      })}
     >
       <View style={{
         position: 'absolute',
-        right: -10,
-        bottom: -6,
-        width: 172,
-        height: 114
+        right: -6,
+        bottom: -4,
+        width: 176,
+        height: 116
       }}>
         <Humo />
         <Image
@@ -311,12 +315,26 @@ function CasillaAncha({ dato }: { readonly dato: Servicio }) {
         />
       </View>
 
-      <View style={{ width: '56%', height: '100%', justifyContent: 'space-between' }}>
-        <View style={{ gap: 4 }}>
-          <Txt nivel="encabezado">{dato.titulo}</Txt>
-          <Txt nivel="pie" tono="secundario">{dato.detalle}</Txt>
+      <View style={{ width: '56%', height: '100%', justifyContent: 'space-between', zIndex: 2 }}>
+        <View style={{ gap: 3 }}>
+          <Txt nivel="encabezado" estilo={{ fontWeight: '800', letterSpacing: -0.2 }}>{dato.titulo}</Txt>
+          <Txt nivel="pie" tono="secundario" estilo={{ fontSize: 12, lineHeight: 16 }}>{dato.detalle}</Txt>
         </View>
-        <Txt nivel="etiqueta" tono="acento">Pedir</Txt>
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 5,
+          alignSelf: 'flex-start',
+          paddingVertical: 4.5,
+          paddingHorizontal: 11,
+          borderRadius: 8,
+          backgroundColor: `${tema.color.acento}1e`,
+          borderWidth: 1,
+          borderColor: `${tema.color.acento}44`
+        }}>
+          <Txt nivel="etiqueta" tono="acento" estilo={{ fontWeight: '700', fontSize: 12 }}>Pedir</Txt>
+          <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: tema.color.acento }} />
+        </View>
       </View>
     </Pressable>
   );
@@ -331,23 +349,22 @@ function CasillaAncha({ dato }: { readonly dato: Servicio }) {
 function Casilla({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
   const ir = useIr();
+  const quieto = useMovimientoReducido();
   const arte = ARTE_DE_SERVICIO[dato.arte];
 
-  const lado = 68;
+  const lado = 44;
 
   const emblema = arte === undefined ? (
     <View style={{
-      width: lado - 8,
-      height: lado - 8,
-      borderRadius: (lado - 8) / 2,
+      width: lado,
+      height: lado,
       alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: dato.listo ? `${tema.color.acento}26` : tema.color.superficieHundida
+      justifyContent: 'center'
     }}>
       <Icono
         nombre={dato.icono}
         color={dato.listo ? tema.color.acentoTexto : tema.color.textoTenue}
-        tamano={19}
+        tamano={20}
       />
     </View>
   ) : (
@@ -365,27 +382,32 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
       accessibilityLabel={dato.titulo}
       accessibilityState={{ disabled: !dato.listo }}
       onPress={() => ir('servicio', { servicio: dato.clave })}
-      style={{
+      style={({ pressed }) => ({
         flexBasis: '48%',
         flexGrow: 1,
         maxWidth: '49%',
-        minHeight: 148,
-        padding: tema.ritmo.dentroDeTarjeta,
+        minHeight: 136,
+        padding: 14,
         borderRadius: tema.radio.tarjeta,
         backgroundColor: tema.color.superficie,
         justifyContent: 'space-between',
         borderWidth: 1,
-        borderColor: tema.color.borde,
+        borderColor: dato.listo ? `${tema.color.acento}33` : tema.color.borde,
         opacity: dato.listo ? 1 : 0.82,
+        transform: [{ scale: pressed && !quieto ? 0.98 : 1 }],
         ...tema.superficie.sombra
-      }}
+      })}
     >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{
-          width: lado,
-          height: lado,
+          width: 50,
+          height: 50,
+          borderRadius: 14,
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          backgroundColor: dato.listo ? `${tema.color.acento}14` : tema.color.superficieHundida,
+          borderWidth: 1,
+          borderColor: dato.listo ? `${tema.color.acento}33` : tema.color.borde
         }}>
           {emblema}
         </View>
@@ -393,8 +415,8 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
       </View>
 
       <View style={{ gap: 2, marginTop: 8 }}>
-        <Txt nivel="etiqueta">{dato.titulo}</Txt>
-        <Txt nivel="pie" tono="tenue" numberOfLines={1}>{dato.detalle}</Txt>
+        <Txt nivel="etiqueta" estilo={{ fontWeight: '700', fontSize: 13.5 }}>{dato.titulo}</Txt>
+        <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11, lineHeight: 14 }}>{dato.detalle}</Txt>
       </View>
     </Pressable>
   );
@@ -470,7 +492,8 @@ export function C2InicioPasajera({
   datos = DATOS_DEMO,
   modeloDelMapa,
   avisoPostulacion,
-  abrirServiciosAlMontar = false
+  abrirServiciosAlMontar = false,
+  slotBanner
 }: {
   /**
    * Sin nada, los datos de ejemplo: es el recorrido de diseño. La aplicación
@@ -491,6 +514,11 @@ export function C2InicioPasajera({
    * omisión `false`: ni el laboratorio ni el resto de usos cambian.
    */
   readonly abrirServiciosAlMontar?: boolean;
+  /**
+   * Espacio preparado para banner compacto futuro debajo del buscador.
+   * Sin lógica publicitaria ni mocks; sólo la reserva limpia para evitar romper mapa o sheet.
+   */
+  readonly slotBanner?: React.ReactNode;
 } = {}) {
   const tema = useTema();
   const ir = useIr();
@@ -522,7 +550,10 @@ export function C2InicioPasajera({
     if (hojaAbierta) {
       progreso.set(quieto
         ? 1
-        : withSpring(1, { duration: 300, dampingRatio: 0.92 }));
+        : withTiming(1, {
+            duration: 260,
+            easing: EasingAnimada.bezier(0.16, 1, 0.3, 1)
+          }));
       return;
     }
 
@@ -533,7 +564,7 @@ export function C2InicioPasajera({
     }
 
     progreso.set(withTiming(0, {
-      duration: 240,
+      duration: 200,
       easing: EasingAnimada.bezier(0.4, 0, 1, 1)
     }, terminada => {
       if (terminada) scheduleOnRN(desmontarHoja);
@@ -579,7 +610,7 @@ export function C2InicioPasajera({
           top: 0,
           right: 0,
           left: 0,
-          paddingBottom: 14,
+          paddingBottom: 10,
           backgroundColor: tema.color.fondo,
           borderBottomWidth: 1,
           borderBottomColor: tema.color.borde,
@@ -593,10 +624,11 @@ export function C2InicioPasajera({
           <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
             <CampoDeDestino onPress={() => ir('pedir')} />
             {avisoPostulacion ? (
-              <View style={{ marginTop: 10 }}>
+              <View style={{ marginTop: 8 }}>
                 <AvisoPostulacionDriver {...avisoPostulacion} />
               </View>
             ) : null}
+            {slotBanner ?? null}
           </View>
         </View>
       </LienzoDeMapa>
@@ -623,7 +655,7 @@ export function C2InicioPasajera({
                 right: 0,
                 bottom: 0,
                 left: 0,
-                height: Math.min(altoDePantalla * 0.82, altoDePantalla - 72),
+                height: Math.min(altoDePantalla * 0.78, altoDePantalla - 80),
                 borderTopLeftRadius: 28,
                 borderTopRightRadius: 28,
                 backgroundColor: tema.color.fondo,
@@ -641,7 +673,7 @@ export function C2InicioPasajera({
             ]}
           >
             <View style={{
-              minHeight: 72,
+              minHeight: 62,
               alignItems: 'center',
               justifyContent: 'center',
               paddingHorizontal: tema.ritmo.margenPantalla,
@@ -650,8 +682,8 @@ export function C2InicioPasajera({
             }}>
               <View style={{
                 position: 'absolute',
-                top: 9,
-                width: 42,
+                top: 8,
+                width: 38,
                 height: 4,
                 borderRadius: 2,
                 backgroundColor: tema.color.borde
@@ -669,10 +701,10 @@ export function C2InicioPasajera({
                 style={({ pressed }) => ({
                   position: 'absolute',
                   right: tema.ritmo.margenPantalla,
-                  top: 18,
-                  width: 44,
-                  height: 44,
-                  borderRadius: 22,
+                  top: 11,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: pressed ? tema.color.superficieHundida : tema.color.superficieElevada,
@@ -681,7 +713,7 @@ export function C2InicioPasajera({
                 })}
               >
                 <Reanimated.View style={estiloDeCerrar}>
-                  <Text style={{ color: tema.color.textoPrimario, fontSize: 27, lineHeight: 29, fontWeight: '500' }}>×</Text>
+                  <Text style={{ color: tema.color.textoPrimario, fontSize: 24, lineHeight: 26, fontWeight: '500' }}>×</Text>
                 </Reanimated.View>
               </Pressable>
             </View>
@@ -691,8 +723,8 @@ export function C2InicioPasajera({
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{
                 paddingHorizontal: tema.ritmo.margenPantalla,
-                paddingTop: 18,
-                paddingBottom: 118
+                paddingTop: 14,
+                paddingBottom: 110
               }}
             >
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>

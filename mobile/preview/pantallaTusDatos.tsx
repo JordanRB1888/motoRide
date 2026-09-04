@@ -26,8 +26,9 @@
  */
 
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { Boton, Txt } from '../ui/componentes';
+import { IconoAnimado } from '../ui/IconoAnimado';
 import { Campo } from '../ui/Campo';
 import { useTema } from '../theme/ThemeContext';
 import { CabeceraAmarilla } from './pantallasSaldo';
@@ -66,6 +67,7 @@ export function C2TusDatos({ perfil, onVolver, onGuardar }: {
   const [errores, setErrores] = useState<ErroresDeCampo>({});
   const [aviso, setAviso] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [fotoPulsada, setFotoPulsada] = useState(false);
 
   const campos = camposEditables(perfil.role);
   const modificado = hayCambios(perfil, borrador);
@@ -119,6 +121,70 @@ export function C2TusDatos({ perfil, onVolver, onGuardar }: {
           paddingTop: tema.ritmo.entreBloques,
           gap: tema.ritmo.entreElementos
         }}>
+          {/* Foto de perfil y botón para cambiarla */}
+          <View style={{ alignItems: 'center', marginBottom: 12 }}>
+            <View style={{
+              width: 88,
+              height: 88,
+              borderRadius: 44,
+              borderWidth: 2.5,
+              borderColor: tema.color.acento,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: tema.color.superficieElevada,
+              shadowColor: tema.color.acento,
+              shadowOpacity: 0.2,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 4
+            }}>
+              <Txt nivel="titulo" estilo={{ fontSize: 28, fontWeight: '800' }}>
+                {(perfil.firstName.slice(0, 1) + perfil.lastName.slice(0, 1)).toUpperCase()}
+              </Txt>
+
+              <View style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: tema.color.acento,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 2,
+                borderColor: tema.color.fondo
+              }}>
+                <IconoAnimado
+                  nombre="imagen"
+                  color="#111827"
+                  tamano={15}
+                  reaccionando={fotoPulsada}
+                  variante="pulso"
+                />
+              </View>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cambiar foto de perfil"
+              onPressIn={() => setFotoPulsada(true)}
+              onPressOut={() => setFotoPulsada(false)}
+              onPress={() => undefined}
+              style={({ pressed }) => ({
+                marginTop: 10,
+                paddingHorizontal: 14,
+                paddingVertical: 6,
+                borderRadius: 12,
+                backgroundColor: pressed ? `${tema.color.acento}18` : 'transparent'
+              })}
+            >
+              <Txt nivel="pie" tono="acento" estilo={{ fontWeight: '700' }}>
+                Cambiar foto de perfil
+              </Txt>
+            </Pressable>
+          </View>
+
           {campos.map(campo => (
             <Campo
               key={campo}

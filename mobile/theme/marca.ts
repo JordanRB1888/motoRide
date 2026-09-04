@@ -99,13 +99,13 @@ export const EMBLEMA: ImageSourcePropType =
 /**
  * Los avatares del selector de rol.
  *
- * Los encargó el dueño y llegan con la identidad ya puesta: negro y amarillo,
- * el pin del mapa, la ruta trazada y la moto. Sustituyen a lo que había —un
- * recorte de mapa y la fotografía del vehículo—, que servía pero era un apaño.
+ * Son ilustraciones editoriales propias, con fondo transparente y el lenguaje
+ * de la marca: grafito, amarillo y formas limpias. Se apoyan sobre el disco que
+ * pinta cada tarjeta, por lo que funcionan igual de bien en día y en noche sin
+ * introducir un cuadrado de fondo dentro del avatar.
  *
- * Se guardan a 288 píxeles: se usan en un hueco de 96 puntos, así que eso cubre
- * pantallas de tres veces la densidad. Los originales venían a 1254 y pesaban
- * 1,3 y 1,5 MB; a ese tamaño son 82 y 100 KB.
+ * Se guardan a 288 píxeles: el triple del tamaño aproximado al que se muestran
+ * en pantalla, con nitidez suficiente sin castigar memoria ni datos móviles.
  */
 export const AVATARES_DE_ROL = Object.freeze({
   pasajero: require('../assets/marca/rol-pasajero.png') as ImageSourcePropType,
@@ -115,10 +115,11 @@ export const AVATARES_DE_ROL = Object.freeze({
 /**
  * Los logotipos de Google y de Apple, para los botones de entrada.
  *
- * NO SON LOS OFICIALES. Google y Apple entregan los suyos y exigen usarlos;
- * estos los dibuja `scripts/marcas-de-terceros.py` con sus formas y colores
- * para poder ver y probar la pantalla, y HAY QUE SUSTITUIRLOS antes de
- * publicar en las tiendas.
+ * Google usa el activo oficial descargado de sus recursos preaprobados. El de
+ * Apple conserva la advertencia histórica «NO SON LOS OFICIALES»: ese recurso
+ * todavía NO ES EL OFICIAL y lo dibuja
+ * `scripts/marcas-de-terceros.py` para poder revisar la pantalla y HAY QUE
+ * SUSTITUIRLO antes de publicar en las tiendas.
  *
  * Mientras tanto los botones estan deshabilitados —no hay autenticacion social
  * real detras—, asi que nadie llega a un flujo de Google o de Apple detras de

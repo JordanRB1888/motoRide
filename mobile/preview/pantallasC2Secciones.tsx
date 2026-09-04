@@ -42,6 +42,7 @@ import { IconoAnimado } from '../ui/IconoAnimado';
 import { Separador } from '../ui/HojaInferior';
 import {
   BarraDeNavegacion,
+  ControlDeDisponibilidad,
   ControlDePedido,
   DESTINOS_DE_CONDUCTOR,
   DESTINOS_DE_PASAJERA
@@ -204,7 +205,7 @@ function Seccion({ titulo, activo, conCampana = true, resumen, barra = 'pasajera
       <BarraDeNavegacion
         destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo={activo}
-        control={control ?? (barra === 'conductor' ? undefined : <ControlDePedido abierto={false} />)}
+        control={control ?? (barra === 'conductor' ? <ControlDeDisponibilidad enLinea /> : <ControlDePedido abierto={false} />)}
       />
     </View>
   );
@@ -242,15 +243,20 @@ function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 14,
-        paddingVertical: 13,
-        opacity: pressed ? 0.72 : 1,
-        transform: [{ scale: pressed && !quieto ? 0.985 : 1 }]
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        borderRadius: 14,
+        backgroundColor: pressed
+          ? (esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)')
+          : 'transparent',
+        opacity: pressed ? 0.88 : 1,
+        transform: [{ scale: pressed && !quieto ? 0.988 : 1 }]
       })}
     >
       <View style={{
-        width: 38,
-        height: 38,
-        borderRadius: 19,
+        width: 40,
+        height: 40,
+        borderRadius: 12,
         position: 'relative',
         alignItems: 'center',
         justifyContent: 'center',
@@ -261,7 +267,7 @@ function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
         borderWidth: 1,
         borderColor: tono === 'peligro'
           ? (esNoche ? 'rgba(239, 68, 68, 0.35)' : 'transparent')
-          : (esNoche ? 'rgba(245, 158, 11, 0.22)' : '#E5E7EB')
+          : (esNoche ? 'rgba(245, 158, 11, 0.22)' : tema.color.borde)
       }}>
         <IconoAnimado
           nombre={icono}
@@ -271,10 +277,10 @@ function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
         />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Txt nivel="cuerpo" tono={tono === 'peligro' ? 'secundario' : 'primario'} estilo={{ fontWeight: '600' }}>
+        <Txt nivel="cuerpo" tono={tono === 'peligro' ? 'secundario' : 'primario'} estilo={{ fontWeight: '600', fontSize: 15 }}>
           {titulo}
         </Txt>
-        {detalle ? <Txt nivel="pie" tono="tenue">{detalle}</Txt> : null}
+        {detalle ? <Txt nivel="pie" tono="secundario" estilo={{ fontSize: 12, lineHeight: 16 }}>{detalle}</Txt> : null}
       </View>
       {derecha}
       <Galon reaccionando={reaccionando} />
@@ -304,8 +310,8 @@ function Galon({ reaccionando = false }: { readonly reaccionando?: boolean }) {
       {[38, -38].map((giro, indice) => (
         <View key={giro} style={{
           position: 'absolute',
-          width: 8, height: 1.7, borderRadius: 1,
-          backgroundColor: tema.color.textoTenue,
+          width: 8, height: 1.8, borderRadius: 1,
+          backgroundColor: tema.color.textoSecundario,
           transform: [{ rotate: `${giro}deg` }, { translateY: indice === 0 ? -2.4 : 2.4 }]
         }} />
       ))}
@@ -516,8 +522,6 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
               onPress={onFila === undefined ? undefined : () => onFila('datos')}
             />
             <Separador />
-            <Fila icono="destino" titulo="Direcciones guardadas" detalle="Casa, trabajo y las que añadas" />
-            <Separador />
             <Fila
               icono="escudo"
               titulo="Seguridad de la cuenta"
@@ -549,14 +553,6 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
             />
           </Grupo>
 
-          <Grupo titulo="Dinero">
-            <Fila icono="billetera" titulo="Tu saldo" detalle="Todavía no está activo" />
-          </Grupo>
-
-          <Grupo titulo="Ayuda">
-            <Fila icono="ayuda" titulo="Soporte" detalle="Escríbenos si algo no cuadra" />
-          </Grupo>
-
           <View style={{ marginTop: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
             <Boton
               titulo="Cerrar sesión"
@@ -572,7 +568,7 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
       <BarraDeNavegacion
         destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo="perfil"
-        control={control ?? (barra === 'conductor' ? undefined : <ControlDePedido abierto={false} />)}
+        control={control ?? (barra === 'conductor' ? <ControlDeDisponibilidad enLinea /> : <ControlDePedido abierto={false} />)}
       />
     </View>
   );
@@ -917,7 +913,7 @@ const AVISOS_DE_EJEMPLO: readonly AvisoEnPantalla[] = AVISOS_DEMO.map(aviso => (
   navegable: true
 }));
 
-export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, onReintentar }: {
+export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, onReintentar, barra = 'pasajera' }: {
   readonly avisos?: readonly AvisoEnPantalla[];
   readonly estado?: 'cargando' | 'listo' | 'error';
   /** El texto del final. Cambia según si los avisos llevan a alguna parte. */
@@ -925,6 +921,8 @@ export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, 
   readonly onAviso?: (clave: string) => void;
   readonly onLeerTodos?: () => void;
   readonly onReintentar?: () => void;
+  /** De quién es la barra inferior: pasajera o conductor. */
+  readonly barra?: 'pasajera' | 'conductor';
 } = {}) {
   const tema = useTema();
   const lista = avisos ?? (EN_DESARROLLO ? AVISOS_DE_EJEMPLO : []);
@@ -932,7 +930,7 @@ export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, 
 
   if (estado === 'cargando') {
     return (
-      <Seccion titulo="Avisos" activo="perfil" conCampana={false}>
+      <Seccion titulo="Avisos" activo="perfil" conCampana={false} barra={barra}>
         <View style={{ paddingVertical: tema.ritmo.entreBloques * 2, alignItems: 'center' }}>
           <ActivityIndicator color={tema.color.acento} />
         </View>
@@ -942,7 +940,7 @@ export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, 
 
   if (estado === 'error') {
     return (
-      <Seccion titulo="Avisos" activo="perfil" conCampana={false}>
+      <Seccion titulo="Avisos" activo="perfil" conCampana={false} barra={barra}>
         <View style={{ paddingVertical: tema.ritmo.entreBloques, alignItems: 'center', gap: tema.ritmo.entreElementos }}>
           <Txt nivel="cuerpo" centrado>No se pudieron cargar tus avisos.</Txt>
           <Boton titulo="Reintentar" variante="secundario" onPress={onReintentar ?? (() => undefined)} />
@@ -952,7 +950,7 @@ export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, 
   }
 
   return (
-    <Seccion titulo="Avisos" activo="perfil" conCampana={false}>
+    <Seccion titulo="Avisos" activo="perfil" conCampana={false} barra={barra}>
       {/* «Marcar todos» aparece con DOS condiciones: que haya algo que marcar y
           que alguien sepa marcarlo.
           Lo segundo deja el recorrido de diseño exactamente como estaba —ahí

@@ -33,7 +33,8 @@
 
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { Boton, Insignia, Txt } from '../ui/componentes';
+import { Txt } from '../ui/componentes';
+import { TarjetaSaldoDriver } from '../ui/TarjetaSaldoDriver';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
 import { Separador } from '../ui/HojaInferior';
 import { BarraDeNavegacion, ControlDeDisponibilidad, DESTINOS_DE_CONDUCTOR } from '../ui/Navegacion';
@@ -110,63 +111,22 @@ export function C2SaldoConductor({ deudor = false }: { readonly deudor?: boolean
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* El saldo, en grande. Es lo primero que se mira al abrir esto. */}
-        <View style={{
-          padding: tema.ritmo.dentroDeTarjeta,
-          borderRadius: tema.radio.tarjeta,
-          backgroundColor: tema.color.superficie,
-          gap: tema.ritmo.entreElementos,
-          overflow: 'hidden',
-          // En deuda el borde rojo se ve antes que cualquier texto.
-          borderWidth: deudor ? 1 : 0,
-          borderColor: tema.color.peligro
-        }}>
-          {/* El filo: en esta pantalla, el saldo es la zona que manda. */}
-          <View style={{
-            position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
-            backgroundColor: deudor ? tema.color.peligro : tema.color.acento
-          }} />
+        {/* Tarjeta de Saldo Fintech para Conductor (según referencia aprobada) */}
+        <TarjetaSaldoDriver
+          balanceTexto={deudor ? '−$0,00' : '$0,00'}
+          moneda="USD"
+          equivalenteTexto={deudor ? 'SALDO DEUDOR CON +58EXPRESS' : `≈ ${TASA_DEMO.valor}`}
+          tasaTexto={deudor ? 'Recarga para volver a recibir viajes.' : 'BCV'}
+          deudor={deudor}
+          deshabilitado={deudor}
+          onVerPagoMovil={() => undefined}
+          onRegistrarRecarga={() => undefined}
+        />
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Txt nivel="etiqueta" tono={deudor ? 'secundario' : 'secundario'}>
-              {deudor ? 'SALDO DEUDOR CON +58EXPRESS' : 'BALANCE DISPONIBLE'}
-            </Txt>
-            <View style={{ flex: 1 }} />
-            <Insignia texto="0 viajes" />
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
-            <Txt
-              nivel="display"
-              tono={deudor ? 'primario' : 'acento'}
-              estilo={{ color: deudor ? tema.color.peligro : tema.color.acento } as never}
-            >
-              {deudor ? '−$0,00' : '$0,00'}
-            </Txt>
-            <Txt nivel="cuerpo" tono="tenue" estilo={{ paddingBottom: 5 } as never}>USD</Txt>
-          </View>
-
-          <Txt nivel="pie" tono="tenue">
-            {deudor
-              ? 'Recarga para volver a recibir viajes.'
-              : `≈ ${TASA_DEMO.valor} · tasa referencial del BCV`}
-          </Txt>
-
-          <View style={{ gap: tema.ritmo.entreElementos }}>
-            <Boton titulo="Recargar saldo" onPress={() => undefined} />
-            <Boton
-              titulo="Solicitar liquidación"
-              variante="secundario"
-              onPress={() => undefined}
-              deshabilitado={deudor}
-            />
-          </View>
-
-          <Txt nivel="pie" tono="tenue">
-            La cartera todavía no está encendida en el servidor: las cifras se
-            muestran en cero a propósito.
-          </Txt>
-        </View>
+        <Txt nivel="pie" tono="tenue" centrado estilo={{ marginTop: 8 } as never}>
+          La cartera todavía no está encendida en el servidor: las cifras se
+          muestran en cero a propósito.
+        </Txt>
 
         {/* Cómo se reparte cada viaje. Es la duda más frecuente de quien
             conduce, y tenerla aquí evita buscarla en otro sitio. */}

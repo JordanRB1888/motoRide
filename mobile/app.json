@@ -20,6 +20,9 @@
     },
     "android": {
       "package": "com.plus58express.app",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -55,6 +58,7 @@
         }
       ],
       "./plugins/rutaCortaDeCmake",
+      "./plugins/httpLanSoloEnDevelopment",
       "@react-native-google-signin/google-signin",
       "expo-apple-authentication"
     ],

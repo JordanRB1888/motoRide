@@ -45,7 +45,21 @@ export const NOMBRES_DE_ICONO = [
   'ajustes',
   'dolar',
   'mensaje',
-  'imagen'
+  'imagen',
+  'volante',
+  'lapiz',
+  'documento',
+  'ayuda',
+  'salir',
+  'papelera',
+  'billetera',
+  'buscar',
+  'calendario',
+  'flecha-arriba',
+  'flecha-abajo',
+  'servicios',
+  'telefono',
+  'mas'
 ] as const;
 export type NombreDeIcono = (typeof NOMBRES_DE_ICONO)[number];
 
@@ -62,7 +76,7 @@ export function Icono({ nombre, color, tamano = 24, activo = false }: Propiedade
 
   return (
     <View
-      style={[estilos.marco, { width: tamano, height: tamano }]}
+      style={[estilos.marco, { width: tamano, height: tamano, position: 'relative' }]}
       accessibilityElementsHidden
       importantForAccessibility="no"
     >
@@ -304,34 +318,40 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
       );
     }
 
-    // Escudo: cuerpo recto arriba y redondeado hacia la punta.
+    // Escudo / Seguridad: candado con arco superior y cerradura.
     case 'escudo':
       return (
         <>
           <View style={{
             position: 'absolute',
-            top: t.tamano * 0.11,
-            width: t.tamano * 0.64,
-            height: t.tamano * 0.44,
-            borderTopLeftRadius: t.trazo * 2,
-            borderTopRightRadius: t.trazo * 2,
+            top: t.tamano * 0.10,
+            width: t.tamano * 0.42,
+            height: t.tamano * 0.38,
+            borderTopLeftRadius: t.tamano * 0.21,
+            borderTopRightRadius: t.tamano * 0.21,
             borderWidth: t.trazo,
             borderBottomWidth: 0,
-            borderColor: t.color,
-            backgroundColor: t.activo ? t.color : 'transparent'
+            borderColor: t.color
           }} />
           <View style={{
             position: 'absolute',
-            bottom: t.tamano * 0.11,
-            width: t.tamano * 0.64,
-            height: t.tamano * 0.34,
-            borderBottomLeftRadius: t.tamano * 0.32,
-            borderBottomRightRadius: t.tamano * 0.32,
+            bottom: t.tamano * 0.12,
+            width: t.tamano * 0.68,
+            height: t.tamano * 0.48,
+            borderRadius: t.trazo * 2.5,
             borderWidth: t.trazo,
-            borderTopWidth: 0,
             borderColor: t.color,
-            backgroundColor: t.activo ? t.color : 'transparent'
-          }} />
+            backgroundColor: t.activo ? t.color : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <View style={{
+              width: t.trazo * 1.3,
+              height: t.tamano * 0.16,
+              borderRadius: t.trazo * 0.65,
+              backgroundColor: t.activo ? '#0b0a09' : t.color
+            }} />
+          </View>
         </>
       );
 
@@ -415,17 +435,27 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
         </>
       );
 
-    // Campana: cuerpo acampanado, base y badajo.
+    // Campana: corona superior, cuerpo esbelto acampanado, base y badajo.
     case 'campana':
       return (
         <>
           <View style={{
             position: 'absolute',
-            top: t.tamano * 0.15,
-            width: t.tamano * 0.56,
-            height: t.tamano * 0.46,
-            borderTopLeftRadius: t.tamano * 0.28,
-            borderTopRightRadius: t.tamano * 0.28,
+            top: t.tamano * 0.08,
+            width: t.tamano * 0.22,
+            height: t.tamano * 0.16,
+            borderRadius: t.tamano * 0.08,
+            borderWidth: t.trazo * 0.9,
+            borderColor: t.color,
+            borderBottomWidth: 0
+          }} />
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.18,
+            width: t.tamano * 0.60,
+            height: t.tamano * 0.50,
+            borderTopLeftRadius: t.tamano * 0.30,
+            borderTopRightRadius: t.tamano * 0.30,
             borderWidth: t.trazo,
             borderBottomWidth: 0,
             borderColor: t.color,
@@ -433,59 +463,118 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
           }} />
           <View style={{
             position: 'absolute',
-            top: t.tamano * 0.61,
-            width: t.tamano * 0.74,
-            height: t.trazo,
+            top: t.tamano * 0.68,
+            width: t.tamano * 0.78,
+            height: t.trazo * 1.1,
             borderRadius: t.trazo,
             backgroundColor: t.color
           }} />
           <View style={{
             position: 'absolute',
-            top: t.tamano * 0.68,
-            width: t.tamano * 0.2,
-            height: t.tamano * 0.13,
+            top: t.tamano * 0.73,
+            width: t.tamano * 0.24,
+            height: t.tamano * 0.16,
             borderWidth: t.trazo,
             borderTopWidth: 0,
             borderColor: t.color,
-            borderBottomLeftRadius: t.tamano * 0.1,
-            borderBottomRightRadius: t.tamano * 0.1
+            borderBottomLeftRadius: t.tamano * 0.12,
+            borderBottomRightRadius: t.tamano * 0.12,
+            backgroundColor: t.activo ? t.color : 'transparent'
           }} />
         </>
       );
 
-    // Ajustes: tres carriles con su mando. Deslizadores y no un engranaje: un
-    // engranaje a este tamaño y con vistas se convierte en una mancha.
+    // Ajustes: dos deslizadores horizontales perfectamente alineados y centrados.
     case 'ajustes':
       return (
         <>
-          {[
-            { alto: 0.26, mando: 0.6 },
-            { alto: 0.5, mando: 0.26 },
-            { alto: 0.74, mando: 0.64 }
-          ].map(carril => (
-            <View key={carril.alto}>
-              <View style={{
-                position: 'absolute',
-                top: t.tamano * carril.alto,
-                left: t.tamano * 0.13,
-                width: t.tamano * 0.74,
-                height: t.trazo,
-                borderRadius: t.trazo,
-                backgroundColor: t.color
-              }} />
-              <View style={{
-                position: 'absolute',
-                top: t.tamano * carril.alto - t.trazo * 1.4,
-                left: t.tamano * carril.mando,
-                width: t.trazo * 3.4,
-                height: t.trazo * 3.4,
-                borderRadius: t.trazo * 1.7,
-                borderWidth: t.trazo,
-                borderColor: t.color,
-                backgroundColor: t.activo ? t.color : '#0b0a09'
-              }} />
-            </View>
-          ))}
+          {/* Pista superior */}
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.33,
+            left: t.tamano * 0.12,
+            width: t.tamano * 0.76,
+            height: t.trazo,
+            borderRadius: t.trazo,
+            backgroundColor: t.color
+          }} />
+          {/* Pomo superior a la derecha */}
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.33 - t.tamano * 0.09,
+            left: t.tamano * 0.58,
+            width: t.tamano * 0.22,
+            height: t.tamano * 0.22,
+            borderRadius: t.tamano * 0.11,
+            backgroundColor: t.color
+          }} />
+
+          {/* Pista inferior */}
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.65,
+            left: t.tamano * 0.12,
+            width: t.tamano * 0.76,
+            height: t.trazo,
+            borderRadius: t.trazo,
+            backgroundColor: t.color
+          }} />
+          {/* Pomo inferior a la izquierda */}
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.65 - t.tamano * 0.09,
+            left: t.tamano * 0.20,
+            width: t.tamano * 0.22,
+            height: t.tamano * 0.22,
+            borderRadius: t.tamano * 0.11,
+            backgroundColor: t.color
+          }} />
+        </>
+      );
+
+    // Volante: aro exterior, buje central y radios (conductor).
+    case 'volante':
+      return (
+        <>
+          <View style={{
+            position: 'absolute',
+            width: t.tamano * 0.82,
+            height: t.tamano * 0.82,
+            borderRadius: t.tamano * 0.41,
+            borderWidth: t.trazo,
+            borderColor: t.color,
+            backgroundColor: t.activo ? `${t.color}22` : 'transparent'
+          }} />
+          <View style={{
+            position: 'absolute',
+            width: t.tamano * 0.28,
+            height: t.tamano * 0.28,
+            borderRadius: t.tamano * 0.14,
+            backgroundColor: t.color
+          }} />
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.41 - t.trazo / 2,
+            left: t.tamano * 0.09,
+            width: t.tamano * 0.27,
+            height: t.trazo,
+            backgroundColor: t.color
+          }} />
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.41 - t.trazo / 2,
+            right: t.tamano * 0.09,
+            width: t.tamano * 0.27,
+            height: t.trazo,
+            backgroundColor: t.color
+          }} />
+          <View style={{
+            position: 'absolute',
+            top: t.tamano * 0.41,
+            bottom: t.tamano * 0.09,
+            width: t.trazo,
+            backgroundColor: t.color
+          }} />
         </>
       );
 
@@ -576,9 +665,245 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
           ))}
         </>
       );
+
+    // Lápiz: cuerpo diagonal, goma y punta. La inclinación comunica edición.
+    case 'lapiz':
+      return (
+        <>
+          <View style={{
+            position: 'absolute', width: t.tamano * 0.68, height: t.tamano * 0.22,
+            borderRadius: t.trazo, borderWidth: t.trazo, borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent',
+            transform: [{ rotate: '-45deg' }]
+          }} />
+          <View style={{
+            position: 'absolute', right: t.tamano * 0.12, top: t.tamano * 0.13,
+            width: t.tamano * 0.19, height: t.tamano * 0.19,
+            borderRadius: t.trazo, backgroundColor: t.color,
+            transform: [{ rotate: '-45deg' }]
+          }} />
+        </>
+      );
+
+    // Hoja con renglones: documentos, condiciones y licencias.
+    case 'documento':
+      return (
+        <>
+          <View style={{
+            position: 'absolute', width: t.tamano * 0.68, height: t.tamano * 0.82,
+            borderRadius: t.trazo * 1.5, borderWidth: t.trazo, borderColor: t.color,
+            backgroundColor: t.activo ? `${t.color}22` : 'transparent'
+          }} />
+          {[0.38, 0.53, 0.68].map((arriba, indice) => (
+            <View key={arriba} style={{
+              position: 'absolute', top: t.tamano * arriba, left: t.tamano * 0.27,
+              width: t.tamano * (indice === 2 ? 0.3 : 0.45), height: t.trazo,
+              borderRadius: t.trazo, backgroundColor: t.color
+            }} />
+          ))}
+        </>
+      );
+
+    // Ayuda: círculo y signo inequívoco, legible también a 18 puntos.
+    case 'ayuda':
+      return (
+        <View style={{
+          width: t.tamano * 0.82, height: t.tamano * 0.82,
+          borderRadius: t.tamano * 0.41, borderWidth: t.trazo, borderColor: t.color,
+          backgroundColor: t.activo ? t.color : 'transparent',
+          alignItems: 'center', justifyContent: 'center'
+        }}>
+          <Text style={{
+            color: t.activo ? '#0b0a09' : t.color,
+            fontSize: t.tamano * 0.55, lineHeight: t.tamano * 0.65,
+            fontWeight: '800', includeFontPadding: false
+          }}>?</Text>
+        </View>
+      );
+
+    // Salida: marco abierto y flecha que abandona la cuenta.
+    case 'salir':
+      return (
+        <>
+          <View style={{
+            position: 'absolute', left: t.tamano * 0.12,
+            width: t.tamano * 0.5, height: t.tamano * 0.76,
+            borderWidth: t.trazo, borderRightWidth: 0, borderColor: t.color,
+            borderTopLeftRadius: t.trazo * 2, borderBottomLeftRadius: t.trazo * 2
+          }} />
+          <View style={{ position: 'absolute', left: t.tamano * 0.35, width: t.tamano * 0.48, height: t.trazo, backgroundColor: t.color }} />
+          <View style={{
+            position: 'absolute', right: t.tamano * 0.12,
+            width: t.tamano * 0.25, height: t.tamano * 0.25,
+            borderTopWidth: t.trazo, borderRightWidth: t.trazo, borderColor: t.color,
+            transform: [{ rotate: '45deg' }]
+          }} />
+        </>
+      );
+
+    // Papelera contenida: tapa, asa y cuerpo. Sin gesto juguetón.
+    case 'papelera':
+      return (
+        <>
+          <View style={{
+            position: 'absolute', bottom: t.tamano * 0.1,
+            width: t.tamano * 0.58, height: t.tamano * 0.58,
+            borderWidth: t.trazo, borderTopWidth: 0, borderColor: t.color,
+            borderBottomLeftRadius: t.trazo * 2, borderBottomRightRadius: t.trazo * 2
+          }} />
+          <View style={{ position: 'absolute', top: t.tamano * 0.27, width: t.tamano * 0.76, height: t.trazo, backgroundColor: t.color }} />
+          <View style={{
+            position: 'absolute', top: t.tamano * 0.14,
+            width: t.tamano * 0.28, height: t.tamano * 0.14,
+            borderWidth: t.trazo, borderBottomWidth: 0, borderColor: t.color,
+            borderTopLeftRadius: t.trazo * 2, borderTopRightRadius: t.trazo * 2
+          }} />
+        </>
+      );
+
+    // Billetera: cuerpo y broche lateral.
+    case 'billetera':
+      return (
+        <>
+          <View style={{
+            position: 'absolute', width: t.tamano * 0.82, height: t.tamano * 0.62,
+            borderRadius: t.tamano * 0.12, borderWidth: t.trazo, borderColor: t.color,
+            backgroundColor: t.activo ? `${t.color}22` : 'transparent'
+          }} />
+          <View style={{
+            position: 'absolute', right: t.tamano * 0.04,
+            width: t.tamano * 0.36, height: t.tamano * 0.25,
+            borderRadius: t.tamano * 0.08, borderWidth: t.trazo, borderColor: t.color,
+            backgroundColor: t.activo ? t.color : 'transparent'
+          }} />
+          <View style={{ position: 'absolute', right: t.tamano * 0.18, width: t.trazo * 1.2, height: t.trazo * 1.2, borderRadius: t.trazo, backgroundColor: t.color }} />
+        </>
+      );
+
+    // Lupa: búsqueda, no historial ni destino.
+    case 'buscar':
+      return (
+        <>
+          <View style={{
+            position: 'absolute', top: t.tamano * 0.11, left: t.tamano * 0.12,
+            width: t.tamano * 0.56, height: t.tamano * 0.56,
+            borderRadius: t.tamano * 0.28, borderWidth: t.trazo, borderColor: t.color
+          }} />
+          <View style={{
+            position: 'absolute', bottom: t.tamano * 0.18, right: t.tamano * 0.11,
+            width: t.tamano * 0.34, height: t.trazo, borderRadius: t.trazo,
+            backgroundColor: t.color, transform: [{ rotate: '45deg' }]
+          }} />
+        </>
+      );
+
+    // Calendario: hoja, lomo y dos anillas.
+    case 'calendario':
+      return (
+        <>
+          <View style={{
+            position: 'absolute', top: t.tamano * 0.18,
+            width: t.tamano * 0.78, height: t.tamano * 0.68,
+            borderRadius: t.tamano * 0.1, borderWidth: t.trazo, borderColor: t.color,
+            backgroundColor: t.activo ? `${t.color}22` : 'transparent'
+          }} />
+          <View style={{ position: 'absolute', top: t.tamano * 0.39, width: t.tamano * 0.78, height: t.trazo, backgroundColor: t.color }} />
+          {[0.33, 0.67].map(izquierda => (
+            <View key={izquierda} style={{ position: 'absolute', top: t.tamano * 0.08, left: t.tamano * izquierda, width: t.trazo, height: t.tamano * 0.22, borderRadius: t.trazo, backgroundColor: t.color }} />
+          ))}
+        </>
+      );
+
+    case 'flecha-arriba':
+    case 'flecha-abajo':
+      return (
+        <>
+          <View style={{ position: 'absolute', width: t.trazo, height: t.tamano * 0.66, borderRadius: t.trazo, backgroundColor: t.color }} />
+          <View style={{
+            position: 'absolute',
+            top: nombre === 'flecha-arriba' ? t.tamano * 0.15 : undefined,
+            bottom: nombre === 'flecha-abajo' ? t.tamano * 0.15 : undefined,
+            width: t.tamano * 0.33, height: t.tamano * 0.33,
+            borderTopWidth: t.trazo, borderLeftWidth: t.trazo, borderColor: t.color,
+            transform: [{ rotate: nombre === 'flecha-arriba' ? '45deg' : '225deg' }]
+          }} />
+        </>
+      );
+
+    // Servicios / Hub de aplicaciones / Launcher: cuadrícula 2x2 armónica, moderna y simétrica.
+    // Cuatro baldosas redondeadas que comunican un hub de aplicaciones y servicios.
+    case 'servicios': {
+      const ladoBaldosa = t.tamano * 0.33;
+      const separacion = t.tamano * 0.12;
+      const radioBaldosa = Math.max(2, t.tamano * 0.08);
+      const margen = (t.tamano - (ladoBaldosa * 2 + separacion)) / 2;
+
+      return (
+        <>
+          {[
+            { x: margen, y: margen },
+            { x: margen + ladoBaldosa + separacion, y: margen },
+            { x: margen, y: margen + ladoBaldosa + separacion },
+            { x: margen + ladoBaldosa + separacion, y: margen + ladoBaldosa + separacion }
+          ].map((pos, idx) => (
+            <View
+              key={idx}
+              style={{
+                position: 'absolute',
+                left: pos.x,
+                top: pos.y,
+                width: ladoBaldosa,
+                height: ladoBaldosa,
+                borderRadius: radioBaldosa,
+                backgroundColor: t.activo ? t.color : 'transparent',
+                borderWidth: t.activo ? 0 : t.trazo,
+                borderColor: t.color
+              }}
+            />
+          ))}
+        </>
+      );
+    }
+
+    case 'telefono': {
+      const ancho = t.tamano * 0.54;
+      const alto = t.tamano * 0.84;
+      const radio = Math.max(3, t.tamano * 0.12);
+      return (
+        <View style={{
+          position: 'absolute',
+          width: ancho,
+          height: alto,
+          borderRadius: radio,
+          borderWidth: t.trazo,
+          borderColor: t.color,
+          backgroundColor: t.activo ? `${t.color}22` : 'transparent',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingVertical: Math.max(2, t.trazo * 1.5)
+        }}>
+          <View style={{ width: ancho * 0.35, height: t.trazo, borderRadius: t.trazo / 2, backgroundColor: t.color }} />
+          <View style={{ width: t.trazo * 1.8, height: t.trazo * 1.8, borderRadius: t.trazo, backgroundColor: t.color }} />
+        </View>
+      );
+    }
+
+    case 'mas': {
+      const largo = t.tamano * 0.62;
+      return (
+        <View style={{ position: 'absolute', width: largo, height: largo, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ position: 'absolute', width: largo, height: t.trazo, borderRadius: t.trazo / 2, backgroundColor: t.color }} />
+          <View style={{ position: 'absolute', width: t.trazo, height: largo, borderRadius: t.trazo / 2, backgroundColor: t.color }} />
+        </View>
+      );
+    }
   }
 }
 
 const estilos = StyleSheet.create({
-  marco: { alignItems: 'center', justifyContent: 'center' }
+  marco: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center'
+  }
 });
