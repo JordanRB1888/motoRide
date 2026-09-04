@@ -23,6 +23,10 @@ import {
   validateApplicationForSubmission,
   validateDriverApplicationInput
 } from '../domain/driverApplicationModel.js';
+import {
+  PHONE_VERIFICATION_REQUIRED,
+  faltaTelefonoVerificadoParaConductor
+} from '../domain/politicaDeVerificacion.js';
 
 // Solo lo que se puede subir hoy. El vídeo de presentación está en el modelo
 // pero no aquí: el almacenamiento privado no lo admite todavía.
@@ -600,6 +604,17 @@ export function createDriverApplicationsRouter({
     if (missing.length) return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
     const submission = validateApplicationForSubmission(application);
     if (!submission.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: submission.errors });
+    // AUTH-FINAL-2: la politica de telefono verificado, HOY APAGADA. Se deja
+    // cableada aqui --el envio, no la aprobacion ni la entrada-- para que
+    // encenderla sea una variable de entorno y no un cambio de codigo. Con la
+    // politica apagada, `faltaTelefonoVerificadoParaConductor` devuelve
+    // siempre `false` y esta linea no hace nada. Ver el informe: encenderla
+    // hoy bloquearia a TODOS los expedientes existentes.
+    if (faltaTelefonoVerificadoParaConductor({
+      contactosVerificados: authIdentities?.contactos.deUsuario(req.user.id) ?? []
+    })) {
+      return res.status(403).json({ error: PHONE_VERIFICATION_REQUIRED, contactType: 'PHONE' });
+    }
     const now = new Date().toISOString();
     application.status = DRIVER_APPLICATION_STATUS.PENDING;
     application.submittedAt = now;
