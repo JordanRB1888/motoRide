@@ -462,7 +462,9 @@ test('Historial → Detalle → volver', () => {
     'el historial no abre el detalle con el id real'
   );
   assert.match(sinComentarios('app/viaje/[id].tsx'), /router\.back\(\)/, 'no se puede volver');
-  assert.match(sinComentarios('app/historial.tsx'), /clave === 'historial'\) router\.replace\('\/historial'\)/);
+  // La pestana la resuelve el shell, que hace `replace` y no apila: asi
+  // «atras» sale de la aplicacion en vez de recorrer la historia de pestanas.
+  assert.match(sinComentarios('navegacion/shellDePasajero.tsx'), /case 'historial':\n *router\.replace\('\/historial'\)/);
 });
 
 test('la aplicación real NUNCA navega a /diseno', () => {

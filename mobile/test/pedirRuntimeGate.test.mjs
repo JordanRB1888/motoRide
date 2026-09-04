@@ -54,21 +54,27 @@ test('el inicio real monta el HUB aprobado, no una tarjeta de espera', () => {
   // El HUB se monta con los datos reales y el mapa. Desde D4 lleva además el
   // aviso de la postulación, que es una tarjeta más dentro del HUB, no otra
   // pantalla: por eso se comprueba el montaje, no la línea entera.
-  assert.match(inicio, /<C2InicioPasajera datos=\{datos\} modeloDelMapa=\{MAPA_DEL_HOME\}/);
-  assert.match(inicio, /<ProveedorDeNavegacion ir=\{irA\}>/);
+  assert.match(inicio, /<C2InicioPasajera/);
+  assert.match(inicio, /datos=\{datos\}/);
+  assert.match(inicio, /modeloDelMapa=\{MAPA_DEL_HOME\}/);
+  // La navegacion la trae ahora `ShellDePasajero`, que ademas comprueba el rol
+  // --la guarda que le faltaba a esta pantalla--.
+  assert.match(inicio, /<ShellDePasajero/);
   // La tarjeta que decía que Pedir llegaría después se fue con la entrega.
   assert.equal(/siguiente entrega/.test(inicio), false, 'el inicio sigue prometiendo Pedir para luego');
 });
 
 test('Inicio → Pedir resuelve a app/pedir.tsx, no al laboratorio', () => {
   const inicio = sinComentarios('app/pasajero.tsx');
-  // La clave `pedir` —la que emiten el disco central y el campo de destino—
-  // lleva a la ruta REAL.
-  assert.match(inicio, /if \(clave === 'pedir'\) \{ router\.push\('\/pedir'\); return; \}/);
-  // Y la casilla grande de «Viajes» también.
-  assert.match(inicio, /parametros\?\.servicio === 'viajes'\) \{ router\.push\('\/pedir'\); \}/);
-  // Nunca a `/diseno`.
+  // La tabla de claves vive ahora en el shell, entera y una sola vez.
+  const shell = sinComentarios('navegacion/shellDePasajero.tsx');
+  // La casilla grande de «Viajes» lleva a la ruta REAL.
+  assert.match(shell, /parametros\?\.servicio === 'viajes'\) router\.push\('\/pedir'\)/);
+  // Y el disco central abre la hoja de servicios, que es donde esta «Viajes».
+  assert.match(shell, /case 'pedir':/);
+  // Nunca a `/diseno`, ni desde el inicio ni desde el shell.
   assert.equal(/diseno/.test(inicio), false, 'el inicio real navega al laboratorio');
+  assert.equal(/diseno/.test(shell), false, 'el shell navega al laboratorio');
 
   // El campo conserva la puerta directa al flujo real. El disco central ahora
   // despliega el catálogo sobre el mapa y la card Viajes mantiene la otra puerta.
@@ -84,8 +90,10 @@ test('la ruta /pedir existe y es la pantalla integrada', () => {
   assert.ok(fs.existsSync(path.join(raizMovil, 'app/pedir.tsx')), 'no existe app/pedir.tsx');
   const pedir = sinComentarios('app/pedir.tsx');
   assert.match(pedir, /export default function PantallaDePedir/);
-  // Y vuelve al inicio REAL, no al de diseño.
-  assert.match(pedir, /router\.replace\('\/pasajero'\)/);
+  // Y vuelve al inicio REAL, no al de diseño: la vuelta la resuelve el shell,
+  // que es quien tiene la tabla de navegación entera.
+  assert.match(pedir, /crearNavegacionDePasajero\(\{ enPedir: true \}\)/);
+  assert.match(sinComentarios('navegacion/shellDePasajero.tsx'), /router\.replace\('\/pasajero'\)/);
 });
 
 test('el inicio real sigue volviendo al viaje en marcha', () => {

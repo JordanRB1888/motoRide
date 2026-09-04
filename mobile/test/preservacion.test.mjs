@@ -180,7 +180,8 @@ test('el control de disponibilidad conserva sus estados y su latido', () => {
   assert.match(fuente, /tema\.color\.exito/, 'en línea va en el verde del sistema');
   assert.match(fuente, /En línea/);
   assert.match(fuente, /Animated\.loop/, 'el latido comunica que sigue escuchando');
-  assert.match(fuente, /isReduceMotionEnabled/, 'el latido se apaga si se pide movimiento reducido');
+  assert.match(fuente, /useMovimientoReducido/, 'el latido consulta la preferencia compartida');
+  assert.match(leer('ui/movimiento.ts'), /isReduceMotionEnabled/, 'la preferencia no consulta al sistema');
 });
 
 test('el arranque conserva la identidad del que ya existe', () => {
@@ -484,17 +485,11 @@ test('los ajustes de cuenta viven en el perfil, no en la barra', () => {
   assert.doesNotMatch(navegacion, /etiqueta: 'Configuración'/, 'configuración no es una pestaña');
 });
 
-test('lo irreversible va separado de lo reversible', () => {
-  // «Eliminar cuenta» junto a «Cerrar sesión» en la misma lista es un accidente
-  // esperando: se parecen, están juntas, y una de las dos no tiene vuelta.
-  const secciones = leer('preview/pantallasC2Secciones.tsx');
-  const perfil = secciones.slice(secciones.indexOf('export function C2Perfil'), secciones.indexOf('// Saldo'));
-  assert.match(perfil, /Eliminar cuenta/);
-  assert.match(perfil, /tono="peligro"/, 'va marcada como destructiva');
-  assert.ok(
-    perfil.indexOf('Cerrar sesión') < perfil.indexOf('Eliminar cuenta'),
-    'eliminar va después de cerrar sesión, y separada'
-  );
+test('lo irreversible va separado de lo reversible, dentro de configuración', () => {
+  // «Eliminar cuenta» va dentro de Configuración al final, marcada como destructiva.
+  const config = leer('preview/pantallaConfiguracion.tsx');
+  assert.match(config, /Eliminar cuenta/);
+  assert.match(config, /tono="peligro"/, 'va marcada como destructiva');
 });
 
 test('los avisos tienen puerta desde las pantallas de uso', () => {
@@ -550,16 +545,17 @@ test('el arranque no dibuja círculos', () => {
 // El disco central
 // ---------------------------------------------------------------------------
 
-test('el disco central es la MISMA pieza en los dos roles', () => {
-  // Es la decisión de identidad: una forma que sirve en las dos pantallas. Si
-  // cada rol dibujara la suya, dejarían de ser la misma aplicación y habría que
-  // aprender dos cosas donde basta una.
+test('la curva es de la pasajera y el conductor conserva su disco', () => {
+  // El rediseño solicitado pertenece sólo a Passenger. Disponibilidad sigue
+  // siendo un control de estado circular; Pedir recupera su propio botón y
+  // sólo los cuatro destinos usan la curva móvil.
   const fuente = leer('ui/Navegacion.tsx');
-  assert.match(fuente, /function Disco\(/, 'hay un único disco');
+  assert.match(fuente, /function Disco\(/, 'el conductor perdió su disco');
   assert.match(fuente, /export function ControlDeDisponibilidad/);
   assert.match(fuente, /export function ControlDePedido/);
-  // Las dos lo usan.
-  assert.equal((fuente.match(/<Disco/g) ?? []).length, 2, 'los dos controles pintan el mismo disco');
+  assert.equal((fuente.match(/<Disco/g) ?? []).length, 1, 'Pedir volvió a usar el disco anterior');
+  assert.match(fuente, /function BarraCurvaDePasajera/);
+  assert.match(fuente, /<PestanaCurva/);
 });
 
 test('el disco va en el CENTRO de la barra, no a un lado', () => {
@@ -578,7 +574,7 @@ test('el disco va en el CENTRO de la barra, no a un lado', () => {
   assert.ok(centro < derecha, 'y antes del derecho');
 });
 
-test('el disco sobresale por encima de la barra', () => {
+test('el disco del conductor sobresale y los iconos de Passenger se elevan', () => {
   // Es lo que lo separa de los demás destinos: si se queda a ras, se lee como
   // una pestaña más y deja de ser la acción principal.
   //
@@ -589,7 +585,8 @@ test('el disco sobresale por encima de la barra', () => {
   assert.ok(medida.SALIENTE >= 26, `sube sólo ${medida.SALIENTE} puntos: no se despega de los iconos`);
 
   const usos = (leer('ui/Navegacion.tsx').match(/marginTop: -SALIENTE/g) ?? []).length;
-  assert.equal(usos, 2, 'los dos controles suben');
+  assert.equal(usos, 1, 'el disco del conductor dejó de subir');
+  assert.match(leer('ui/Navegacion.tsx'), /\[0, -4\]/, 'el icono activo de Passenger no se eleva de forma sutil');
 });
 
 /** Las medidas del disco y su hueco, leídas del código. */
@@ -670,18 +667,63 @@ test('el disco de PEDIR lleva a alguna parte por sí solo', () => {
   const control = fuente.slice(fuente.indexOf('export function ControlDePedido'));
 
   assert.match(
-    control.slice(0, 900),
+    control.slice(0, 1_500),
     /onAlternar \?\? \(\(\) => ir\(abierto \? 'inicio' : 'pedir'\)\)/,
     'el disco no navega si nadie le dice qué hacer'
   );
-  assert.match(control.slice(0, 900), /onPress=\{alternar\}/);
+  assert.match(control.slice(0, 3_500), /onPress=\{alternar\}/);
 });
 
 test('el disco de la pasajera se cierra desde donde se abrió', () => {
   const fuente = leer('ui/Navegacion.tsx');
   assert.match(fuente, /abierto/, 'el disco conoce su estado abierto');
-  assert.match(fuente, /Aspa/, 'abierto se convierte en aspa de cerrar');
-  assert.match(fuente, /accessibilityState=\{\{ expanded: abierto \}\}/);
+  assert.match(fuente, /expanded: abierto/, 'el estado no se anuncia por accesibilidad');
+});
+
+test('Passenger sólo enseña iconos y la curva viaja de forma continua', () => {
+  const fuente = leer('ui/Navegacion.tsx');
+  const curva = fuente.slice(
+    fuente.indexOf('function PestanaCurva'),
+    fuente.indexOf('function BarraDeNavegacion')
+  );
+
+  assert.doesNotMatch(curva, /<Txt/, 'la barra curva volvió a pintar rótulos');
+  assert.match(curva, /accessibilityLabel=\{etiqueta\}/, 'los iconos perdieron su nombre accesible');
+  assert.match(curva, /ultimoIndiceDePasajera/, 'la posición se reinicia entre rutas');
+  assert.match(curva, /withSpring\(destino/, 'la curva salta en vez de viajar');
+  assert.match(curva, /translateX: desplazamiento\.get\(\)/, 'la curva no se mueve en el hilo de UI');
+  assert.match(curva, /pulsacion\.get\(\) \* pulso\.get\(\)/, 'falta el feedback 0.94 y el micropulso');
+  assert.doesNotMatch(curva, /react-native-svg|MotionBar/, 'se añadió una dependencia para copiar la referencia');
+});
+
+test('Pedir es acción primaria, no un quinto tab ni el dueño de la curva', () => {
+  const fuente = leer('ui/Navegacion.tsx');
+  const pedir = fuente.slice(
+    fuente.indexOf('export function ControlDePedido'),
+    fuente.indexOf('// Barra inferior')
+  );
+  const barra = fuente.slice(
+    fuente.indexOf('function BarraCurvaDePasajera'),
+    fuente.indexOf('export function BarraDeNavegacion')
+  );
+
+  assert.match(pedir, /width: 58, height: 58, borderRadius: 29/, 'Pedir dejó de ser circular');
+  assert.match(pedir, /withDelay\(2300/, 'el heartbeat dejó de ser espaciado');
+  assert.match(pedir, /withTiming\(0\.94/, 'falta la respuesta inmediata al dedo');
+  assert.match(pedir, /accessibilityRole="button"/, 'Pedir volvió a anunciarse como tab');
+  assert.doesNotMatch(barra, /controlEstaAbierto/, 'abrir la hoja vuelve a mover la curva a Pedir');
+  assert.match(fuente, /const ANCHO_DE_LA_CURVA = 58/);
+  assert.match(fuente, /const ALTO_DE_LA_CURVA = 26/);
+});
+
+test('la iconografía reactiva vive en una sola abstracción y respeta reduced motion', () => {
+  const fuente = leer('ui/IconoAnimado.tsx');
+  assert.match(fuente, /export function IconoAnimado/);
+  assert.match(fuente, /movimientoSugerido/);
+  assert.match(fuente, /useMovimientoReducido/);
+  assert.match(fuente, /transform:/);
+  assert.match(fuente, /opacity:/);
+  assert.doesNotMatch(fuente, /setInterval|setTimeout|height: avance|width: avance/);
 });
 
 // ---------------------------------------------------------------------------
@@ -770,13 +812,17 @@ test('el historial abre con la banda amarilla, como saldo y perfil', () => {
   const secciones = leer('preview/pantallasC2Secciones.tsx');
   const historial = secciones.slice(secciones.indexOf('export function C2Historial'));
 
-  assert.match(historial.slice(0, 1200), /resumen=\{/, 'el historial no abre con banda');
+  // Se busca dentro del <Seccion> que monta, no en un corte por numero de
+  // caracteres: ese se rompia en cuanto la firma del componente crecia.
+  const seccionDelHistorial = historial.slice(historial.indexOf('<Seccion'), historial.indexOf('</Seccion>'));
+  assert.match(seccionDelHistorial, /resumen=\{/, 'el historial no abre con banda');
   assert.match(secciones, /<CabeceraAmarilla>/, 'el armazón no sabe pintarla');
 
   // El resumen se CUENTA de la lista que se esté pintando —la real o la de
   // ejemplo—, no de una cifra escrita a mano que se quedaría vieja en cuanto
   // cambie lo que hay justo debajo.
-  assert.match(historial.slice(0, 2200), /\$\{lista\.length\} viajes/);
+  assert.match(seccionDelHistorial, /\$\{lista\.length\} viajes/);
+  // Esta se cuenta en el CUERPO del componente, no dentro de la seccion.
   assert.match(historial.slice(0, 2200), /lista\.filter\(viaje => viaje\.completado\)/);
 });
 

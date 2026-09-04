@@ -198,7 +198,9 @@ test('la puerta del conductor sigue exigiendo aprobación', () => {
 // ---------------------------------------------------------------------------
 
 test('Passenger Home → Pedir sigue resolviendo a app/pedir.tsx', () => {
-  const inicio = sinComentarios('app/pasajero.tsx');
-  assert.match(inicio, /if \(clave === 'pedir'\) \{ router\.push\('\/pedir'\); return; \}/);
+  // La tabla de navegacion vive ahora en el shell, entera y una sola vez.
+  const shell = sinComentarios('navegacion/shellDePasajero.tsx');
+  assert.match(shell, /parametros\?\.servicio === 'viajes'\) router\.push\('\/pedir'\)/);
+  assert.match(sinComentarios('app/pasajero.tsx'), /<ShellDePasajero/);
   assert.ok(fs.existsSync(path.join(raizMovil, 'app/pedir.tsx')));
 });

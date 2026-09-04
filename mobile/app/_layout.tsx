@@ -156,9 +156,33 @@ export default function DisposicionRaiz() {
               // tono del tema contrario.
               contentStyle: undefined,
               // Transición nativa: la que espera cada plataforma, sin imitarla.
+              // Es la de ENTRAR EN PROFUNDIDAD —abrir un viaje, los ajustes, lo
+              // legal—, donde el deslizamiento significa «vas hacia dentro» y el
+              // gesto de volver lo deshace.
               animation: 'slide_from_right'
             }}
-          />
+          >
+            {/*
+              LAS PESTAÑAS NO SE DESLIZAN
+
+              Inicio, Saldo, Historial y Perfil están a la misma altura de la
+              aplicación: moverse entre ellas no es ir hacia dentro. Con la
+              transición del Stack se veía un «pasar página» de derecha a
+              izquierda que el dueño rechazó, y con razón: promete una
+              profundidad que no existe y hace lento algo que debería ser
+              inmediato.
+
+              Aquí se apaga SOLO para ellas. `animation: 'none'` no es renunciar
+              a un adorno: es que el contenido cambie en cuanto se toca, como en
+              cualquier barra de pestañas. El resto de pantallas conserva la
+              transición de arriba.
+            */}
+            <Stack.Screen name="pasajero" options={{ animation: 'none' }} />
+            <Stack.Screen name="saldo" options={{ animation: 'none' }} />
+            <Stack.Screen name="historial" options={{ animation: 'none' }} />
+            <Stack.Screen name="perfil" options={{ animation: 'none' }} />
+            <Stack.Screen name="conductor" options={{ animation: 'none' }} />
+          </Stack>
           </ProveedorDeUbicacionEnVivo>
           </ProveedorDeUbicacion>
           </ProveedorDeSeguimiento>
