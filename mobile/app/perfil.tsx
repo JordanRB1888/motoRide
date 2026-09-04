@@ -23,6 +23,7 @@ import { ShellCompartido } from '../navegacion/shellCompartido';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { shellDelRol } from '../domain/shellDeRol';
+import { ControlCentralDelRol } from '../navegacion/controlCentral';
 import { fuenteDeFoto, pedirPerfil } from '../services/perfil';
 import { pedirAvisos } from '../services/avisos';
 import { contarSinLeer } from '../domain/avisos';
@@ -132,6 +133,7 @@ export default function PantallaDePerfil() {
     <ShellCompartido cargando={<Centro><ActivityIndicator color={tema.color.acento} size="large" /></Centro>}>
       <C2Perfil
         barra={barraDelRol}
+        control={<ControlCentralDelRol barra={barraDelRol} />}
         datos={datos}
         sinLeer={sinLeer}
         cerrando={cerrando}

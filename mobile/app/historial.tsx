@@ -19,6 +19,7 @@ import { C2Historial, type ViajeEnPantalla } from '../preview/pantallasC2Seccion
 import { ShellCompartido } from '../navegacion/shellCompartido';
 import { useSesion } from '../context/AuthContext';
 import { shellDelRol } from '../domain/shellDeRol';
+import { ControlCentralDelRol } from '../navegacion/controlCentral';
 import { pedirHistorial } from '../services/viajes';
 import { fechaDe, nombreDeEstado, type ViajeDeHistorial } from '../domain/viajes';
 
@@ -64,6 +65,7 @@ export default function PantallaDeHistorial() {
     <ShellCompartido cargando={<C2Historial estado="cargando" />}>
       <C2Historial
         barra={barraDelRol}
+        control={<ControlCentralDelRol barra={barraDelRol} />}
         viajes={enPantalla}
         estado={estado}
         // El identificador REAL del viaje, no una clave de ejemplo.

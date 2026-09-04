@@ -288,3 +288,29 @@ test('la pestaña de saldo del conductor tampoco se desliza', () => {
   const layout = leer('app/_layout.tsx');
   assert.match(layout, /<Stack\.Screen name="conductor-saldo" options=\{\{ animation: 'none' \}\} \/>/);
 });
+
+test('el control central NUNCA desaparece: cada rol lleva el suyo', () => {
+  // El bug: al dar al conductor su barra en Historial y Perfil, el control
+  // central se dejó en undefined --el botón de pedir no es suyo-- y con él se
+  // fue su disco de disponibilidad, que SÍ lo es. Desaparecía al entrar en esas
+  // dos pestañas y volvía al salir.
+  const secciones = despojarComentarios(leer('preview/pantallasC2Secciones.tsx'));
+  assert.ok(
+    !/control=\{barra === 'conductor' \? undefined/.test(secciones),
+    'el hueco del centro vuelve a quedarse vacío para el conductor'
+  );
+  assert.match(secciones, /control=\{control \?\?/, 'la barra usa el control que le den');
+
+  const control = despojarComentarios(leer('navegacion/controlCentral.tsx'));
+  assert.match(control, /<ControlDeDisponibilidad/, 'el conductor lleva su disco');
+  assert.match(control, /<ControlDePedido/, 'la pasajera, su botón amarillo');
+  assert.match(control, /useDisponibilidad\(\)/, 'el estado sale de la única autoridad');
+
+  for (const fichero of ['app/historial.tsx', 'app/perfil.tsx']) {
+    assert.match(
+      despojarComentarios(leer(fichero)),
+      /control=\{<ControlCentralDelRol barra=\{barraDelRol\} \/>\}/,
+      fichero
+    );
+  }
+});

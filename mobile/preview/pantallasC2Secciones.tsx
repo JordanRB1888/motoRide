@@ -33,7 +33,8 @@
  * en una captura acaba citado como si fuera el dinero de alguien.
  */
 
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useState, useEffect } from 'react';
+import Reanimated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import { Boton, Insignia, Superficie, Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
@@ -128,7 +129,7 @@ export function Campana({ sinLeer = 0, onPress, sobreElAmarillo = false }: {
  * pantallas apiladas encima: quitarla dejaría a la persona sin saber cómo
  * volver a donde estaba.
  */
-function Seccion({ titulo, activo, conCampana = true, resumen, barra = 'pasajera', children }: {
+function Seccion({ titulo, activo, conCampana = true, resumen, barra = 'pasajera', control, children }: {
   readonly titulo: string;
   readonly activo: string;
   readonly conCampana?: boolean;
@@ -141,6 +142,14 @@ function Seccion({ titulo, activo, conCampana = true, resumen, barra = 'pasajera
   readonly resumen?: ReactNode;
   /** De quien es la barra de abajo. Por omision, pasajera. */
   readonly barra?: 'pasajera' | 'conductor';
+  /**
+   * El control del centro de la barra.
+   *
+   * Sin esto se usa el de la pasajera. El conductor pasa el SUYO --su disco de
+   * disponibilidad--, porque el hueco del centro no puede quedarse vacio: en su
+   * shell ese sitio es el de ponerse en servicio.
+   */
+  readonly control?: ReactNode;
   readonly children: ReactNode;
 }) {
   const tema = useTema();
@@ -195,7 +204,7 @@ function Seccion({ titulo, activo, conCampana = true, resumen, barra = 'pasajera
       <BarraDeNavegacion
         destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo={activo}
-        control={barra === 'conductor' ? undefined : <ControlDePedido abierto={false} />}
+        control={control ?? (barra === 'conductor' ? undefined : <ControlDePedido abierto={false} />)}
       />
     </View>
   );
@@ -268,17 +277,30 @@ function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
         {detalle ? <Txt nivel="pie" tono="tenue">{detalle}</Txt> : null}
       </View>
       {derecha}
-      <Galon />
+      <Galon reaccionando={reaccionando} />
     </Pressable>
   );
 }
 
 /** La punta que dice «esto lleva a algún sitio». */
-function Galon() {
+function Galon({ reaccionando = false }: { readonly reaccionando?: boolean }) {
   const tema = useTema();
+  const quieto = useMovimientoReducido();
+  const avance = useSharedValue(0);
+
+  useEffect(() => {
+    if (quieto) return;
+    avance.set(reaccionando
+      ? withSpring(3, { duration: 150, dampingRatio: 0.85 })
+      : withSpring(0, { duration: 180, dampingRatio: 0.9 }));
+  }, [avance, quieto, reaccionando]);
+
+  const estiloAvance = useAnimatedStyle(() => ({
+    transform: [{ translateX: avance.get() }]
+  }));
 
   return (
-    <View style={{ width: 9, height: 14, justifyContent: 'center' }}>
+    <Reanimated.View style={[{ width: 12, height: 14, justifyContent: 'center' }, estiloAvance]}>
       {[38, -38].map((giro, indice) => (
         <View key={giro} style={{
           position: 'absolute',
@@ -287,7 +309,7 @@ function Galon() {
           transform: [{ rotate: `${giro}deg` }, { translateY: indice === 0 ? -2.4 : 2.4 }]
         }} />
       ))}
-    </View>
+    </Reanimated.View>
   );
 }
 
@@ -394,7 +416,7 @@ const PERFIL_DE_EJEMPLO: DatosDelPerfil = {
   foto: null
 };
 
-export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, cerrando = false, barra = 'pasajera' }: {
+export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, cerrando = false, barra = 'pasajera', control }: {
   /** Sin esto se pinta el ejemplo. Con esto, la persona de verdad. */
   readonly datos?: DatosDelPerfil;
   /** Cuántos avisos sin leer. Sin esto se cuenta el fixture. */
@@ -404,6 +426,14 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
   readonly cerrando?: boolean;
   /** De quien es la barra de abajo. Ver `C2Historial`. */
   readonly barra?: 'pasajera' | 'conductor';
+  /**
+   * El control del centro de la barra.
+   *
+   * Sin esto se usa el de la pasajera. El conductor pasa el SUYO --su disco de
+   * disponibilidad--, porque el hueco del centro no puede quedarse vacio: en su
+   * shell ese sitio es el de ponerse en servicio.
+   */
+  readonly control?: ReactNode;
 } = {}) {
   const tema = useTema();
   const sinLeer = sinLeerReal ?? AVISOS_DEMO.filter(aviso => aviso.sinLeer).length;
@@ -542,7 +572,7 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
       <BarraDeNavegacion
         destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo="perfil"
-        control={barra === 'conductor' ? undefined : <ControlDePedido abierto={false} />}
+        control={control ?? (barra === 'conductor' ? undefined : <ControlDePedido abierto={false} />)}
       />
     </View>
   );
@@ -647,7 +677,7 @@ const HISTORIAL_DE_EJEMPLO: readonly ViajeEnPantalla[] = HISTORIAL_DEMO.map(viaj
   completado: viaje.estado === 'Completado'
 }));
 
-export function C2Historial({ viajes, estado = 'listo', onViaje, onReintentar, barra = 'pasajera' }: {
+export function C2Historial({ viajes, estado = 'listo', onViaje, onReintentar, barra = 'pasajera', control }: {
   readonly viajes?: readonly ViajeEnPantalla[];
   readonly estado?: 'cargando' | 'listo' | 'error';
   readonly onViaje?: (clave: string) => void;
@@ -661,6 +691,14 @@ export function C2Historial({ viajes, estado = 'listo', onViaje, onReintentar, b
    * y cualquier uso anterior no cambian.
    */
   readonly barra?: 'pasajera' | 'conductor';
+  /**
+   * El control del centro de la barra.
+   *
+   * Sin esto se usa el de la pasajera. El conductor pasa el SUYO --su disco de
+   * disponibilidad--, porque el hueco del centro no puede quedarse vacio: en su
+   * shell ese sitio es el de ponerse en servicio.
+   */
+  readonly control?: ReactNode;
 } = {}) {
   const tema = useTema();
   const ir = useIr();
@@ -677,6 +715,7 @@ export function C2Historial({ viajes, estado = 'listo', onViaje, onReintentar, b
       titulo="Tu historial"
       activo="historial"
       barra={barra}
+      control={control}
       resumen={
         <View style={{ gap: 9 }}>
           <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
