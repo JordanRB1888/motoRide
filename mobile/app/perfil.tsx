@@ -19,9 +19,10 @@ import { Redirect, router } from 'expo-router';
 
 import { C2Perfil, type DatosDelPerfil } from '../preview/pantallasC2Secciones';
 import { Boton, Txt } from '../ui/componentes';
-import { ProveedorDeNavegacion } from '../ui/navegar';
+import { ShellCompartido } from '../navegacion/shellCompartido';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
+import { shellDelRol } from '../domain/shellDeRol';
 import { fuenteDeFoto, pedirPerfil } from '../services/perfil';
 import { pedirAvisos } from '../services/avisos';
 import { contarSinLeer } from '../domain/avisos';
@@ -38,6 +39,8 @@ type Foto = { readonly uri: string; readonly headers?: Record<string, string> } 
 export default function PantallaDePerfil() {
   const tema = useTema();
   const { sesion, salir } = useSesion();
+  // De quien es la barra de abajo: la decide el ROL que devuelve el servidor.
+  const barraDelRol = shellDelRol(sesion.estado === 'AUTENTICADO' ? sesion.usuario.role : null) === 'conductor' ? 'conductor' : 'pasajera';
 
   const [perfil, setPerfil] = useState<PerfilDeUsuario | null>(null);
   const [foto, setFoto] = useState<Foto>(null);
@@ -126,15 +129,16 @@ export default function PantallaDePerfil() {
   }
 
   return (
-    <ProveedorDeNavegacion ir={irA}>
+    <ShellCompartido cargando={<Centro><ActivityIndicator color={tema.color.acento} size="large" /></Centro>}>
       <C2Perfil
+        barra={barraDelRol}
         datos={datos}
         sinLeer={sinLeer}
         cerrando={cerrando}
         onFila={abrir}
         onCerrarSesion={() => { void cerrarSesion(); }}
       />
-    </ProveedorDeNavegacion>
+    </ShellCompartido>
   );
 }
 
@@ -164,11 +168,10 @@ function abrir(clave: string) {
  * es deliberado: mandar «Saldo» a una pantalla de ejemplo desde la aplicación
  * de verdad enseñaría cifras inventadas a una persona real.
  */
-function irA(clave: string) {
-  if (clave === 'inicio') router.replace('/pasajero');
-  if (clave === 'historial') router.replace('/historial');
-  if (clave === 'perfil') router.replace('/perfil');
-}
+// La tabla de navegacion ya no vive aqui: la trae `ShellCompartido`, que ademas
+// elige la del rol real. Esta version entendia 'inicio', 'historial' y 'perfil'
+// y nada mas, asi que el boton amarillo --que pide 'pedir'-- no hacia nada, y
+// 'saldo' tampoco existia.
 
 function Centro({ children }: { readonly children: React.ReactNode }) {
   const tema = useTema();

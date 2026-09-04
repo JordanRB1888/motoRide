@@ -37,6 +37,7 @@ import { LienzoDeMapa } from '../ui/Mapa';
 import { Trayecto } from '../ui/Trayecto';
 import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
 import { FilaDeVehiculo, type PrecioDeTarjeta } from '../preview/pantallasC2';
+import { crearNavegacionDePasajero } from '../navegacion/shellDePasajero';
 import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
@@ -190,9 +191,12 @@ export default function PantallaDePedir() {
   // pero enseñar la pantalla de pedir a quien ya va en una moto es mentirle.
   if (viajeActivo.fase === 'CON_VIAJE') return <Redirect href="/viaje-activo" />;
 
-  const irA = (destinoDeLaBarra: string) => {
-    if (destinoDeLaBarra === 'inicio') router.replace('/pasajero');
-  };
+  // La tabla completa del shell. Antes solo entendia 'inicio', asi que desde
+  // aqui las pestanas de Historial, Saldo y Perfil no hacian nada.
+  //
+  // `enPedir` es lo unico propio de esta pantalla: estando ya en Pedir, el
+  // boton amarillo cierra y vuelve al inicio en vez de abrir la hoja.
+  const irA = crearNavegacionDePasajero({ enPedir: true });
 
   const trabajando = fase === 'ESTIMANDO' || fase === 'PIDIENDO';
 
@@ -262,7 +266,7 @@ export default function PantallaDePedir() {
 
             <View style={{ height: tema.ritmo.entreBloques }} />
             <Txt nivel="etiqueta" tono="secundario">CÓMO QUIERES IR</Txt>
-            <View style={{ paddingTop: 4, gap: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 10, paddingTop: 6 }}>
               {/* Sin minutos: nadie sabe cuánto tarda en llegar una moto, y
                   ponerlo sería prometer una hora que no se puede cumplir. */}
               {/* Y sin precio hasta que el servidor lo diga: la tarjeta elegida

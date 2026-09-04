@@ -16,13 +16,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { Redirect, router } from 'expo-router';
 
 import { C2Historial, type ViajeEnPantalla } from '../preview/pantallasC2Secciones';
-import { ProveedorDeNavegacion } from '../ui/navegar';
+import { ShellCompartido } from '../navegacion/shellCompartido';
 import { useSesion } from '../context/AuthContext';
+import { shellDelRol } from '../domain/shellDeRol';
 import { pedirHistorial } from '../services/viajes';
 import { fechaDe, nombreDeEstado, type ViajeDeHistorial } from '../domain/viajes';
 
 export default function PantallaDeHistorial() {
   const { sesion } = useSesion();
+  // De quien es la barra de abajo: la decide el ROL que devuelve el servidor.
+  const barraDelRol = shellDelRol(sesion.estado === 'AUTENTICADO' ? sesion.usuario.role : null) === 'conductor' ? 'conductor' : 'pasajera';
 
   const [viajes, setViajes] = useState<readonly ViajeDeHistorial[]>([]);
   const [estado, setEstado] = useState<'cargando' | 'listo' | 'error'>('cargando');
@@ -58,20 +61,20 @@ export default function PantallaDeHistorial() {
   }));
 
   return (
-    <ProveedorDeNavegacion ir={irA}>
+    <ShellCompartido cargando={<C2Historial estado="cargando" />}>
       <C2Historial
+        barra={barraDelRol}
         viajes={enPantalla}
         estado={estado}
         // El identificador REAL del viaje, no una clave de ejemplo.
         onViaje={id => router.push(`/viaje/${encodeURIComponent(id)}` as never)}
         onReintentar={() => { void cargar(); }}
       />
-    </ProveedorDeNavegacion>
+    </ShellCompartido>
   );
 }
 
-function irA(clave: string) {
-  if (clave === 'inicio') router.replace('/pasajero');
-  if (clave === 'historial') router.replace('/historial');
-  if (clave === 'perfil') router.replace('/perfil');
-}
+// La tabla de navegacion ya no vive aqui: la trae `ShellCompartido`, que ademas
+// elige la del rol real. Esta version entendia 'inicio', 'historial' y 'perfil'
+// y nada mas, asi que el boton amarillo --que pide 'pedir'-- no hacia nada, y
+// 'saldo' tampoco existia.

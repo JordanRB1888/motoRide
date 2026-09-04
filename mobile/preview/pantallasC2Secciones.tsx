@@ -33,12 +33,18 @@
  * en una captura acaba citado como si fuera el dinero de alguien.
  */
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import { Boton, Insignia, Superficie, Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
+import { IconoAnimado } from '../ui/IconoAnimado';
 import { Separador } from '../ui/HojaInferior';
-import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
+import {
+  BarraDeNavegacion,
+  ControlDePedido,
+  DESTINOS_DE_CONDUCTOR,
+  DESTINOS_DE_PASAJERA
+} from '../ui/Navegacion';
 import { EntradaDeTransporteSeguro } from '../ui/Servicio';
 import { useEsquema, useTema } from '../theme/ThemeContext';
 import { useMovimientoReducido } from '../ui/movimiento';
@@ -81,10 +87,13 @@ export function Campana({ sinLeer = 0, onPress, sobreElAmarillo = false }: {
   readonly sobreElAmarillo?: boolean;
 }) {
   const tema = useTema();
+  const [sonando, setSonando] = useState(false);
 
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => setSonando(true)}
+      onPressOut={() => setSonando(false)}
       accessibilityRole="button"
       accessibilityLabel={sinLeer > 0 ? `Avisos: ${sinLeer} sin leer` : 'Avisos'}
       style={({ pressed }) => ({
@@ -93,10 +102,11 @@ export function Campana({ sinLeer = 0, onPress, sobreElAmarillo = false }: {
         backgroundColor: pressed ? tema.color.superficieElevada : 'transparent'
       })}
     >
-      <Icono
+      <IconoAnimado
         nombre="campana"
         color={sobreElAmarillo ? tema.color.sobreAcento : tema.color.textoPrimario}
         tamano={25}
+        reaccionando={sonando}
       />
       {sinLeer > 0 ? (
         <View style={{
@@ -118,7 +128,7 @@ export function Campana({ sinLeer = 0, onPress, sobreElAmarillo = false }: {
  * pantallas apiladas encima: quitarla dejaría a la persona sin saber cómo
  * volver a donde estaba.
  */
-function Seccion({ titulo, activo, conCampana = true, resumen, children }: {
+function Seccion({ titulo, activo, conCampana = true, resumen, barra = 'pasajera', children }: {
   readonly titulo: string;
   readonly activo: string;
   readonly conCampana?: boolean;
@@ -129,6 +139,8 @@ function Seccion({ titulo, activo, conCampana = true, resumen, children }: {
    * título suelto sobre el fondo, que es como abren las de segundo nivel.
    */
   readonly resumen?: ReactNode;
+  /** De quien es la barra de abajo. Por omision, pasajera. */
+  readonly barra?: 'pasajera' | 'conductor';
   readonly children: ReactNode;
 }) {
   const tema = useTema();
@@ -181,9 +193,9 @@ function Seccion({ titulo, activo, conCampana = true, resumen, children }: {
       </ScrollView>
 
       <BarraDeNavegacion
-        destinos={DESTINOS_DE_PASAJERA}
+        destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo={activo}
-        control={<ControlDePedido abierto={false} />}
+        control={barra === 'conductor' ? undefined : <ControlDePedido abierto={false} />}
       />
     </View>
   );
@@ -203,6 +215,7 @@ function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
   const esquema = useEsquema();
   const esNoche = esquema === 'oscuro';
   const quieto = useMovimientoReducido();
+  const [reaccionando, setReaccionando] = useState(false);
   const color = tono === 'peligro'
     ? tema.color.peligro
     : (esNoche ? tema.color.acento : tema.color.textoPrimario);
@@ -210,6 +223,8 @@ function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => setReaccionando(true)}
+      onPressOut={() => setReaccionando(false)}
       accessibilityRole="button"
       accessibilityLabel={detalle ? `${titulo}. ${detalle}` : titulo}
       pressRetentionOffset={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -239,7 +254,12 @@ function Fila({ icono, titulo, detalle, derecha, tono = 'normal', onPress }: {
           ? (esNoche ? 'rgba(239, 68, 68, 0.35)' : 'transparent')
           : (esNoche ? 'rgba(245, 158, 11, 0.22)' : '#E5E7EB')
       }}>
-        <Icono nombre={icono} color={color} tamano={20} />
+        <IconoAnimado
+          nombre={icono}
+          color={color}
+          tamano={20}
+          reaccionando={reaccionando}
+        />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Txt nivel="cuerpo" tono={tono === 'peligro' ? 'secundario' : 'primario'} estilo={{ fontWeight: '600' }}>
@@ -374,7 +394,7 @@ const PERFIL_DE_EJEMPLO: DatosDelPerfil = {
   foto: null
 };
 
-export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, cerrando = false }: {
+export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, cerrando = false, barra = 'pasajera' }: {
   /** Sin esto se pinta el ejemplo. Con esto, la persona de verdad. */
   readonly datos?: DatosDelPerfil;
   /** Cuántos avisos sin leer. Sin esto se cuenta el fixture. */
@@ -382,6 +402,8 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
   readonly onFila?: (clave: string) => void;
   readonly onCerrarSesion?: () => void;
   readonly cerrando?: boolean;
+  /** De quien es la barra de abajo. Ver `C2Historial`. */
+  readonly barra?: 'pasajera' | 'conductor';
 } = {}) {
   const tema = useTema();
   const sinLeer = sinLeerReal ?? AVISOS_DEMO.filter(aviso => aviso.sinLeer).length;
@@ -458,7 +480,7 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
         <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
           <Grupo titulo="Tu cuenta">
             <Fila
-              icono="perfil"
+              icono="lapiz"
               titulo="Tus datos"
               detalle="Nombre, teléfono y correo"
               onPress={onFila === undefined ? undefined : () => onFila('datos')}
@@ -493,16 +515,17 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
           </Grupo>
 
           <Grupo titulo="Dinero">
-            <Fila icono="dolar" titulo="Tu saldo" detalle="Todavía no está activo" />
+            <Fila icono="billetera" titulo="Tu saldo" detalle="Todavía no está activo" />
           </Grupo>
 
           <Grupo titulo="Ayuda">
-            <Fila icono="mensaje" titulo="Soporte" detalle="Escríbenos si algo no cuadra" />
+            <Fila icono="ayuda" titulo="Soporte" detalle="Escríbenos si algo no cuadra" />
           </Grupo>
 
           <View style={{ marginTop: tema.ritmo.entreBloques, gap: tema.ritmo.entreElementos }}>
             <Boton
               titulo="Cerrar sesión"
+              icono="salir"
               variante="secundario"
               cargando={cerrando}
               onPress={onCerrarSesion ?? (() => undefined)}
@@ -512,9 +535,9 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
       </ScrollView>
 
       <BarraDeNavegacion
-        destinos={DESTINOS_DE_PASAJERA}
+        destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo="perfil"
-        control={<ControlDePedido abierto={false} />}
+        control={barra === 'conductor' ? undefined : <ControlDePedido abierto={false} />}
       />
     </View>
   );
@@ -579,11 +602,11 @@ export function C2Saldo() {
       </View>
 
       <Grupo titulo="Cuando esté disponible">
-        <Fila icono="viajes" titulo="Movimientos" detalle="Lo que entra y lo que sale, con su fecha" />
+        <Fila icono="calendario" titulo="Movimientos" detalle="Lo que entra y lo que sale, con su fecha" />
         <Separador />
-        <Fila icono="perfil" titulo="Métodos de cobro" detalle="Dónde quieres recibir tu dinero" />
+        <Fila icono="billetera" titulo="Métodos de cobro" detalle="Dónde quieres recibir tu dinero" />
         <Separador />
-        <Fila icono="rayo" titulo="Retirar" detalle="Sacar tu saldo a una cuenta tuya" />
+        <Fila icono="flecha-arriba" titulo="Retirar" detalle="Sacar tu saldo a una cuenta tuya" />
       </Grupo>
     </Seccion>
   );
@@ -619,11 +642,20 @@ const HISTORIAL_DE_EJEMPLO: readonly ViajeEnPantalla[] = HISTORIAL_DEMO.map(viaj
   completado: viaje.estado === 'Completado'
 }));
 
-export function C2Historial({ viajes, estado = 'listo', onViaje, onReintentar }: {
+export function C2Historial({ viajes, estado = 'listo', onViaje, onReintentar, barra = 'pasajera' }: {
   readonly viajes?: readonly ViajeEnPantalla[];
   readonly estado?: 'cargando' | 'listo' | 'error';
   readonly onViaje?: (clave: string) => void;
   readonly onReintentar?: () => void;
+  /**
+   * De quien es la barra de abajo.
+   *
+   * El historial lo ven los dos roles, pero no con la misma barra: la de
+   * pasajera lleva el boton amarillo de pedir, y ensenarselo a un conductor
+   * era ofrecerle algo que no es suyo. Por omision, pasajera: el laboratorio
+   * y cualquier uso anterior no cambian.
+   */
+  readonly barra?: 'pasajera' | 'conductor';
 } = {}) {
   const tema = useTema();
   const ir = useIr();
@@ -639,6 +671,7 @@ export function C2Historial({ viajes, estado = 'listo', onViaje, onReintentar }:
     <Seccion
       titulo="Tu historial"
       activo="historial"
+      barra={barra}
       resumen={
         <View style={{ gap: 9 }}>
           <Txt nivel="pie" tono="sobreAcento" estilo={{ opacity: 0.78 }}>
