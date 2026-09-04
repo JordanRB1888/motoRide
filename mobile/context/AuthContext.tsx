@@ -26,16 +26,26 @@ import {
   type Sesion
 } from '../domain/authState';
 import {
+  crearCuenta,
   iniciarSesion as pedirAcceso,
   validarSesion,
   type CredencialesDeAcceso,
-  type ResultadoDeLogin
+  type ResultadoDeLogin,
+  type ResultadoDeRegistro
 } from '../services/auth';
+import type { DatosDeRegistro } from '../domain/registro';
 import { borrarToken, guardarToken, leerToken } from '../services/session';
 
 export interface ValorDelContexto {
   readonly sesion: Sesion;
   readonly entrar: (credenciales: CredencialesDeAcceso) => Promise<ResultadoDeLogin>;
+  /**
+   * Crea la cuenta y deja la sesión abierta, por el mismo camino que `entrar`.
+   *
+   * La cuenta nace como pasajera SIEMPRE: quien se registra para postularse a
+   * conductor también. El rol lo concede la aprobación del expediente.
+   */
+  readonly registrar: (datos: DatosDeRegistro) => Promise<ResultadoDeRegistro>;
   readonly salir: (motivo?: MotivoDeCierre) => Promise<void>;
   /** Vuelve a preguntar al backend. Para reintentar tras un fallo de red. */
   readonly revalidar: () => Promise<void>;
@@ -100,6 +110,26 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
 
   useEffect(() => { void revalidar(); }, [revalidar]);
 
+  const registrar = useCallback(async (datos: DatosDeRegistro) => {
+    const numero = ++operacion.current;
+    aplicar(numero, { estado: 'AUTENTICANDO' });
+
+    const resultado = await crearCuenta(datos);
+
+    // Si mientras tanto empezó otra operación, esta respuesta ya no manda.
+    if (numero !== operacion.current) return resultado;
+
+    if (!resultado.ok) {
+      aplicar(numero, { estado: 'SIN_SESION', motivo: null });
+      return resultado;
+    }
+
+    // El token sale del servidor, como en el login. Aquí no se firma nada.
+    await guardarToken(resultado.token);
+    aplicar(numero, { estado: 'AUTENTICADO', usuario: resultado.usuario });
+    return resultado;
+  }, [aplicar]);
+
   const entrar = useCallback(async (credenciales: CredencialesDeAcceso) => {
     const numero = ++operacion.current;
     aplicar(numero, { estado: 'AUTENTICANDO' });
@@ -133,8 +163,8 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
   }, [aplicar]);
 
   const valor = useMemo<ValorDelContexto>(
-    () => ({ sesion, entrar, salir, revalidar }),
-    [sesion, entrar, salir, revalidar]
+    () => ({ sesion, entrar, registrar, salir, revalidar }),
+    [sesion, entrar, registrar, salir, revalidar]
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

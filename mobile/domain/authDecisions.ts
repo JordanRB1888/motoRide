@@ -20,6 +20,7 @@
 
 import type { FalloDeApi, Resultado } from './apiResult';
 import { leerIdentidad, type IdentidadDeUsuario } from './authState';
+export type { IdentidadDeUsuario };
 
 // ---------------------------------------------------------------------------
 // Acceso
@@ -93,6 +94,49 @@ export function interpretarLogin(cuerpo: CuerpoDeLogin): ResultadoDeLogin {
     return { ok: false, motivo: 'RESPUESTA_INESPERADA' };
   }
   return { ok: true, token, usuario };
+}
+
+// ---------------------------------------------------------------------------
+// Crear una cuenta
+// ---------------------------------------------------------------------------
+
+/**
+ * Traduce un fallo del alta al vocabulario del registro.
+ *
+ * Lo mismo que en el login, con una diferencia importante: aquí el 409 es una
+ * respuesta legítima y frecuente —alguien que ya tenía cuenta y no se acordaba—
+ * y merece un camino de salida, no un mensaje de error a secas.
+ *
+ * El servidor no dice si el que ya existe es el correo o el teléfono, y está
+ * bien que no lo diga: precisarlo permitiría averiguar qué correos hay
+ * registrados probando uno a uno.
+ */
+export function traducirFalloDeRegistro(fallo: FalloDeApi): {
+  readonly ok: false;
+  readonly motivo: 'CUENTA_EXISTENTE' | 'DATOS_INVALIDOS' | 'DEMASIADOS_INTENTOS' | 'SIN_CONEXION' | 'ERROR_DEL_SERVIDOR';
+  readonly campos?: Readonly<Record<string, string>>;
+} {
+  if (fallo.codigo === 'USER_EXISTS') return { ok: false, motivo: 'CUENTA_EXISTENTE' };
+
+  if (fallo.codigo === 'VALIDATION_FAILED') {
+    const datos = fallo.detalle as { fields?: unknown } | null | undefined;
+    const campos = datos?.fields;
+    const limpios: Record<string, string> = {};
+    if (campos !== null && typeof campos === 'object') {
+      for (const [campo, mensaje] of Object.entries(campos as Record<string, unknown>)) {
+        if (typeof mensaje === 'string') limpios[campo] = mensaje;
+      }
+    }
+    return Object.keys(limpios).length > 0
+      ? { ok: false, motivo: 'DATOS_INVALIDOS', campos: limpios }
+      : { ok: false, motivo: 'DATOS_INVALIDOS' };
+  }
+
+  if (fallo.motivo === 'SIN_RED' || fallo.motivo === 'TIEMPO_AGOTADO') return { ok: false, motivo: 'SIN_CONEXION' };
+  // El registro tiene su propio limitador: veinte por cuarto de hora.
+  if (fallo.codigo === 'RATE_LIMITED' || fallo.mensaje.includes('429')) return { ok: false, motivo: 'DEMASIADOS_INTENTOS' };
+
+  return { ok: false, motivo: 'ERROR_DEL_SERVIDOR' };
 }
 
 // ---------------------------------------------------------------------------
