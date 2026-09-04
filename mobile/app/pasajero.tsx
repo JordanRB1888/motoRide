@@ -33,11 +33,11 @@
  */
 
 import { useEffect, useMemo } from 'react';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 import { C2InicioPasajera, type DatosDelInicio } from '../preview/pantallaInicioPasajera';
-import { ProveedorDeNavegacion } from '../ui/navegar';
+import { ABRIR_SERVICIOS, ShellDePasajero } from '../navegacion/shellDePasajero';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
 import { useViajeActivo } from '../realtime/ViajeActivo';
@@ -63,15 +63,10 @@ const MAPA_DEL_HOME: ModeloDelMapa = Object.freeze({
  * tiene pantalla real no navega a ninguna parte: mejor un toque que no hace
  * nada que un toque que abre una pantalla de ejemplo.
  */
-function irA(clave: string, parametros?: Record<string, string>) {
-  if (clave === 'pedir') { router.push('/pedir'); return; }
-  if (clave === 'historial') { router.replace('/historial'); return; }
-  if (clave === 'perfil') { router.replace('/perfil'); return; }
-  if (clave === 'avisos') { router.push('/avisos'); return; }
-  // La casilla grande de «Viajes» es la otra puerta a pedir. El resto de
-  // servicios —comercios, envíos, comida— no existen aún de verdad.
-  if (clave === 'servicio' && parametros?.servicio === 'viajes') { router.push('/pedir'); }
-}
+// La tabla de navegación ya no vive aquí: la trae `ShellDePasajero`, entera y
+// una sola vez. Antes cada pantalla del shell tenía su propia versión a medias
+// —esta entendía «pedir» y «servicio» pero no «saldo»— y el botón amarillo no
+// hacía nada desde Historial o Perfil.
 
 /** Las iniciales de un nombre, para el disco de la cabecera. */
 function inicialesDe(nombre: string, apellido: string): string {
@@ -79,8 +74,22 @@ function inicialesDe(nombre: string, apellido: string): string {
   return letras.join('') || '·';
 }
 
-export default function InicioDePasajera() {
+/** Lo que se ve mientras la sesion se confirma. Nunca una pantalla en blanco. */
+function Cargando() {
   const tema = useTema();
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: tema.color.fondo }}>
+      <ActivityIndicator color={tema.color.acento} size="large" />
+    </View>
+  );
+}
+
+export default function InicioDePasajera() {
+  // El boton amarillo de las otras pestanas llega con este parametro puesto:
+  // asi la hoja de servicios es UNA sola, la de esta pantalla.
+  const parametros = useLocalSearchParams<{ servicios?: string }>();
+  const abrirServicios = parametros[ABRIR_SERVICIOS] === '1';
+
   const { sesion, revalidar } = useSesion();
   const { estado: viajeActivo } = useViajeActivo();
 
@@ -152,21 +161,26 @@ export default function InicioDePasajera() {
     };
   }, [usuario]);
 
-  if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: tema.color.fondo }}>
-        <ActivityIndicator color={tema.color.acento} size="large" />
-      </View>
-    );
-  }
+  if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') return <Cargando />;
 
   // Sin autoridad fresca no se entra. `SIN_VERIFICAR` incluido: hay token, pero
   // nadie ha confirmado que valga.
+  //
+  // La comprobación de ROL la hace `ShellDePasajero`, y es la que faltaba: sin
+  // ella un conductor veía esta pantalla y sólo descubría el cruce al pulsar
+  // «Viajes», que le mandaba al shell de conductor.
   if (sesion.estado !== 'AUTENTICADO' || datos === null) return <Redirect href="/" />;
 
   return (
-    <ProveedorDeNavegacion ir={irA}>
-      <C2InicioPasajera datos={datos} modeloDelMapa={MAPA_DEL_HOME} avisoPostulacion={avisoPostulacion} />
-    </ProveedorDeNavegacion>
+    <ShellDePasajero cargando={<Cargando />}>
+      <C2InicioPasajera
+        datos={datos}
+        modeloDelMapa={MAPA_DEL_HOME}
+        avisoPostulacion={avisoPostulacion}
+        // El botón amarillo de las otras pestañas trae aquí pidiendo que la
+        // hoja se abra. Una sola hoja para todo el shell, la que ya estaba.
+        abrirServiciosAlMontar={abrirServicios}
+      />
+    </ShellDePasajero>
   );
 }
