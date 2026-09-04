@@ -355,3 +355,11 @@ test('un vídeo de la galería que no se puede leer no culpa a la cámara', () =
   assert.equal(/abrir la cámara/.test(linea), false);
   assert.match(linea, /Elige otro/);
 });
+
+test('un aviso de error no sobrevive a una lectura correcta', () => {
+  // Salió en la certificación E2E: el error de una operación que ya se había
+  // arreglado seguía en pantalla, contradiciendo a las tarjetas en verde.
+  const pantalla = sinComentarios('app/postulacion/documentos.tsx');
+  const recargar = pantalla.slice(pantalla.indexOf('const recargar'), pantalla.indexOf('const irALaCorreccion'));
+  assert.match(recargar, /setAviso\(null\);\s*fijarSolicitud/);
+});

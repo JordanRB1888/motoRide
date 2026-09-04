@@ -45,6 +45,16 @@ import { HeroDeMarca, LemaConFilos, PlacaDeMarca } from '../ui/HeroDeMarca';
 import { DiscoDeMarca, LogoDeApple, LogoDeGoogle } from '../ui/MarcasDeTerceros';
 import { FlechaDerecha, IconoDeCandado, IconoDeCorreo, IconoDeOjo } from '../ui/IconosDeCampo';
 import { useMovimientoReducido } from '../ui/movimiento';
+import { HojaDeRegistro, SelectorDeCaminoAuth } from '../ui/Registro';
+import { guardarUltimoRol } from '../services/session';
+import {
+  MENSAJES_DE_REGISTRO,
+  destinoTrasRegistrarse,
+  registroCompleto,
+  validarRegistro,
+  type DatosDeRegistro,
+  type ErroresDeRegistro
+} from '../domain/registro';
 import { useTema } from '../theme/ThemeContext';
 import { espaciado } from '../theme/tokens';
 import { useSesion } from '../context/AuthContext';
@@ -80,6 +90,10 @@ export default function Acceso() {
   const tema = useTema();
   const insets = useSafeAreaInsets();
   const quieto = useMovimientoReducido();
+  const [modo, setModo] = useState<'login' | 'registro'>('login');
+  const [erroresDeRegistro, setErroresDeRegistro] = useState<ErroresDeRegistro>({});
+  const [avisoDeRegistro, setAvisoDeRegistro] = useState<string | null>(null);
+  const [creandoCuenta, setCreandoCuenta] = useState(false);
 
   // LA INTENCIÓN SE ENSEÑA; EL ROL NO SE ELIGE AQUÍ, NI SE MANDA
   //
@@ -93,7 +107,7 @@ export default function Acceso() {
   const { intencion: intencionElegida } = useLocalSearchParams<{ intencion?: string }>();
   const intencion = esIntencionDeEntrada(intencionElegida) ? describirIntencion(intencionElegida) : null;
 
-  const { entrar, sesion } = useSesion();
+  const { entrar, registrar, sesion } = useSesion();
   const [identificador, setIdentificador] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [aLaVista, setALaVista] = useState(false);
@@ -102,6 +116,45 @@ export default function Acceso() {
 
   const enviando = sesion.estado === 'AUTENTICANDO';
   const puedeEnviar = identificador.trim() !== '' && contrasena !== '' && !enviando;
+
+  /**
+   * Crea la cuenta de verdad.
+   *
+   * LA INTENCIÓN NO VIAJA
+   *
+   * Quien llegó por la puerta de conductor crea una cuenta de PASAJERA, igual
+   * que todo el mundo: el registro directo del servidor sólo permite eso, y el
+   * rol de conductor lo concede la aprobación del expediente. Lo único que
+   * cambia según la intención es a dónde se va después.
+   */
+  const crearLaCuenta = async (datos: DatosDeRegistro) => {
+    // Un segundo toque mientras se está creando no manda otra petición. El
+    // servidor además comprueba el duplicado dos veces, antes y después de
+    // cifrar la contraseña, así que ni una carrera crearía dos cuentas.
+    if (creandoCuenta) return;
+
+    // Lo que se puede comprobar sin gastar la red se comprueba aquí; la
+    // autoridad sigue siendo el servidor, y sus errores pisan a estos.
+    const fallos = validarRegistro(datos);
+    setErroresDeRegistro(fallos);
+    setAvisoDeRegistro(null);
+    if (!registroCompleto(fallos)) return;
+
+    setCreandoCuenta(true);
+    const resultado = await registrar(datos);
+    setCreandoCuenta(false);
+
+    if (!resultado.ok) {
+      setErroresDeRegistro(resultado.campos ?? {});
+      setAvisoDeRegistro(MENSAJES_DE_REGISTRO[resultado.motivo]);
+      return;
+    }
+
+    // La preferencia se recuerda para la próxima vez, igual que al entrar. No
+    // es un permiso: sólo decide por qué puerta se abre la aplicación.
+    void guardarUltimoRol(intencion?.intencion ?? 'passenger');
+    router.replace(destinoTrasRegistrarse(intencion?.intencion ?? null));
+  };
 
   const enviar = async () => {
     if (!puedeEnviar) return;
@@ -146,121 +199,163 @@ export default function Acceso() {
 
       {/* LA HOJA DEL FORMULARIO
           Recoge todo lo que hay que rellenar con diseño nítido y moderno. */}
-      <View
-        testID="hoja-de-acceso"
-        style={{
-          backgroundColor: tema.color.superficieElevada,
-          borderTopLeftRadius: 36,
-          borderTopRightRadius: 36,
-          borderBottomLeftRadius: 0,
-          borderBottomRightRadius: 0,
-          marginTop: -16,
-          paddingHorizontal: 28,
-          paddingTop: 32,
-          paddingBottom: 28,
-          gap: 22,
-          shadowColor: '#000000',
-          shadowOpacity: 0.08,
-          shadowRadius: 24,
-          shadowOffset: { width: 0, height: -4 },
-          elevation: 6
-        }}
-      >
-        <View style={{ gap: 4 }}>
-          <Text
-            accessibilityRole="header"
-            style={{
-              fontSize: 28,
-              fontWeight: '800',
-              letterSpacing: -0.6,
-              color: tema.color.textoPrimario,
-              lineHeight: 34
-            }}
-          >
-            Entra a tu cuenta
-          </Text>
-          {/* El contexto que trae la bienvenida. Es una pista de a qué venía,
-              no una promesa: a dónde va lo dirá su cuenta. */}
-          <View testID="acceso-intencion">
-            <Text style={{ fontSize: 15, color: tema.color.textoSecundario, fontWeight: '400', marginTop: 2 }}>
-              {intencion === null
-                ? 'Entras como pasajero.'
-                : `Entras como ${intencion.titulo.toLowerCase()}.`}
-            </Text>
-          </View>
-        </View>
-
-        <View style={{ gap: 18 }}>
-          <CampoDeTexto
-            etiqueta="Correo o teléfono"
-            placeholder="Correo o teléfono"
-            icono={<IconoDeCorreo tamano={20} color="#9CA3AF" />}
-            value={identificador}
-            onChangeText={setIdentificador}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            textContentType="username"
-            returnKeyType="next"
-            editable={!enviando}
-            onSubmitEditing={() => campoContrasena.current?.focus()}
-            testID="campo-identificador"
-          />
-
-          <CampoDeTexto
-            ref={campoContrasena}
-            etiqueta="Contraseña"
-            placeholder="Contraseña"
-            icono={<IconoDeCandado tamano={20} color="#9CA3AF" />}
-            value={contrasena}
-            onChangeText={setContrasena}
-            secureTextEntry={!aLaVista}
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType="password"
-            returnKeyType="go"
-            editable={!enviando}
-            error={error}
-            onSubmitEditing={() => { void enviar(); }}
-            testID="campo-contrasena"
-            accion={
-              <Pressable
-                onPress={() => setALaVista(visible => !visible)}
-                accessibilityRole="button"
-                accessibilityLabel={aLaVista ? 'Ocultar la contraseña' : 'Ver la contraseña'}
-                accessibilityState={{ selected: aLaVista }}
-                hitSlop={10}
-                testID="ver-contrasena"
-              >
-                <IconoDeOjo tamano={20} color="#9CA3AF" tachado={aLaVista} />
-              </Pressable>
-            }
-          />
-
-          <ContrasenaOlvidada />
-        </View>
-
-        <Boton
-          titulo="Entrar"
-          onPress={() => { void enviar(); }}
-          cargando={enviando}
-          deshabilitado={!puedeEnviar}
-          sufijo={<FlechaDerecha color={tema.color.sobreAcento} />}
-          estilo={{
-            minHeight: 56,
-            borderRadius: 28,
-            opacity: 1,
-            shadowColor: '#D97706',
-            shadowOpacity: 0.35,
-            shadowRadius: 14,
-            shadowOffset: { width: 0, height: 6 },
-            elevation: 6
-          } as never}
-          testID="boton-entrar"
+      {modo === 'registro' ? (
+        <HojaDeRegistro
+          intencion={intencion?.intencion === 'driver' ? 'driver' : 'passenger'}
+          onIrALogin={() => setModo('login')}
+          onAbrirDocumentoLegal={tipo => {
+            Alert.alert(
+              tipo === 'terminos' ? 'Términos y Condiciones' : 'Política de Privacidad',
+              'Los documentos legales oficiales están en revisión.'
+            );
+          }}
+          errores={erroresDeRegistro}
+          aviso={avisoDeRegistro}
+          creando={creandoCuenta}
+          onCrearCuenta={datos => { void crearLaCuenta(datos); }}
         />
+      ) : (
+        <View
+          testID="hoja-de-acceso"
+          style={{
+            backgroundColor: tema.color.superficieElevada,
+            borderTopLeftRadius: 36,
+            borderTopRightRadius: 36,
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+            marginTop: -16,
+            paddingHorizontal: 28,
+            paddingTop: 28,
+            paddingBottom: 28,
+            gap: 20,
+            shadowColor: '#000000',
+            shadowOpacity: 0.08,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: -4 },
+            elevation: 6
+          }}
+        >
+          {/* Selector de camino: Iniciar sesión / Crear cuenta */}
+          <SelectorDeCaminoAuth
+            modoActivo="login"
+            onCambiarModo={setModo}
+          />
 
-        <EntradaSocial />
-      </View>
+          <View style={{ gap: 4 }}>
+            <Text
+              accessibilityRole="header"
+              style={{
+                fontSize: 28,
+                fontWeight: '800',
+                letterSpacing: -0.6,
+                color: tema.color.textoPrimario,
+                lineHeight: 34
+              }}
+            >
+              Entra a tu cuenta
+            </Text>
+            {/* El contexto que trae la bienvenida. Es una pista de a qué venía,
+                no una promesa: a dónde va lo dirá su cuenta. */}
+            <View testID="acceso-intencion">
+              <Text style={{ fontSize: 15, color: tema.color.textoSecundario, fontWeight: '400', marginTop: 2 }}>
+                {intencion === null
+                  ? 'Entras como pasajero.'
+                  : `Entras como ${intencion.titulo.toLowerCase()}.`}
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ gap: 18 }}>
+            <CampoDeTexto
+              etiqueta="Correo o teléfono"
+              placeholder="Correo o teléfono"
+              icono={<IconoDeCorreo tamano={20} color="#9CA3AF" />}
+              value={identificador}
+              onChangeText={setIdentificador}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="username"
+              returnKeyType="next"
+              editable={!enviando}
+              onSubmitEditing={() => campoContrasena.current?.focus()}
+              testID="campo-identificador"
+            />
+
+            <CampoDeTexto
+              ref={campoContrasena}
+              etiqueta="Contraseña"
+              placeholder="Contraseña"
+              icono={<IconoDeCandado tamano={20} color="#9CA3AF" />}
+              value={contrasena}
+              onChangeText={setContrasena}
+              secureTextEntry={!aLaVista}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="password"
+              returnKeyType="go"
+              editable={!enviando}
+              error={error}
+              onSubmitEditing={() => { void enviar(); }}
+              testID="campo-contrasena"
+              accion={
+                <Pressable
+                  onPress={() => setALaVista(visible => !visible)}
+                  accessibilityRole="button"
+                  accessibilityLabel={aLaVista ? 'Ocultar la contraseña' : 'Ver la contraseña'}
+                  accessibilityState={{ selected: aLaVista }}
+                  hitSlop={10}
+                  testID="ver-contrasena"
+                >
+                  <IconoDeOjo tamano={20} color="#9CA3AF" tachado={aLaVista} />
+                </Pressable>
+              }
+            />
+
+            <ContrasenaOlvidada />
+          </View>
+
+          <Boton
+            titulo="Entrar"
+            onPress={() => { void enviar(); }}
+            cargando={enviando}
+            deshabilitado={!puedeEnviar}
+            sufijo={<FlechaDerecha color={tema.color.sobreAcento} />}
+            estilo={{
+              minHeight: 56,
+              borderRadius: 28,
+              opacity: 1,
+              shadowColor: '#D97706',
+              shadowOpacity: 0.35,
+              shadowRadius: 14,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: 6
+            } as never}
+            testID="boton-entrar"
+          />
+
+          {/* Enlace destacado directo para crear cuenta */}
+          <View style={{ alignItems: 'center', marginTop: -4 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={intencion?.intencion === 'driver' ? '¿No tienes cuenta? Crear cuenta y postularme' : '¿No tienes cuenta? Crear cuenta'}
+              onPress={() => setModo('registro')}
+              hitSlop={8}
+              style={{ paddingVertical: 4 }}
+              testID="enlace-crear-cuenta"
+            >
+              <Text style={{ fontSize: 14, color: tema.color.textoSecundario, fontWeight: '500' }}>
+                ¿No tienes una cuenta?{' '}
+                <Text style={{ color: tema.color.acentoTexto, fontWeight: '700' }}>
+                  {intencion?.intencion === 'driver' ? 'Crear cuenta y postularme' : 'Crear cuenta'}
+                </Text>
+              </Text>
+            </Pressable>
+          </View>
+
+          <EntradaSocial />
+        </View>
+      )}
     </Pantalla>
   );
 }

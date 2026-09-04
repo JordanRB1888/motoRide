@@ -138,6 +138,10 @@ export default function PasoDeDocumentos() {
     setCargando(false);
     if (!lectura.ok) { if (!alPerderLaSesion(lectura.motivo)) setAviso(MENSAJES[lectura.motivo]); return; }
     if (lectura.solicitud === null) { router.replace('/postulacion'); return; }
+    // Una lectura buena deja sin sentido el aviso anterior. Sin esto, el error
+    // de una operación que ya se arregló seguía en pantalla, contradiciendo a
+    // las tarjetas que ya estaban en verde.
+    setAviso(null);
     fijarSolicitud(lectura.solicitud);
   }, [fijarSolicitud]);
 
