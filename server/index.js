@@ -40,6 +40,13 @@ import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch
 import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_TRIP_USER_IDS } from './domain/tripFilters.js';
 import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
+import { createHash } from 'node:crypto';
+import { createAuthRouter } from './routes/auth.js';
+import { createAuthIdentityStore } from './services/authIdentityStore.js';
+import { createVerificationService } from './services/verificationChallenges.js';
+import { crearProveedores, describirConfiguracion } from './services/verificationProviders.js';
+import { crearVerificadorSocial } from './services/socialTokenVerifier.js';
+import { normalizarTelefono } from './domain/contactos.js';
 import { createPushRouter } from './routes/push.js';
 import { createTripOfflineEventsRouter } from './routes/tripOfflineEvents.js';
 import { createTransportSubscriptionsRouter } from './routes/transportSubscriptions.js';
@@ -129,7 +136,15 @@ const credenciales = {
   // no deben gastar de los cubos de arriba, pero tampoco pueden quedarse sin
   // proteccion al retirar el limitador global.
   sesion: createIdentityLimiter({ name: 'sesion', limit: 240, windowMs: MINUTO }),
-  perfil: createIdentityLimiter({ name: 'perfil', limit: 60, windowMs: MINUTO })
+  perfil: createIdentityLimiter({ name: 'perfil', limit: 60, windowMs: MINUTO }),
+  // AUTH-FINAL-1. Pedir codigos cuesta dinero por cada envio, asi que va tan
+  // ajustado como el registro; escribirlos es la fuerza bruta de un codigo de
+  // seis cifras y encima cada desafio ya tiene su propio tope de intentos.
+  desafio: createIdentityLimiter({ name: 'desafio', limit: 20, windowMs: CUARTO_DE_HORA }),
+  verificacion: createIdentityLimiter({ name: 'verificacion', limit: 30, windowMs: CUARTO_DE_HORA }),
+  // Entrar con Google o Apple es un intento de credenciales como el login.
+  social: createIdentityLimiter({ name: 'social', limit: 30, windowMs: CUARTO_DE_HORA }),
+  identidades: createIdentityLimiter({ name: 'identidades', limit: 60, windowMs: MINUTO })
 };
 
 /**
@@ -425,6 +440,38 @@ async function persistHttp(res) {
 }
 
 await ensureSeedCredentials();
+
+// AUTH-FINAL-1: la identidad canonica. Cada User con contrasena recibe su
+// identidad PASSWORD (el hash sigue en `users`; aqui no se duplica). Corre en
+// cada arranque y la segunda vez no crea nada.
+const identidad = createAuthIdentityStore({ database });
+{
+  const creadas = identidad.identidades.rellenarContrasenas();
+  if (creadas > 0) {
+    if (!await persistDatabase()) throw new Error('AUTH_IDENTITY_BACKFILL_PERSIST_FAILED');
+    console.log(`[+58express Auth] identidades PASSWORD creadas al arrancar: ${creadas}`);
+  }
+}
+
+// Los codigos se firman con OTP_PEPPER si existe. Si no, el secreto se DERIVA
+// del de las sesiones en vez de reutilizarlo tal cual: comprometer uno no
+// entrega el otro, y la derivacion siempre tiene la longitud que el HMAC exige
+// aunque el secreto de desarrollo sea corto. Los proveedores de envio se leen
+// del entorno y hoy ninguno esta cableado a un transporte real: el arranque lo
+// cuenta por nombre de variable, nunca por valor.
+const otpSecret = process.env.OTP_PEPPER || createHash('sha256').update(`otp-pepper:${jwtSecret}`).digest('hex');
+const verificacion = createVerificationService({
+  database,
+  secreto: otpSecret,
+  proveedores: crearProveedores({ env: process.env })
+});
+const verificadorSocial = crearVerificadorSocial({ env: process.env });
+{
+  const canales = describirConfiguracion(process.env);
+  const resumen = Object.entries(canales).map(([canal, c]) => `${canal}=${c.configurado ? 'configurado' : `faltan ${c.faltan.length}`}`);
+  const sociales = ['GOOGLE', 'APPLE'].map(p => `${p}=${verificadorSocial.configurado(p) ? 'configurado' : 'sin audiencia'}`);
+  console.log(`[+58express Auth] verificacion: ${resumen.join(', ')}; social: ${sociales.join(', ')}`);
+}
 
 function publicUser(user) {
   if (!user) return null;
@@ -796,7 +843,30 @@ app.use('/api', createDriverApplicationsRouter({
   requireRole,
   io,
   bcrypt,
-  privateStorage
+  privateStorage,
+  authIdentities: identidad
+}));
+
+// AUTH-FINAL-1: codigos de verificacion, Google/Apple y vinculacion. Al lado
+// del login y el registro, que siguen tal cual.
+app.use('/api', createAuthRouter({
+  database,
+  persistDatabase,
+  publicUser,
+  signToken,
+  requireAuth,
+  sesionOpcional,
+  identidad,
+  verificacion,
+  verificadorSocial,
+  limitadores: {
+    desafio: credenciales.desafio,
+    verificacion: credenciales.verificacion,
+    social: credenciales.social,
+    identidades: credenciales.identidades
+  },
+  bcrypt,
+  sanitizeText
 }));
 
 // SAFE-TRANSPORT-1E: el puente al MOTOR DE VIAJES existente. El traslado
@@ -1096,6 +1166,11 @@ app.post('/api/auth/login', credenciales.login, async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
   }
+  // AUTH-FINAL-1: se anota el uso de la identidad PASSWORD. Si no se pudiera
+  // guardar, el login sigue siendo el de siempre: esto es contabilidad, no
+  // autorizacion.
+  identidad.identidades.marcarUso(identidad.identidades.asegurarDeContrasena(user).identidad);
+  await persistDatabase();
   res.json({ status: 'success', user: publicUser(user), token: signToken(user) });
 });
 
@@ -1139,7 +1214,14 @@ app.post('/api/auth/register', credenciales.registro, async (req, res) => {
     updatedAt: now
   };
   database.users.push(user);
+  // AUTH-FINAL-1: la identidad PASSWORD y los contactos declarados, SIN
+  // verificar. Aparecer en el registro no demuestra posesion.
+  const alta = identidad.altaConContrasena(user, {
+    email: normalizedEmail,
+    phoneE164: normalizarTelefono(normalizedPhone).e164
+  });
   if (!await persistHttp(res)) {
+    alta.deshacer();
     database.users.splice(database.users.indexOf(user), 1);
     return;
   }

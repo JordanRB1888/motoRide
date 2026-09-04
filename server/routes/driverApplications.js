@@ -162,7 +162,11 @@ export function createDriverApplicationsRouter({
   requireRole,
   io,
   bcrypt,
-  privateStorage
+  privateStorage,
+  // AUTH-FINAL-1: el almacen de identidades, para dar su identidad PASSWORD
+  // al User que nace aqui. Opcional para no romper a quien monte el router
+  // sin el; el relleno de arranque cubre a los que se quedaran sin ella.
+  authIdentities = null
 }) {
   const router = express.Router();
 
@@ -350,7 +354,12 @@ export function createDriverApplicationsRouter({
       application.submittedAt = now;
     }
 
-    if (!existingUser) database.users.push(user);
+    if (!existingUser) {
+      database.users.push(user);
+      // AUTH-FINAL-1: un User nuevo con contrasena recibe su identidad
+      // PASSWORD, como en el registro. El hash sigue en `users`.
+      authIdentities?.identidades.asegurarDeContrasena(user);
+    }
     database.driverApplications.push(application);
     database.driverDocuments.push(...stored);
     const adminNotification = complete ? createNotification({
