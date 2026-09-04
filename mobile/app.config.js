@@ -34,8 +34,26 @@
  * cuesta más entender qué falta.
  */
 
+const path = require('path');
+
 const CLAVE_DE_ANDROID = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY;
 const CLAVE_DE_IOS = process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY;
+
+/**
+ * De qué worktree sale este bundle, para poder decirlo al arrancar.
+ *
+ * Este fichero se evalúa EN EL PROYECTO QUE SIRVE EL BUNDLE, así que
+ * `__dirname` es la única fuente honesta: si quien responde es el Metro de otra
+ * rama, aquí saldrá el nombre de esa otra rama, que es justo lo que se quiere
+ * poder leer. En `dev/procedenciaDelBundle.ts` está por qué hace falta.
+ *
+ * SÓLO FUERA DE PRODUCCIÓN. El nombre de una carpeta del ordenador de quien
+ * compila no pinta nada en una aplicación que se instala la gente.
+ */
+function worktreeDeDesarrollo() {
+  if (process.env.NODE_ENV === 'production') return null;
+  return path.basename(path.resolve(__dirname, '..'));
+}
 
 /**
  * El esquema de URL con el que iOS vuelve de Google (AUTH-FINAL-3).
@@ -76,5 +94,10 @@ module.exports = ({ config }) => {
     return entrada;
   });
 
-  return { ...config, plugins };
+  const worktree = worktreeDeDesarrollo();
+  const extra = worktree === null
+    ? config.extra
+    : { ...config.extra, worktreeDeDesarrollo: worktree };
+
+  return { ...config, plugins, extra };
 };

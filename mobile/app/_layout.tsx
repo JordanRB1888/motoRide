@@ -25,10 +25,13 @@
  * y sólo en desarrollo, porque el propio laboratorio se apaga en release.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
+
+import { procedenciaDelBundle } from '../dev/procedenciaDelBundle';
 
 import { configuracion } from '../config/environment';
 import { ProveedorDeSesion } from '../context/AuthContext';
@@ -46,6 +49,43 @@ import LaboratorioVisual from './preview';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+
+/**
+ * De qué carpeta salió este código, dicho en voz alta al arrancar.
+ *
+ * Con varios worktrees abiertos, el bundler que responde en el puerto por
+ * omisión puede ser el de otra rama, y entonces se depura código ajeno sin
+ * enterarse. El porqué completo está en `dev/procedenciaDelBundle.ts`.
+ *
+ * VA EN UN EFECTO, Y NO AL CARGAR EL MÓDULO, PORQUE SI NO NO SE LEE. Un
+ * `console.log` de nivel de módulo se emite antes de que el canal de registro
+ * llegue a la consola de Metro: se ejecuta, no falla, y no aparece en ningún
+ * sitio. Comprobado en el emulador. Al montar ya está el canal abierto.
+ *
+ * LOS DOS DATOS SALEN DEL MANIFIESTO, que es quien arranca la aplicación. En
+ * el uso normal el manifiesto y el bundle vienen del mismo Metro, así que la
+ * línea describe el código en ejecución. Si alguien cambia a mano la ubicación
+ * del bundle sin reiniciar —el menú de desarrollo lo permite—, el JavaScript
+ * puede venir de otro sitio y esta línea seguirá hablando del manifiesto.
+ *
+ * La alternativa —preguntarle al módulo nativo por la URL del script— hoy sólo
+ * responde por un import profundo que React Native ya marca como obsoleto, y
+ * no vale la pena un aviso de obsolescencia en cada arranque a cambio de
+ * cubrir un apaño de depuración.
+ *
+ * Nunca en release: `EN_DESARROLLO` es `false` y `app.config.js` tampoco
+ * escribe el nombre de la carpeta.
+ */
+function useAvisoDeProcedencia() {
+  useEffect(() => {
+    if (!EN_DESARROLLO) return;
+    const linea = procedenciaDelBundle({
+      worktree: Constants.expoConfig?.extra?.worktreeDeDesarrollo as string | undefined,
+      urlDelBundle: Constants.expoConfig?.hostUri
+    });
+    if (linea !== null) console.log(`[+58express dev] ${linea}`);
+  }, []);
+}
 
 function AvisoDeConfiguracion({ detalle }: { readonly detalle: string }) {
   const [verLaboratorio, setVerLaboratorio] = useState(false);
@@ -91,6 +131,8 @@ function AvisoDeConfiguracion({ detalle }: { readonly detalle: string }) {
 }
 
 export default function DisposicionRaiz() {
+  useAvisoDeProcedencia();
+
   return (
     <SafeAreaProvider>
       {/* El tema envuelve TODO, incluida la pantalla de configuración
