@@ -318,6 +318,23 @@ export function createAuthRouter({
     res.status(201).json({ status: 'created', user: publicUser(user), token: signToken(user) });
   }
 
+  /**
+   * Que proveedores sociales sabe verificar el servidor. Sin sesion: es la
+   * lista de lo que esta configurado, no dice nada de ninguna cuenta.
+   *
+   * Existe por lo mismo que la de canales: un boton que no lleva a ninguna
+   * parte es peor que no tener el boton. La aplicacion solo enciende los que
+   * salgan aqui como disponibles.
+   */
+  router.get('/auth/social/providers', limitadores.identidades, (_req, res) => {
+    res.json({
+      providers: ['GOOGLE', 'APPLE'].map(provider => ({
+        provider,
+        available: verificadorSocial.configurado(provider) === true
+      }))
+    });
+  });
+
   router.post('/auth/social/:provider', sesionOpcional, limitadores.social, (req, res) =>
     conProveedor(req, res, { exigirSesion: false })
   );

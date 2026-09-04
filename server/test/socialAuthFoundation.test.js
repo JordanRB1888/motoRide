@@ -279,6 +279,33 @@ test('un token invalido nunca crea nada: firma ajena, audiencia, emisor, vencido
   assert.equal(database.authIdentities.length, 0);
 });
 
+test('la lista de proveedores dice la verdad, y no habla de ninguna cuenta', async t => {
+  const todos = await montar(t);
+  const listado = await todos.json('/auth/social/providers', { method: 'GET' });
+  assert.equal(listado.status, 200);
+  assert.deepEqual(listado.cuerpo, {
+    providers: [
+      { provider: 'GOOGLE', available: true },
+      { provider: 'APPLE', available: true }
+    ]
+  });
+
+  // Sin audiencia configurada, ese proveedor NO se ofrece: la aplicación no
+  // debe pintar un botón que sólo puede acabar en 503.
+  const soloGoogle = await montar(t, { audiencias: { GOOGLE_OAUTH_CLIENT_IDS: GOOGLE_AUD } });
+  const parcial = await soloGoogle.json('/auth/social/providers', { method: 'GET' });
+  assert.deepEqual(parcial.cuerpo.providers, [
+    { provider: 'GOOGLE', available: true },
+    { provider: 'APPLE', available: false }
+  ]);
+
+  const ninguno = await montar(t, { audiencias: {} });
+  const vacio = await ninguno.json('/auth/social/providers', { method: 'GET' });
+  assert.ok(vacio.cuerpo.providers.every(p => p.available === false));
+  // Es la lista de lo configurado: ni correos, ni identidades, ni usuarios.
+  assert.ok(!/email|userId|sub|identit/i.test(JSON.stringify(vacio.cuerpo)));
+});
+
 test('proveedor sin audiencia configurada → 503, aunque el token sea perfecto', async t => {
   const { json } = await montar(t, { audiencias: { GOOGLE_OAUTH_CLIENT_IDS: GOOGLE_AUD } });
   assert.equal((await json('/auth/social/apple', { body: { token: tokenDeApple({ sub: 'a-9' }) } })).status, 503);
