@@ -34,7 +34,7 @@ function montar({ env = WHATSAPP_ENV, transporte } = {}) {
     env,
     transporte: transporte ?? (async (canal, peticion) => {
       entregados.push({ canal, peticion });
-      return { delivered: true };
+      return { resultado: 'delivered', motivo: null, latenciaMs: 12 };
     })
   });
   const database = { users: [], authChallenges: [] };
@@ -42,8 +42,8 @@ function montar({ env = WHATSAPP_ENV, transporte } = {}) {
   const codigoEntregado = () => {
     const ultima = entregados.at(-1);
     if (ultima.canal === 'WHATSAPP') return ultima.peticion.body.template.components[0].parameters[0].text;
-    if (ultima.canal === 'SMS') return ultima.peticion.body.Body.match(/\d{6}/)[0];
-    return ultima.peticion.message.text.match(/\d{6}/)[0];
+    if (ultima.canal === 'SMS') return ultima.peticion.form.Body.match(/\d{6}/)[0];
+    return ultima.peticion.body.text.match(/\d{6}/)[0];
   };
   return { database, servicio, entregados, codigoEntregado, avanzar, now };
 }
@@ -128,7 +128,11 @@ test('la vista publica no lleva ni el hash ni el destino', () => {
   const publico = desafioPublico(registro, new Date(registro.createdAt));
   assert.deepEqual(Object.keys(publico).sort(), ['attemptsLeft', 'challengeId', 'channel', 'expiresInSeconds', 'purpose', 'resendAvailableInSeconds']);
   assert.equal(publico.expiresInSeconds, 300);
-  assert.equal(publico.resendAvailableInSeconds, 60);
+  // Recien creado, la entrega aun no esta confirmada: no hay enfriamiento que
+  // esperar. Solo un envio que el proveedor acepto activa los sesenta segundos.
+  assert.equal(publico.resendAvailableInSeconds, 0);
+  const confirmado = { ...registro, deliveryConfirmed: true };
+  assert.equal(desafioPublico(confirmado, new Date(registro.createdAt)).resendAvailableInSeconds, 60);
 });
 
 // ---------------------------------------------------------------------------
@@ -189,15 +193,21 @@ test('sin proveedor configurado no se crea ningun desafio, y un envio fallido ta
   assert.equal(r.error, 'VERIFICATION_PROVIDER_NOT_CONFIGURED');
   assert.equal(sinSms.database.authChallenges.length, 0);
 
-  const fallando = montar({ transporte: async () => ({ delivered: false, reason: 'PROVIDER_REJECTED' }) });
+  const fallando = montar({ transporte: async () => ({ resultado: 'rejected', motivo: 'PROVIDER_REJECTED' }) });
   const f = await fallando.servicio.sendVerification({ ...LOGIN, origen: 'ip:1' });
   assert.equal(f.error, 'VERIFICATION_SEND_FAILED');
   assert.equal(f.reason, 'PROVIDER_REJECTED');
   assert.equal(fallando.database.authChallenges.length, 0);
+});
 
+test('un transporte que revienta es AMBIGUO: el mensaje pudo salir, asi que el desafio vale', async () => {
   const explotando = montar({ transporte: async () => { throw new Error('secreto-que-no-debe-salir'); } });
   const e = await explotando.servicio.sendVerification({ ...LOGIN, origen: 'ip:1' });
+  assert.equal(e.ok, true, 'no se descarta un codigo que quiza llego');
+  assert.equal(e.deliveryConfirmed, false);
+  assert.equal(e.warning, 'DELIVERY_UNCONFIRMED');
   assert.equal(e.reason, 'PROVIDER_TRANSPORT_ERROR', 'el error del transporte no se propaga');
+  assert.equal(explotando.database.authChallenges.length, 1);
 });
 
 test('un destino invalido, un canal o un proposito desconocidos se rechazan antes de tocar al proveedor', async () => {
@@ -277,9 +287,12 @@ test('los contratos de proveedor nombran variables, nunca valores, y todos sigue
   const descripcion = describirConfiguracion({});
   for (const canal of ['WHATSAPP', 'SMS', 'EMAIL']) {
     assert.equal(descripcion[canal].configurado, false);
-    assert.deepEqual(descripcion[canal].faltan, [...CONTRATOS_DE_PROVEEDOR[canal].variables]);
-    for (const secreta of CONTRATOS_DE_PROVEEDOR[canal].secretas) assert.ok(CONTRATOS_DE_PROVEEDOR[canal].variables.includes(secreta));
+    for (const falta of descripcion[canal].faltan) assert.ok(typeof falta === 'string' && falta === falta.toUpperCase());
   }
+  assert.deepEqual(descripcion.WHATSAPP.faltan, [...CONTRATOS_DE_PROVEEDOR.WHATSAPP.variables]);
+  // `EMAIL_PROVIDER` tiene valor por omision (Resend): no falta, se elige.
+  assert.deepEqual(descripcion.EMAIL.faltan, ['RESEND_API_KEY', 'EMAIL_FROM']);
+  assert.deepEqual(describirConfiguracion({ EMAIL_PROVIDER: 'sendgrid' }).EMAIL.faltan, ['SENDGRID_API_KEY', 'EMAIL_FROM']);
   const parcial = describirConfiguracion({ TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 'tok' });
   assert.deepEqual(parcial.SMS.faltan, ['TWILIO_SMS_FROM']);
   assert.ok(!JSON.stringify(parcial).includes('tok'), 'el valor del secreto no aparece');
@@ -288,19 +301,47 @@ test('los contratos de proveedor nombran variables, nunca valores, y todos sigue
 test('configurado pero sin transporte cableado no envia: PROVIDER_TRANSPORT_NOT_WIRED', async () => {
   const proveedores = crearProveedores({ env: WHATSAPP_ENV });
   assert.equal(proveedores.WHATSAPP.configurado(), true);
-  assert.deepEqual(await proveedores.WHATSAPP.enviar({ destination: '+584141234567', codigo: '123456' }), { delivered: false, reason: 'PROVIDER_TRANSPORT_NOT_WIRED' });
-  assert.deepEqual(await proveedores.SMS.enviar({ destination: '+584141234567', codigo: '123456' }), { delivered: false, reason: 'PROVIDER_NOT_CONFIGURED' });
+  const sinCablear = await proveedores.WHATSAPP.enviar({ destination: '+584141234567', codigo: '123456' });
+  assert.equal(sinCablear.resultado, 'rejected');
+  assert.equal(sinCablear.motivo, 'PROVIDER_TRANSPORT_NOT_WIRED');
+  const sinConfigurar = await proveedores.SMS.enviar({ destination: '+584141234567', codigo: '123456' });
+  assert.equal(sinConfigurar.resultado, 'rejected');
+  assert.equal(sinConfigurar.motivo, 'PROVIDER_NOT_CONFIGURED');
+  assert.deepEqual(await proveedores.SMS.healthCheck(), { ok: false, motivo: 'PROVIDER_NOT_CONFIGURED' });
 });
 
 test('la peticion de cada proveedor lleva el codigo donde toca y el destino en su formato', () => {
-  const env = { ...WHATSAPP_ENV, TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 'tok', TWILIO_SMS_FROM: '+15550001111', SMTP_HOST: 'h', SMTP_PORT: '587', SMTP_USER: 'u', SMTP_PASSWORD: 'p', EMAIL_FROM: 'no-reply@58express.com' };
+  const env = {
+    ...WHATSAPP_ENV,
+    TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 'tok', TWILIO_SMS_FROM: '+15550001111',
+    RESEND_API_KEY: 'clave-secreta', EMAIL_FROM: 'no-reply@58express.com'
+  };
   const sms = construirPeticion('SMS', { env, destination: '+584141234567', codigo: '123456' });
-  assert.equal(sms.body.To, '+584141234567');
-  assert.match(sms.body.Body, /123456/);
+  assert.equal(sms.form.To, '+584141234567', 'Twilio recibe formulario, no JSON');
+  assert.match(sms.form.Body, /123456/);
   assert.match(sms.headers.authorization, /^Basic /);
+
   const correo = construirPeticion('EMAIL', { env, destination: 'ana@x.co', codigo: '123456' });
-  assert.equal(correo.message.to, 'ana@x.co');
-  assert.match(correo.message.text, /123456/);
-  assert.ok(!('password' in correo.transport), 'la contrasena SMTP no viaja en la descripcion del transporte');
+  assert.equal(correo.url, 'https://api.resend.com/emails');
+  assert.deepEqual(correo.body.to, ['ana@x.co']);
+  assert.match(correo.body.text, /123456/);
+  assert.ok(!/https?:\/\//.test(correo.body.text), 'un correo de codigo no lleva enlaces');
+
+  const conSendgrid = construirPeticion('EMAIL', { env: { ...env, EMAIL_PROVIDER: 'sendgrid', SENDGRID_API_KEY: 'sg' }, destination: 'ana@x.co', codigo: '123456' });
+  assert.equal(conSendgrid.url, 'https://api.sendgrid.com/v3/mail/send');
+  assert.equal(conSendgrid.body.personalizations[0].to[0].email, 'ana@x.co');
   assert.throws(() => construirPeticion('PALOMA', { env, destination: 'x', codigo: '1' }));
+});
+
+test('el mensaje lleva la marca, el codigo y nada mas: ni PII, ni contrasenas, ni enlaces', () => {
+  const env = { ...WHATSAPP_ENV, TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 'tok', TWILIO_SMS_FROM: '+1', RESEND_API_KEY: 'k', EMAIL_FROM: 'no-reply@58express.com' };
+  const sms = construirPeticion('SMS', { env, destination: '+584141234567', codigo: '123456' }).form.Body;
+  const correo = construirPeticion('EMAIL', { env, destination: 'ana@x.co', codigo: '123456' }).body.text;
+  for (const texto of [sms, correo]) {
+    assert.match(texto, /\+58Express/);
+    assert.match(texto, /123456/);
+    assert.match(texto, /No lo compartas/i);
+    assert.ok(!/contrase|password|token|cedula/i.test(texto));
+    assert.ok(!texto.includes('+584141234567') && !texto.includes('ana@x.co'), 'el destino no se repite dentro del texto');
+  }
 });
