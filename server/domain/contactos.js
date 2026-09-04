@@ -102,6 +102,40 @@ export function mismoCorreo(a, b) {
 export const TIPOS_DE_CONTACTO = Object.freeze(['EMAIL', 'PHONE']);
 
 /**
+ * El destino enmascarado: lo unico que puede salir de aqui hacia un registro
+ * de diagnostico o hacia una pantalla.
+ *
+ * Un telefono conserva el codigo de pais y las dos ultimas cifras; un correo,
+ * la primera y la ultima letra del nombre y el dominio entero. Es suficiente
+ * para que la persona reconozca su contacto y para que quien lea un log
+ * distinga dos destinos, e insuficiente para saber cual es.
+ */
+export function enmascararTelefono(valor) {
+  const { e164, digitos } = normalizarTelefono(valor);
+  const referencia = e164 ?? (digitos ? `+${digitos}` : '');
+  if (referencia.length < 5) return '+•••';
+  const pais = referencia.slice(0, 3);
+  const finales = referencia.slice(-2);
+  const ocultas = Math.max(1, referencia.length - pais.length - finales.length);
+  return `${pais}${'•'.repeat(ocultas)}${finales}`;
+}
+
+export function enmascararCorreo(valor) {
+  const correo = normalizarCorreo(valor);
+  const arroba = correo.lastIndexOf('@');
+  if (arroba <= 0) return '•••';
+  const nombre = correo.slice(0, arroba);
+  const dominio = correo.slice(arroba);
+  if (nombre.length <= 2) return `${nombre[0] ?? '•'}•••${dominio}`;
+  return `${nombre[0]}•••${nombre[nombre.length - 1]}${dominio}`;
+}
+
+/** Enmascara segun el tipo de contacto. Nunca devuelve el valor completo. */
+export function enmascararContacto(tipo, valor) {
+  return tipo === 'EMAIL' ? enmascararCorreo(valor) : enmascararTelefono(valor);
+}
+
+/**
  * El valor normalizado de un contacto, segun su tipo. Es lo que se guarda en
  * `verifiedContacts.valueNormalized` y lo que se compara para saber si dos
  * personas reclaman el mismo contacto.

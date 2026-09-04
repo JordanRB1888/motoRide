@@ -135,7 +135,12 @@ export function crearDesafio({
     expiresAt: new Date(creado + POLITICA.TTL_MS).toISOString(),
     lastSentAt: new Date(creado).toISOString(),
     consumedAt: null,
-    invalidatedAt: null
+    invalidatedAt: null,
+    // AUTH-FINAL-2. Nace en `false`: mientras el proveedor no confirme la
+    // entrega, el enfriamiento no corre. Asi un envio que quedo en el aire no
+    // deja a la persona esperando sesenta segundos por un mensaje que quiza
+    // nunca salio. Lo pone en `true` el servicio, y solo con `delivered`.
+    deliveryConfirmed: false
   };
   return { registro, codigo };
 }
@@ -208,9 +213,14 @@ export function verificarCodigo({ desafio, codigo, secreto, esperado, now = new 
 /**
  * Cuantos milisegundos faltan para poder reenviar. Cero si ya se puede.
  * Un desafio muerto no se reenvia: se crea otro.
+ *
+ * Un desafio cuya entrega no se confirmo tampoco enfria: el proveedor no dijo
+ * que el mensaje saliera, y hacer esperar por un mensaje que quiza no existe
+ * es castigar a la persona por un fallo que no es suyo.
  */
 export function esperaParaReenviar(desafio, now = new Date()) {
   if (!desafio || !estaVivo(desafio, now)) return 0;
+  if (desafio.deliveryConfirmed === false) return 0;
   const desde = new Date(desafio.lastSentAt).getTime();
   const falta = desde + POLITICA.COOLDOWN_DE_REENVIO_MS - now.getTime();
   return falta > 0 ? falta : 0;
