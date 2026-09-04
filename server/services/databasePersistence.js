@@ -30,7 +30,12 @@ export const PERSISTED_TABLES = Object.freeze([
   'adminActions',
   'pushSubscriptions',
   'transportSubscriptions',
-  'scheduledRides'
+  'scheduledRides',
+  // AUTH-FINAL-1: la identidad canonica. USER != AUTH IDENTITY != VERIFIED
+  // CONTACT, y los desafios OTP viven en su propia tabla con TTL.
+  'authIdentities',
+  'verifiedContacts',
+  'authChallenges'
 ]);
 
 // Los nombres de tabla se interpolan en SQL, así que nunca pueden venir de

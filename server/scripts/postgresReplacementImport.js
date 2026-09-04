@@ -35,6 +35,10 @@ import { readSqliteCollections, preflightSqliteData } from './sqlitePostgresMigr
  * correcto si algún día dejan de serlo.
  */
 export const CANONICAL_DELETE_ORDER = Object.freeze([
+  // AUTH-FINAL-1: identidad canonica. Las tres cuelgan de users.
+  'authChallenges',     // -> users
+  'verifiedContacts',   // -> users
+  'authIdentities',     // -> users
   'adminActions',       // -> users, driverApplications, transactions
   'driverDocuments',    // -> driverApplications, users
   'messages',           // -> trips, users

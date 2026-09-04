@@ -17,8 +17,19 @@ export const POSTGRES_TABLES = Object.freeze({
   adminActions: 'admin_actions',
   pushSubscriptions: 'push_subscriptions',
   transportSubscriptions: 'transport_subscriptions',
-  scheduledRides: 'scheduled_rides'
+  scheduledRides: 'scheduled_rides',
+  // AUTH-FINAL-1. Las crea `supabase/migrations/20260904120000_auth_identity_foundation.sql`.
+  authIdentities: 'auth_identities',
+  verifiedContacts: 'verified_contacts',
+  authChallenges: 'auth_challenges'
 });
+
+/**
+ * Codigo SQLSTATE de Postgres para «la relacion no existe». Cuando una tabla
+ * de la lista falta, el arranque debe decir CUAL y que migracion la crea, no
+ * un error crudo de `pg` que obliga a adivinar.
+ */
+const RELACION_INEXISTENTE = '42P01';
 
 const SSL_TRUE = new Set(['1', 'true', 'require', 'required']);
 const SSL_FALSE = new Set(['0', 'false', 'disable', 'disabled']);
@@ -89,7 +100,21 @@ export async function loadPostgresDatabase(pool) {
   const database = {};
   for (const table of PERSISTED_TABLES) {
     const physical = POSTGRES_TABLES[table];
-    const result = await pool.query(`select payload from public.${physical} order by id`);
+    let result;
+    try {
+      result = await pool.query(`select payload from public.${physical} order by id`);
+    } catch (error) {
+      if (error?.code === RELACION_INEXISTENTE) {
+        const fallo = new Error(
+          `MISSING_TABLE:${physical} -- la tabla no existe en esta base de datos. ` +
+            'Aplica las migraciones de supabase/migrations/ antes de arrancar.'
+        );
+        fallo.code = 'MISSING_TABLE';
+        fallo.table = physical;
+        throw fallo;
+      }
+      throw error;
+    }
     database[table] = result.rows.map(row => row.payload);
   }
   return database;
