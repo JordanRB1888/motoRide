@@ -40,6 +40,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { Pantalla } from '../components/Pantalla';
+import { Boton } from '../ui/componentes';
 import {
   C2VerificacionOTP,
   SelectorCanalOTP,
@@ -225,6 +226,34 @@ export default function Verificacion() {
       destinoEnmascarado: enmascararParaMostrar(disponible, destinoDe(disponible)),
       recomendado: disponible === 'WHATSAPP'
     }));
+
+  // Sin ningún canal que ofrecer no se pinta un selector vacío con un botón
+  // que no hace nada. Es el estado de hoy —ningún proveedor configurado— y la
+  // persona merece saber qué pasa y poder salir, no quedarse mirando un hueco.
+  if (!desafio && canalesParaLaSuperficie.length === 0) {
+    const cargandoCanales = canales.length === 0;
+    return (
+      <Pantalla>
+        <View
+          style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}
+          testID="pantalla-sin-canales"
+          accessibilityRole="alert"
+        >
+          <Text style={{ fontSize: 20, fontWeight: '800', textAlign: 'center' }}>
+            {cargandoCanales ? 'Un momento…' : 'No podemos enviarte el código'}
+          </Text>
+          <Text style={{ fontSize: 15, lineHeight: 21, textAlign: 'center' }}>
+            {cargandoCanales
+              ? 'Estamos viendo por dónde podemos enviarte el código.'
+              : 'Ahora mismo no hay ningún medio disponible para verificar tu contacto. Inténtalo más tarde.'}
+          </Text>
+          {!cargandoCanales ? (
+            <Boton titulo="Volver" onPress={() => router.back()} testID="volver-sin-canales" />
+          ) : null}
+        </View>
+      </Pantalla>
+    );
+  }
 
   if (!desafio) {
     return (

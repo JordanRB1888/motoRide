@@ -284,6 +284,25 @@ test('la pantalla sólo pinta canales disponibles Y con contacto al que enviar',
   assert.match(pantalla, /\.filter\(disponible => destinoDe\(disponible\) !== ''\)/);
 });
 
+test('sin ningún canal disponible no hay lista vacía ni botón muerto: hay explicación y salida', () => {
+  const pantalla = despojarComentarios(leer('app/verificacion.tsx'));
+  // Es el estado de HOY --ningún proveedor configurado-- y es justo el que se
+  // olvida: un selector con cero opciones y un «Continuar» que no hace nada.
+  assert.match(pantalla, /canalesParaLaSuperficie\.length === 0/);
+  assert.match(pantalla, /testID="pantalla-sin-canales"/);
+  assert.match(pantalla, /No podemos enviarte el código/);
+  assert.match(pantalla, /Inténtalo más tarde/);
+  assert.match(pantalla, /titulo="Volver"/, 'y se puede salir');
+  // Mientras se consulta la lista, se distingue de «no hay ninguno».
+  assert.match(pantalla, /const cargandoCanales = canales\.length === 0/);
+  assert.match(pantalla, /Un momento…/);
+  // El estado vacío va ANTES del selector: si no, se pintaría la lista vacía.
+  assert.ok(
+    pantalla.indexOf('pantalla-sin-canales') < pantalla.indexOf('pantalla-eleccion-canal'),
+    'el estado vacío se comprueba antes de pintar el selector'
+  );
+});
+
 // ---------------------------------------------------------------------------
 // El código que se teclea
 // ---------------------------------------------------------------------------
