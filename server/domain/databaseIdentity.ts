@@ -118,9 +118,39 @@ const normalizar = (valor: string | null | undefined): string =>
  * El orden de las comprobaciones ES la seguridad: producción se deniega antes
  * de mirar nada más.
  */
+/**
+ * Si la URI apunta a una base que corre en esta misma máquina.
+ *
+ * Una base local levantada por la propia prueba —el PostgreSQL desechable de
+ * `postgresActiveTrip`, por ejemplo— no puede ser producción: nace vacía, vive
+ * en un directorio temporal y se borra al terminar. No tiene identidad de
+ * proyecto que declarar, y exigirle una la dejaría fuera sin ganar nada.
+ *
+ * Se reconoce SÓLO por el anfitrión, que es lo único que no se puede falsear
+ * sin salir de la máquina.
+ */
+export function esBaseLocal(uri: string): boolean {
+  if (typeof uri !== 'string' || uri.trim() === '') return false;
+  let analizada: URL;
+  try {
+    analizada = new URL(uri);
+  } catch {
+    return false;
+  }
+  const anfitrion = (analizada.hostname ?? '').toLowerCase();
+  return anfitrion === 'localhost' || anfitrion === '127.0.0.1' || anfitrion === '::1' || anfitrion === '[::1]';
+}
+
 export function evaluarIdentidadDeBaseDeDatos(entrada: EntradaDeIdentidad): ResultadoDeIdentidad {
   const observado = extraerIdentidadDeProyecto(entrada.uriObservada);
 
+  // OJO: aquí NO hay excepción para bases locales, y es deliberado.
+  //
+  // La regla de esta función es «no saber dónde escribes basta para no
+  // escribir», y quien la usa cuenta con ella. Una base local puede ser segura
+  // en el contexto de una prueba que la acaba de crear, pero eso lo sabe quien
+  // la creó, no este módulo. La excepción vive en
+  // `test/helpers/baseDePruebaSegura.js`, que es quien tiene ese contexto.
   if (observado === null) {
     return {
       veredicto: 'RECHAZO_IDENTIDAD_ILEGIBLE',

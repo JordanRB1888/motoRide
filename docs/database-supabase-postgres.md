@@ -46,6 +46,42 @@ Las migraciones viven en `supabase/migrations/` y parten de una base vacía. El 
 
 Crear un proyecto/base PostgreSQL independiente o un schema efímero con credenciales exclusivas de CI. Definir `TEST_DATABASE_URL`; nunca reutilizar `DATABASE_URL` de producción. Aplicar migraciones, ejecutar tests/integración y destruir el proyecto/schema al finalizar. Los tests SQLite actuales continúan usando archivos temporales.
 
+### Las DOS variables, y por qué hacen falta las dos
+
+| Variable | Qué lleva |
+|---|---|
+| `TEST_DATABASE_URL` | La URI completa del proyecto de pruebas |
+| `FX_TEST_DB_PROJECT_REF` | **El `ref` de ese mismo proyecto**, declarado aparte |
+
+La segunda no es redundante: es la **declaración explícita** de a qué proyecto se
+tiene intención de escribir. El guardián compara lo declarado con lo observado en
+la URI, y si no coinciden no escribe. Sin declaración tampoco escribe — no saber
+dónde vas a escribir basta para no hacerlo.
+
+El `ref` de un proyecto Supabase se lee de la propia URI: va en el usuario cuando
+se conecta por el pooler (`postgres.<ref>`) y en el host en conexión directa
+(`db.<ref>.supabase.co`).
+
+> **Cuidado al comparar dos URIs de Supabase.** Todos los proyectos de una misma
+> región comparten host de pooler (`aws-0-<region>.pooler.supabase.com`) y todos
+> se llaman `postgres`. Comparar host y nombre de base da falsos positivos: **lo
+> único que distingue un proyecto de otro es el `ref`**.
+
+### Qué protege el guardián
+
+`domain/databaseIdentity.ts` decide, y `test/helpers/baseDePruebaSegura.js` lo
+cablea a las suites que escriben. Las identidades de producción se deducen solas
+de `DATABASE_URL` y `PRODUCTION_DATABASE_URL` si están en el entorno, sin que
+nadie tenga que acordarse de declararlas.
+
+| Destino | Qué pasa |
+|---|---|
+| Producción | **Lanza.** Ni se conecta. Una configuración peligrosa no puede pasar en silencio |
+| Proyecto de pruebas declarado | Se ejecuta |
+| PostgreSQL de esta máquina (`localhost`) | Se ejecuta: nace vacío y se borra al terminar |
+| Remoto sin declarar | Se salta, con el motivo escrito en la salida |
+| Sin `TEST_DATABASE_URL` | Se salta |
+
 ## Migrar SQLite
 
 Preflight sin escritura ni conexión PostgreSQL:

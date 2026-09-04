@@ -5,7 +5,22 @@ import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 
+import { motivoParaSaltarse } from './helpers/baseDePruebaSegura.js';
+
+/**
+ * ESTA SUITE ESCRIBE. Por eso pasa por el guardian de identidad.
+ *
+ * Arranca un servidor apuntado a esta base, da de alta administracion, pasajera
+ * y conductor, recorre un ciclo de viaje entero y borra filas al limpiar. Antes
+ * solo comprobaba que `TEST_DATABASE_URL` existiera: si alguien pegaba ahi la
+ * URI de produccion, todo eso ocurria en produccion sin preguntar.
+ *
+ * `motivoParaSaltarse` LANZA si el destino resulta ser produccion --un error de
+ * configuracion peligroso no debe pasar en silencio-- y devuelve el motivo del
+ * salto cuando simplemente no hay base utilizable.
+ */
 const connectionString = process.env.TEST_DATABASE_URL;
+const motivoDelSalto = motivoParaSaltarse(connectionString);
 const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 const adminEmail = `db2-admin-${suffix}@example.test`;
 const passengerEmail = `db2-passenger-${suffix}@example.test`;
@@ -88,7 +103,7 @@ async function cleanup(pool) {
   }
 }
 
-test('DATABASE-2 final PostgreSQL backend smokes and two-client concurrency', { skip: !connectionString }, async () => {
+test('DATABASE-2 final PostgreSQL backend smokes and two-client concurrency', { skip: motivoDelSalto ?? false }, async () => {
   const pool = new pg.Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 4 });
   let child;
   let originalAdminPayload;

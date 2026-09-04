@@ -83,6 +83,33 @@ async function intentarLevantar() {
   };
 }
 
+/**
+ * UNA sola base para todo el fichero.
+ *
+ * Levantar PostgreSQL cuesta unos segundos, y arrancar dos a la vez mientras el
+ * resto de la suite corre en paralelo llega a agotar el tiempo de espera. Se
+ * comparte, y se apaga cuando termina el ultimo test.
+ */
+let compartida = null;
+async function base() {
+  if (compartida === undefined) return null;
+  if (compartida !== null) return compartida;
+  compartida = await intentarLevantar();
+  if (compartida === null) {
+    compartida = undefined;   // no hay `embedded-postgres`: no reintentar
+    return null;
+  }
+  compartida.pool = new Pool({ connectionString: compartida.connectionString, max: 10 });
+  await compartida.pool.query(DDL);
+  return compartida;
+}
+
+test.after(async () => {
+  if (compartida === null || compartida === undefined) return;
+  await compartida.pool.end().catch(() => {});
+  await compartida.cerrar();
+});
+
 const viaje = (id, passengerId) => JSON.stringify({
   id, passengerId, status: 'SEARCHING', driverId: null, assignedDriverId: null
 });
@@ -160,16 +187,12 @@ async function carreras(pool, etiqueta, crear) {
 }
 
 test('un solo viaje activo por pasajera, con PostgreSQL real y concurrencia real', async t => {
-  const base = await intentarLevantar();
-  if (base === null) {
+  const activa = await base();
+  if (activa === null) {
     t.skip('sin `embedded-postgres`: npm install --no-save embedded-postgres');
     return;
   }
-  const pool = new Pool({ connectionString: base.connectionString, max: 10 });
-  // El orden importa: primero se cierran las conexiones y DESPUES se apaga la
-  // base. Al reves, el pool se queda hablando con un servidor que ya no esta.
-  t.after(async () => { await pool.end(); await base.cerrar(); });
-  await pool.query(DDL);
+  const { pool } = activa;
 
   // 1. La version sin cerrojo, para que quede escrito POR QUE hace falta.
   const suelto = await carreras(pool, 'suelto', sinCerrojo);
@@ -189,25 +212,21 @@ test('un solo viaje activo por pasajera, con PostgreSQL real y concurrencia real
 });
 
 test('el cerrojo es POR PASAJERA: dos personas distintas no se estorban', async t => {
-  const base = await intentarLevantar();
-  if (base === null) {
+  const activa = await base();
+  if (activa === null) {
     t.skip('sin `embedded-postgres`');
     return;
   }
-  const pool = new Pool({ connectionString: base.connectionString, max: 10 });
-  // El orden importa: primero se cierran las conexiones y DESPUES se apaga la
-  // base. Al reves, el pool se queda hablando con un servidor que ya no esta.
-  t.after(async () => { await pool.end(); await base.cerrar(); });
-  await pool.query(DDL);
+  const { pool } = activa;
 
-  for (const id of ['ana', 'beto']) {
+  for (const id of ['ana_aparte', 'beto_aparte']) {
     await pool.query('insert into public.users (id, payload) values ($1, $2::jsonb) on conflict do nothing',
       [id, JSON.stringify({ id, role: 'passenger' })]);
   }
 
   const [a, b] = await Promise.all([
-    conCerrojo(pool, 'trip_ana', 'ana'),
-    conCerrojo(pool, 'trip_beto', 'beto')
+    conCerrojo(pool, 'trip_ana_aparte', 'ana_aparte'),
+    conCerrojo(pool, 'trip_beto_aparte', 'beto_aparte')
   ]);
   assert.deepEqual([a, b], [true, true], 'la invariante es por pasajera, no global');
 });
