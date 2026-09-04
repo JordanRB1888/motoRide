@@ -232,5 +232,8 @@ test('no secret logs: ni el secreto de sesion, ni tokens, ni contrasenas aparece
   assert.ok(!salida.includes(registro.cuerpo.token));
   assert.ok(!salida.includes(datos.password));
   assert.ok(!/Bearer /.test(salida));
-  assert.match(salida, /\[\+58express Auth\] verificacion: WHATSAPP=faltan 4, SMS=faltan 3, EMAIL=faltan 5; social: GOOGLE=sin audiencia, APPLE=sin audiencia/);
+  // AUTH-FINAL-2 cambió el contrato de correo de SMTP (cinco variables) a API
+  // HTTP (dos: la clave y el remitente). El arranque sigue contando por NOMBRE
+  // de variable, nunca por valor.
+  assert.match(salida, /\[\+58express Auth\] verificacion: WHATSAPP=faltan 4, SMS=faltan 3, EMAIL=faltan 2; social: GOOGLE=sin audiencia, APPLE=sin audiencia/);
 });

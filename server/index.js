@@ -45,6 +45,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createAuthIdentityStore } from './services/authIdentityStore.js';
 import { createVerificationService } from './services/verificationChallenges.js';
 import { crearProveedores, describirConfiguracion } from './services/verificationProviders.js';
+import { crearTransporteHttp, TIMEOUT_POR_OMISION_MS } from './services/verificationTransport.js';
 import { crearVerificadorSocial } from './services/socialTokenVerifier.js';
 import { normalizarTelefono } from './domain/contactos.js';
 import { createPushRouter } from './routes/push.js';
@@ -460,10 +461,19 @@ const identidad = createAuthIdentityStore({ database });
 // del entorno y hoy ninguno esta cableado a un transporte real: el arranque lo
 // cuenta por nombre de variable, nunca por valor.
 const otpSecret = process.env.OTP_PEPPER || createHash('sha256').update(`otp-pepper:${jwtSecret}`).digest('hex');
+// El transporte HTTP real, con su timeout. Es lo unico que separa a los
+// adaptadores de enviar de verdad: en cuanto haya configuracion autentica,
+// envian. Ver `services/verificationTransport.js`.
+const transporteDeVerificacion = await crearTransporteHttp({
+  timeoutMs: Number(process.env.VERIFICATION_TIMEOUT_MS) || TIMEOUT_POR_OMISION_MS
+});
 const verificacion = createVerificationService({
   database,
   secreto: otpSecret,
-  proveedores: crearProveedores({ env: process.env })
+  proveedores: crearProveedores({ env: process.env, transporte: transporteDeVerificacion }),
+  // Diagnostico con metadata segura: canal, proposito, categoria del
+  // resultado, latencia y el destino ENMASCARADO. Nunca el codigo.
+  registrar: metadata => console.log(`[+58express OTP] ${JSON.stringify(metadata)}`)
 });
 const verificadorSocial = crearVerificadorSocial({ env: process.env });
 {

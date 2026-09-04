@@ -97,13 +97,34 @@ export function createAuthRouter({
         res.set('Retry-After', String(Math.ceil(resultado.retryAfterMs / 1000)));
         return res.status(429).json({ error: resultado.error, retryAfterMs: resultado.retryAfterMs });
       }
+      // Un envio ya en curso para la misma atadura. No es un fallo del
+      // usuario ni gasta nada: es el segundo toque del mismo boton.
+      if (resultado.error === 'SEND_IN_PROGRESS') return res.status(409).json({ error: resultado.error });
       if (resultado.error === 'VERIFICATION_PROVIDER_NOT_CONFIGURED' || resultado.error === 'VERIFICATION_SEND_FAILED') {
-        return res.status(503).json({ error: resultado.error });
+        // `channel` deja que la interfaz diga QUE canal no esta disponible y
+        // ofrezca otro, en vez de un error generico.
+        return res.status(503).json({ error: resultado.error, channel: resultado.channel ?? channel });
       }
       return res.status(400).json({ error: resultado.error });
     }
     if (!await persistir(res)) return;
-    res.status(202).json({ status: 'sent', ...resultado.desafio });
+    res.status(202).json({
+      status: 'sent',
+      ...resultado.desafio,
+      maskedDestination: resultado.destinoEnmascarado,
+      // El proveedor no confirmo la entrega: el codigo pudo llegar igualmente,
+      // asi que el desafio vale, y reenviar o cambiar de canal no espera.
+      deliveryConfirmed: resultado.deliveryConfirmed,
+      ...(resultado.warning ? { warning: resultado.warning } : {})
+    });
+  });
+
+  /**
+   * Que canales puede ofrecer la aplicacion. Sin sesion: es la lista de lo que
+   * el servidor sabe enviar, no dice nada de ninguna cuenta.
+   */
+  router.get('/auth/verification/channels', limitadores.identidades, (_req, res) => {
+    res.json({ channels: verificacion.canalesDisponibles() });
   });
 
   router.post('/auth/verification/verify', sesionOpcional, limitadores.verificacion, async (req, res) => {

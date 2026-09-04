@@ -21,7 +21,7 @@ const WHATSAPP_ENV = {
   WHATSAPP_CLOUD_PHONE_NUMBER_ID: '1000',
   WHATSAPP_OTP_TEMPLATE_NAME: 'otp',
   WHATSAPP_OTP_TEMPLATE_LANGUAGE: 'es',
-  SMTP_HOST: 'h', SMTP_PORT: '587', SMTP_USER: 'u', SMTP_PASSWORD: 'p', EMAIL_FROM: 'no-reply@58express.com'
+  RESEND_API_KEY: 'clave-de-prueba', EMAIL_FROM: 'no-reply@58express.com'
 };
 
 async function montar(t) {
@@ -36,9 +36,14 @@ async function montar(t) {
     transporte: async (canal, peticion) => {
       const codigo = canal === 'WHATSAPP'
         ? peticion.body.template.components[0].parameters[0].text
-        : peticion.message.text.match(/\d{6}/)[0];
-      entregados.push({ canal, destino: canal === 'WHATSAPP' ? `+${peticion.body.to}` : peticion.message.to, codigo });
-      return { delivered: true };
+        : canal === 'SMS'
+          ? peticion.form.Body.match(/\d{6}/)[0]
+          : peticion.body.text.match(/\d{6}/)[0];
+      const destino = canal === 'WHATSAPP'
+        ? `+${peticion.body.to}`
+        : canal === 'SMS' ? peticion.form.To : peticion.body.to[0];
+      entregados.push({ canal, destino, codigo });
+      return { resultado: 'delivered', motivo: null, latenciaMs: 8 };
     }
   });
   const verificacion = createVerificationService({ database, secreto: JWT_SECRET, proveedores, now });
@@ -102,8 +107,13 @@ test('pedir un codigo responde 202 con la cuenta atras, sin el codigo ni el hash
   const r = await pedir({ channel: 'WHATSAPP', destination: '0414 123 4567', purpose: 'SIGNUP' });
   assert.equal(r.status, 202);
   assert.equal(r.cuerpo.status, 'sent');
-  assert.deepEqual(Object.keys(r.cuerpo).sort(), ['attemptsLeft', 'challengeId', 'channel', 'expiresInSeconds', 'purpose', 'resendAvailableInSeconds', 'status']);
+  assert.deepEqual(
+    Object.keys(r.cuerpo).sort(),
+    ['attemptsLeft', 'challengeId', 'channel', 'deliveryConfirmed', 'expiresInSeconds', 'maskedDestination', 'purpose', 'resendAvailableInSeconds', 'status']
+  );
   assert.equal(r.cuerpo.expiresInSeconds, 300);
+  assert.equal(r.cuerpo.deliveryConfirmed, true);
+  assert.equal(r.cuerpo.maskedDestination, '+58••••••••67', 'el destino vuelve enmascarado');
   assert.equal(entregados.length, 1);
   assert.equal(entregados[0].destino, '+584141234567');
   assert.ok(!JSON.stringify(r.cuerpo).includes(entregados[0].codigo));
