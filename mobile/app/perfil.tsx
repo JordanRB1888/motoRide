@@ -152,6 +152,7 @@ export default function PantallaDePerfil() {
  */
 function abrir(clave: string) {
   if (clave === 'datos') router.push('/perfil-datos');
+  if (clave === 'seguridad') router.push('/seguridad');
   if (clave === 'avisos') router.push('/avisos');
   if (clave === 'configuracion') router.push('/configuracion');
   // «Cambiar de modo» es la puerta de quien ya tiene sesión abierta: la

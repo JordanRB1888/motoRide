@@ -488,7 +488,12 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
             <Separador />
             <Fila icono="destino" titulo="Direcciones guardadas" detalle="Casa, trabajo y las que añadas" />
             <Separador />
-            <Fila icono="escudo" titulo="Seguridad de la cuenta" detalle="Contraseña y sesiones abiertas" />
+            <Fila
+              icono="escudo"
+              titulo="Seguridad de la cuenta"
+              detalle="Cómo entras y cómo cerrar tu cuenta"
+              onPress={onFila === undefined ? undefined : () => onFila('seguridad')}
+            />
           </Grupo>
 
           <Grupo titulo="Preferencias">
