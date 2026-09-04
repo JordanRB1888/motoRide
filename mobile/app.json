@@ -15,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.plus58express.app"
+      "bundleIdentifier": "com.plus58express.app",
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.plus58express.app",
@@ -53,7 +54,9 @@
           "microphonePermission": "+58Express usa el micrófono para grabar el sonido de tu vídeo de presentación. Sin él, el vídeo saldría mudo."
         }
       ],
-      "./plugins/rutaCortaDeCmake"
+      "./plugins/rutaCortaDeCmake",
+      "@react-native-google-signin/google-signin",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

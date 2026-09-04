@@ -4,7 +4,9 @@
   "main": "expo-router/entry",
   "private": true,
   "dependencies": {
+    "@react-native-google-signin/google-signin": "^16.1.5",
     "expo": "~57.0.18",
+    "expo-apple-authentication": "~57.0.1",
     "expo-constants": "~57.0.16",
     "expo-image-picker": "~57.0.15",
     "expo-linking": "~57.0.8",

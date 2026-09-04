@@ -30,7 +30,7 @@
  * un flujo que no existe.
  */
 
-import { forwardRef, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import type { ReactNode } from 'react';
@@ -47,6 +47,19 @@ import { FlechaDerecha, IconoDeCandado, IconoDeCorreo, IconoDeOjo } from '../ui/
 import { useMovimientoReducido } from '../ui/movimiento';
 import { HojaDeRegistro, SelectorDeCaminoAuth } from '../ui/Registro';
 import { guardarUltimoRol } from '../services/session';
+// AUTH-FINAL-3. La pantalla NO importa las bibliotecas de Google ni de Apple:
+// entran por su única puerta, `social/proveedores.ts`, igual que la cámara
+// entra por `media/captura.ts`. Aquí sólo hay decisiones ya traducidas.
+import { consultarProveedores, entrarConProveedor } from '../services/social';
+import { entrarCon, soportadoEnEstaPlataforma } from '../social/proveedores';
+import {
+  esFalloQueSeAvisa,
+  interpretarResultadoDelProveedor,
+  proveedoresOfrecibles,
+  socialOcupado,
+  type EstadoSocial,
+  type ProveedorSocial
+} from '../domain/entradaSocial';
 import {
   MENSAJES_DE_REGISTRO,
   destinoTrasRegistrarse,
@@ -107,7 +120,73 @@ export default function Acceso() {
   const { intencion: intencionElegida } = useLocalSearchParams<{ intencion?: string }>();
   const intencion = esIntencionDeEntrada(intencionElegida) ? describirIntencion(intencionElegida) : null;
 
-  const { entrar, registrar, sesion } = useSesion();
+  const { entrar, registrar, entrarConIdentidadSocial, sesion } = useSesion();
+
+  // AUTH-FINAL-3: entrar con Google o con Apple.
+  //
+  // La lista de proveedores la manda el SERVIDOR y se cruza con lo que esta
+  // plataforma soporta: Apple sólo existe en iOS, y Google necesita su client
+  // ID de web. Mientras la consulta no vuelve, no se ofrece ninguno —así el
+  // botón nunca aparece encendido un instante y luego apagado.
+  const [proveedoresSociales, setProveedoresSociales] = useState<readonly ProveedorSocial[]>([]);
+  const [estadoSocial, setEstadoSocial] = useState<EstadoSocial>('REPOSO');
+  const [avisoSocial, setAvisoSocial] = useState<string | null>(null);
+  // Un cerrojo que no depende del repintado: dos toques seguidos ocurren en el
+  // mismo fotograma y `useState` todavía no ha cambiado.
+  const abriendoProveedor = useRef(false);
+
+  useEffect(() => {
+    let vivo = true;
+    void consultarProveedores().then(({ proveedores }) => {
+      if (vivo) setProveedoresSociales(proveedoresOfrecibles(proveedores, soportadoEnEstaPlataforma));
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const entrarConSocial = useCallback(
+    async (proveedor: ProveedorSocial) => {
+      if (abriendoProveedor.current) return;
+      abriendoProveedor.current = true;
+      setEstadoSocial('ABRIENDO_PROVEEDOR');
+      setAvisoSocial(null);
+      try {
+        // 1. El selector del proveedor. Lo único que interesa es su token.
+        const delProveedor = await entrarCon(proveedor);
+        const corte = interpretarResultadoDelProveedor(delProveedor, proveedor);
+        if (corte) {
+          // Cancelar NO es un error: se vuelve en silencio, sin aviso rojo.
+          setEstadoSocial(corte.estado);
+          setAvisoSocial(esFalloQueSeAvisa(corte.estado) ? corte.mensaje ?? null : null);
+          return;
+        }
+
+        // 2. El servidor verifica la firma del token. Es la única autoridad.
+        setEstadoSocial('VERIFICANDO_CON_SERVIDOR');
+        const token = delProveedor.estado === 'TOKEN' ? delProveedor.token : '';
+        const resultado = await entrarConProveedor({
+          proveedor,
+          token,
+          nombre: delProveedor.estado === 'TOKEN' ? delProveedor.nombre : undefined,
+          apellido: delProveedor.estado === 'TOKEN' ? delProveedor.apellido : undefined
+        });
+
+        setEstadoSocial(resultado.estado);
+        setAvisoSocial(esFalloQueSeAvisa(resultado.estado) ? resultado.mensaje ?? null : null);
+        if (resultado.estado !== 'ENTRADO' || !resultado.usuario || !resultado.token) return;
+
+        // 3. La sesión es de +58Express, y el destino lo decide el ROL que
+        //    devolvió el servidor, no la intención con la que se pulsó.
+        await entrarConIdentidadSocial({ usuario: resultado.usuario, token: resultado.token });
+        void guardarUltimoRol(resultado.usuario.role === 'driver' ? 'driver' : 'passenger');
+        router.replace(destinoTrasEntrar(resultado.usuario, intencion?.intencion ?? null));
+      } finally {
+        abriendoProveedor.current = false;
+      }
+    },
+    [entrarConIdentidadSocial, intencion]
+  );
   const [identificador, setIdentificador] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [aLaVista, setALaVista] = useState(false);
@@ -353,7 +432,12 @@ export default function Acceso() {
             </Pressable>
           </View>
 
-          <EntradaSocial />
+          <EntradaSocial
+            disponibles={proveedoresSociales}
+            ocupado={socialOcupado(estadoSocial)}
+            aviso={avisoSocial}
+            onEntrar={entrarConSocial}
+          />
         </View>
       )}
     </Pantalla>
@@ -401,24 +485,69 @@ function ContrasenaOlvidada() {
  * disponibles, y cada botón lleva su nombre completo para quien no ve la
  * pantalla. Un icono apagado sin explicación se lee como una avería.
  */
-function EntradaSocial() {
-  const google = ENTRADA_SOCIAL.google;
-  const apple = ENTRADA_SOCIAL.apple;
-  const alguno = google.disponible || apple.disponible;
+/**
+ * Los dos accesos de siempre, ahora conectados.
+ *
+ * AUTH-FINAL-3. `disponibles` lo dice el SERVIDOR —qué proveedores tiene
+ * configurados— cruzado con lo que esta plataforma soporta. Mientras un
+ * proveedor no esté en esa lista, su botón sigue deshabilitado y con el aviso
+ * de siempre: un botón que no lleva a ninguna parte es peor que no tenerlo.
+ *
+ * El aviso de abajo sólo aparece cuando NINGUNO está disponible, igual que
+ * antes; si uno lo está y el otro no, el que no lo está se queda apagado y con
+ * su pista de accesibilidad, sin una línea que hable por los dos.
+ */
+function EntradaSocial({
+  disponibles,
+  ocupado,
+  aviso,
+  onEntrar
+}: {
+  readonly disponibles: readonly ProveedorSocial[];
+  readonly ocupado: boolean;
+  /**
+   * Lo que salió mal, ya traducido. Cancelar no llega aquí: no es un fallo, y
+   * enseñar un aviso rojo por algo que la persona hizo a propósito la haría
+   * dudar de si rompió algo.
+   */
+  readonly aviso: string | null;
+  readonly onEntrar: (proveedor: ProveedorSocial) => void;
+}) {
+  const hayGoogle = disponibles.includes('GOOGLE');
+  const hayApple = disponibles.includes('APPLE');
+  const alguno = hayGoogle || hayApple;
 
   return (
     <View style={{ gap: 16 }} testID="entrada-social">
       <Separador texto="o entra con" />
 
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 14 }}>
-        <BotonDeMarca nombre={google.titulo} disponible={google.disponible} testID="entrada-google">
+        <BotonDeMarca
+          nombre={ENTRADA_SOCIAL.google.titulo}
+          disponible={hayGoogle && !ocupado}
+          onPress={() => onEntrar('GOOGLE')}
+          testID="entrada-google"
+        >
           <LogoDeGoogle />
         </BotonDeMarca>
 
-        <BotonDeMarca nombre={apple.titulo} disponible={apple.disponible} testID="entrada-apple">
+        <BotonDeMarca
+          nombre={ENTRADA_SOCIAL.apple.titulo}
+          disponible={hayApple && !ocupado}
+          onPress={() => onEntrar('APPLE')}
+          testID="entrada-apple"
+        >
           <LogoDeApple />
         </BotonDeMarca>
       </View>
+
+      {aviso ? (
+        <View testID="aviso-social" accessibilityRole="alert" style={{ marginTop: 2 }}>
+          <Text style={{ fontSize: 13, lineHeight: 19, color: '#DC2626', textAlign: 'center', fontWeight: '500' }}>
+            {aviso}
+          </Text>
+        </View>
+      ) : null}
 
       {alguno ? null : (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 4 }}>

@@ -46,6 +46,15 @@ export interface ValorDelContexto {
    * conductor también. El rol lo concede la aprobación del expediente.
    */
   readonly registrar: (datos: DatosDeRegistro) => Promise<ResultadoDeRegistro>;
+  /**
+   * Abre la sesión que devolvió Google o Apple, por el mismo camino que las
+   * otras dos. El proveedor demuestra la identidad; el rol lo sigue diciendo
+   * el servidor, y su token no se guarda.
+   */
+  readonly entrarConIdentidadSocial: (sesionNueva: {
+    readonly usuario: IdentidadDeUsuario;
+    readonly token: string;
+  }) => Promise<void>;
   readonly salir: (motivo?: MotivoDeCierre) => Promise<void>;
   /** Vuelve a preguntar al backend. Para reintentar tras un fallo de red. */
   readonly revalidar: () => Promise<void>;
@@ -130,6 +139,29 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
     return resultado;
   }, [aplicar]);
 
+  /**
+   * Abre la sesión que devolvió una entrada con Google o con Apple.
+   *
+   * AUTH-FINAL-3. El proveedor demuestra QUIÉN es alguien; la sesión sigue
+   * siendo la de +58Express, con el rol que decide el servidor. El token de
+   * Google o de Apple **no** se guarda: ya cumplió su función al ser verificado
+   * y conservarlo sería guardar una credencial de otro sistema sin motivo.
+   *
+   * Recibe lo que el servidor devolvió porque quien habla con el proveedor es
+   * la pantalla —necesita abrir su selector—; aquí sólo se persiste la sesión,
+   * por el mismo camino que `entrar` y `registrar`.
+   */
+  const entrarConIdentidadSocial = useCallback(
+    async (sesionNueva: { readonly usuario: IdentidadDeUsuario; readonly token: string }) => {
+      const numero = ++operacion.current;
+      aplicar(numero, { estado: 'AUTENTICANDO' });
+      await guardarToken(sesionNueva.token);
+      if (numero !== operacion.current) return;
+      aplicar(numero, { estado: 'AUTENTICADO', usuario: sesionNueva.usuario });
+    },
+    [aplicar]
+  );
+
   const entrar = useCallback(async (credenciales: CredencialesDeAcceso) => {
     const numero = ++operacion.current;
     aplicar(numero, { estado: 'AUTENTICANDO' });
@@ -163,8 +195,8 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
   }, [aplicar]);
 
   const valor = useMemo<ValorDelContexto>(
-    () => ({ sesion, entrar, registrar, salir, revalidar }),
-    [sesion, entrar, registrar, salir, revalidar]
+    () => ({ sesion, entrar, registrar, entrarConIdentidadSocial, salir, revalidar }),
+    [sesion, entrar, registrar, entrarConIdentidadSocial, salir, revalidar]
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

@@ -116,8 +116,17 @@ test('la pantalla de acceso no asigna roles ni firma sesiones', () => {
   assert.equal(/role\s*[:=]/.test(alta), false);
   assert.equal(/signToken|jwt|firmar/i.test(alta), false);
   // La sesión se abre por el contexto, que es el único que guarda el token.
-  assert.match(pantalla, /const \{ entrar, registrar, sesion \} = useSesion\(\)/);
+  // Se comprueba QUÉ saca del contexto, no en qué orden ni cuántas cosas: la
+  // lista creció al conectar Google y Apple, y fijar la línea entera hacía
+  // fallar la prueba por un cambio que no toca lo que protege.
+  const delContexto = pantalla.match(/const \{([^}]*)\} = useSesion\(\)/);
+  assert.ok(delContexto, 'la pantalla toma la sesión del contexto');
+  for (const pieza of ['entrar', 'registrar', 'sesion']) {
+    assert.match(delContexto[1], new RegExp(`\\b${pieza}\\b`));
+  }
   assert.match(sinComentarios('context/AuthContext.tsx'), /await guardarToken\(resultado\.token\)/);
+  // Y ninguna de las entradas de la pantalla firma nada por su cuenta.
+  assert.equal(/signToken|jwt\.sign/i.test(pantalla), false);
 });
 
 // ---------------------------------------------------------------------------

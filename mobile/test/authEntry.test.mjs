@@ -267,7 +267,9 @@ test('Google y Apple viven en el ACCESO, no en la bienvenida', () => {
   const acceso = sinComentarios('app/acceso.tsx');
   assert.match(acceso, /ENTRADA_SOCIAL\.google/);
   assert.match(acceso, /ENTRADA_SOCIAL\.apple/);
-  assert.match(acceso, /<EntradaSocial \/>/);
+  // Con props desde AUTH-FINAL-3: qué proveedores hay, si está ocupado y qué
+  // salió mal. Lo que la prueba protege es DÓNDE vive, no su firma.
+  assert.match(acceso, /<EntradaSocial\b/);
   // Antes estaban antes de elegir, que era pedir cuenta sin saber de qué.
   assert.equal(/ENTRADA_SOCIAL/.test(sinComentarios('ui/Bienvenida.tsx')), false,
     'la bienvenida vuelve a llevar los accesos sociales');

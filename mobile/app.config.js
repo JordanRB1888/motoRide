@@ -37,10 +37,31 @@
 const CLAVE_DE_ANDROID = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY;
 const CLAVE_DE_IOS = process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY;
 
+/**
+ * El esquema de URL con el que iOS vuelve de Google (AUTH-FINAL-3).
+ *
+ * Es el client ID de iOS AL REVÉS: `123-abc.apps.googleusercontent.com` se
+ * convierte en `com.googleusercontent.apps.123-abc`. Se DERIVA en vez de pedir
+ * otra variable, porque son el mismo dato escrito de dos formas y dos
+ * variables que tienen que coincidir acaban no coincidiendo.
+ *
+ * Sin client ID de iOS no se escribe ninguno: el complemento se queda como
+ * está y el flujo de iOS no arranca, que es lo correcto cuando falta la
+ * configuración. Inventar un esquema daría un error de Google mucho más
+ * difícil de leer que la ausencia.
+ */
+function esquemaInvertidoDeGoogle(clienteDeIos) {
+  const sufijo = '.apps.googleusercontent.com';
+  if (!clienteDeIos || !clienteDeIos.endsWith(sufijo)) return null;
+  return `com.googleusercontent.apps.${clienteDeIos.slice(0, -sufijo.length)}`;
+}
+
 module.exports = ({ config }) => {
   const opciones = {};
   if (CLAVE_DE_ANDROID) opciones.androidGoogleMapsApiKey = CLAVE_DE_ANDROID;
   if (CLAVE_DE_IOS) opciones.iosGoogleMapsApiKey = CLAVE_DE_IOS;
+
+  const esquemaDeGoogle = esquemaInvertidoDeGoogle(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
 
   // La lista de complementos sigue viviendo en `app.json`; aquí sólo se le
   // añaden las opciones a uno. Redefinirla entera dejaría una trampa: quien
@@ -48,7 +69,11 @@ module.exports = ({ config }) => {
   // nada avisara.
   const plugins = (config.plugins ?? []).map((entrada) => {
     const nombre = Array.isArray(entrada) ? entrada[0] : entrada;
-    return nombre === 'react-native-maps' ? ['react-native-maps', opciones] : entrada;
+    if (nombre === 'react-native-maps') return ['react-native-maps', opciones];
+    if (nombre === '@react-native-google-signin/google-signin' && esquemaDeGoogle) {
+      return ['@react-native-google-signin/google-signin', { iosUrlScheme: esquemaDeGoogle }];
+    }
+    return entrada;
   });
 
   return { ...config, plugins };
