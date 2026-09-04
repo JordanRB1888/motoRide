@@ -48,6 +48,8 @@ import { crearViaje, pedirEstimacion } from '../services/pedido';
 import {
   claveDeIntento,
   estadoDelFallo,
+  huellaDelIntento,
+  PAGO_DE_ESTA_FASE,
   mensajeDelFallo,
   queFaltaParaPedir,
   puedeEstimar,
@@ -88,7 +90,7 @@ export default function PantallaDePedir() {
   const [tipo, setTipo] = useState<TipoEnLaPantalla>('MOTO');
   const [destino, setDestino] = useState<PuntoDelViaje | null>(null);
   const [fase, setFase] = useState<FaseDelPedido>('ELIGIENDO');
-  /** La clave de ESTE intento de pedir. Vive mientras el recorrido no cambie. */
+  /** La clave de ESTE intento de pedir. Vive mientras la huella no cambie. */
   const claveDelIntento = useRef<string | null>(null);
   const [estimacion, setEstimacion] = useState<Estimacion | null>(null);
   const [problema, setProblema] = useState<string | null>(null);
@@ -114,17 +116,25 @@ export default function PantallaDePedir() {
 
   const falta = queFaltaParaPedir(origen, destino);
 
-  // Cambiar cualquier cosa invalida el precio: era el de otro recorrido.
+  // LA HUELLA DEL INTENTO
   //
-  // Y con él la clave del intento: otro recorrido es otro viaje, no el
-  // reintento del anterior. Si se reutilizara, pedir a un destino nuevo
-  // devolvería el viaje viejo.
+  // Mientras no cambie, los toques y los reintentos son EL MISMO intento y
+  // llevan la misma clave de idempotencia. Cuando cambia, es otro viaje.
+  //
+  // Incluye el origen, que el borrado por destino y tipo se dejaba fuera: si
+  // alguien cruza la calle para que le recojan enfrente, eso es otro viaje aunque
+  // el destino sea el mismo. Va redondeado para que el temblor del GPS no
+  // cuente como cambio.
+  const huella = huellaDelIntento({ origen, destino, tipo, pago: PAGO_DE_ESTA_FASE });
+
+  // Cambiar cualquier cosa invalida el precio: era el de otro recorrido, y con
+  // él la clave, que era la de otro intento.
   useEffect(() => {
     setEstimacion(null);
     setProblema(null);
     claveDelIntento.current = null;
     setFase(previa => (previa === 'PIDIENDO' ? previa : 'ELIGIENDO'));
-  }, [tipo, destino?.lat, destino?.lng]);
+  }, [huella]);
 
   // ---------------------------------------------------------------------
   // Preguntar el precio
