@@ -159,7 +159,21 @@ export const EVENTOS_DEL_SERVIDOR = [
   /** Demasiados eventos en poco tiempo. Se avisa UNA vez por ventana. */
   'socket:rate_limited',
   /** Rol insuficiente para lo que se pidió. Fuente: `allowSocketRole`. */
-  'authorization:error'
+  'authorization:error',
+
+  /**
+   * Una carrera ofrecida a ESTE conductor.
+   *
+   * Fuente: `io.to(socketId).emit('rideRequested', offer)` en
+   * `dispatchTripToDrivers`. Llega el viaje entero mas `offeredDriverId`,
+   * `distanceToPickupKm`, `candidatesCount` y `offerExpiresAt`.
+   *
+   * El despacho ofrece de UNO EN UNO y espera quince segundos: no llegan dos a
+   * la vez para la misma persona. `offerExpiresAt` es la marca de vencimiento
+   * que calculo el servidor, y es contra ella contra la que cuenta la pantalla
+   * --no contando quince hacia atras, que prometeria mas tiempo del que hay.
+   */
+  'rideRequested'
 ] as const;
 export type EventoDelServidor = (typeof EVENTOS_DEL_SERVIDOR)[number];
 
@@ -171,12 +185,15 @@ export type EventoDelServidor = (typeof EVENTOS_DEL_SERVIDOR)[number];
  * su fase. Nombrarlos no los activa.
  */
 export const EVENTOS_PENDIENTES = [
-  // Despacho — la solicitud y sus rechazos, que necesitan pantalla propia.
+  // Despacho — lo que todavía no tiene pantalla.
+  //
+  // `rideRequested` SALIÓ de aquí en DISPATCH-DRIVER-SURFACES-1: ya tiene
+  // superficie y se escucha de verdad.
   //
   // OJO: `rideAccepted` NO está aquí ni entre los escuchados, y es a propósito:
   // el servidor NO lo emite. Es sólo cliente→servidor. Lo que el conductor
   // recibe al aceptar es un `tripStatusUpdated`.
-  'rideRequested', 'rideRequestFailed', 'rideAcceptanceFailed',
+  'rideRequestFailed', 'rideAcceptanceFailed',
   'tripStatusRejected',
   // Conductor — los tres de presencia salieron en DRIVER-AVAILABILITY-1.
   // No queda ninguno pendiente de esta familia.

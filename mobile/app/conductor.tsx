@@ -48,6 +48,8 @@ import {
   sePuedeReintentar
 } from '../domain/mapaDelConductor';
 import { AvisoDeUbicacionEnMapa } from '../ui/AvisoDeUbicacion';
+import { useOfertaEnVivo } from '../realtime/OfertaEnVivo';
+import { CierreDeOferta, SuperficieDeOferta } from '../conductor/SuperficieDeOferta';
 
 export default function InicioDeConductor() {
   const { sesion, salir } = useSesion();
@@ -181,12 +183,25 @@ export default function InicioDeConductor() {
 
   // APROBADO: su pantalla de verdad.
   //
+  // LAS CARRERAS QUE LE OFRECEN
+  //
+  // No se le pasa si esta en servicio: el despacho solo ofrece a quien tiene
+  // por disponible, asi que recibir una oferta ya es la prueba de estarlo.
+  const carrera = useOfertaEnVivo();
+
   // La misma que se aprobó en el recorrido de diseño, con el disco de la barra
   // —que ya estaba dibujado y sin conectar— pidiendo el cambio de estado al
   // servidor. Nada nuevo dibujado aquí.
   if (operativo) {
     return (
       <ProveedorDeNavegacion ir={irA}>
+        {/* EL CONTENEDOR HACE FALTA, Y NO ES DECORATIVO
+          *
+          * `ProveedorDeNavegacion` es solo un contexto: no pinta ninguna
+          * `View`. Sin este envoltorio, la capa absoluta de la oferta no tiene
+          * padre con dimensiones y no llega a verse --el evento llegaba, el
+          * estado cambiaba, y en pantalla no aparecia nada. */}
+        <View style={{ flex: 1 }}>
         <C2InicioConductor
           enLinea={enLinea}
           onAlternar={alternar}
@@ -199,6 +214,44 @@ export default function InicioDeConductor() {
             />
           }
         />
+
+        {/* LA OFERTA VA ENCIMA, NO DENTRO
+          *
+          * Se superpone al inicio aprobado en vez de modificarlo: el mapa, el
+          * disco de disponibilidad y la barra siguen siendo exactamente los
+          * mismos, y esta superficie aparece y desaparece sin tocarlos.
+          *
+          * `pointerEvents="box-none"` deja pasar los toques al mapa donde no hay
+          * tarjeta; sin eso, una capa invisible se comeria el paneo. */}
+        <View
+          pointerEvents="box-none"
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+        >
+          {carrera.estado === 'OFERTA' || carrera.estado === 'ACEPTANDO' ? (
+            carrera.oferta === null ? null : (
+              <SuperficieDeOferta
+                oferta={carrera.oferta}
+                segundos={carrera.segundos}
+                puedeAceptar={carrera.puedeAceptar}
+                puedeRechazar={carrera.puedeRechazar}
+                aceptando={carrera.estado === 'ACEPTANDO'}
+                onAceptar={carrera.aceptar}
+                onRechazar={carrera.rechazar}
+              />
+            )
+          ) : null}
+
+          {carrera.estado === 'ACEPTADA' || carrera.estado === 'RECHAZADA'
+            || carrera.estado === 'EXPIRADA' || carrera.estado === 'ERROR' ? (
+              <CierreDeOferta
+                estado={carrera.estado}
+                onCerrar={carrera.estado === 'ACEPTADA'
+                  ? () => { carrera.descartar(); router.replace('/viaje-activo'); }
+                  : carrera.descartar}
+              />
+            ) : null}
+        </View>
+        </View>
       </ProveedorDeNavegacion>
     );
   }

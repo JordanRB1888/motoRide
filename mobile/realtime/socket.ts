@@ -323,3 +323,38 @@ export function cancelarViaje(viajeId: string): boolean {
 export function hayConexion(): boolean {
   return socket !== null;
 }
+
+/**
+ * Aceptar una carrera ofrecida.
+ *
+ * QUIEN DECIDE NO ES ESTO
+ *
+ * Manda la intención; la carrera la adjudica el servidor con su reserva
+ * condicional, que sólo prospera si el viaje sigue en `SEARCHING` y sin
+ * conductor. Dos conductores pueden pulsar a la vez y sólo uno se la queda: por
+ * eso la pantalla espera la confirmación en vez de darse por ganadora.
+ *
+ * La identidad NO va en el payload: el servidor la saca de la sesión firmada.
+ * Sólo se manda a qué viaje se refiere.
+ *
+ * Devuelve `false` si no hay socket, para que quien llame sepa que no salió y
+ * pueda decirlo en vez de quedarse esperando una respuesta que no vendrá.
+ */
+export function aceptarCarrera(viajeId: string): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('rideAccepted', { tripId: viajeId });
+  return true;
+}
+
+/**
+ * Rechazar una carrera ofrecida.
+ *
+ * El servidor apunta a este conductor en `excludedDriverIds` y ofrece la carrera
+ * al siguiente candidato en el acto. No es «ignorar»: es liberar la carrera para
+ * que otro la coja sin esperar los quince segundos.
+ */
+export function rechazarCarrera(viajeId: string): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('rideRejected', { tripId: viajeId });
+  return true;
+}

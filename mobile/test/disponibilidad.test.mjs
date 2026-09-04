@@ -278,9 +278,13 @@ test('sigue sin haber despacho', () => {
   const carpetas = ['realtime', 'app', 'preview', 'services'];
   // `rideCancelled` sale de la lista en PASSENGER-TRIP-1: la pasajera ya
   // puede cancelar la busqueda desde su pantalla, con su confirmacion del
-  // servidor. Siguen vedados los del CONDUCTOR —aceptar y rechazar— que son
-  // la fase siguiente y necesitan su superficie.
-  const prohibidos = ['rideAccepted', 'rideRejected', 'tripRated', 'chat:send_message'];
+  // servidor.
+  //
+  // `rideAccepted` y `rideRejected` salen en DISPATCH-DRIVER-SURFACES-1: el
+  // conductor ya tiene la superficie de oferta con su cuenta atras, y los emite
+  // desde `realtime/socket.ts` con sus candados. Siguen vedados los que aun no
+  // tienen pantalla: calificar y el chat.
+  const prohibidos = ['tripRated', 'chat:send_message'];
   for (const carpeta of carpetas) {
     for (const nombre of fs.readdirSync(path.join(raizMovil, carpeta), { recursive: true })) {
       const completa = path.join(raizMovil, carpeta, String(nombre));

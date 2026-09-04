@@ -338,16 +338,19 @@ test('NO se emite ningún evento de despacho todavía', () => {
   //
   // `driver:connect` y `driver:status` salen de la lista en
   // DRIVER-AVAILABILITY-1: el conductor ya puede ponerse en servicio desde
-  // su pantalla. Siguen vedados los que MUEVEN UN VIAJE — pedir, aceptar,
-  // rechazar, cancelar, cambiar de estado, calificar y hablar por el chat—,
-  // que necesitan sus pantallas y sus confirmaciones antes de dispararse.
+  // su pantalla.
+  //
+  // `rideAccepted` y `rideRejected` salen en DISPATCH-DRIVER-SURFACES-1, que
+  // es la fase que les da su superficie: la oferta con su cuenta atras, el
+  // candado del doble toque y la negativa a aceptar una vencida. Siguen vedados
+  // los que MUEVEN UN VIAJE sin pantalla propia — pedir, cambiar de estado,
+  // calificar y hablar por el chat.
   //
   // `rideCancelled` sale en PASSENGER-TRIP-1: la pasajera ya puede cancelar la
   // busqueda, con la confirmacion del servidor y sin limpiar nada por su
-  // cuenta. Siguen vedados los que mueven un viaje desde el lado del
-  // CONDUCTOR y los que todavia no tienen pantalla.
+  // cuenta. Siguen vedados los que mueven un viaje sin pantalla propia.
   const prohibidos = [
-    'rideRequested', 'rideAccepted', 'rideRejected',
+    'rideRequested',
     'tripStatusUpdated', 'tripRated', 'chat:send_message'
   ];
 
@@ -388,13 +391,18 @@ test('NO se emite ningún evento de despacho todavía', () => {
       `hay una emision con el evento en una variable: ${emision}`);
   }
 
-  // Y son exactamente las autorizadas: dos de ubicacion y dos de presencia.
+  // Y son exactamente las autorizadas.
   const eventosEmitidos = emisiones.map(e => e.replace(/\.emit\('/, '').replace(/'$/, ''));
   // `rideCancelled` entra en PASSENGER-TRIP-1: la pasajera cancela su propia
-  // busqueda. Sigue siendo una funcion concreta con su evento escrito.
+  // busqueda.
+  //
+  // `rideAccepted` y `rideRejected` entran en DISPATCH-DRIVER-SURFACES-1, cada
+  // uno en su funcion concreta --`aceptarCarrera`, `rechazarCarrera`-- con su
+  // evento escrito y sin identidad en el payload: el servidor la saca de la
+  // sesion firmada.
   assert.deepEqual(eventosEmitidos.sort(), [
     'driver:connect', 'driver:location', 'driver:status', 'passenger:location_update',
-    'rideCancelled'
+    'rideAccepted', 'rideCancelled', 'rideRejected'
   ]);
 });
 
