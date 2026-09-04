@@ -160,6 +160,24 @@ export default function InicioDeConductor() {
     [ubicacion.posicion, camara]
   );
 
+  //
+  // LAS CARRERAS QUE LE OFRECEN
+  //
+  // VA AQUI ARRIBA, Y NO JUNTO A DONDE SE DIBUJA, POR UNA RAZON DE PESO.
+  //
+  // Debajo hay tres salidas condicionales --sesion arrancando, sesion sin
+  // autenticar, y rol que no es de conductor-- y un hook que quede por debajo
+  // de ellas se ejecuta unas veces si y otras no. React cuenta los hooks de
+  // cada render y compara: en el arranque en frio la sesion pasa por
+  // ARRANCANDO --sale por la primera puerta, con menos hooks-- y al render
+  // siguiente ya esta AUTENTICADO y los ejecuta todos. Esa diferencia rompe
+  // la pantalla entera con "Rendered more hooks than during the previous
+  // render", y la oferta no llegaba a verse nunca en ese camino.
+  //
+  // No se le pasa si esta en servicio: el despacho solo ofrece a quien tiene
+  // por disponible, asi que recibir una oferta ya es la prueba de estarlo.
+  const carrera = useOfertaEnVivo();
+
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (
       <Pantalla>
@@ -182,12 +200,6 @@ export default function InicioDeConductor() {
   if (usuario.role !== 'driver') return <Redirect href="/postulacion" />;
 
   // APROBADO: su pantalla de verdad.
-  //
-  // LAS CARRERAS QUE LE OFRECEN
-  //
-  // No se le pasa si esta en servicio: el despacho solo ofrece a quien tiene
-  // por disponible, asi que recibir una oferta ya es la prueba de estarlo.
-  const carrera = useOfertaEnVivo();
 
   // La misma que se aprobó en el recorrido de diseño, con el disco de la barra
   // —que ya estaba dibujado y sin conectar— pidiendo el cambio de estado al

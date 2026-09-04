@@ -53,6 +53,26 @@ type Escucha = (payload: unknown) => void;
 let socket: Socket | null = null;
 let estado: EstadoDeConexion = 'apagado';
 
+/**
+ * Los escuchas registrados, HAYA SOCKET O NO.
+ *
+ * Antes, `escuchar()` hacia `socket?.on(...)` y punto: si todavia no habia
+ * socket --la conexion es asincrona y empieza con `await leerToken()`-- la
+ * suscripcion se perdia sin dejar rastro y nadie volvia a intentarlo. Que
+ * funcionara dependia de un rebote afortunado: al cambiar el estado de
+ * conexion, React volvia a montar el efecto y suscribia otra vez.
+ *
+ * Eso es fragil por dos motivos. Uno, depende de que quien escucha se re-suscriba
+ * con el estado, y no todos tienen por que hacerlo. Dos, un fallo asi no se ve:
+ * no lanza, no avisa, simplemente no llegan eventos.
+ *
+ * Ahora el registro es la autoridad y el socket un detalle: quien se apunta
+ * queda apuntado, y al crearse el socket se le aplican todos. Sin duplicados,
+ * porque cada envoltorio se registra una sola vez y se aplica una sola vez por
+ * socket.
+ */
+const escuchas = new Set<{ evento: EventoDelServidor; envoltorio: Escucha }>();
+
 const observadores = new Set<(estado: EstadoDeConexion) => void>();
 /** Quien quiere enterarse de una reconexión, para volver a preguntar por HTTP. */
 const observadoresDeResync = new Set<() => void>();
@@ -162,6 +182,9 @@ export async function conectar(): Promise<void> {
   });
 
   socket = cliente;
+  // Lo que se apunto antes de que existiera el socket entra ahora. Sin esto,
+  // quien monto su pantalla durante la conexion no recibiria nada.
+  for (const { evento, envoltorio } of escuchas) cliente.on(evento, envoltorio);
 }
 
 /**
@@ -180,6 +203,10 @@ export function desconectar(): void {
   socket.io.removeAllListeners();
   socket.disconnect();
   socket = null;
+  // El REGISTRO se conserva a proposito: los componentes que escuchan siguen
+  // montados, y cuando vuelva a haber sesion sus escuchas se aplican solos al
+  // socket nuevo. Lo que se tira son los escuchas del socket viejo, que es lo
+  // que evita que un evento de la sesion anterior despierte a nadie.
   cambiarEstado('apagado');
   anotar('desconectado y limpio');
 }
@@ -201,8 +228,15 @@ export function escuchar(evento: EventoDelServidor, escucha: Escucha): () => voi
     }
   };
 
+  const registro = { evento, envoltorio };
+  escuchas.add(registro);
+  // Si ya hay socket se aplica en el acto; si no, lo hara `conectar`.
   socket?.on(evento, envoltorio);
-  return () => { socket?.off(evento, envoltorio); };
+
+  return () => {
+    escuchas.delete(registro);
+    socket?.off(evento, envoltorio);
+  };
 }
 
 /**

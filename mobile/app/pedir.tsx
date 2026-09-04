@@ -220,8 +220,40 @@ export default function PantallaDePedir() {
     router.replace('/viaje-activo');
   }, [origen, destino, tipo, fase, estimacion, viajeActivo.fase, refrescarViaje]);
 
+  // EL MODELO DEL MAPA SE MEMORIZA, Y NO ES UN DETALLE
+  //
+  // El mapa nativo mueve la camara cuando cambia `modelo.camara` POR
+  // IDENTIDAD. Construir el modelo inline hacia que cada `setDestino`
+  // fabricara una camara nueva, el mapa se moviera, avisara de su centro y
+  // volviera a `setDestino`: un bucle que React corta con «Maximum update
+  // depth exceeded». Se vio en el emulador, no en las pruebas.
+  //
+  // Solo depende del origen: la camara arranca sobre ti y el reticulo esta
+  // siempre puesto, elijas lo que elijas.
+  const modelo = useMemo(() => ({
+    camara: origen === null
+      ? CAMARA_DE_MARACAIBO
+      : { ...CAMARA_DE_MARACAIBO, centro: { lat: origen.lat, lng: origen.lng } },
+    marcadores: [],
+    ruta: [],
+    // El reticulo de «mueve el mapa, no el pin»: el centro es lo que se
+    // esta eligiendo.
+    eligiendoPunto: true,
+    aireInferior: 0
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [origen?.lat, origen?.lng]);
+
   // ---------------------------------------------------------------------
   // Guardias
+  //
+  // TODOS LOS HOOKS QUEDAN POR ENCIMA DE ESTA LINEA.
+  //
+  // Debajo hay cuatro salidas condicionales, y un hook por debajo de ellas
+  // se ejecuta unas veces si y otras no. React cuenta los hooks de cada
+  // render: en el arranque en frio la sesion pasa por ARRANCANDO --sale por
+  // la primera puerta, con menos hooks-- y al render siguiente ya esta
+  // AUTENTICADO y los ejecuta todos. Esa diferencia no da un aviso: tumba la
+  // pantalla con "Rendered more hooks than during the previous render".
   // ---------------------------------------------------------------------
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (
@@ -245,29 +277,6 @@ export default function PantallaDePedir() {
   const irA = crearNavegacionDePasajero({ enPedir: true });
 
   const trabajando = fase === 'ESTIMANDO' || fase === 'PIDIENDO';
-
-  // EL MODELO DEL MAPA SE MEMORIZA, Y NO ES UN DETALLE
-  //
-  // El mapa nativo mueve la camara cuando cambia `modelo.camara` POR
-  // IDENTIDAD. Construir el modelo inline hacia que cada `setDestino`
-  // fabricara una camara nueva, el mapa se moviera, avisara de su centro y
-  // volviera a `setDestino`: un bucle que React corta con «Maximum update
-  // depth exceeded». Se vio en el emulador, no en las pruebas.
-  //
-  // Solo depende del origen: la camara arranca sobre ti y el reticulo esta
-  // siempre puesto, elijas lo que elijas.
-  const modelo = useMemo(() => ({
-    camara: origen === null
-      ? CAMARA_DE_MARACAIBO
-      : { ...CAMARA_DE_MARACAIBO, centro: { lat: origen.lat, lng: origen.lng } },
-    marcadores: [],
-    ruta: [],
-    // El reticulo de «mueve el mapa, no el pin»: el centro es lo que se
-    // esta eligiendo.
-    eligiendoPunto: true,
-    aireInferior: 0
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [origen?.lat, origen?.lng]);
 
   // El importe del servidor, solo en la tarjeta del vehiculo que se estimo.
   const precioDeTarjeta = (vehiculo: TipoEnLaPantalla): PrecioDeTarjeta | undefined => {

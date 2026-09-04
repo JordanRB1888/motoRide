@@ -194,7 +194,14 @@ test('los escuchas se quitan solos', () => {
   // Sin la limpieza, cada montaje añade un escucha y el mismo evento se
   // procesa dos, tres, diez veces.
   const cliente = sinComentarios('realtime/socket.ts');
-  assert.match(cliente, /return \(\) => \{ socket\?\.off\(evento, envoltorio\); \};/);
+  const desdeEscuchar = cliente.slice(cliente.indexOf('export function escuchar'));
+  const baja = desdeEscuchar.slice(desdeEscuchar.indexOf('return () =>'));
+
+  // Quitarlo del socket ya no basta: desde que el registro de escuchas
+  // sobrevive a la conexión, uno que no salga de él se volvería a aplicar al
+  // reconectar. Hacen falta las dos cosas, o hay fuga.
+  assert.match(baja, /escuchas\.delete\(registro\)/, 'no sale del registro');
+  assert.match(baja, /socket\?\.off\(evento, envoltorio\)/, 'no se quita del socket');
 
   const proveedor = sinComentarios('realtime/ProveedorDeTiempoReal.tsx');
   assert.match(proveedor, /useEffect\(\s*\(\) => suscribir\(evento/, 'el hook no devuelve la limpieza');
