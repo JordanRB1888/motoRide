@@ -182,6 +182,7 @@ export default function DisposicionRaiz() {
             <Stack.Screen name="historial" options={{ animation: 'none' }} />
             <Stack.Screen name="perfil" options={{ animation: 'none' }} />
             <Stack.Screen name="conductor" options={{ animation: 'none' }} />
+            <Stack.Screen name="conductor-saldo" options={{ animation: 'none' }} />
           </Stack>
           </ProveedorDeUbicacionEnVivo>
           </ProveedorDeUbicacion>

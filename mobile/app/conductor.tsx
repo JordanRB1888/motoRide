@@ -241,6 +241,7 @@ function irA(clave: string) {
   if (clave === 'perfil') router.replace('/perfil');
   if (clave === 'historial') router.replace('/historial');
   if (clave === 'mapa') router.replace('/conductor');
+  if (clave === 'saldo') router.replace('/conductor-saldo');
 }
 
 /**

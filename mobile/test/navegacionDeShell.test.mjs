@@ -259,3 +259,32 @@ test('los shells no registran nada ni guardan estado de rol', () => {
     assert.ok(!/useState/.test(fuente) || fichero === 'app/saldo.tsx', `${fichero} no guarda estado de rol`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// El saldo del conductor
+// ---------------------------------------------------------------------------
+
+test('la pestaña Saldo del conductor lleva a su pantalla: ya no es un botón muerto', () => {
+  // Su superficie estaba dibujada y aprobada desde hacía tiempo, pero sin ruta
+  // ni clave en la tabla: pulsarla caía al final de la función sin hacer nada.
+  const compartido = despojarComentarios(leer('navegacion/shellCompartido.tsx'));
+  assert.match(compartido, /if \(clave === 'saldo'\) router\.replace\('\/conductor-saldo'\)/);
+  const conductor = despojarComentarios(leer('app/conductor.tsx'));
+  assert.match(conductor, /if \(clave === 'saldo'\) router\.replace\('\/conductor-saldo'\)/);
+  assert.ok(fs.existsSync(path.resolve(raizMovil, 'app/conductor-saldo.tsx')), 'no existe la ruta');
+});
+
+test('el saldo del conductor monta la superficie aprobada y exige ser conductor', () => {
+  const pantalla = despojarComentarios(leer('app/conductor-saldo.tsx'));
+  assert.match(pantalla, /<C2SaldoConductor/, 'monta la superficie que ya existía');
+  assert.match(pantalla, /puedeOperarComoConductor\(sesion\)/, 'sin aprobación no hay cuenta operativa');
+  assert.match(pantalla, /<Redirect href="\/postulacion" \/>/);
+  assert.match(pantalla, /<ShellCompartido/);
+  // No se duplica la superficie ni se inventan cifras aquí.
+  assert.ok(!/Bs\. ?[0-9]|\$ ?[0-9]/.test(pantalla), 'sin importes inventados');
+});
+
+test('la pestaña de saldo del conductor tampoco se desliza', () => {
+  const layout = leer('app/_layout.tsx');
+  assert.match(layout, /<Stack\.Screen name="conductor-saldo" options=\{\{ animation: 'none' \}\} \/>/);
+});

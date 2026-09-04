@@ -31,8 +31,11 @@ export function crearNavegacionDeConductor() {
     if (clave === 'mapa') router.replace('/conductor');
     if (clave === 'historial') router.replace('/historial');
     if (clave === 'perfil') router.replace('/perfil');
-    // `saldo` todavía no tiene pantalla en el conductor: su cartera está
-    // apagada en el servidor y no se inventa una.
+    // El saldo del conductor. Su superficie estaba dibujada y aprobada, pero
+    // sin ruta ni clave aqui: pulsar la pestaña caia al final sin hacer nada.
+    // La cartera sigue apagada en el servidor, asi que la pantalla no inventa
+    // ninguna cifra --eso ya lo garantiza una prueba sobre la superficie--.
+    if (clave === 'saldo') router.replace('/conductor-saldo');
   };
 }
 
