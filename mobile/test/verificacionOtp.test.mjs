@@ -280,7 +280,7 @@ test('WhatsApp es el preferido; si no está, SMS; y el correo el último', () =>
 
 test('la pantalla sólo pinta canales disponibles Y con contacto al que enviar', () => {
   const pantalla = despojarComentarios(leer('app/verificacion.tsx'));
-  assert.match(pantalla, /canalesOfrecibles\(canales\)/);
+  assert.match(pantalla, /canalesOfrecibles\(canales \?\? \[\]\)/);
   assert.match(pantalla, /\.filter\(disponible => destinoDe\(disponible\) !== ''\)/);
 });
 
@@ -293,14 +293,39 @@ test('sin ningún canal disponible no hay lista vacía ni botón muerto: hay exp
   assert.match(pantalla, /No podemos enviarte el código/);
   assert.match(pantalla, /Inténtalo más tarde/);
   assert.match(pantalla, /titulo="Volver"/, 'y se puede salir');
-  // Mientras se consulta la lista, se distingue de «no hay ninguno».
-  assert.match(pantalla, /const cargandoCanales = canales\.length === 0/);
-  assert.match(pantalla, /Un momento…/);
   // El estado vacío va ANTES del selector: si no, se pintaría la lista vacía.
   assert.ok(
     pantalla.indexOf('pantalla-sin-canales') < pantalla.indexOf('pantalla-eleccion-canal'),
     'el estado vacío se comprueba antes de pintar el selector'
   );
+});
+
+test('las tres razones para no tener canales se distinguen, y ninguna se queda esperando', () => {
+  const pantalla = despojarComentarios(leer('app/verificacion.tsx'));
+  // Encontrado en el emulador: si la consulta fallaba, la pantalla se quedaba
+  // en «Un momento…» PARA SIEMPRE. `null` es «aún no pregunté»; una lista
+  // vacía es «pregunté y no hay»; y `consultaOk: false` es «no pude preguntar».
+  assert.match(pantalla, /const consultando = canales === null/);
+  assert.match(pantalla, /Un momento…/);
+  assert.match(pantalla, /Sin conexión/, 'no llegó la petición');
+  assert.match(pantalla, /El servidor no responde/, 'llegó y contestó mal');
+  assert.match(pantalla, /No podemos enviarte el código/, 'contestó bien y no hay ninguno');
+  assert.match(pantalla, /titulo="Reintentar"/, 'de un fallo se puede volver sin salir');
+  const servicio = despojarComentarios(leer('services/otp.ts'));
+  assert.match(servicio, /sinRed: boolean/);
+  assert.match(servicio, /\['SIN_RED', 'TIEMPO_AGOTADO', 'SIN_CONFIGURACION'\]\.includes\(respuesta\.motivo\)/);
+});
+
+test('los textos de la pantalla toman su color del tema: la aplicación tiene modo oscuro', () => {
+  const pantalla = despojarComentarios(leer('app/verificacion.tsx'));
+  // Encontrado en el emulador: sin color del tema, el texto salía negro sobre
+  // fondo negro y era ilegible.
+  assert.match(pantalla, /const tema = useTema\(\)/);
+  const textos = pantalla.match(/<Text[\s\S]*?>/g) ?? [];
+  assert.ok(textos.length > 0, 'hay textos que revisar');
+  for (const texto of textos) {
+    assert.match(texto, /color: tema\.color\./, `un <Text> sin color del tema: ${texto.slice(0, 70)}`);
+  }
 });
 
 // ---------------------------------------------------------------------------

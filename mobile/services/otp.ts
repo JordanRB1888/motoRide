@@ -56,12 +56,29 @@ import {
   type ResultadoDeVerificacion
 } from '../domain/verificacionOtp';
 
-/** Qué canales sabe enviar el servidor. Sin sesión: no habla de cuentas. */
-export async function consultarCanales(): Promise<CanalDisponible[]> {
+/**
+ * Qué canales sabe enviar el servidor. Sin sesión: no habla de cuentas.
+ *
+ * Devuelve si la consulta SALIÓ BIEN, aparte de la lista. No es lo mismo «el
+ * servidor dice que no hay ninguno» que «no pude preguntar»: confundirlos deja
+ * la pantalla esperando para siempre a una respuesta que ya falló.
+ */
+export async function consultarCanales(): Promise<{
+  ok: boolean;
+  /** `true` sólo cuando la petición ni siquiera salió del teléfono. */
+  sinRed: boolean;
+  canales: CanalDisponible[];
+}> {
   const respuesta = await llamar<{ channels: CanalDisponible[] }>('/auth/verification/channels', {
     conSesion: false
   });
-  return respuesta.ok ? (respuesta.datos.channels ?? []) : [];
+  if (!respuesta.ok) {
+    // Que no haya red y que el servidor conteste mal son problemas distintos,
+    // y la persona hace cosas distintas con cada uno: mirar su wifi, o esperar.
+    const sinRed = ['SIN_RED', 'TIEMPO_AGOTADO', 'SIN_CONFIGURACION'].includes(respuesta.motivo);
+    return { ok: false, sinRed, canales: [] };
+  }
+  return { ok: true, sinRed: false, canales: respuesta.datos.channels ?? [] };
 }
 
 /**

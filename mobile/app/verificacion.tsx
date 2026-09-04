@@ -41,6 +41,7 @@ import { Text, View } from 'react-native';
 
 import { Pantalla } from '../components/Pantalla';
 import { Boton } from '../ui/componentes';
+import { useTema } from '../theme/ThemeContext';
 import {
   C2VerificacionOTP,
   SelectorCanalOTP,
@@ -89,13 +90,21 @@ export default function Verificacion() {
     volverA?: string;
   }>();
 
+  // Los colores salen del tema, nunca de literales: la aplicación tiene modo
+  // oscuro y un texto sin color se pinta negro sobre negro.
+  const tema = useTema();
   const proposito = (parametros.proposito ?? 'SIGNUP') as PropositoDeVerificacion;
   const telefono = typeof parametros.telefono === 'string' ? parametros.telefono : '';
   const correo = typeof parametros.correo === 'string' ? parametros.correo : '';
   /** Los propósitos que exigen sesión: el servidor los rechaza sin ella. */
   const conSesion = ['CHANGE_PHONE', 'CHANGE_EMAIL', 'ACCOUNT_LINK', 'SENSITIVE_ACTION'].includes(proposito);
 
-  const [canales, setCanales] = useState<CanalDisponible[]>([]);
+  // `null` es «todavía no he preguntado». Una lista vacía es «pregunté y no
+  // hay ninguno», y `false` en `consultaOk` es «no pude preguntar». Los tres
+  // son distintos y se ven distintos.
+  const [canales, setCanales] = useState<CanalDisponible[] | null>(null);
+  const [consultaOk, setConsultaOk] = useState(true);
+  const [sinRed, setSinRed] = useState(false);
   const [canal, setCanal] = useState<CanalDeVerificacion | null>(null);
   const [estado, setEstado] = useState<EstadoDeVerificacion>('ELIGIENDO_CANAL');
   const [desafio, setDesafio] = useState<DesafioEnviado | null>(null);
@@ -109,17 +118,25 @@ export default function Verificacion() {
   const enviando = useRef(false);
   const verificando = useRef(false);
 
-  useEffect(() => {
-    let vivo = true;
-    consultarCanales().then(lista => {
-      if (!vivo) return;
-      setCanales(lista);
-      setCanal(actual => actual ?? canalPreferido(lista));
-    });
-    return () => {
-      vivo = false;
-    };
+  const cargarCanales = useCallback(async () => {
+    const { ok, sinRed, canales: lista } = await consultarCanales();
+    setConsultaOk(ok);
+    setSinRed(sinRed);
+    setCanales(lista);
+    setCanal(actual => actual ?? canalPreferido(lista));
   }, []);
+
+  /** Volver a preguntar tras un fallo de red, sin salir de la pantalla. */
+  const reintentarCanales = useCallback(() => {
+    setCanales(null);
+    setConsultaOk(true);
+    setSinRed(false);
+    void cargarCanales();
+  }, [cargarCanales]);
+
+  useEffect(() => {
+    void cargarCanales();
+  }, [cargarCanales]);
 
   // La cuenta atrás del reenvío. Sólo pinta; no decide nada.
   useEffect(() => {
@@ -212,7 +229,7 @@ export default function Verificacion() {
     else router.back();
   }, [parametros.volverA]);
 
-  const ofrecibles = canalesOfrecibles(canales);
+  const ofrecibles = canalesOfrecibles(canales ?? []);
 
   // Sólo se pintan los canales que el servidor sabe enviar Y para los que
   // tenemos contacto: un botón que no lleva a ninguna parte es peor que no
@@ -228,10 +245,25 @@ export default function Verificacion() {
     }));
 
   // Sin ningún canal que ofrecer no se pinta un selector vacío con un botón
-  // que no hace nada. Es el estado de hoy —ningún proveedor configurado— y la
-  // persona merece saber qué pasa y poder salir, no quedarse mirando un hueco.
+  // que no hace nada. Y hay tres razones distintas para no tener canales:
+  // todavía estoy preguntando, pregunté y no hay ninguno, o no pude preguntar.
+  // Las tres se ven distintas, y ninguna se queda esperando para siempre.
   if (!desafio && canalesParaLaSuperficie.length === 0) {
-    const cargandoCanales = canales.length === 0;
+    const consultando = canales === null;
+    const titulo = consultando
+      ? 'Un momento…'
+      : consultaOk
+        ? 'No podemos enviarte el código'
+        : sinRed
+          ? 'Sin conexión'
+          : 'El servidor no responde';
+    const explicacion = consultando
+      ? 'Estamos viendo por dónde podemos enviarte el código.'
+      : consultaOk
+        ? 'Ahora mismo no hay ningún medio disponible para verificar tu contacto. Inténtalo más tarde.'
+        : sinRed
+          ? 'Revisa tus datos o el wifi e inténtalo de nuevo.'
+          : 'No pudimos preguntar por dónde enviarte el código. Inténtalo de nuevo en un momento.';
     return (
       <Pantalla>
         <View
@@ -239,16 +271,23 @@ export default function Verificacion() {
           testID="pantalla-sin-canales"
           accessibilityRole="alert"
         >
-          <Text style={{ fontSize: 20, fontWeight: '800', textAlign: 'center' }}>
-            {cargandoCanales ? 'Un momento…' : 'No podemos enviarte el código'}
+          <Text
+            style={{ fontSize: 20, fontWeight: '800', textAlign: 'center', color: tema.color.textoPrimario }}
+          >
+            {titulo}
           </Text>
-          <Text style={{ fontSize: 15, lineHeight: 21, textAlign: 'center' }}>
-            {cargandoCanales
-              ? 'Estamos viendo por dónde podemos enviarte el código.'
-              : 'Ahora mismo no hay ningún medio disponible para verificar tu contacto. Inténtalo más tarde.'}
+          <Text
+            style={{ fontSize: 15, lineHeight: 21, textAlign: 'center', color: tema.color.textoSecundario }}
+          >
+            {explicacion}
           </Text>
-          {!cargandoCanales ? (
-            <Boton titulo="Volver" onPress={() => router.back()} testID="volver-sin-canales" />
+          {!consultando ? (
+            <View style={{ gap: 10, marginTop: 8 }}>
+              {!consultaOk ? (
+                <Boton titulo="Reintentar" onPress={reintentarCanales} testID="reintentar-canales" />
+              ) : null}
+              <Boton titulo="Volver" onPress={() => router.back()} testID="volver-sin-canales" />
+            </View>
           ) : null}
         </View>
       </Pantalla>
@@ -268,7 +307,7 @@ export default function Verificacion() {
           />
           {aviso ? (
             <View testID="aviso-envio" accessibilityRole="alert" style={{ marginTop: 16 }}>
-              <Text style={{ fontSize: 14, lineHeight: 20, textAlign: 'center' }}>{aviso}</Text>
+              <Text style={{ fontSize: 14, lineHeight: 20, textAlign: 'center', color: tema.color.textoSecundario }}>{aviso}</Text>
             </View>
           ) : null}
         </View>
