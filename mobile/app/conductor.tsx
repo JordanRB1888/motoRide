@@ -25,7 +25,7 @@
  */
 
 import { Redirect, router } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../components/Boton';
@@ -37,6 +37,17 @@ import { describirSituacion, SIN_SOLICITUD } from '../domain/driverApplication';
 import { C2InicioConductor } from '../preview/pantallasC2';
 import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useDisponibilidad } from '../realtime/Disponibilidad';
+import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
+import {
+  CAMARA_INICIAL_DEL_CONDUCTOR,
+  MENSAJES_DE_UBICACION,
+  avisoDeUbicacion,
+  camaraCentradaEn,
+  camaraDelConductor,
+  modeloDelMapaDelConductor,
+  sePuedeReintentar
+} from '../domain/mapaDelConductor';
+import { AvisoDeUbicacionEnMapa } from '../ui/AvisoDeUbicacion';
 
 export default function InicioDeConductor() {
   const { sesion, salir } = useSesion();
@@ -101,6 +112,52 @@ export default function InicioDeConductor() {
     );
   }, [faltaElPermisoDeFondo, abrirAjustesDeUbicacion]);
 
+  // ---------------------------------------------------------------------
+  // SU UBICACION EN EL MAPA
+  //
+  // El proveedor de ubicacion es el UNICO watcher de primer plano y lo monta
+  // el layout raiz: aqui solo se lee. pedirUbicacion no abre nada nuevo, y
+  // solo hace algo la primera vez que se pregunta.
+  //
+  // Verla NO es publicarla: que su posicion salga hacia el servidor lo decide
+  // UbicacionEnVivo con la politica de siempre --fuera de linea, nada--. Por
+  // eso el conductor se ve a si mismo aunque este fuera de linea.
+  // ---------------------------------------------------------------------
+  const { estado: ubicacion, pedirUbicacion, refrescar: refrescarUbicacion } = useUbicacion();
+  const [camara, setCamara] = useState(CAMARA_INICIAL_DEL_CONDUCTOR);
+  // La primera posicion centra el mapa UNA vez. Despues manda quien mira: si
+  // la camara se recalculara con cada lectura, panear seria imposible.
+  const yaCentro = useRef(false);
+
+  useEffect(() => { void pedirUbicacion(); }, [pedirUbicacion]);
+
+  useEffect(() => {
+    const siguiente = camaraDelConductor({
+      posicion: ubicacion.posicion,
+      yaCentro: yaCentro.current,
+      anterior: camara
+    });
+    if (siguiente === camara) return;
+    yaCentro.current = true;
+    setCamara(siguiente);
+  }, [ubicacion.posicion, camara]);
+
+  /** El boton de centrar. Con posicion, centra; sin ella, la pide. */
+  const centrarEnMi = useCallback(() => {
+    if (ubicacion.posicion !== null) {
+      setCamara(camaraCentradaEn(ubicacion.posicion));
+      yaCentro.current = true;
+      return;
+    }
+    void refrescarUbicacion();
+  }, [ubicacion.posicion, refrescarUbicacion]);
+
+  const aviso = avisoDeUbicacion(ubicacion, Date.now());
+  const modeloDelMapa = useMemo(
+    () => modeloDelMapaDelConductor({ posicion: ubicacion.posicion, camara }),
+    [ubicacion.posicion, camara]
+  );
+
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (
       <Pantalla>
@@ -130,7 +187,18 @@ export default function InicioDeConductor() {
   if (operativo) {
     return (
       <ProveedorDeNavegacion ir={irA}>
-        <C2InicioConductor enLinea={enLinea} onAlternar={alternar} />
+        <C2InicioConductor
+          enLinea={enLinea}
+          onAlternar={alternar}
+          modeloDelMapa={modeloDelMapa}
+          onCentrar={centrarEnMi}
+          avisoDeUbicacion={
+            <AvisoDeUbicacionEnMapa
+              mensaje={MENSAJES_DE_UBICACION[aviso]}
+              onReintentar={sePuedeReintentar(aviso) ? () => { void refrescarUbicacion(); } : undefined}
+            />
+          }
+        />
       </ProveedorDeNavegacion>
     );
   }

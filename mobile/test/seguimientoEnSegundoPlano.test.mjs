@@ -466,7 +466,11 @@ test('la pantalla del conductor no se rediseñó', () => {
   // El encargo lo pide explícitamente. Lo único que se añadió son avisos del
   // sistema: ni un componente nuevo, ni un estilo nuevo, ni una vista más.
   const pantalla = sinComentarios('app/conductor.tsx');
-  assert.match(pantalla, /<C2InicioConductor enLinea=\{enLinea\} onAlternar=\{alternar\} \/>/);
+  // Se comprueba QUE monta y con que estado, no la linea entera: desde
+  // DRIVER-MAP-LOCATION-HOTFIX-1 recibe ademas el mapa real con su ubicacion.
+  assert.match(pantalla, /<C2InicioConductor/);
+  assert.match(pantalla, /enLinea=\{enLinea\}/);
+  assert.match(pantalla, /onAlternar=\{alternar\}/);
   assert.equal(/StyleSheet\.create\(\{[\s\S]*permiso/i.test(pantalla), false,
     'se añadieron estilos para el aviso en vez de usar el del sistema');
 });

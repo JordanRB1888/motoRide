@@ -63,7 +63,8 @@ import {
   Trayecto,
   type Beneficiario
 } from '../ui/Trayecto';
-import { useTema } from '../theme/ThemeContext';
+import { useEsquema, useTema } from '../theme/ThemeContext';
+import { useMovimientoReducido } from '../ui/movimiento';
 import { useAireDeArriba } from '../ui/seguro';
 import type { TipoDeVehiculo } from '../theme/marca';
 import {
@@ -402,7 +403,7 @@ export function C2PedirViaje() {
               estrena una forma nueva de enseñar lo mismo. */}
           <View style={{ height: tema.ritmo.entreBloques }} />
           <Txt nivel="etiqueta" tono="secundario">CÓMO QUIERES IR</Txt>
-          <View style={{ paddingTop: 4, gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 10, paddingTop: 6 }}>
             <FilaDeVehiculo
               tipo="MOTO"
               minutos={4}
@@ -540,7 +541,7 @@ export function C2ConfirmarViaje() {
               <Insignia texto="4 cerca" tono="exito" />
             </View>
 
-            <View style={{ gap: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 10, paddingTop: 6 }}>
               <FilaDeVehiculo
                 tipo="MOTO"
                 minutos={4}
@@ -598,26 +599,18 @@ export const PRECIO_DE_EJEMPLO: PrecioDeTarjeta = Object.freeze({ dolares: '$0,0
 
 export function FilaDeVehiculo({ tipo, minutos, precio, activa, onPress }: {
   readonly tipo: TipoDeVehiculo;
-  /**
-   * Cuanto cuesta. OPCIONAL: sin precio del servidor la tarjeta no pinta
-   * ninguno. Un «$0,00» esperando se lee como una cotizacion de cero.
-   */
   readonly precio?: PrecioDeTarjeta;
-  /**
-   * Cuanto tarda en llegar. OPCIONAL, y casi siempre ausente.
-   *
-   * En el recorrido de diseno eran cuatro y siete minutos escritos a mano.
-   * En la pantalla real no hay de donde sacarlos —el servidor no calcula
-   * cuanto tarda una moto en llegar— y ponerlos igualmente seria prometer
-   * una hora que nadie va a cumplir. Sin el dato, la tarjeta no lo dice.
-   */
   readonly minutos?: number;
   readonly activa: boolean;
   readonly onPress?: () => void;
 }) {
   const tema = useTema();
+  const esquema = useEsquema();
+  const esNoche = esquema === 'oscuro';
+  const quieto = useMovimientoReducido();
   const plazas = tipo === 'MOTO' ? 1 : 4;
   const nombre = tipo === 'MOTO' ? 'Moto' : 'Auto';
+  const subtitulo = tipo === 'MOTO' ? 'Ágil y rápido' : 'Espacioso y con A/A';
 
   return (
     <Pressable
@@ -629,42 +622,114 @@ export function FilaDeVehiculo({ tipo, minutos, precio, activa, onPress }: {
         `${plazas} ${plazas === 1 ? 'persona' : 'personas'}`,
         ...(minutos === undefined ? [] : [`${minutos} minutos`])
       ].join(', ')}
-      style={{
+      style={({ pressed }) => ({
+        flex: 1,
+        minHeight: 146,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        borderRadius: 18,
+        backgroundColor: pressed
+          ? tema.color.superficieElevada
+          : (activa
+              ? (esNoche ? '#1E1B15' : tema.color.superficieElevada)
+              : (esNoche ? '#141311' : tema.color.superficie)),
+        borderWidth: activa ? 1.8 : 1,
+        borderColor: activa
+          ? tema.color.acento
+          : (esNoche ? 'rgba(245, 158, 11, 0.18)' : '#E5E7EB'),
+        shadowColor: activa ? tema.color.acento : '#000000',
+        shadowOpacity: activa ? (esNoche ? 0.28 : 0.15) : (esNoche ? 0.20 : 0.04),
+        shadowRadius: activa ? 8 : 4,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: activa ? 4 : 2,
+        transform: [{ scale: pressed && !quieto ? 0.975 : 1 }],
+        overflow: 'hidden'
+      })}
+    >
+      {/* Indicador de capacidad y selector */}
+      <View style={{
+        width: '100%',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-        paddingVertical: 8,
-        paddingRight: 14,
-        paddingLeft: 12,
-        borderRadius: tema.radio.tarjeta,
-        backgroundColor: activa ? tema.color.superficieElevada : 'transparent',
-        overflow: 'hidden'
-      }}
-    >
-      {activa ? (
+        justifyContent: 'space-between'
+      }}>
         <View style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: 3, backgroundColor: tema.color.acento
-        }} />
-      ) : null}
+          backgroundColor: activa
+            ? `${tema.color.acento}24`
+            : (esNoche ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6'),
+          paddingHorizontal: 7,
+          paddingVertical: 2,
+          borderRadius: 6
+        }}>
+          <Txt nivel="pie" estilo={{
+            fontSize: 10,
+            fontWeight: '700',
+            color: activa ? tema.color.acento : tema.color.textoTenue
+          }}>
+            {plazas} {plazas === 1 ? 'persona' : 'personas'}
+          </Txt>
+        </View>
 
-      <Vehiculo tipo={tipo} ancho={76} atenuado={!activa} />
-
-      <View style={{ flex: 1, gap: 2 }}>
-        <Txt nivel="encabezado" tono={activa ? 'primario' : 'secundario'}>{nombre}</Txt>
-        <Txt nivel="pie" tono="tenue">
-          {plazas} {plazas === 1 ? 'persona' : 'personas'}{minutos === undefined ? '' : ` · ${minutos} min`}
-        </Txt>
-      </View>
-
-      {precio !== undefined && (
-        <View style={{ alignItems: 'flex-end', gap: 1 }}>
-          <Txt nivel="encabezado" tono={activa ? 'acento' : 'secundario'}>{precio.dolares}</Txt>
-          {precio.bolivares !== null && (
-            <Txt nivel="pie" tono="tenue">{precio.bolivares}</Txt>
+        <View style={{
+          width: 18,
+          height: 18,
+          borderRadius: 9,
+          borderWidth: activa ? 0 : 1.2,
+          borderColor: esNoche ? 'rgba(245, 158, 11, 0.35)' : '#D1D5DB',
+          backgroundColor: activa ? tema.color.acento : 'transparent',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          {activa && (
+            <View style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: '#111827'
+            }} />
           )}
         </View>
-      )}
+      </View>
+
+      {/* Render del vehículo */}
+      <View style={{ marginVertical: 6, alignItems: 'center', justifyContent: 'center' }}>
+        <Vehiculo tipo={tipo} ancho={tipo === 'MOTO' ? 76 : 94} atenuado={!activa} />
+      </View>
+
+      {/* Información del vehículo abajo */}
+      <View style={{ width: '100%', alignItems: 'center', gap: 1 }}>
+        <Txt nivel="cuerpo" centrado estilo={{
+          fontWeight: '800',
+          fontSize: 15,
+          color: activa ? (esNoche ? '#FFFFFF' : '#111827') : tema.color.textoSecundario
+        }}>
+          {nombre}
+        </Txt>
+        <Txt nivel="pie" tono="tenue" centrado estilo={{ fontSize: 10.5 }}>
+          {subtitulo}
+        </Txt>
+
+        {minutos !== undefined && (
+          <Txt nivel="pie" tono="acento" centrado estilo={{ fontSize: 10, fontWeight: '700', marginTop: 1 }}>
+            {minutos} min
+          </Txt>
+        )}
+
+        {precio !== undefined && (
+          <View style={{ alignItems: 'center', marginTop: 2 }}>
+            <Txt nivel="etiqueta" tono={activa ? 'acento' : 'secundario'} centrado estilo={{ fontWeight: '800', fontSize: 13 }}>
+              {precio.dolares}
+            </Txt>
+            {precio.bolivares !== null && (
+              <Txt nivel="pie" tono="tenue" centrado estilo={{ fontSize: 10 }}>
+                {precio.bolivares}
+              </Txt>
+            )}
+          </View>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -738,7 +803,7 @@ export function C2BuscandoAuto() {
  * No hay tablero financiero. La cartera está apagada en el servidor, y el
  * resumen del día se muestra vacío con su nota.
  */
-export function C2InicioConductor({ enLinea = false, onAlternar }: {
+export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, onCentrar, avisoDeUbicacion }: {
   readonly enLinea?: boolean;
   /**
    * Que pasa al tocar el disco.
@@ -748,6 +813,18 @@ export function C2InicioConductor({ enLinea = false, onAlternar }: {
    * servidor, que es quien decide si el conductor esta en servicio.
    */
   readonly onAlternar?: () => void;
+  /**
+   * El mapa REAL, con la ubicacion del conductor.
+   *
+   * Sin esto se pinta el lienzo dibujado del recorrido de diseño, que es lo
+   * que hacia la aplicacion: una cuadricula y una moto clavada al 48 % del
+   * ancho. La aplicacion real pasa coordenadas y aqui se monta Google Maps.
+   */
+  readonly modeloDelMapa?: ModeloDelMapa;
+  /** Que hace el boton de centrar. Sin esto sigue dibujado y sin accion. */
+  readonly onCentrar?: () => void;
+  /** Lo que hay que decirle sobre su ubicacion, ya traducido. */
+  readonly avisoDeUbicacion?: ReactNode;
 }) {
   const tema = useTema();
   const arriba = useAireDeArriba();
@@ -763,7 +840,11 @@ export function C2InicioConductor({ enLinea = false, onAlternar }: {
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
-      <LienzoDeMapa vehiculos={conectado ? [mio, ...MOTOS_CERCA.slice(0, 2)] : [mio]}>
+      <LienzoDeMapa
+        modelo={modeloDelMapa}
+        onCentrar={onCentrar}
+        vehiculos={modeloDelMapa === undefined ? [mio] : []}
+      >
         {/* Dónde está y si le llegan viajes, en una línea. Conectado enseña
             el punto conocido más cercano; desconectado, sólo la zona: sin
             aceptar viajes, la calle exacta no le sirve para nada. */}
@@ -782,6 +863,7 @@ export function C2InicioConductor({ enLinea = false, onAlternar }: {
               via: conectado ? CONTEXTO_DEMO.via : undefined
             }}
           />
+          {avisoDeUbicacion}
         </View>
 
         {/* DESCONECTADO NO HAY HOJA.

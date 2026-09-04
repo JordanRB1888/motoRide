@@ -241,7 +241,11 @@ test('el GPS del conductor sigue midiendo aunque esté fuera', () => {
 
 test('la pantalla del conductor es la aprobada, sin dibujar nada nuevo', () => {
   const pantalla = sinComentarios('app/conductor.tsx');
-  assert.match(pantalla, /<C2InicioConductor enLinea=\{enLinea\} onAlternar=\{alternar\} \/>/);
+  // Se comprueba QUE monta y con que estado, no la linea entera: desde
+  // DRIVER-MAP-LOCATION-HOTFIX-1 recibe ademas el mapa real con su ubicacion.
+  assert.match(pantalla, /<C2InicioConductor/);
+  assert.match(pantalla, /enLinea=\{enLinea\}/);
+  assert.match(pantalla, /onAlternar=\{alternar\}/);
 
   // Y el disco que se conecta ya estaba dibujado en la barra.
   const barra = sinComentarios('ui/Navegacion.tsx');
