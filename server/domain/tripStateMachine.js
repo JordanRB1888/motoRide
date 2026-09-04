@@ -7,7 +7,15 @@ export const TRIP_STATUS = Object.freeze({
   CANCELLED: 'CANCELLED'
 });
 
-const aliases = Object.freeze({
+/**
+ * Los nombres historicos que la persistencia todavia puede contener.
+ *
+ * Se exportan para que quien necesite saber que estados ocupan a una pasajera
+ * los lea de aqui en vez de escribir su propia lista: una lista a mano se queda
+ * vieja el dia que alguien anade un estado, y ese dia un viaje activo dejaria
+ * de contar como activo.
+ */
+export const TRIP_STATUS_ALIASES = Object.freeze({
   PENDING: TRIP_STATUS.SEARCHING,
   ACCEPTED: TRIP_STATUS.DRIVER_ASSIGNED,
   EN_ROUTE: TRIP_STATUS.DRIVER_ASSIGNED,
@@ -26,7 +34,7 @@ const transitions = Object.freeze({
 });
 
 export function normalizeTripStatus(status) {
-  return aliases[status] || status;
+  return TRIP_STATUS_ALIASES[status] || status;
 }
 
 export function canTransitionTrip(from, to) {

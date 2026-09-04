@@ -219,6 +219,55 @@ export async function createPostgresPersistence({ pool, database, logger = conso
     });
   }
 
+  /**
+   * Reserva el UNICO hueco de viaje activo de una pasajera.
+   *
+   * POR QUE NO VALE COMPROBAR Y LUEGO INSERTAR
+   *
+   * `if (tieneViajeActivo) return 409; crear();` deja una ventana entre las dos
+   * lineas. Dos peticiones simultaneas comprueban a la vez, las dos ven el
+   * hueco libre, y las dos crean. Pasa de verdad: bastan dos toques del mismo
+   * dedo, o un reintento de la red mientras la primera sigue en camino.
+   *
+   * Aqui la comprobacion y la insercion son UNA sentencia. PostgreSQL la
+   * ejecuta entera o no la ejecuta: si dos llegan juntas, una inserta y la otra
+   * no encuentra fila que devolver. Y como el arbitro es la base y no la
+   * memoria de este proceso, sigue valiendo con varias instancias del servidor.
+   *
+   * Es el mismo patron que `reserveTripAssignment` usa para que dos conductores
+   * no acepten el mismo viaje.
+   *
+   * @param {object} trip  el viaje a crear
+   * @param {string[]} activeStatuses  los estados que cuentan como ocupado
+   * @returns {Promise<boolean>} `true` si el hueco quedo reservado
+   */
+  function reserveActiveTripSlot(trip, activeStatuses) {
+    return enqueue(async () => {
+      let payload;
+      try {
+        payload = serializeRecord('trips', trip);
+      } catch (error) {
+        logger.error('[+58express Database] No se pudo preparar el viaje:', error.message);
+        return false;
+      }
+
+      const result = await pool.query(
+        `insert into public.trips (id, payload)
+         select $1, $2::jsonb
+          where not exists (
+                select 1 from public.trips
+                 where passenger_id = $3
+                   and status = any($4::text[])
+              )
+         returning id`,
+        [trip.id, payload, trip.passengerId, activeStatuses]
+      );
+      if (result.rowCount !== 1) return false;
+      shadow.get('trips').set(trip.id, payload);
+      return true;
+    });
+  }
+
   function reserveTripAssignment(tripId, driverId, updatedAt) {
     return enqueue(async () => {
       const result = await pool.query(
@@ -247,6 +296,7 @@ export async function createPostgresPersistence({ pool, database, logger = conso
     persist,
     persistRecord,
     reserveTripAssignment,
+    reserveActiveTripSlot,
     flush: () => writeQueue,
     shadowSize: table => shadow.get(table)?.size ?? 0,
     close: () => pool.end(),

@@ -11,7 +11,10 @@ import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
-import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
+import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS, TRIP_STATUS_ALIASES } from './domain/tripStateMachine.js';
+import { calculateDistance, estadosActivos, metricasDelRecorrido } from './domain/tripMetrics.js';
+import { createRouteMatrixClient } from './services/routeMatrixClient.js';
+import { crearCacheDeRecorridos } from './services/routeMetricsCache.js';
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
 import { passengerPublicProfile, driverPublicProfile, sanitizeEmbeddedTripDriver } from './domain/userProjections.js';
 import { canViewUserPhoto, userPhotoUrl } from './domain/photoAccess.js';
@@ -19,9 +22,7 @@ import { canViewChatMedia, findMessageByMediaId } from './domain/chatMediaAccess
 import {
   PAYMENT_METHODS,
   normalizeTripId,
-  normalizePaymentMethod,
-  normalizeRouteMetrics,
-  normalizeClientFareEstimate
+  normalizePaymentMethod
 } from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
 import { openDatabaseBackend } from './services/databaseBackend.js';
@@ -307,6 +308,39 @@ const chatMediaPipeline = createChatMediaPipeline({
     `[+58express chat-media] archivo huerfano tras fallo de persistencia: ${detalle.reason} (${detalle.mimeType}, ${detalle.bytes} bytes)`
   )
 });
+/**
+ * Quien mide los recorridos, y la cache que evita repetir la pregunta.
+ *
+ * Es el MISMO cliente que usa el ranking del despacho: una sola integracion con
+ * Google en todo el servidor, con la credencial dedicada de servidor
+ * --DISPATCH_ROUTES_API_KEY-- que jamas sale de este proceso ni llega a un
+ * telefono. Sin ella el medidor cae a su geodesica propia.
+ *
+ * Lo que NUNCA hace es preguntarle la distancia al cliente.
+ */
+const routeMatrix = createRouteMatrixClient({ logger: console });
+const cacheDeRecorridos = crearCacheDeRecorridos();
+
+/** Los estados que ocupan a una pasajera. Derivados, no escritos a mano. */
+const ESTADOS_DE_VIAJE_ACTIVO = estadosActivos(TRIP_STATUS, TRIP_STATUS_ALIASES);
+
+/** Mide un recorrido con la autoridad del servidor. Nunca mira el cuerpo. */
+function medirRecorrido(pickup, destination) {
+  return metricasDelRecorrido(pickup, destination, {
+    routeMatrix,
+    cache: cacheDeRecorridos,
+    logger: console
+  });
+}
+
+/** El viaje activo de una pasajera, si lo tiene. */
+function viajeActivoDe(passengerId) {
+  return database.trips.find(item =>
+    item.passengerId === passengerId
+    && ESTADOS_DE_VIAJE_ACTIVO.includes(normalizeTripStatus(item.status))
+  ) ?? null;
+}
+
 let pricingConfig = {
   ...DEFAULT_PRICING,
   bcvRate: Number(process.env.BCV_RATE || 0),
@@ -1072,17 +1106,9 @@ const tripLocks = new Map();
 const dispatchTimers = new Map();
 const dispatchSessions = new Map();
 
-// Calculate distance using Haversine formula
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c * 1.35; // Urban road factor
-}
+// La distancia por calle vive ahora en domain/tripMetrics.js, que la comparten
+// el radio de despacho, el estimador de viajes programados y el precio. Se
+// importa arriba: aqui habia una copia de la formula.
 
 function normalizeLocation(location) {
   const coordinates = normalizeCoordinates(location);
@@ -1162,19 +1188,45 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/pricing/config', requireAuth, (req, res) => res.json(pricingConfig));
 
-app.post('/api/pricing/estimate', requireAuth, (req, res) => {
-  const distanceKm = Number(req.body.distanceKm);
-  const durationMin = Number(req.body.durationMin);
-  if (!Number.isFinite(distanceKm) || !Number.isFinite(durationMin)) {
-    return res.status(400).json({ error: 'INVALID_ROUTE_METRICS' });
+/**
+ * Cuanto cuesta ir de un sitio a otro.
+ *
+ * EL CLIENTE DICE DONDE, NO CUANTO
+ *
+ * Antes recibia `distanceKm` y `durationMin` del telefono y calculaba la tarifa
+ * con ellos. El precio lo ponia el servidor, si, pero con la regla que le
+ * prestaba el cliente: declarar cuatro kilometros donde hay uno cambiaba el
+ * importe.
+ *
+ * Ahora recibe los dos PUNTOS y mide el recorrido el mismo. Lo que llegue en
+ * `distanceKm`, `durationMin` o `fareUSD` se ignora por completo.
+ *
+ * `requestedAt` tambien lo pone el servidor: si lo pusiera el cliente, bastaria
+ * declarar las tres de la tarde para esquivar el recargo nocturno.
+ */
+app.post('/api/pricing/estimate', requireAuth, limitadores.telemetria, async (req, res) => {
+  const pickup = normalizeLocation(req.body.pickup ?? req.body.origin);
+  const destination = normalizeLocation(req.body.destination);
+  if (!pickup || !destination) {
+    return res.status(400).json({ error: 'VALID_GPS_COORDINATES_REQUIRED' });
   }
-  res.json(calculateFare({
-    distanceKm,
-    durationMin,
-    requestedAt: req.body.requestedAt || new Date(),
+
+  let metrics;
+  try {
+    metrics = await medirRecorrido(pickup, destination);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_ROUTE_METRICS' });
+  }
+
+  const fare = calculateFare({
+    distanceKm: metrics.distanceKm,
+    durationMin: metrics.durationMin,
+    requestedAt: new Date(),
     exchangeRateType: req.body.exchangeRateType || 'BCV',
     rideType: req.body.rideType || 'MOTO'
-  }, pricingConfig));
+  }, pricingConfig);
+
+  res.json({ ...fare, metricsSource: metrics.source });
 });
 
 app.post('/api/auth/login', credenciales.login, async (req, res) => {
@@ -2103,7 +2155,11 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
     // es el viaje.
     if (claimed) {
       if (claimed.passengerId !== req.user.id) return res.status(409).json({ error: 'TRIP_ID_UNAVAILABLE' });
-      return res.json({ status: 'existing', trip: claimed });
+      // IDEMPOTENCIA. El mismo intento logico --doble toque, reintento de red,
+      // reenvio desde la cola sin conexion-- devuelve EL MISMO viaje en vez de
+      // crear otro. La clave es el propio id del viaje, que es unico para
+      // siempre: mas fuerte que una ventana de horas.
+      return res.json({ status: 'existing', trip: claimed, idempotentReplay: true });
     }
   }
 
@@ -2120,11 +2176,21 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
     : normalizePaymentMethod(req.body.paymentMethod);
   if (!paymentMethod) return res.status(400).json({ error: 'INVALID_PAYMENT_METHOD' });
 
+  // LAS METRICAS LAS MIDE EL SERVIDOR, SIEMPRE
+  //
+  // Se miden aqui a partir de los mismos dos puntos que llegan en esta
+  // peticion, asi que no hay ventana entre estimar y crear: pedir precio para
+  // un recorrido y crear otro no cambia el importe, porque el importe se
+  // vuelve a calcular con el recorrido que se esta creando de verdad.
+  //
+  // Lo que venga en `distanceKm`, `durationMin`, `fareUSD` o `fareEUR` se
+  // ignora. Sigue llegando de clientes viejos y no se rechaza por eso --seria
+  // romperlos sin motivo-- pero no influye en nada.
   let routeMetrics;
   try {
-    routeMetrics = normalizeRouteMetrics(req.body);
+    routeMetrics = await medirRecorrido(pickup, destination);
   } catch (error) {
-    return res.status(400).json({ error: error.code });
+    return res.status(400).json({ error: error.code || 'INVALID_ROUTE_METRICS' });
   }
 
   const trip = {
@@ -2134,10 +2200,9 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
     paymentMethod,
     exchangeRateType: req.body.exchangeRateType === 'PARALLEL' ? 'PARALLEL' : 'BCV'
   };
-  if (routeMetrics) {
-    trip.distanceKm = routeMetrics.distanceKm;
-    trip.durationMin = routeMetrics.durationMin;
-  }
+  trip.distanceKm = routeMetrics.distanceKm;
+  trip.durationMin = routeMetrics.durationMin;
+  trip.metricsSource = routeMetrics.source;
 
   // Identidad derivada siempre del usuario autenticado.
   trip.passengerId = req.user.id;
@@ -2153,35 +2218,50 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
   trip.createdAt = new Date().toISOString();
   trip.updatedAt = trip.createdAt;
   trip.statusHistory = [{ status: trip.status, at: trip.createdAt, actorId: req.user.id }];
-  if (routeMetrics) {
-    // Con métricas de ruta utilizables manda el cálculo del servidor: la
-    // tarifa que envíe el cliente se descarta por completo.
-    trip.pricing = calculateFare({
-      distanceKm: routeMetrics.distanceKm,
-      durationMin: routeMetrics.durationMin,
-      exchangeRateType: trip.exchangeRateType || 'BCV',
-      rideType: trip.rideType
-    }, pricingConfig);
-    trip.fareUSD = trip.pricing.fareUSD;
-    trip.fareVES = trip.pricing.fareVES;
-    trip.fareSource = 'SERVER_CALCULATED';
-  } else {
-    // RIESGO PENDIENTE (alta): sin métricas de ruta el servidor no tiene una
-    // fuente propia para calcular la tarifa —distancia y duración las produce
-    // el navegador— así que conserva la estimación del cliente, acotada. Es la
-    // única vía por la que un pasajero todavía influye en el importe. Cerrarlo
-    // exige cotizaciones firmadas o cálculo de ruta en el servidor: fase aparte.
-    const estimate = normalizeClientFareEstimate(req.body.fareUSD ?? req.body.fareEUR);
-    if (estimate === null) return res.status(400).json({ error: 'INVALID_FARE_ESTIMATE' });
-    trip.fareUSD = estimate;
-    trip.fareSource = 'CLIENT_ESTIMATE';
-  }
+  // El precio, con las metricas que acaba de medir el servidor.
+  //
+  // Ya no hay segundo camino. El que aceptaba la estimacion del cliente estaba
+  // marcado en este mismo sitio como RIESGO PENDIENTE (alta) y era la ultima
+  // via por la que una pasajera influia en el importe de su propio viaje.
+  trip.pricing = calculateFare({
+    distanceKm: routeMetrics.distanceKm,
+    durationMin: routeMetrics.durationMin,
+    exchangeRateType: trip.exchangeRateType || 'BCV',
+    rideType: trip.rideType
+  }, pricingConfig);
+  trip.fareUSD = trip.pricing.fareUSD;
+  trip.fareVES = trip.pricing.fareVES;
+  trip.fareSource = 'SERVER_CALCULATED';
   try {
     ensureWalletCanCoverTrip(trip, req.user);
   } catch (error) {
     return res.status(402).json({ error: error.code, balance: error.balance, required: error.required });
   }
+  // UN SOLO VIAJE ACTIVO POR PASAJERA
+  //
+  // La comprobacion y el alta van juntas y sin ceder el control: en memoria
+  // porque Node es de un solo hilo y entre estas dos lineas no hay `await`, y
+  // en PostgreSQL porque `reserveActiveTripSlot` es UNA sentencia condicional.
+  //
+  // Comprobar y despues insertar en dos pasos deja una ventana por la que dos
+  // toques del mismo dedo crean dos viajes.
+  const yaTieneUno = viajeActivoDe(req.user.id);
+  if (yaTieneUno) {
+    // Se devuelve el viaje para que la aplicacion pueda llevar a la persona a
+    // el sin una segunda peticion.
+    return res.status(409).json({ error: 'ACTIVE_TRIP_EXISTS', trip: yaTieneUno });
+  }
   database.trips.push(trip);
+
+  // Y la misma invariante en la base, que es la que sobrevive a varias
+  // instancias del servidor. En SQLite no hay nada que reservar --un proceso,
+  // un hilo-- y responde que si.
+  if (!await persistence.reserveActiveTripSlot(trip, ESTADOS_DE_VIAJE_ACTIVO)) {
+    database.trips.splice(database.trips.indexOf(trip), 1);
+    return res.status(409).json({ error: 'ACTIVE_TRIP_EXISTS', trip: viajeActivoDe(req.user.id) });
+  }
+  // La reserva ya dejo la fila puesta en PostgreSQL; esto es lo que la guarda
+  // en SQLite, donde la reserva no escribe.
   if (!await persistHttp(res)) {
     database.trips.splice(database.trips.indexOf(trip), 1);
     return;
@@ -2491,7 +2571,25 @@ io.on('connection', (socket) => {
     const lat = Number(data.latitude ?? data.lat);
     const lng = Number(data.longitude ?? data.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    trip.pickup = { ...(trip.pickup || {}), lat, lng };
+    // EL PUNTO DE RECOGIDA SE CONGELA CUANDO UN CONDUCTOR ACEPTA
+    //
+    // Decision del dueno: PASSENGER_PICKUP_POLICY = FREEZE_ON_DRIVER_ACCEPT.
+    //
+    // Buscando conductor tiene sentido que el punto siga a quien lo pidio: aun
+    // esta bajando las escaleras o caminando hacia la calle, y nadie ha salido
+    // todavia a buscarla.
+    //
+    // Con un conductor YA en camino, no. El sitio al que va cambiaria bajo sus
+    // ruedas sin que el se entere: acepto ir a un punto y acabaria en otro. El
+    // punto que recibio al aceptar es el que se queda.
+    //
+    // Esto NO depende de que el telefono deje de mandar: se comprueba el estado
+    // aqui, que es donde esta la autoridad. La posicion en vivo de la pasajera
+    // sigue viajando --el conductor la ve acercarse-- pero ya no mueve la
+    // recogida.
+    if (normalizeTripStatus(trip.status) === TRIP_STATUS.SEARCHING) {
+      trip.pickup = { ...(trip.pickup || {}), lat, lng };
+    }
     trip.passengerLocation = { lat, lng, heading: Number(data.heading || 0), updatedAt: Date.now() };
     // Un evento por cada movimiento del pasajero: solo cambia este viaje.
     if (!await persistRecord('trips', trip)) {

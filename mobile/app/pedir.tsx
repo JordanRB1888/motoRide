@@ -26,7 +26,7 @@
  * viaje una vez creado: a partir de ahí la autoridad es el almacén.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 
@@ -46,7 +46,9 @@ import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
 import { CAMARA_DE_MARACAIBO, distanciaKm } from '../mapa/modelo';
 import { crearViaje, pedirEstimacion } from '../services/pedido';
 import {
-  metricasDelRecorrido,
+  claveDeIntento,
+  estadoDelFallo,
+  mensajeDelFallo,
   queFaltaParaPedir,
   puedeEstimar,
   puedePedir,
@@ -86,6 +88,8 @@ export default function PantallaDePedir() {
   const [tipo, setTipo] = useState<TipoEnLaPantalla>('MOTO');
   const [destino, setDestino] = useState<PuntoDelViaje | null>(null);
   const [fase, setFase] = useState<FaseDelPedido>('ELIGIENDO');
+  /** La clave de ESTE intento de pedir. Vive mientras el recorrido no cambie. */
+  const claveDelIntento = useRef<string | null>(null);
   const [estimacion, setEstimacion] = useState<Estimacion | null>(null);
   const [problema, setProblema] = useState<string | null>(null);
 
@@ -111,9 +115,14 @@ export default function PantallaDePedir() {
   const falta = queFaltaParaPedir(origen, destino);
 
   // Cambiar cualquier cosa invalida el precio: era el de otro recorrido.
+  //
+  // Y con él la clave del intento: otro recorrido es otro viaje, no el
+  // reintento del anterior. Si se reutilizara, pedir a un destino nuevo
+  // devolvería el viaje viejo.
   useEffect(() => {
     setEstimacion(null);
     setProblema(null);
+    claveDelIntento.current = null;
     setFase(previa => (previa === 'PIDIENDO' ? previa : 'ELIGIENDO'));
   }, [tipo, destino?.lat, destino?.lng]);
 
@@ -127,10 +136,10 @@ export default function PantallaDePedir() {
     setFase('ESTIMANDO');
     setProblema(null);
 
-    const respuesta = await pedirEstimacion(tipo, metricasDelRecorrido(origen, destino));
+    const respuesta = await pedirEstimacion(tipo, origen, destino);
     if (!respuesta.ok) {
       setFase('RECHAZADO');
-      setProblema(respuesta.mensaje);
+      setProblema(mensajeDelFallo(estadoDelFallo(respuesta), respuesta.mensaje));
       return;
     }
 
@@ -154,16 +163,43 @@ export default function PantallaDePedir() {
     setFase('PIDIENDO');
     setProblema(null);
 
+    // LA CLAVE DEL INTENTO, GENERADA UNA SOLA VEZ
+    //
+    // Se guarda para que un reintento --el segundo toque, o el reenvío después
+    // de que se caiga la red-- lleve LA MISMA. El servidor devuelve entonces el
+    // viaje que ya creó en vez de crear otro. Si se generase una por envío, un
+    // corte de red a mitad acabaría en dos carreras y dos cobros.
+    claveDelIntento.current ??= claveDeIntento();
+
     const respuesta = await crearViaje({
       origen,
       destino,
       tipo,
-      metricas: metricasDelRecorrido(origen, destino)
+      clave: claveDelIntento.current
     });
 
     if (!respuesta.ok) {
+      const estado = estadoDelFallo(respuesta);
+
+      // YA HAY UN VIAJE EN MARCHA
+      //
+      // No es un fallo que haya que enseñar como tal: la persona ya tiene una
+      // carrera y lo que quiere es verla. Se la enseña. El servidor manda el
+      // viaje en el mismo 409, así que no hace falta preguntar otra vez.
+      if (estado === 'ACTIVE_TRIP_EXISTS') {
+        refrescarViaje();
+        router.replace('/viaje-activo');
+        return;
+      }
+
+      // SIN RED NO SE INVENTA NADA
+      //
+      // Ni viaje local, ni cola optimista, ni «ya se enviará». La clave del
+      // intento SE CONSERVA: si el envío llegó y sólo se perdió la respuesta,
+      // el reintento lleva la misma clave y el servidor devuelve aquel viaje
+      // en vez de crear otro.
       setFase('RECHAZADO');
-      setProblema(respuesta.mensaje);
+      setProblema(mensajeDelFallo(estado, respuesta.mensaje));
       return;
     }
 

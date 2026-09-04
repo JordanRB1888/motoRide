@@ -25,9 +25,9 @@ import { leerDetalle, type DetalleReal } from '../domain/viajes';
 import {
   cuerpoParaCrear,
   leerEstimacion,
+  puntoParaElServidor,
   tipoParaElServidor,
   type Estimacion,
-  type MetricasDelRecorrido,
   type PuntoDelViaje,
   type TipoEnLaPantalla
 } from '../domain/pedirViaje';
@@ -41,13 +41,15 @@ import {
  */
 export async function pedirEstimacion(
   tipo: TipoEnLaPantalla,
-  metricas: MetricasDelRecorrido
+  origen: PuntoDelViaje,
+  destino: PuntoDelViaje
 ): Promise<Resultado<Estimacion>> {
   const respuesta = await llamar<unknown>('/api/pricing/estimate', {
     metodo: 'POST',
+    // Los dos PUNTOS, no la distancia. El teléfono ya no mide para cobrar.
     cuerpo: {
-      distanceKm: metricas.distanciaKm,
-      durationMin: metricas.minutos,
+      pickup: puntoParaElServidor(origen),
+      destination: puntoParaElServidor(destino),
       rideType: tipoParaElServidor(tipo)
     }
   });
@@ -86,16 +88,20 @@ export async function crearViaje({
   origen,
   destino,
   tipo,
-  metricas
+  clave
 }: {
   readonly origen: PuntoDelViaje;
   readonly destino: PuntoDelViaje;
   readonly tipo: TipoEnLaPantalla;
-  readonly metricas: MetricasDelRecorrido;
+  /**
+   * La clave del intento. Quien llama la genera UNA VEZ y la reutiliza en los
+   * reintentos: es lo que impide que un corte de red acabe en dos carreras.
+   */
+  readonly clave: string;
 }): Promise<Resultado<DetalleReal>> {
   const respuesta = await llamar<unknown>('/api/trips/create', {
     metodo: 'POST',
-    cuerpo: cuerpoParaCrear({ origen, destino, tipo, metricas })
+    cuerpo: cuerpoParaCrear({ origen, destino, tipo, clave })
   });
 
   if (!respuesta.ok) return respuesta;

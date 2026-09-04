@@ -77,7 +77,19 @@ export async function openDatabaseBackend({
   return {
     kind: 'sqlite',
     database,
-    persistence: { ...persistence, kind: 'sqlite', reserveTripAssignment: async () => true, flush: async () => true },
+    // SQLite corre en UN proceso con el estado en memoria, asi que la exclusion
+    // la garantiza el propio hilo de Node: quien llama comprueba y apunta el
+    // viaje sin ceder el control entre medias, y ahi no cabe otra peticion.
+    // Estas dos devuelven `true` porque no hay nada que reservar, no porque la
+    // invariante no importe: en PostgreSQL, que es donde hay concurrencia real
+    // entre procesos, si reservan de verdad.
+    persistence: {
+      ...persistence,
+      kind: 'sqlite',
+      reserveTripAssignment: async () => true,
+      reserveActiveTripSlot: async () => true,
+      flush: async () => true
+    },
     close: async () => sqlite.close()
   };
 }

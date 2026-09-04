@@ -161,6 +161,14 @@ export interface MetricasDelRecorrido {
   readonly minutos: number;
 }
 
+/**
+ * La distancia aproximada del recorrido, SÓLO PARA PINTAR.
+ *
+ * NO ES AUTORIDAD DE NADA. Desde PASSENGER-TRIP-HARDENING-1 el precio sale de
+ * lo que mide el servidor, y este número no viaja en ninguna petición: sirve
+ * para enseñar «unos 3 km» mientras llega la respuesta, y nada más. Si alguna
+ * vez vuelve a viajar en un cuerpo, el precio vuelve a ser manipulable.
+ */
 export function metricasDelRecorrido(
   origen: PuntoDelViaje,
   destino: PuntoDelViaje
@@ -297,12 +305,13 @@ export function cuerpoParaCrear({
   origen,
   destino,
   tipo,
-  metricas
+  clave
 }: {
   readonly origen: PuntoDelViaje;
   readonly destino: PuntoDelViaje;
   readonly tipo: TipoEnLaPantalla;
-  readonly metricas: MetricasDelRecorrido;
+  /** La clave de este intento. El mismo intento, la misma clave. */
+  readonly clave: string;
 }): Record<string, unknown> {
   return {
     pickup: puntoParaElServidor(origen),
@@ -311,7 +320,88 @@ export function cuerpoParaCrear({
     // Efectivo: es lo que esta fase conecta. La cartera tiene su propio camino
     // —`ensureWalletCanCoverTrip`— y sus banderas siguen apagadas.
     paymentMethod: 'CASH',
-    distanceKm: metricas.distanciaKm,
-    durationMin: metricas.minutos
+    // NO VIAJAN NI KILÓMETROS NI PRECIO.
+    //
+    // Antes iban `distanceKm` y `durationMin`, y el servidor cobraba con ellos:
+    // declarar cuarenta kilómetros donde había uno cambiaba el importe. Ahora
+    // sólo van los dos puntos y el servidor mide.
+    id: clave
   };
+}
+
+/**
+ * La clave de un intento de pedir.
+ *
+ * Se genera UNA VEZ por intento de la persona, no una por reintento de red: en
+ * eso consiste. Si el primer envío llega y la respuesta se pierde, el reintento
+ * lleva la misma clave y el servidor devuelve el viaje que ya creó en vez de
+ * crear otro.
+ *
+ * El formato lo fija el servidor: hasta 80 caracteres de letras, dígitos, guión
+ * y guión bajo.
+ */
+export function claveDeIntento(): string {
+  const azar = Math.random().toString(36).slice(2, 10);
+  return `trip_${Date.now().toString(36)}_${azar}`;
+}
+
+// ---------------------------------------------------------------------------
+// Por qué no se pudo
+// ---------------------------------------------------------------------------
+
+/**
+ * En qué estado deja la pantalla un fallo.
+ *
+ * POR QUÉ NO BASTA CON EL MENSAJE
+ *
+ * «No se pudo» es la misma frase para un túnel sin cobertura, para un servidor
+ * caído y para haber tocado el botón demasiadas veces, y las tres piden cosas
+ * distintas: esperar a salir del túnel, reintentar, o esperar un minuto. Un
+ * solo estado de error obliga a la persona a adivinar cuál de las tres le toca.
+ *
+ * Se clasifica aquí, en el dominio, para que se pueda comprobar sin emulador.
+ */
+export type EstadoDeFallo =
+  | 'OFFLINE'
+  | 'RATE_LIMITED'
+  | 'ACTIVE_TRIP_EXISTS'
+  | 'SESION_CADUCADA'
+  | 'ROUTE_ERROR'
+  | 'PRICING_ERROR';
+
+export function estadoDelFallo(fallo: {
+  readonly motivo: string;
+  readonly codigo: string | null;
+  readonly estadoHttp?: number | null;
+}): EstadoDeFallo {
+  // Ya tiene un viaje: no es un fallo, es que hay que llevarla a verlo.
+  if (fallo.codigo === 'ACTIVE_TRIP_EXISTS') return 'ACTIVE_TRIP_EXISTS';
+  if (fallo.motivo === 'NO_AUTENTICADO') return 'SESION_CADUCADA';
+  // Sin red no se crea nada local: no hay viaje falso esperando a subir.
+  if (fallo.motivo === 'SIN_RED' || fallo.motivo === 'TIEMPO_AGOTADO') return 'OFFLINE';
+  if (fallo.estadoHttp === 429) return 'RATE_LIMITED';
+  // El recorrido no se pudo medir: los dos puntos no valen o el servidor no
+  // supo trazar entre ellos.
+  if (fallo.codigo === 'VALID_GPS_COORDINATES_REQUIRED' || fallo.codigo === 'INVALID_ROUTE_METRICS') {
+    return 'ROUTE_ERROR';
+  }
+  return 'PRICING_ERROR';
+}
+
+/** Qué decirle a la persona, según lo que pasó de verdad. */
+export function mensajeDelFallo(estado: EstadoDeFallo, mensajeDelServidor: string): string {
+  switch (estado) {
+    case 'OFFLINE':
+      return 'Sin conexión. No se creó ningún viaje: inténtalo cuando vuelvas a tener señal.';
+    case 'RATE_LIMITED':
+      return 'Demasiados intentos seguidos. Espera un momento y vuelve a probar.';
+    case 'SESION_CADUCADA':
+      return 'Tu sesión caducó. Entra otra vez.';
+    case 'ROUTE_ERROR':
+      return 'No pudimos calcular el recorrido. Revisa el destino en el mapa.';
+    case 'ACTIVE_TRIP_EXISTS':
+      return 'Ya tienes un viaje en marcha.';
+    default:
+      return mensajeDelServidor;
+  }
 }

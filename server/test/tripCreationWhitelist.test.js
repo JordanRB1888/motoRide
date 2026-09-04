@@ -207,6 +207,10 @@ test('el ciclo completo y la liquidación siguen funcionando tras la lista blanc
     })
   });
   assert.equal(creacion.status, 200, 'solicitar');
+  // La tarifa la pone el servidor midiendo el recorrido, asi que la liquidacion
+  // se comprueba contra ELLA y no contra un numero escrito a mano que dejaria
+  // de valer al tocar el estimador. Los 4.5 que se mandan arriba se ignoran.
+  const tarifa = (await creacion.json()).trip.fareUSD;
   const ofrecido = await oferta;
   assert.equal(ofrecido.passengerName, 'Ana Cliente', 'la oferta lleva el nombre derivado por el servidor');
 
@@ -223,17 +227,21 @@ test('el ciclo completo y la liquidación siguen funcionando tras la lista blanc
   await completado;
   await new Promise(r => setTimeout(r, 200));
 
-  // Liquidación intacta: 10 − 4.5 al pasajero, 85 % al conductor.
+  // Liquidación intacta: la tarifa sale del saldo del pasajero y el 85 % llega
+  // al conductor. Las REGLAS son las de siempre; lo unico que cambio es de
+  // donde sale el importe.
+  const centavos = x => Math.round(x * 100) / 100;
   const walletPasajero = await (await asJson(`${url}/api/wallet/me`, passenger.token)).json();
-  assert.equal(walletPasajero.balance, 5.5, 'cobro por billetera');
+  assert.equal(walletPasajero.balance, centavos(10 - tarifa), 'cobro por billetera');
   const pagos = walletPasajero.transactions.filter(x => x.type === 'RIDE_PAYMENT' && x.tripId === 'trip_ciclo');
   assert.equal(pagos.length, 1);
-  assert.equal(pagos[0].amount, -4.5);
+  assert.equal(pagos[0].amount, -tarifa);
 
-  // Comisión 15 %: 4.5 × 0.15 = 0.675 → 0.68; neto 4.5 − 0.68 = 3.82.
+  // Comisión del 15 %, y el resto para quien condujo.
+  const comision = centavos(tarifa * 0.15);
   const walletConductor = await (await asJson(`${url}/api/wallet/me`, driver.token)).json();
-  assert.equal(walletConductor.balance, 3.82, 'ganancia neta del conductor');
+  assert.equal(walletConductor.balance, centavos(tarifa - comision), 'ganancia neta del conductor');
   const ganancias = walletConductor.transactions.filter(x => x.type === 'DRIVER_EARNING' && x.tripId === 'trip_ciclo');
   assert.equal(ganancias.length, 1);
-  assert.equal(ganancias[0].commission, 0.68);
+  assert.equal(ganancias[0].commission, comision);
 });

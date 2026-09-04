@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 
 import { despojarComentarios, ficherosDelLaboratorio } from './ayudas.mjs';
 import {
+  claveDeIntento,
   cuerpoParaCrear,
+  estadoDelFallo,
+  mensajeDelFallo,
   leerEstimacion,
   metricasDelRecorrido,
   puedeEstimar,
@@ -68,13 +71,22 @@ test('los dos endpoints existen y son los que se usan', () => {
   assert.match(cliente, /'\/api\/trips\/create'/);
 });
 
-test('el servidor pide las métricas que se le mandan', () => {
-  // Sin `distanceKm` y `durationMin` responde `INVALID_ROUTE_METRICS`.
+test('el servidor pide los PUNTOS y mide él: ya no acepta métricas', () => {
+  // El contrato se invirtió en PASSENGER-TRIP-HARDENING-1. Antes el estimador
+  // leía `distanceKm` del cuerpo y cobraba con eso; ahora lee los dos puntos.
   const codigo = servidor();
-  const estimador = codigo.slice(codigo.indexOf("app.post('/api/pricing/estimate'"));
-  assert.match(estimador.slice(0, 500), /const distanceKm = Number\(req\.body\.distanceKm\)/);
-  assert.match(estimador.slice(0, 500), /const durationMin = Number\(req\.body\.durationMin\)/);
-  assert.match(estimador.slice(0, 500), /INVALID_ROUTE_METRICS/);
+  const estimador = codigo.slice(codigo.indexOf("app.post('/api/pricing/estimate'")).slice(0, 700);
+
+  assert.match(estimador, /normalizeLocation\(req\.body\.pickup/, 'toma el punto de recogida');
+  assert.match(estimador, /normalizeLocation\(req\.body\.destination\)/, 'y el destino');
+  assert.match(estimador, /medirRecorrido\(pickup, destination\)/, 'y mide él mismo');
+  assert.match(estimador, /VALID_GPS_COORDINATES_REQUIRED/, 'sin los dos puntos no hay precio');
+
+  // Y ya NO lee la distancia del cuerpo: ahí estaba la manipulación.
+  assert.ok(
+    !/Number\(req\.body\.distanceKm\)/.test(estimador),
+    'el servidor volvió a leer la distancia que le manda el cliente'
+  );
 });
 
 test('los tipos de vehículo son los que el servidor conoce', () => {
@@ -205,39 +217,53 @@ test('NO hay ninguna fórmula de tarifa en el teléfono', () => {
   }
 });
 
-test('en la creación NO viaja ningún precio', () => {
-  // Con métricas de ruta el servidor calcula y descarta lo que mande el
-  // cliente. Mandarlo igualmente no cambiaría el importe hoy, pero dejaría
-  // escrito que el teléfono opina del precio.
+test('en la creación no viaja NI precio NI distancia: sólo dónde', () => {
   const cuerpo = cuerpoParaCrear({
     origen: punto(),
     destino: punto({ lat: enElCentro.lat + 0.01 }),
     tipo: 'MOTO',
-    metricas: { distanciaKm: 1.1, minutos: 3 }
+    clave: 'trip_prueba_clave'
   });
+
+  // Ni el precio, que nunca fue del teléfono...
   assert.equal('fareUSD' in cuerpo, false, 'se manda un precio en la creación');
   assert.equal('fareEUR' in cuerpo, false);
   assert.equal('fareVES' in cuerpo, false);
 
-  // Y sí van las métricas, que son las que hacen que el servidor calcule.
-  assert.equal(cuerpo.distanceKm, 1.1);
-  assert.equal(cuerpo.durationMin, 3);
+  // ...ni la distancia, que SÍ lo era y era la vía para inflar el importe.
+  assert.equal('distanceKm' in cuerpo, false, 'el teléfono volvió a mandar kilómetros');
+  assert.equal('durationMin' in cuerpo, false, 'y minutos');
+
+  // Lo que va es dónde empieza, dónde termina, en qué, y de qué intento es.
+  assert.ok(cuerpo.pickup && cuerpo.destination, 'los dos puntos');
+  assert.equal(cuerpo.rideType, 'MOTO');
+  assert.equal(cuerpo.id, 'trip_prueba_clave', 'la clave del intento');
 });
 
-test('mandar métricas es lo que pone al servidor al mando', () => {
-  // Sin ellas cae en su otro camino, el que su propio código marca como
-  // «RIESGO PENDIENTE (alta)»: conservar la estimación del cliente.
+test('la clave del intento tiene la forma que el servidor admite', () => {
+  // `normalizeTripId` sólo acepta letras, dígitos, guión y guión bajo, hasta 80.
+  const claves = Array.from({ length: 50 }, () => claveDeIntento());
+  for (const clave of claves) {
+    assert.match(clave, /^[A-Za-z0-9_-]{1,80}$/, clave);
+  }
+  // Y dos intentos distintos no pueden compartirla: serían el mismo viaje.
+  assert.equal(new Set(claves).size, claves.length, 'dos intentos con la misma clave');
+});
+
+test('el camino que confiaba en el cliente YA NO EXISTE en el servidor', () => {
+  // Habia dos: uno calculaba la tarifa y el otro conservaba la del cliente,
+  // marcado en el propio codigo como «RIESGO PENDIENTE (alta)». El segundo se
+  // borro, asi que ya no depende de que este cliente evite pisarlo.
   const codigo = servidor();
-  assert.match(codigo, /fareSource = 'SERVER_CALCULATED'/);
-  assert.match(codigo, /fareSource = 'CLIENT_ESTIMATE'/);
-  // El camino del cliente sigue existiendo en el servidor; lo que se garantiza
-  // es que este cliente no lo pisa nunca.
-  const cuerpo = cuerpoParaCrear({
-    origen: punto(), destino: punto({ lat: enElCentro.lat + 0.01 }),
-    tipo: 'MOTO', metricas: { distanciaKm: 2, minutos: 5 }
-  });
-  assert.ok(Number.isFinite(cuerpo.distanceKm) && cuerpo.distanceKm > 0);
-  assert.ok(Number.isFinite(cuerpo.durationMin) && cuerpo.durationMin > 0);
+  assert.match(codigo, /fareSource = 'SERVER_CALCULATED'/, 'queda el del servidor');
+  assert.ok(
+    !/fareSource = 'CLIENT_ESTIMATE'/.test(codigo),
+    'volvió a existir el camino que confía en el precio del cliente'
+  );
+  assert.ok(
+    !/normalizeClientFareEstimate\(/.test(codigo),
+    'el servidor volvió a leer la tarifa que le manda el cliente'
+  );
 });
 
 test('la distancia es una medida, y los minutos salen de ella', () => {
@@ -465,4 +491,55 @@ test('la pantalla aprobada no se rediseñó', () => {
   }
   // Sin hoja de estilos propia: usa el tema.
   assert.equal(/StyleSheet\.create/.test(pantalla), false, 'la pantalla estrena estilos');
+});
+
+// ---------------------------------------------------------------------------
+// Los estados de la pantalla cuando algo sale mal
+// ---------------------------------------------------------------------------
+
+test('cada fallo deja la pantalla en el estado que le corresponde', () => {
+  // Un tunel sin cobertura, un servidor caido y haber tocado el boton veinte
+  // veces piden cosas distintas. Con un solo estado de error la persona tiene
+  // que adivinar cual de las tres le toca.
+  const casos = [
+    [{ motivo: 'SIN_RED', codigo: null }, 'OFFLINE'],
+    [{ motivo: 'TIEMPO_AGOTADO', codigo: null }, 'OFFLINE'],
+    [{ motivo: 'ERROR_DEL_SERVIDOR', codigo: null, estadoHttp: 429 }, 'RATE_LIMITED'],
+    [{ motivo: 'ERROR_DEL_SERVIDOR', codigo: 'ACTIVE_TRIP_EXISTS', estadoHttp: 409 }, 'ACTIVE_TRIP_EXISTS'],
+    [{ motivo: 'NO_AUTENTICADO', codigo: null, estadoHttp: 401 }, 'SESION_CADUCADA'],
+    [{ motivo: 'ERROR_DEL_SERVIDOR', codigo: 'VALID_GPS_COORDINATES_REQUIRED', estadoHttp: 400 }, 'ROUTE_ERROR'],
+    [{ motivo: 'ERROR_DEL_SERVIDOR', codigo: 'INVALID_ROUTE_METRICS', estadoHttp: 400 }, 'ROUTE_ERROR'],
+    [{ motivo: 'ERROR_DEL_SERVIDOR', codigo: 'DATABASE_WRITE_FAILED', estadoHttp: 503 }, 'PRICING_ERROR']
+  ];
+  for (const [fallo, esperado] of casos) {
+    assert.equal(estadoDelFallo(fallo), esperado, JSON.stringify(fallo));
+  }
+});
+
+test('estar sin red se dice como sin red, y se promete que no se creo nada', () => {
+  const texto = mensajeDelFallo('OFFLINE', 'algo salio mal');
+  assert.match(texto, /[Ss]in conexi/, 'dice qué pasó de verdad');
+  assert.match(texto, /no se cre/i, 'y promete que no quedó un viaje a medias');
+
+  // El limitador se explica como espera, no como fallo.
+  assert.match(mensajeDelFallo('RATE_LIMITED', 'x'), /[Ee]spera/);
+
+  // Y lo que no se sabe clasificar conserva el mensaje del servidor en vez de
+  // taparlo con una frase generica.
+  assert.equal(mensajeDelFallo('PRICING_ERROR', 'No hay tarifa para esa zona'), 'No hay tarifa para esa zona');
+});
+
+test('la pantalla de pedir usa esos estados y NO crea viajes locales', () => {
+  const codigo = leer('app/pedir.tsx');
+
+  assert.match(codigo, /estadoDelFallo\(respuesta\)/, 'clasifica el fallo');
+  assert.match(codigo, /mensajeDelFallo\(/, 'y lo cuenta en su idioma');
+  assert.match(codigo, /estado === 'ACTIVE_TRIP_EXISTS'/, 'el 409 lleva al viaje que ya existe');
+
+  // Un solo intento en vuelo: la fase cierra la puerta hasta que responda.
+  assert.match(codigo, /setFase\('PIDIENDO'\)/);
+  assert.match(codigo, /claveDelIntento\.current \?\?= claveDeIntento\(\)/, 'la clave se genera UNA vez');
+
+  // Sin red no se guarda un viaje en el telefono esperando a subir.
+  assert.ok(!/AsyncStorage|colaDeViajes|pendienteDeSubir/.test(codigo), 'no hay cola optimista de viajes');
 });
