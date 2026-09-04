@@ -81,9 +81,35 @@ test('el token de sesión sólo se guarda en el almacén SEGURO', () => {
   const codigo = soloCodigo(sesion);
 
   assert.match(codigo, /expo-secure-store/, 'usa el almacén seguro del sistema');
-  // Nada de almacenamiento plano para el token.
   assert.equal(codigo.includes('AsyncStorage'), false, 'el token no va a almacenamiento plano');
-  assert.equal(/localStorage|sessionStorage/.test(codigo), false, 'ni a almacenamiento del navegador');
+
+  // EN NATIVO, NUNCA EL NAVEGADOR
+  //
+  // Antes esta prueba prohibía la PALABRA `localStorage` en el fichero. Era
+  // una regla útil mientras no existía laboratorio web, pero prohibir una
+  // palabra no es lo mismo que prohibir un comportamiento: lo que hay que
+  // garantizar es que un teléfono jamás llegue ahí.
+  //
+  // Ahora se comprueba la guarda de plataforma, que es lo que de verdad
+  // protege: en iOS y Android `Platform.OS !== 'web'` corta antes, y en una
+  // build publicada `__DEV__` es falso, así que el respaldo plano sólo existe
+  // en el laboratorio web de desarrollo.
+  const guarda = codigo.match(
+    /function\s+\w+\([^)]*\)\s*:\s*Storage \| null \{[\s\S]{0,400}?\n\}/
+  );
+  assert.ok(guarda, 'el respaldo web debe estar en UNA función que devuelva Storage | null');
+  assert.match(guarda[0], /Platform\.OS !== 'web'/, 'corta en cuanto no es web');
+  assert.match(guarda[0], /__DEV__/, 'y sólo vale en desarrollo');
+
+  // Y nadie más toca el navegador: todos los accesos están dentro de ella.
+  const fuera = codigo.replace(guarda[0], '');
+  assert.equal(
+    /localStorage|sessionStorage/.test(fuera), false,
+    'hay un acceso al navegador fuera de la guarda de plataforma'
+  );
+
+  // El token se escribe con la protección más fuerte del almacén seguro.
+  assert.match(codigo, /WHEN_UNLOCKED_THIS_DEVICE_ONLY/, 'no viaja en copias de seguridad');
 });
 
 test('ningún fichero del móvil guarda el token en almacenamiento plano', () => {

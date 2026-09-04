@@ -229,13 +229,40 @@ export async function createPostgresPersistence({ pool, database, logger = conso
    * hueco libre, y las dos crean. Pasa de verdad: bastan dos toques del mismo
    * dedo, o un reintento de la red mientras la primera sigue en camino.
    *
-   * Aqui la comprobacion y la insercion son UNA sentencia. PostgreSQL la
-   * ejecuta entera o no la ejecuta: si dos llegan juntas, una inserta y la otra
-   * no encuentra fila que devolver. Y como el arbitro es la base y no la
-   * memoria de este proceso, sigue valiendo con varias instancias del servidor.
+   * Y POR QUE TAMPOCO BASTA `INSERT ... WHERE NOT EXISTS`
    *
-   * Es el mismo patron que `reserveTripAssignment` usa para que dos conductores
-   * no acepten el mismo viaje.
+   * Parece que si --es UNA sentencia-- pero no lo es. PostgreSQL trabaja por
+   * omision en READ COMMITTED, donde cada sentencia ve una instantanea de lo
+   * que estaba CONFIRMADO cuando empezo. Dos transacciones a la vez:
+   *
+   *     A: insert ... where not exists (...)   no ve nada  -> inserta
+   *     B: insert ... where not exists (...)   TAMPOCO ve la fila de A,
+   *                                            que aun no ha hecho commit
+   *                                            -> inserta tambien
+   *
+   * Las dos prosperan y la pasajera acaba con dos viajes. La subconsulta no
+   * bloquea nada ni espera a nadie: un `NOT EXISTS` sobre una fila que todavia
+   * no existe para ti es cierto. Esto se reprodujo aqui con PostgreSQL real.
+   *
+   * LA GARANTIA DE VERDAD: UN CERROJO POR PASAJERA
+   *
+   * `pg_advisory_xact_lock` toma un cerrojo con el numero que se le de y lo
+   * suelta al terminar la transaccion. Derivado del id de la pasajera, serializa
+   * SOLO a las peticiones de esa misma persona: dos pasajeras distintas no se
+   * estorban. La segunda espera, y cuando entra ya ve el viaje de la primera
+   * confirmado, asi que su `NOT EXISTS` es falso y no inserta.
+   *
+   * Es garantia de PostgreSQL y sobrevive a varias instancias del servidor,
+   * porque el cerrojo vive en la base y no en la memoria de un proceso. No hace
+   * falta Redis para esto, y no se usa.
+   *
+   * SE PREFIERE AL INDICE UNICO PARCIAL
+   *
+   * `create unique index ... where status in (...)` tambien lo garantizaria,
+   * pero hay que migrarlo cada vez que se anada un estado --justo el olvido que
+   * esta fase vino a evitar-- y no se puede crear si la base ya arrastra alguna
+   * pasajera con dos viajes abiertos. El cerrojo no tiene ninguno de los dos
+   * problemas y deja la lista de estados donde ya vive, en el dominio.
    *
    * @param {object} trip  el viaje a crear
    * @param {string[]} activeStatuses  los estados que cuentan como ocupado
@@ -251,20 +278,38 @@ export async function createPostgresPersistence({ pool, database, logger = conso
         return false;
       }
 
-      const result = await pool.query(
-        `insert into public.trips (id, payload)
-         select $1, $2::jsonb
-          where not exists (
-                select 1 from public.trips
-                 where passenger_id = $3
-                   and status = any($4::text[])
-              )
-         returning id`,
-        [trip.id, payload, trip.passengerId, activeStatuses]
-      );
-      if (result.rowCount !== 1) return false;
-      shadow.get('trips').set(trip.id, payload);
-      return true;
+      // Una conexion propia: el cerrojo y la insercion tienen que ir en la
+      // MISMA transaccion, y `pool.query` puede darle otra a cada sentencia.
+      const cliente = await pool.connect();
+      try {
+        await cliente.query('begin');
+        // El cerrojo se suelta solo al cerrar la transaccion, pase lo que pase.
+        // `hashtext` convierte el id en el entero que espera la funcion.
+        await cliente.query('select pg_advisory_xact_lock(hashtext($1))', [trip.passengerId]);
+
+        const result = await cliente.query(
+          `insert into public.trips (id, payload)
+           select $1, $2::jsonb
+            where not exists (
+                  select 1 from public.trips
+                   where passenger_id = $3
+                     and status = any($4::text[])
+                )
+           returning id`,
+          [trip.id, payload, trip.passengerId, activeStatuses]
+        );
+        await cliente.query('commit');
+
+        if (result.rowCount !== 1) return false;
+        shadow.get('trips').set(trip.id, payload);
+        return true;
+      } catch (error) {
+        try { await cliente.query('rollback'); } catch { /* la conexion ya no vale */ }
+        logger.error('[+58express Database] No se pudo reservar el viaje:', error.message);
+        return false;
+      } finally {
+        cliente.release();
+      }
     });
   }
 

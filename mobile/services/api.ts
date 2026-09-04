@@ -23,8 +23,28 @@
 
 import type { ApiError } from '../../shared/contracts/api';
 import type { MotivoDeError, Resultado } from '../domain/apiResult';
-import { configuracion } from '../config/environment';
+import { Platform } from 'react-native';
+
+import { configuracion, EN_DESARROLLO } from '../config/environment';
+import { urlParaEstaPlataforma } from '../domain/backendDelEntorno';
 import { leerToken } from './session';
+
+/**
+ * La dirección a la que se llama de verdad.
+ *
+ * `configuracion.urlBase` es lo que puso quien configuró el entorno; esto es
+ * eso mismo traducido a lo que ESTE dispositivo puede alcanzar. En el emulador
+ * de Android `localhost` es el propio emulador, no el ordenador, y hay que
+ * pedirle las cosas a `10.0.2.2`. La decisión vive en
+ * `domain/backendDelEntorno`, sin nada de React Native, para poder comprobarla
+ * sin levantar un emulador.
+ */
+const URL_BASE = configuracion.ok
+  ? urlParaEstaPlataforma(configuracion.urlBase, {
+    esAndroid: Platform.OS === 'android',
+    enDesarrollo: EN_DESARROLLO
+  })
+  : '';
 
 /** Cuánto se espera antes de dar una petición por perdida. */
 const TIEMPO_MAXIMO_MS = 15_000;
@@ -84,7 +104,7 @@ export async function llamar<T>(ruta: string, opciones: OpcionesDePeticion = {})
 
   let respuesta: Response;
   try {
-    respuesta = await fetch(`${configuracion.urlBase}${ruta}`, {
+    respuesta = await fetch(`${URL_BASE}${ruta}`, {
       method: opciones.metodo ?? 'GET',
       headers: cabeceras,
       body: opciones.cuerpo === undefined
@@ -163,7 +183,7 @@ export async function subirArchivo<T>(
   }
   // Se lee fuera de la promesa: dentro del cierre TypeScript ya no sabe que
   // la configuración es válida.
-  const urlBase = configuracion.urlBase;
+  const urlBase = URL_BASE;
   const token = await leerToken();
 
   return new Promise<Resultado<T>>(resolve => {

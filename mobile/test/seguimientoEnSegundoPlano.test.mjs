@@ -854,13 +854,31 @@ test('el manifiesto pide lo del segundo plano y NADA ajeno', () => {
   const pedidos = xml.split('\n').filter(linea => !linea.includes('tools:node="remove"')).join('\n');
   for (const ajeno of [
     'android.permission.READ_CONTACTS',
-    'android.permission.RECORD_AUDIO',
     'android.permission.READ_SMS',
     'android.permission.READ_CALL_LOG',
     'android.permission.BODY_SENSORS'
   ]) {
     assert.equal(pedidos.includes(ajeno), false, `el manifiesto pide ${ajeno}, que no se usa`);
   }
+
+  // RECORD_AUDIO SE QUEDA, Y SE JUSTIFICA AQUÍ
+  //
+  // Estaba en la lista de ajenos de arriba, de cuando la postulación sólo
+  // fotografiaba documentos. Ya no: el vídeo de presentación pide literalmente
+  // «con tu cara y tu voz: di tu nombre y con qué trabajas». Sin el permiso el
+  // vídeo sale mudo y quien lo revisa no puede comprobar la voz, que es la
+  // mitad del propósito.
+  //
+  // Se afirma que SIGUE estando, para que quitarlo rompa esta prueba en vez de
+  // romper la postulación en silencio.
+  assert.ok(
+    pedidos.includes('android.permission.RECORD_AUDIO'),
+    'el vídeo de presentación necesita audio: sin RECORD_AUDIO sale mudo'
+  );
+  const instruccion = fs.readFileSync(
+    path.join(raizMovil, 'preview/pantallaPostulacionDocumentos.tsx'), 'utf8'
+  );
+  assert.match(instruccion, /tu voz/, 'si el vídeo deja de pedir la voz, el permiso sobra');
 });
 
 // ---------------------------------------------------------------------------

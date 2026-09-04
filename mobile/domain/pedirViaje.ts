@@ -43,6 +43,17 @@ export type TipoEnElServidor = 'MOTO' | 'CAR';
  * conoce: su `calculateFare` lo leería como `MOTO` y cobraría tarifa de moto
  * por un carro. No falla, no avisa, y cobra de menos: el peor tipo de error.
  */
+/**
+ * La forma de pago que esta fase conecta.
+ *
+ * Efectivo. La cartera tiene su propio camino en el servidor
+ * --`ensureWalletCanCoverTrip`-- y sus banderas siguen apagadas. Vive aqui, y
+ * no escrita a mano en dos sitios, porque la usan el cuerpo de la peticion y la
+ * huella del intento: si se separaran, cambiar de forma de pago dejaria de
+ * contar como intento nuevo.
+ */
+export const PAGO_DE_ESTA_FASE = 'CASH';
+
 export function tipoParaElServidor(tipo: TipoEnLaPantalla): TipoEnElServidor {
   return tipo === 'AUTO' ? 'CAR' : 'MOTO';
 }
@@ -317,9 +328,7 @@ export function cuerpoParaCrear({
     pickup: puntoParaElServidor(origen),
     destination: puntoParaElServidor(destino),
     rideType: tipoParaElServidor(tipo),
-    // Efectivo: es lo que esta fase conecta. La cartera tiene su propio camino
-    // —`ensureWalletCanCoverTrip`— y sus banderas siguen apagadas.
-    paymentMethod: 'CASH',
+    paymentMethod: PAGO_DE_ESTA_FASE,
     // NO VIAJAN NI KILÓMETROS NI PRECIO.
     //
     // Antes iban `distanceKm` y `durationMin`, y el servidor cobraba con ellos:
@@ -404,4 +413,40 @@ export function mensajeDelFallo(estado: EstadoDeFallo, mensajeDelServidor: strin
     default:
       return mensajeDelServidor;
   }
+}
+
+/**
+ * La huella de un intento de pedir.
+ *
+ * QUE HACE QUE DOS TOQUES SEAN EL MISMO INTENTO
+ *
+ * Mientras esta huella no cambie, la clave de idempotencia se conserva: el
+ * segundo toque, o el reenvio despues de que se caiga la red, llegan con la
+ * misma clave y el servidor devuelve el viaje que ya creo en vez de crear otro.
+ *
+ * EL ORIGEN VA REDONDEADO, Y ESO ES DELIBERADO
+ *
+ * El origen sale del GPS y se mueve solo: quieto encima de una mesa, el sensor
+ * baila unos metros cada segundo. Con el valor exacto en la huella, dos toques
+ * seguidos casi nunca compartirian clave --que es justo lo que hay que evitar--
+ * porque el GPS habria respirado entre uno y otro.
+ *
+ * Cuatro decimales son unos once metros: el ruido del sensor cae dentro de la
+ * misma celda, y cruzar la calle para que te recojan enfrente no. Es la misma
+ * resolucion con la que el servidor agrupa recorridos en su cache.
+ */
+export function huellaDelIntento({
+  origen,
+  destino,
+  tipo,
+  pago
+}: {
+  readonly origen: PuntoDelViaje | null;
+  readonly destino: PuntoDelViaje | null;
+  readonly tipo: TipoEnLaPantalla;
+  readonly pago: string;
+}): string {
+  const celda = (punto: PuntoDelViaje | null) =>
+    punto === null ? 'sin' : `${punto.lat.toFixed(4)},${punto.lng.toFixed(4)}`;
+  return [celda(origen), celda(destino), tipo, pago].join('|');
 }

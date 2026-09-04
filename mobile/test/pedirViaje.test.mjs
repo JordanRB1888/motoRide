@@ -8,6 +8,8 @@ import { despojarComentarios, ficherosDelLaboratorio } from './ayudas.mjs';
 import {
   claveDeIntento,
   cuerpoParaCrear,
+  huellaDelIntento,
+  PAGO_DE_ESTA_FASE,
   estadoDelFallo,
   mensajeDelFallo,
   leerEstimacion,
@@ -468,7 +470,16 @@ test('las banderas de negocio siguen apagadas', () => {
     assert.equal(codigo.includes(bandera), false, `esta fase toca ${bandera}`);
   }
   // El pago es en efectivo: la cartera tiene su propio camino y sus banderas.
-  assert.match(sinComentarios('domain/pedirViaje.ts'), /paymentMethod: 'CASH'/);
+  // Se comprueba el VALOR que sale, no como esta escrito: la constante se
+  // extrajo para que la compartan el cuerpo y la huella del intento.
+  assert.equal(PAGO_DE_ESTA_FASE, 'CASH');
+  assert.equal(
+    cuerpoParaCrear({
+      origen: punto(), destino: punto({ lat: enElCentro.lat + 0.01 }),
+      tipo: 'MOTO', clave: 'trip_pago'
+    }).paymentMethod,
+    'CASH'
+  );
 });
 
 test('el laboratorio visual sigue aislado', () => {
@@ -542,4 +553,114 @@ test('la pantalla de pedir usa esos estados y NO crea viajes locales', () => {
 
   // Sin red no se guarda un viaje en el telefono esperando a subir.
   assert.ok(!/AsyncStorage|colaDeViajes|pendienteDeSubir/.test(codigo), 'no hay cola optimista de viajes');
+});
+
+// ---------------------------------------------------------------------------
+// El doble toque conserva la clave
+// ---------------------------------------------------------------------------
+
+test('el temblor del GPS NO convierte el segundo toque en otro intento', () => {
+  // Un teléfono quieto encima de una mesa mueve su posición unos metros cada
+  // segundo. Si eso contara como intento nuevo, dos toques seguidos llevarían
+  // claves distintas y el servidor crearía dos viajes: exactamente el fallo
+  // que la idempotencia viene a evitar.
+  const origen = punto();
+  const destino = punto({ lat: enElCentro.lat + 0.01 });
+  const comun = { destino, tipo: 'MOTO', pago: PAGO_DE_ESTA_FASE };
+
+  const quieto = huellaDelIntento({ origen, ...comun });
+  const conTemblor = huellaDelIntento({
+    origen: punto({ lat: origen.lat + 0.00002, lng: origen.lng - 0.00003 }),
+    ...comun
+  });
+  assert.equal(conTemblor, quieto, 'unos metros de GPS no son otro viaje');
+});
+
+test('cambiar el viaje SÍ es otro intento, y con él otra clave', () => {
+  const origen = punto();
+  const destino = punto({ lat: enElCentro.lat + 0.01 });
+  const base = { origen, destino, tipo: 'MOTO', pago: PAGO_DE_ESTA_FASE };
+  const huella = huellaDelIntento(base);
+
+  // Cruzar la calle para que te recojan enfrente es otro viaje, aunque el
+  // destino no cambie.
+  assert.notEqual(
+    huellaDelIntento({ ...base, origen: punto({ lat: origen.lat + 0.002 }) }), huella,
+    'mover el ORIGEN de verdad es otro intento'
+  );
+  assert.notEqual(
+    huellaDelIntento({ ...base, destino: punto({ lat: enElCentro.lat + 0.05 }) }), huella,
+    'otro destino, otro intento'
+  );
+  assert.notEqual(
+    huellaDelIntento({ ...base, tipo: 'AUTO' }), huella,
+    'moto y carro no son el mismo viaje'
+  );
+  assert.notEqual(
+    huellaDelIntento({ ...base, pago: 'WALLET' }), huella,
+    'cambiar la forma de pago es otro intento'
+  );
+});
+
+test('la pantalla ata la clave a la huella, no sólo al destino', () => {
+  const codigo = leer('app/pedir.tsx');
+
+  // El borrado por [tipo, destino] dejaba el ORIGEN fuera: cambiarlo conservaba
+  // la clave y el servidor devolvía el viaje anterior.
+  assert.match(codigo, /huellaDelIntento\(\{ origen, destino, tipo, pago: PAGO_DE_ESTA_FASE \}\)/);
+  assert.match(codigo, /\}, \[huella\]\);/, 'la clave se invalida con la huella entera');
+  assert.match(codigo, /claveDelIntento\.current \?\?= claveDeIntento\(\)/, 'y se genera UNA sola vez');
+
+  // La forma de pago sale del dominio, no escrita a mano aquí: si se separaran,
+  // cambiarla dejaría de contar como intento nuevo.
+  assert.ok(!/paymentMethod: 'CASH'/.test(codigo), 'la forma de pago no se escribe a mano en la pantalla');
+});
+
+// ---------------------------------------------------------------------------
+// El backend, alcanzable desde el emulador
+// ---------------------------------------------------------------------------
+
+test('el emulador de Android traduce localhost al anfitrión, y sólo ahí', async () => {
+  const { urlParaEstaPlataforma, ANFITRION_DEL_EMULADOR_ANDROID } =
+    await import('../domain/backendDelEntorno');
+
+  const enEmulador = { esAndroid: true, enDesarrollo: true };
+
+  // Dentro del emulador, `localhost` es el propio emulador: el backend del
+  // ordenador no está ahí. Android publica 10.0.2.2 justo para esto.
+  assert.equal(
+    urlParaEstaPlataforma('http://127.0.0.1:4000', enEmulador),
+    `http://${ANFITRION_DEL_EMULADOR_ANDROID}:4000`
+  );
+  assert.equal(
+    urlParaEstaPlataforma('http://localhost:4000', enEmulador),
+    `http://${ANFITRION_DEL_EMULADOR_ANDROID}:4000`
+  );
+
+  // Una IP de la red local es de quien la escribió: se respeta.
+  assert.equal(
+    urlParaEstaPlataforma('http://192.168.1.50:4000', enEmulador),
+    'http://192.168.1.50:4000'
+  );
+
+  // Fuera del emulador y fuera de desarrollo, nada se toca.
+  assert.equal(
+    urlParaEstaPlataforma('http://127.0.0.1:4000', { esAndroid: false, enDesarrollo: true }),
+    'http://127.0.0.1:4000'
+  );
+  assert.equal(
+    urlParaEstaPlataforma('https://api.plus58.example', { esAndroid: true, enDesarrollo: false }),
+    'https://api.plus58.example'
+  );
+});
+
+test('no hay ninguna IP personal escrita en el código', () => {
+  // La máquina de cada quien vive en su `.env`, que git ignora. Una IP fija en
+  // el código funciona en un ordenador y en ninguno más.
+  for (const fichero of ['config/environment.ts', 'domain/backendDelEntorno.ts', 'services/api.ts', 'app/pedir.tsx']) {
+    const codigo = despojarComentarios(leer(fichero));
+    const ips = codigo.match(/\b192\.168\.\d{1,3}\.\d{1,3}\b|\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g) || [];
+    const ajenas = ips.filter(ip => ip !== '10.0.2.2');
+    assert.deepEqual(ajenas, [], `${fichero} tiene una IP escrita a mano: ${ajenas.join(', ')}`);
+  }
 });

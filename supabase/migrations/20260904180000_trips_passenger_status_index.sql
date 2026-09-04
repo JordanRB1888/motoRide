@@ -1,0 +1,32 @@
+-- PASSENGER-TRIP-HARDENING-1.1
+--
+-- El indice que necesita la reserva del unico viaje activo.
+--
+-- POR QUE NO BASTABAN LOS QUE YA HABIA
+--
+-- `trips_passenger_idx (passenger_id)` y `trips_status_idx (status)` existen
+-- por separado desde el esquema inicial. La comprobacion de la reserva filtra
+-- por LOS DOS a la vez:
+--
+--     select 1 from public.trips
+--      where passenger_id = $1 and status = any($2::text[])
+--
+-- Con indices sueltos PostgreSQL elige uno y descarta por el otro leyendo las
+-- filas: para una pasajera con muchos viajes en su historial, eso es recorrer
+-- todos sus viajes viejos en CADA creacion, y esa comprobacion corre dentro de
+-- una transaccion con un cerrojo tomado, asi que su coste retrasa a las demas
+-- peticiones de esa misma persona.
+--
+-- El compuesto resuelve la comprobacion sin tocar la tabla.
+--
+-- CONCURRENTLY, para no bloquear la tabla
+--
+-- `create index` normal toma un ACCESS EXCLUSIVE sobre `trips` y detiene toda
+-- creacion de viajes mientras dura. `concurrently` tarda mas pero deja la tabla
+-- operativa, que es lo que corresponde en una tabla viva.
+--
+-- No puede ir dentro de una transaccion: si el gestor de migraciones las
+-- envuelve, esta hay que aplicarla suelta.
+
+create index concurrently if not exists trips_passenger_status_idx
+  on public.trips (passenger_id, status);

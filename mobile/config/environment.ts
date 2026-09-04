@@ -134,11 +134,13 @@ export function resolverConfiguracion(
  * que hay que nombrar cada variable literalmente: un acceso dinámico
  * (`process.env[nombre]`) no se sustituiría y llegaría vacío al dispositivo.
  */
+/** `__DEV__` es global de React Native: cierto en Metro, falso en release. */
+export const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+
 export const configuracion: Configuracion = resolverConfiguracion(
   {
     [VARIABLE_URL]: process.env.EXPO_PUBLIC_API_BASE_URL,
     [VARIABLE_ENTORNO]: process.env.EXPO_PUBLIC_ENV
   },
-  // `__DEV__` es global de React Native: cierto en Metro, falso en release.
-  typeof __DEV__ !== 'undefined' && __DEV__
+  EN_DESARROLLO
 );

@@ -28,12 +28,23 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 import type { UserRole } from '../../shared/contracts/domain';
 
 /** Las claves del almacén. Estables: cambiarlas cierra la sesión de todo el mundo. */
 const CLAVE_TOKEN = 'plus58express.session.token';
 const CLAVE_ULTIMO_ROL = 'plus58express.preferencias.ultimoRol';
+
+/**
+ * Expo web no implementa SecureStore. El respaldo plano existe únicamente en
+ * el laboratorio web de desarrollo para poder recorrer la UI autenticada; un
+ * paquete nativo y cualquier build publicada siguen usando Keychain/Keystore.
+ */
+function almacenamientoDelLaboratorioWeb(): Storage | null {
+  if (Platform.OS !== 'web' || typeof __DEV__ === 'undefined' || !__DEV__) return null;
+  return typeof localStorage === 'undefined' ? null : localStorage;
+}
 
 /** Los roles que la aplicación móvil ofrece elegir. */
 export const ROLES_MOVILES = ['passenger', 'driver'] as const;
@@ -63,17 +74,29 @@ export function esRolMovil(valor: unknown): valor is RolMovil {
  * abrió ahí.
  */
 export async function guardarToken(token: string): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.setItem(CLAVE_TOKEN, token);
+    return;
+  }
   await SecureStore.setItemAsync(CLAVE_TOKEN, token, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
   });
 }
 
 export async function leerToken(): Promise<string | null> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) return web.getItem(CLAVE_TOKEN);
   return SecureStore.getItemAsync(CLAVE_TOKEN);
 }
 
 /** Cierra la sesión. Borra el token; la preferencia de rol se conserva. */
 export async function borrarToken(): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.removeItem(CLAVE_TOKEN);
+    return;
+  }
   await SecureStore.deleteItemAsync(CLAVE_TOKEN);
 }
 
@@ -86,16 +109,30 @@ export async function borrarToken(): Promise<void> {
  * aprobado verá la pantalla que le corresponda según su estado real.
  */
 export async function guardarUltimoRol(rol: RolMovil): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.setItem(CLAVE_ULTIMO_ROL, rol);
+    return;
+  }
   await SecureStore.setItemAsync(CLAVE_ULTIMO_ROL, rol);
 }
 
 export async function leerUltimoRol(): Promise<RolMovil | null> {
-  const guardado = await SecureStore.getItemAsync(CLAVE_ULTIMO_ROL);
+  const web = almacenamientoDelLaboratorioWeb();
+  const guardado = web !== null
+    ? web.getItem(CLAVE_ULTIMO_ROL)
+    : await SecureStore.getItemAsync(CLAVE_ULTIMO_ROL);
   return esRolMovil(guardado) ? guardado : null;
 }
 
 /** Borra todo lo de esta aplicación. Para «cerrar sesión y olvidar el dispositivo». */
 export async function olvidarTodo(): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.removeItem(CLAVE_TOKEN);
+    web.removeItem(CLAVE_ULTIMO_ROL);
+    return;
+  }
   await SecureStore.deleteItemAsync(CLAVE_TOKEN);
   await SecureStore.deleteItemAsync(CLAVE_ULTIMO_ROL);
 }
