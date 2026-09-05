@@ -6,6 +6,20 @@
  * Los banners están definidos con un contrato de datos desacoplado { id, title,
  * subtitle, image, ctaLabel, ctaAction, active, tag } para que posteriormente
  * el Panel Administrativo pueda inyectar promociones dinámicas.
+ *
+ * EL COLOR DEL BANNER ES UNA SUPERFICIE, NO UNA TINTA
+ *
+ * `colorAcento` viene con el banner y sirve para el resplandor, el filo, el
+ * fondo de la etiqueta y el del botón. Como TEXTO no siempre vale: los tres
+ * amarillos de la lista sobre el marfil del día rondan el 1,3:1 —el mismo
+ * cálculo que ya trae `theme/esquemas.ts`— y la etiqueta se volvía un fantasma.
+ * Por eso en día la etiqueta se escribe con `acentoTexto`, el ámbar legible, y
+ * en noche sigue con el color propio del banner. El botón no cambia: ahí el
+ * amarillo es fondo y lleva tinta oscura encima, que es su papel correcto.
+ *
+ * El titular y el subtítulo estaban fijados en blanco y gris de noche, y en día
+ * el titular desaparecía por completo mientras el subtítulo aguantaba. Ahora los
+ * dos salen del tema.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,7 +34,7 @@ import {
   View
 } from 'react-native';
 
-import { useTema } from '../theme/ThemeContext';
+import { useEsquema, useTema } from '../theme/ThemeContext';
 import { useMovimientoReducido } from './movimiento';
 
 export interface BannerItem {
@@ -80,6 +94,7 @@ export function PromoCarousel({
   intervaloMs = 5500
 }: PropiedadesPromoCarousel) {
   const tema = useTema();
+  const esquema = useEsquema();
   const quieto = useMovimientoReducido();
   const scrollRef = useRef<ScrollView>(null);
   const [indiceActivo, setIndiceActivo] = useState(0);
@@ -138,6 +153,9 @@ export function PromoCarousel({
       >
         {bannersActivos.map(banner => {
           const colorMarca = banner.colorAcento ?? tema.color.acento;
+          // El mismo amarillo no puede ser superficie y tinta en día: aquí sólo
+          // se decide con qué se ESCRIBE la etiqueta.
+          const tintaDeMarca = esquema === 'claro' ? tema.color.acentoTexto : colorMarca;
           return (
             <Pressable
               key={banner.id}
@@ -167,7 +185,7 @@ export function PromoCarousel({
               {/* Tag superior */}
               {banner.tag ? (
                 <View style={[estilos.tagPill, { borderColor: `${colorMarca}55`, backgroundColor: `${colorMarca}1c` }]}>
-                  <Text style={[estilos.tagTexto, { color: colorMarca }]}>
+                  <Text style={[estilos.tagTexto, { color: tintaDeMarca }]}>
                     {banner.tag}
                   </Text>
                 </View>
@@ -175,10 +193,10 @@ export function PromoCarousel({
 
               {/* Textos */}
               <View style={estilos.cuerpoTexto}>
-                <Text style={estilos.titulo} numberOfLines={1}>
+                <Text style={[estilos.titulo, { color: tema.color.textoPrimario }]} numberOfLines={1}>
                   {banner.title}
                 </Text>
-                <Text style={estilos.subtitulo} numberOfLines={2}>
+                <Text style={[estilos.subtitulo, { color: tema.color.textoSecundario }]} numberOfLines={2}>
                   {banner.subtitle}
                 </Text>
               </View>
@@ -187,8 +205,8 @@ export function PromoCarousel({
               {banner.ctaLabel ? (
                 <View style={estilos.filaAccion}>
                   <View style={[estilos.botonCta, { backgroundColor: colorMarca }]}>
-                    <Text style={estilos.botonCtaTexto}>{banner.ctaLabel}</Text>
-                    <Text style={estilos.botonCtaFlecha}>→</Text>
+                    <Text style={[estilos.botonCtaTexto, { color: tema.color.sobreAcento }]}>{banner.ctaLabel}</Text>
+                    <Text style={[estilos.botonCtaFlecha, { color: tema.color.sobreAcento }]}>→</Text>
                   </View>
                 </View>
               ) : null}
@@ -206,7 +224,8 @@ export function PromoCarousel({
               style={[
                 estilos.dot,
                 {
-                  backgroundColor: i === indiceActivo ? tema.color.acento : 'rgba(255, 255, 255, 0.2)',
+                  // El punto apagado era blanco al 20%: sobre marfil no se veía.
+                  backgroundColor: i === indiceActivo ? tema.color.acento : tema.color.borde,
                   width: i === indiceActivo ? 18 : 6
                 }
               ]}
@@ -254,16 +273,15 @@ const estilos = StyleSheet.create({
   cuerpoTexto: {
     gap: 4
   },
+  // Sin `color`: lo pone el tema en el punto de uso.
   titulo: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
     letterSpacing: -0.3
   },
   subtitulo: {
     fontSize: 12.5,
-    lineHeight: 17,
-    color: '#A0A0A8'
+    lineHeight: 17
   },
   filaAccion: {
     flexDirection: 'row',
@@ -278,15 +296,15 @@ const estilos = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8
   },
+  // Tinta oscura sobre el amarillo: la pone `sobreAcento`, que es el token que
+  // significa exactamente eso.
   botonCtaTexto: {
     fontSize: 12,
-    fontWeight: '800',
-    color: '#121214'
+    fontWeight: '800'
   },
   botonCtaFlecha: {
     fontSize: 12,
-    fontWeight: '800',
-    color: '#121214'
+    fontWeight: '800'
   },
   dotsContenedor: {
     flexDirection: 'row',

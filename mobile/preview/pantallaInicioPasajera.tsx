@@ -291,9 +291,12 @@ function EmblemaDeServicio({
   readonly listo: boolean;
   readonly tema: ReturnType<typeof useTema>;
 }) {
-  const trazoColor = listo ? tema.color.acento : '#8E8E93';
-  const fondoBadge = listo ? `${tema.color.acento}14` : 'rgba(255, 255, 255, 0.04)';
-  const bordeBadge = listo ? `${tema.color.acento}44` : 'rgba(255, 255, 255, 0.08)';
+  // El emblema se DIBUJA, así que su trazo es tinta: en día va con `acentoTexto`
+  // y no con el amarillo de marca, que sobre marfil casi no se ve. Y el fondo
+  // del que está apagado era blanco al 4%: en día no existía.
+  const trazoColor = listo ? tema.color.acentoTexto : tema.color.textoTenue;
+  const fondoBadge = listo ? `${tema.color.acento}14` : tema.color.superficieHundida;
+  const bordeBadge = listo ? `${tema.color.acento}44` : tema.color.borde;
 
   return (
     <View style={{
@@ -961,7 +964,7 @@ export function C2InicioPasajera({
                   borderColor: tema.color.borde
                 }}
               >
-                <Text style={{ color: tema.color.acento, fontWeight: '700', fontSize: 12.5 }}>← Volver a promociones</Text>
+                <Text style={{ color: tema.color.acentoTexto, fontWeight: '700', fontSize: 12.5 }}>← Volver a promociones</Text>
               </Pressable>
               {avisoPostulacion ? (
                 <View style={{ marginTop: 8 }}>

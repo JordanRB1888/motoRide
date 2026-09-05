@@ -216,3 +216,58 @@ test('el saludo usa el nombre de quien entró', () => {
   assert.match(PANTALLAS.pasajera(), /Hola, /, 'el inicio no saluda');
   assert.ok(leer(INICIO).includes('PASAJERA_DEMO'), 'el saludo no sale de los datos');
 });
+
+/**
+ * EL MODO DÍA NO SE COMPRUEBA SOLO.
+ *
+ * La superficie comercial del inicio se dibujó sobre grafito y sus tintas se
+ * escribieron a mano: los títulos en `#FFFFFF`, las líneas de apoyo en
+ * `#8E8E93`, los fondos en blanco con alfa. Sobre el marfil del día eso pinta
+ * blanco sobre blanco: «Aliados comerciales», «Promociones para ti» y el nombre
+ * de cada comercio DESAPARECÍAN — y no fallaba nada. La aplicación arrancaba,
+ * la pantalla se montaba, la suite pasaba entera. Sólo se veía mirándola.
+ *
+ * Por eso la guarda es de fichero y no de comportamiento: lo que hay que
+ * impedir es que vuelva a colarse una tinta fija en estas tres piezas. Todo
+ * color de texto sale del tema, que es el único que sabe si hoy es de día.
+ */
+const PIEZAS_COMERCIALES = [
+  'ui/PromoCarousel.tsx',
+  'ui/CommercialPartners.tsx',
+  'ui/PassengerHomeCommercial.tsx'
+];
+
+test('el inicio comercial no fija ninguna tinta a mano', () => {
+  for (const pieza of PIEZAS_COMERCIALES) {
+    const codigo = despojarComentarios(leer(pieza));
+
+    // Un `color:` seguido de un literal es exactamente el fallo: una tinta que
+    // no sabe en qué esquema está.
+    const tintasFijas = codigo.match(/color:\s*'#[0-9a-fA-F]{3,8}'/g) ?? [];
+    assert.deepEqual(
+      tintasFijas,
+      [],
+      `${pieza} escribe la tinta a mano (${tintasFijas.join(', ')}); tiene que salir de useTema()`
+    );
+
+    // Los fondos de blanco con alfa son la otra mitad del mismo fallo: sobre
+    // grafito aclaran, sobre marfil no existen.
+    assert.ok(
+      !/rgba\(\s*255\s*,\s*255\s*,\s*255/.test(codigo),
+      `${pieza} usa blanco con alfa como superficie; en día no se ve`
+    );
+  }
+});
+
+test('el amarillo de marca no se usa como texto en el inicio comercial', () => {
+  // `acento` es una SUPERFICIE. Como texto sobre el marfil del día da 1,27:1
+  // —la medición está en theme/esquemas.ts— así que la tinta amarilla tiene su
+  // propio token, `acentoTexto`, que en noche vuelve a ser el mismo amarillo.
+  for (const pieza of PIEZAS_COMERCIALES) {
+    const codigo = despojarComentarios(leer(pieza));
+    assert.ok(
+      !/color:\s*tema\.color\.acento\b/.test(codigo),
+      `${pieza} escribe con tema.color.acento; para texto va tema.color.acentoTexto`
+    );
+  }
+});

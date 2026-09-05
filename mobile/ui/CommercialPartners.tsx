@@ -3,6 +3,19 @@
  *
  * Muestra comercios asociados a +58Express con sus beneficios exclusivos.
  * Estructurado para poblarse desde el Panel de Administración en el futuro.
+ *
+ * LA TINTA SALE DEL TEMA, NO DE LA HOJA DE ESTILOS
+ *
+ * Esta sección nació con los colores escritos a mano —`#FFFFFF` en los títulos,
+ * `#8E8E93` en las líneas de apoyo— porque se dibujó sobre grafito y allí
+ * funcionaba. En el modo día eso pinta blanco sobre marfil: los nombres de los
+ * aliados y el título de la sección DESAPARECÍAN, mientras las líneas grises
+ * seguían leyéndose. Era exactamente lo que se veía en pantalla.
+ *
+ * Y el amarillo tiene dos papeles que en claro no pueden ser el mismo (lo
+ * explica `theme/esquemas.ts`): como FONDO de la insignia sigue siendo el de
+ * marca, `acento`; como TEXTO tiene que ser `acentoTexto`, que en día baja a un
+ * ámbar legible y en noche vuelve a ser el amarillo de siempre.
  */
 
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -83,8 +96,8 @@ export function CommercialPartners({
       {/* Cabecera de la seccion */}
       <View style={[estilos.cabecera, { paddingHorizontal: tema.ritmo.margenPantalla }]}>
         <View style={estilos.titulos}>
-          <Text style={estilos.tituloSeccion}>Aliados comerciales</Text>
-          <Text style={estilos.subtituloSeccion}>Beneficios en Maracaibo</Text>
+          <Text style={[estilos.tituloSeccion, { color: tema.color.textoPrimario }]}>Aliados comerciales</Text>
+          <Text style={[estilos.subtituloSeccion, { color: tema.color.textoSecundario }]}>Beneficios en Maracaibo</Text>
         </View>
         {onVerTodos ? (
           <Pressable
@@ -94,7 +107,7 @@ export function CommercialPartners({
             hitSlop={8}
             style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           >
-            <Text style={[estilos.verTodos, { color: tema.color.acento }]}>Ver todos</Text>
+            <Text style={[estilos.verTodos, { color: tema.color.acentoTexto }]}>Ver todos</Text>
           </Pressable>
         ) : null}
       </View>
@@ -128,31 +141,31 @@ export function CommercialPartners({
             {/* Cabecera de card: Icono/Insignia + Rating */}
             <View style={estilos.filaInsignia}>
               <View style={[estilos.insignia, { backgroundColor: `${tema.color.acento}18`, borderColor: `${tema.color.acento}38` }]}>
-                <Text style={[estilos.insigniaTexto, { color: tema.color.acento }]}>
+                <Text style={[estilos.insigniaTexto, { color: tema.color.acentoTexto }]}>
                   {aliado.iconLetter ?? aliado.name.slice(0, 2).toUpperCase()}
                 </Text>
               </View>
               {aliado.rating ? (
-                <View style={estilos.ratingBadge}>
-                  <Text style={estilos.ratingEstrella}>★</Text>
-                  <Text style={estilos.ratingNumero}>{aliado.rating}</Text>
+                <View style={[estilos.ratingBadge, { backgroundColor: tema.color.superficieHundida }]}>
+                  <Text style={[estilos.ratingEstrella, { color: tema.color.acentoTexto }]}>★</Text>
+                  <Text style={[estilos.ratingNumero, { color: tema.color.textoSecundario }]}>{aliado.rating}</Text>
                 </View>
               ) : null}
             </View>
 
             {/* Nombre y categoria */}
             <View style={estilos.bloqueNombres}>
-              <Text style={estilos.nombre} numberOfLines={1}>
+              <Text style={[estilos.nombre, { color: tema.color.textoPrimario }]} numberOfLines={1}>
                 {aliado.name}
               </Text>
-              <Text style={estilos.categoria} numberOfLines={1}>
+              <Text style={[estilos.categoria, { color: tema.color.textoSecundario }]} numberOfLines={1}>
                 {aliado.category}
               </Text>
             </View>
 
             {/* Beneficio destacado */}
             <View style={[estilos.beneficioPill, { backgroundColor: `${tema.color.acento}14`, borderColor: `${tema.color.acento}30` }]}>
-              <Text style={[estilos.beneficioTexto, { color: tema.color.acento }]} numberOfLines={1}>
+              <Text style={[estilos.beneficioTexto, { color: tema.color.acentoTexto }]} numberOfLines={1}>
                 {aliado.benefit}
               </Text>
             </View>
@@ -176,15 +189,15 @@ const estilos = StyleSheet.create({
   titulos: {
     gap: 2
   },
+  // Sin `color` a propósito: lo pone el tema en el punto de uso. Dejarlo aquí
+  // volvería a fijar una tinta de noche que en día no se lee.
   tituloSeccion: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#FFFFFF',
     letterSpacing: -0.2
   },
   subtituloSeccion: {
-    fontSize: 12,
-    color: '#8E8E93'
+    fontSize: 12
   },
   verTodos: {
     fontSize: 13,
@@ -222,17 +235,14 @@ const estilos = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)'
+    borderRadius: 6
   },
   ratingEstrella: {
-    fontSize: 10,
-    color: '#FFD700'
+    fontSize: 10
   },
   ratingNumero: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#E0E0E6'
+    fontWeight: '700'
   },
   bloqueNombres: {
     gap: 2,
@@ -241,12 +251,10 @@ const estilos = StyleSheet.create({
   nombre: {
     fontSize: 13.5,
     fontWeight: '700',
-    color: '#FFFFFF',
     letterSpacing: -0.2
   },
   categoria: {
-    fontSize: 11,
-    color: '#8E8E93'
+    fontSize: 11
   },
   beneficioPill: {
     paddingHorizontal: 8,
