@@ -168,7 +168,7 @@ export default function PantallaDePedir() {
   // tres viajes buscando conductor a la vez.
   const pedir = useCallback(async () => {
     if (origen === null || destino === null) return;
-    if (!puedePedir(fase, estimacion, viajeActivo.fase === 'CON_VIAJE')) return;
+    if (!puedePedir(fase, estimacion, viajeActivo.fase === 'CON_VIAJE', falta)) return;
 
     setFase('PIDIENDO');
     setProblema(null);
@@ -390,7 +390,12 @@ export default function PantallaDePedir() {
                 onPress={() => { void pedir(); }}
                 // Aqui ya no puede haber viaje activo: si lo hubiera, esta
                 // pantalla habria redirigido antes de llegar a pintar nada.
-                deshabilitado={trabajando || !puedePedir(fase, estimacion, false)}
+                //
+                // `falta` SI se mira, y no es un detalle: el origen sale del
+                // GPS y puede desaparecer despues de haber visto el precio.
+                // Sin esto el boton seguia encendido, se pulsaba, y no pasaba
+                // nada de nada.
+                deshabilitado={trabajando || !puedePedir(fase, estimacion, false, falta)}
               />
             )}
           </HojaInferior>

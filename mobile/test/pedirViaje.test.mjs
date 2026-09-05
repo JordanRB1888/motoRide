@@ -366,6 +366,27 @@ test('sin precio del servidor no se puede confirmar', () => {
   assert.equal(puedePedir('ELIGIENDO', null, false), false);
 });
 
+test('si falta el origen o el destino, el botón NO se ofrece', () => {
+  // ESTO SE VIO EN EL EMULADOR, y costó encontrarlo.
+  //
+  // El origen sale del GPS y puede desaparecer DESPUÉS de haber visto el
+  // precio: basta con que el teléfono pierda la posición un momento. `pedir()`
+  // se planta si falta, pero el botón no lo miraba y se quedaba encendido. Se
+  // pulsaba y no pasaba nada: ni petición, ni error, ni aviso. Nada.
+  //
+  // Un botón encendido es una promesa.
+  const precio = leerEstimacion({
+    fareUSD: 3, fareVES: 0, exchangeRate: 0, distanceKm: 1, durationMin: 3, rideType: 'MOTO'
+  });
+  assert.equal(puedePedir('CON_PRECIO', precio, false, 'NADA'), true);
+  for (const falta of ['ORIGEN', 'DESTINO', 'ORIGEN_FUERA_DEL_AREA', 'DESTINO_FUERA_DEL_AREA']) {
+    assert.equal(
+      puedePedir('CON_PRECIO', precio, false, falta), false,
+      `con «${falta}» el botón seguía encendido`
+    );
+  }
+});
+
 test('con un viaje en marcha no se pide otro', () => {
   const precio = leerEstimacion({
     fareUSD: 3, fareVES: 0, exchangeRate: 0, distanceKm: 1, durationMin: 3, rideType: 'MOTO'

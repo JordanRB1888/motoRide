@@ -285,7 +285,22 @@ export function puedeEstimar(fase: FaseDelPedido, falta: QueFalta): boolean {
  * ¿Se puede crear el viaje?
  *
  * Hace falta un precio del servidor —confirmar sin ver el precio no es
- * confirmar— y que no haya ya una creación en marcha ni un viaje activo.
+ * confirmar—, que no haya ya una creación en marcha ni un viaje activo, y que
+ * no falte ninguno de los dos puntos.
+ *
+ * LO DE LOS PUNTOS NO SOBRA, Y COSTÓ ENCONTRARLO.
+ *
+ * `pedir()` se planta si el origen o el destino son `null`, pero esta función
+ * no los miraba, así que el botón se pintaba habilitado igualmente. Y el origen
+ * puede desaparecer DESPUÉS de haber visto el precio: sale del GPS, y basta con
+ * que el teléfono pierda la posición un momento.
+ *
+ * Lo que se veía era esto: el precio en pantalla, el botón encendido, se pulsa,
+ * y no pasa nada. Ni petición, ni error, ni aviso. Nada. Y la única pista de
+ * que la aplicación seguía viva era que no se había caído.
+ *
+ * Un botón encendido es una promesa. Si la acción no puede salir, el botón se
+ * apaga y quien mira sabe que falta algo.
  *
  * El servidor sigue siendo la defensa final: rechaza el segundo viaje por su
  * cuenta. Esto evita que se le pregunte dos veces.
@@ -293,10 +308,12 @@ export function puedeEstimar(fase: FaseDelPedido, falta: QueFalta): boolean {
 export function puedePedir(
   fase: FaseDelPedido,
   estimacion: Estimacion | null,
-  hayViajeActivo: boolean
+  hayViajeActivo: boolean,
+  falta: QueFalta = 'NADA'
 ): boolean {
   if (hayViajeActivo) return false;
   if (estimacion === null) return false;
+  if (falta !== 'NADA') return false;
   return fase === 'CON_PRECIO';
 }
 
