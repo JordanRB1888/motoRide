@@ -552,7 +552,7 @@ function indiceDelDestino(clave: string): number {
   if (clave === 'inicio') return 0;
   if (clave === 'historial') return 1;
   if (clave === 'pedir') return 2;
-  if (clave === 'saldo') return 3;
+  if (clave === 'seguro') return 3;
   if (clave === 'perfil') return 4;
   return 0;
 }
@@ -1167,17 +1167,26 @@ export const DESTINOS_DE_PASAJERA: readonly DestinoDeNavegacion[] = Object.freez
   // «Historial», no «Viajes»: lo que hay ahí son los que YA hiciste. «Viajes»
   // en una aplicación de viajes no distingue nada — podría ser cualquier cosa.
   { clave: 'historial', icono: 'reloj', etiqueta: 'Historial' },
-  // «Saldo» ocupa el sitio que tenía «Viaje seguro».
+  // «Seguro» recupera el sitio que ocupó un tiempo «Saldo».
   //
-  // Transporte Seguro tiene ahora su propia casilla en el inicio, grande y a la
-  // vista, así que gastar una de las cuatro pestañas en repetirlo era gastarla
-  // en algo que ya está a un toque. El saldo sí necesita pestaña: recargar y
-  // revisar movimientos no se hace de un vistazo.
+  // Se cambió en su día con el argumento de que el Transporte Seguro ya tenía
+  // casilla en el inicio y el saldo no tenía sitio. Manda el otro: el saldo es
+  // un DATO DE CUENTA —se mira de vez en cuando y se olvida— y por eso baja a
+  // una fila del perfil, junto a los datos y la seguridad. Una pestaña es para
+  // aquello a lo que se vuelve, y quien contrata un plan quincenal vuelve todos
+  // los días a ver qué moto le toca y a qué hora.
   //
-  // El botón de EMERGENCIA no se pierde con la pestaña. Se muda a la pantalla
-  // del viaje en curso, que es donde de verdad hace falta: ahí queda a un
-  // toque, y antes obligaba a salirse del viaje para buscarlo.
-  { clave: 'saldo', icono: 'dolar', etiqueta: 'Saldo' },
+  // Es además lo que diferencia a +58express: la promesa de que a esa persona
+  // la van a buscar sí o sí. Esa promesa no puede vivir escondida detrás del
+  // botón amarillo.
+  //
+  // Sigue estando también en la hoja de servicios del inicio, a propósito: son
+  // dos caminos al mismo sitio, no una duplicación. Uno es «hoy necesito esto»
+  // y el otro es «esto es mío y lo consulto».
+  //
+  // El botón de EMERGENCIA no vuelve con la pestaña: se quedó en la pantalla
+  // del viaje en curso, que es donde de verdad hace falta.
+  { clave: 'seguro', icono: 'escudo', etiqueta: 'Seguro' },
   { clave: 'perfil', icono: 'perfil', etiqueta: 'Perfil' }
 ]);
 

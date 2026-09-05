@@ -102,19 +102,77 @@ test('el Home de pasajero ya tiene la guarda que le faltaba', () => {
 // El botón amarillo, desde las cuatro pestañas
 // ---------------------------------------------------------------------------
 
-test('las cuatro pestañas de pasajero tienen ruta, y Saldo es una de ellas', () => {
-  assert.deepEqual(Object.keys(RUTAS_DE_PESTANA_PASAJERO).sort(), ['historial', 'inicio', 'perfil', 'saldo']);
-  assert.equal(RUTAS_DE_PESTANA_PASAJERO.saldo, '/saldo');
-  for (const clave of ['inicio', 'saldo', 'historial', 'perfil']) {
+test('las cuatro pestañas de pasajero tienen ruta, y Seguro es una de ellas', () => {
+  // El sitio era de Saldo y pasó al Transporte Seguro. Una pestaña es para
+  // aquello a lo que se VUELVE: el saldo se mira una vez y se olvida, el plan
+  // se consulta a diario. El saldo no se pierde —baja a una fila del perfil— y
+  // eso se comprueba más abajo, que es lo que impide que este cambio lo deje
+  // inalcanzable.
+  assert.deepEqual(Object.keys(RUTAS_DE_PESTANA_PASAJERO).sort(), ['historial', 'inicio', 'perfil', 'seguro']);
+  assert.equal(RUTAS_DE_PESTANA_PASAJERO.seguro, '/seguro');
+  for (const clave of ['inicio', 'seguro', 'historial', 'perfil']) {
     assert.equal(esPestanaDePasajero(clave), true, clave);
   }
   assert.equal(esPestanaDePasajero('pedir'), false, 'pedir no es una pestaña');
+  assert.equal(esPestanaDePasajero('saldo'), false, 'el saldo ya no es una pestaña');
+});
+
+test('la barra y el traductor de índices hablan de las MISMAS pestañas', () => {
+  // Esta guarda nace de un fallo real, y de los que no dan ninguna señal.
+  //
+  // `DESTINOS_DE_PASAJERA` dice qué pestañas hay y en qué orden;
+  // `indiceDelDestino` traduce la clave activa a una posición para que el hueco
+  // viaje hasta ella. Son dos listas separadas que tienen que decir lo mismo.
+  //
+  // Al cambiar Saldo por Seguro se cambió sólo la primera. La segunda seguía
+  // buscando 'saldo', no lo encontraba, y su `return 0` de reserva mandaba el
+  // hueco a Inicio: la pantalla era la correcta y la barra señalaba otra cosa.
+  // Compilaba, pasaba la suite entera y sólo se veía mirando el teléfono.
+  const fuente = leer('ui/Navegacion.tsx');
+
+  const bloque = fuente.slice(fuente.indexOf('DESTINOS_DE_PASAJERA: readonly'));
+  const claves = [...bloque.slice(0, bloque.indexOf('])')).matchAll(/clave: '([^']+)'/g)]
+    .map(coincidencia => coincidencia[1]);
+  assert.equal(claves.length, 4, 'la barra de la pasajera tiene cuatro pestañas');
+
+  const traductor = fuente.slice(
+    fuente.indexOf('function indiceDelDestino'),
+    fuente.indexOf('function indiceDelDestino') + 400
+  );
+  // El centro es del botón amarillo, así que las dos primeras van a 0 y 1 y las
+  // dos últimas a 3 y 4.
+  const posiciones = [0, 1, 3, 4];
+  claves.forEach((clave, i) => {
+    assert.match(
+      traductor,
+      new RegExp(`clave === '${clave}'\\) return ${posiciones[i]};`),
+      `«${clave}» está en la barra pero el traductor no la lleva a la posición ${posiciones[i]}`
+    );
+  });
+});
+
+test('el saldo sigue siendo alcanzable desde el perfil', () => {
+  // La otra mitad del cambio anterior, y la que de verdad importa: quitar una
+  // pestaña sin dar la puerta nueva deja una pantalla huérfana. Aquí se
+  // comprueba la cadena entera —la fila, el destino y la ruta— porque romper
+  // cualquiera de los tres eslabones no da ningún error.
+  const perfilVisual = despojarComentarios(leer('preview/pantallasC2Secciones.tsx'));
+  assert.match(perfilVisual, /onFila\('saldo'\)/, 'el perfil no ofrece la fila del saldo');
+  assert.match(perfilVisual, /barra === 'pasajera' \?/, 'la fila del saldo no es sólo de la pasajera');
+
+  const perfil = despojarComentarios(leer('app/perfil.tsx'));
+  assert.match(perfil, /clave === 'saldo'.*router\.push\('\/saldo'\)/, 'la fila del perfil no lleva al saldo');
+
+  // Y en profundidad, no de lado: con `replace` se saldría del shell en vez de
+  // poder volver al perfil.
+  const shell = despojarComentarios(leer('navegacion/shellDePasajero.tsx'));
+  assert.match(shell, /case 'saldo':\s*router\.push\('\/saldo'\)/, 'el shell manda el saldo con replace');
 });
 
 test('la tabla del shell entiende TODAS las claves, no un puñado', () => {
   const shell = despojarComentarios(leer('navegacion/shellDePasajero.tsx'));
   // Las cuatro pestañas...
-  for (const clave of ['inicio', 'saldo', 'historial', 'perfil']) {
+  for (const clave of ['inicio', 'seguro', 'historial', 'perfil']) {
     assert.match(shell, new RegExp(`case '${clave}':`), clave);
   }
   // ...y lo demás que la interfaz pide.
@@ -183,7 +241,13 @@ test('Saldo existe, responde y es honesto: ni cifras inventadas ni pantalla muer
   assert.ok(!/liquidacion|liquidación|retiro|comision|comisión/i.test(saldo), 'no es la cartera del conductor');
   // Y la barra sigue estando: desde aquí se llega a todo.
   assert.match(saldo, /<BarraDeNavegacion/);
-  assert.match(saldo, /activo="saldo"/);
+  // Encendida en PERFIL, no en «saldo». El saldo dejó de ser pestaña cuando el
+  // Transporte Seguro recuperó ese sitio, así que se llega desde el perfil y es
+  // esa la que tiene que quedar marcada. Con la clave vieja no se encendería
+  // ninguna —ya no está en la barra— y el hueco viajero se quedaría donde
+  // estuviera antes, como si la barra se hubiera colgado.
+  assert.match(saldo, /activo="perfil"/);
+  assert.doesNotMatch(saldo, /activo="saldo"/, 'el saldo ya no es una pestaña');
 });
 
 // ---------------------------------------------------------------------------
@@ -193,13 +257,24 @@ test('Saldo existe, responde y es honesto: ni cifras inventadas ni pantalla muer
 test('las pestañas NO se deslizan, y las pantallas en profundidad sí', () => {
   const layout = leer('app/_layout.tsx');
   // Las cuatro pestañas de pasajero y el inicio de conductor, instantáneas.
-  for (const ruta of ['pasajero', 'saldo', 'historial', 'perfil', 'conductor']) {
+  for (const ruta of ['pasajero', 'seguro', 'historial', 'perfil', 'conductor']) {
     assert.match(
       layout,
       new RegExp(`<Stack\\.Screen name="${ruta}" options=\\{\\{ animation: 'none' \\}\\} />`),
       `${ruta} debe cambiar sin deslizamiento`
     );
   }
+  // Y el saldo de la pasajera YA NO está en esa lista: dejó de ser pestaña y se
+  // entra desde el perfil, o sea hacia dentro. Que deslice no es un descuido,
+  // es lo que significa el movimiento aquí. `conductor-saldo` es otra cosa: para
+  // el conductor su cartera sí es pestaña, y por eso sigue sin deslizarse.
+  assert.doesNotMatch(
+    layout,
+    /<Stack\.Screen name="saldo" options=\{\{ animation: 'none' \}\} \/>/,
+    'el saldo de la pasajera ya no es una pestaña'
+  );
+  assert.match(layout, /<Stack\.Screen name="conductor-saldo" options=\{\{ animation: 'none' \}\} \/>/);
+
   // La transición general se conserva: abrir un viaje o los ajustes sí es ir
   // hacia dentro, y ahí el deslizamiento significa algo.
   assert.match(layout, /animation: 'slide_from_right'/);

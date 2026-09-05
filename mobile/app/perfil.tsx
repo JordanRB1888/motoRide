@@ -156,16 +156,24 @@ export default function PantallaDePerfil() {
 /**
  * A dónde lleva cada fila del perfil, HOY.
  *
- * Sólo las tres que existen como pantalla real. Las demás no hacen nada, y es
- * deliberado: mandar «Tu saldo» o «Direcciones guardadas» a una maqueta desde
- * la aplicación de verdad enseñaría datos inventados a una persona real. Dos de
- * ellas ni siquiera tienen backend.
+ * Sólo las que existen como pantalla real. Las demás no hacen nada, y es
+ * deliberado: mandar «Direcciones guardadas» a una maqueta desde la aplicación
+ * de verdad enseñaría datos inventados a una persona real, y además ni siquiera
+ * tiene backend.
+ *
+ * «Tu saldo» sí está, y es nueva aquí: bajó de la barra cuando el Transporte
+ * Seguro recuperó esa pestaña. Su pantalla ya existía y es honesta —dice que
+ * todavía no se puede recargar—, así que la fila lleva a algo de verdad.
  */
 function abrir(clave: string) {
   if (clave === 'datos') router.push('/perfil-datos');
   if (clave === 'seguridad') router.push('/seguridad');
   if (clave === 'avisos') router.push('/avisos');
   if (clave === 'configuracion') router.push('/configuracion');
+  // El saldo bajó aquí desde la barra, donde ahora está el Transporte Seguro.
+  // `push` y no `replace`: es una entrada en profundidad, y «atrás» tiene que
+  // devolver al perfil.
+  if (clave === 'saldo') router.push('/saldo');
   // «Cambiar de modo» es la puerta de quien ya tiene sesión abierta: la
   // bienvenida sólo se ve al entrar, y sin esto una persona con una solicitud
   // a medias no tendría por dónde volver a ella. Lleva a la postulación, que

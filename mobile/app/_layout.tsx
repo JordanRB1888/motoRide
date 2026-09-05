@@ -207,7 +207,7 @@ export default function DisposicionRaiz() {
             {/*
               LAS PESTAÑAS NO SE DESLIZAN
 
-              Inicio, Saldo, Historial y Perfil están a la misma altura de la
+              Inicio, Seguro, Historial y Perfil están a la misma altura de la
               aplicación: moverse entre ellas no es ir hacia dentro. Con la
               transición del Stack se veía un «pasar página» de derecha a
               izquierda que el dueño rechazó, y con razón: promete una
@@ -220,11 +220,16 @@ export default function DisposicionRaiz() {
               transición de arriba.
             */}
             <Stack.Screen name="pasajero" options={{ animation: 'none' }} />
-            <Stack.Screen name="saldo" options={{ animation: 'none' }} />
+            <Stack.Screen name="seguro" options={{ animation: 'none' }} />
             <Stack.Screen name="historial" options={{ animation: 'none' }} />
             <Stack.Screen name="perfil" options={{ animation: 'none' }} />
             <Stack.Screen name="conductor" options={{ animation: 'none' }} />
             <Stack.Screen name="conductor-saldo" options={{ animation: 'none' }} />
+            {/* `saldo` NO está en esta lista, y es deliberado. Dejó de ser
+                pestaña de la pasajera: ahora se entra desde una fila del perfil,
+                o sea hacia dentro, así que le corresponde la transición normal
+                del Stack. `conductor-saldo` sí sigue arriba porque para el
+                conductor su cartera SÍ es una pestaña. */}
           </Stack>
           </ProveedorDeUbicacionEnVivo>
           </ProveedorDeUbicacion>

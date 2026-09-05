@@ -446,15 +446,19 @@ test('la barra de la pasajera usa los nombres acordados', () => {
   // «Historial» y no «Viajes»: lo que hay ahí son los que YA hiciste, y
   // «Viajes» en una aplicación de viajes no distingue nada.
   //
-  // «Saldo» sustituye a «Viaje seguro»: Transporte Seguro tiene su casilla en
-  // el inicio, y repetirlo gastaba una de las cuatro pestañas en algo que ya
-  // estaba a un toque.
+  // «Seguro» recupera el sitio que le quitó «Saldo» en su día. El argumento de
+  // entonces —Transporte Seguro ya tiene casilla en el inicio, así que repetirlo
+  // gasta una pestaña— lo revocó el dueño, y con razón: la casilla del inicio es
+  // «hoy necesito esto» y la pestaña es «esto es mío y lo consulto». El plan se
+  // mira todos los días; el saldo, una vez cada tanto, y por eso bajó a una fila
+  // del perfil. Que siga siendo alcanzable lo guarda `navegacionDeShell`.
   const fuente = leer('ui/Navegacion.tsx');
   const barra = fuente.slice(fuente.indexOf('DESTINOS_DE_PASAJERA'));
   const soloPasajera = barra.slice(0, barra.indexOf('DESTINOS_DE_CONDUCTOR'));
 
   assert.match(soloPasajera, /etiqueta: 'Historial'/);
-  assert.match(soloPasajera, /etiqueta: 'Saldo'/);
+  assert.match(soloPasajera, /etiqueta: 'Seguro'/);
+  assert.doesNotMatch(soloPasajera, /etiqueta: 'Saldo'/, 'el saldo dejó la barra de la pasajera');
   assert.doesNotMatch(soloPasajera, /etiqueta: 'Seguridad'/);
 });
 

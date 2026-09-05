@@ -5,7 +5,7 @@
  * QUÉ PROBLEMA RESUELVE
  *
  * Antes cada pantalla traía su propia función `irA`, y ninguna las traía todas:
- * el Home entendía «pedir» y «servicio» pero no «saldo»; Historial y Perfil
+ * el Home entendía «pedir» y «servicio» pero no «seguro»; Historial y Perfil
  * entendían «inicio», «historial» y «perfil» pero no «pedir», así que el botón
  * amarillo no hacía nada desde ellas; y Pedir sólo entendía «inicio». Cuatro
  * versiones incompletas de la misma tabla.
@@ -54,14 +54,21 @@ export function crearNavegacionDePasajero({ enPedir = false } = {}) {
       case 'inicio':
         router.replace('/pasajero');
         return;
-      case 'saldo':
-        router.replace('/saldo');
+      case 'seguro':
+        router.replace('/seguro');
         return;
       case 'historial':
         router.replace('/historial');
         return;
       case 'perfil':
         router.replace('/perfil');
+        return;
+
+      // El saldo YA NO ES UNA PESTAÑA: vive en una fila del perfil. Por eso va
+      // con `push` y no con `replace` — se entra en profundidad desde el perfil
+      // y «atrás» tiene que devolver ahí. Con `replace` se saldría del shell.
+      case 'saldo':
+        router.push('/saldo');
         return;
 
       // El botón amarillo. Desde cualquier pestaña abre la hoja de servicios;

@@ -1,13 +1,22 @@
 /**
  * El saldo de la pasajera. Pantalla REAL, y honesta sobre lo que todavía no hay.
  *
- * POR QUÉ ESTA PANTALLA NO EXISTÍA
+ * DÓNDE VIVE AHORA
  *
- * La pestaña «Saldo» estaba en la barra desde hacía tiempo, pero no había ruta
- * detrás ni ninguna función de navegación entendía su clave: pulsarla no hacía
- * absolutamente nada. Un botón que no responde se lee como una avería de la
- * aplicación, y quien lo pulsa tres veces acaba pensando que el teléfono va
- * lento.
+ * En una FILA DEL PERFIL, no en la barra. Tuvo pestaña un tiempo y la cedió al
+ * Transporte Seguro, que es a lo que la gente vuelve todos los días. El saldo
+ * es un dato de cuenta: se consulta de vez en cuando, igual que los datos
+ * personales o la seguridad, y ese es exactamente el vecindario del perfil.
+ *
+ * La pantalla no cambió al mudarse. Sólo la barra sabe que ahora se llega desde
+ * el perfil, y por eso deja encendida esa pestaña.
+ *
+ * POR QUÉ ESTA PANTALLA EXISTE
+ *
+ * Antes «Saldo» estaba en la barra pero no había ruta detrás ni ninguna función
+ * de navegación entendía su clave: pulsarla no hacía absolutamente nada. Un
+ * botón que no responde se lee como una avería de la aplicación, y quien lo
+ * pulsa tres veces acaba pensando que el teléfono va lento.
  *
  * POR QUÉ NO SE REUTILIZA LA DEL CONDUCTOR
  *
@@ -19,14 +28,16 @@
  * LO QUE SÍ SE HACE
  *
  * Decir la verdad: la recarga todavía no está disponible, y cuando lo esté se
- * verá aquí. La pestaña responde, el botón amarillo sigue funcionando y desde
- * aquí se llega a cualquier otra parte de la aplicación.
+ * verá aquí. La fila responde, el botón amarillo sigue funcionando y desde aquí
+ * se llega a cualquier otra parte de la aplicación.
  *
  * CUANDO EXISTA LA CARTERA
  *
  * Este es el sitio: se sustituye el bloque de «todavía no» por el saldo y los
- * movimientos que devuelva el servidor. La pestaña, la barra y el botón ya
- * están donde tienen que estar.
+ * movimientos que devuelva el servidor. Y no es un asunto suelto: el
+ * Transporte Seguro se cobra de ESTA cartera, carrera realizada a carrera
+ * realizada, así que sin recarga no se puede contratar un plan. Las dos
+ * pantallas son la misma decisión vista por dos lados.
  */
 
 import { View } from 'react-native';
@@ -76,11 +87,15 @@ export default function PantallaDeSaldo() {
           </Txt>
         </View>
 
-        {/* La misma barra y el mismo botón amarillo que en el resto del shell:
-            desde aquí se sigue llegando a todo. */}
+        {/* `activo="perfil"`, y no «saldo»: el saldo YA NO ES UNA PESTAÑA. Se
+            entra desde una fila del perfil, así que la que tiene que quedar
+            encendida es aquella de la que vienes. Con la clave vieja no se
+            encendería ninguna —no está en la barra— y el hueco viajero se
+            quedaría en el sitio de la anterior, como si la barra estuviera
+            rota. */}
         <BarraDeNavegacion
           destinos={DESTINOS_DE_PASAJERA}
-          activo="saldo"
+          activo="perfil"
           control={<ControlDePedido abierto={false} />}
         />
       </View>

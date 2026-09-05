@@ -68,7 +68,12 @@ export function destinoSiNoLeCorresponde(
  */
 export const RUTAS_DE_PESTANA_PASAJERO = Object.freeze({
   inicio: '/pasajero',
-  saldo: '/saldo',
+  // El Transporte Seguro ocupa el sitio que tenía «Saldo». El saldo no
+  // desapareció: bajó a una fila del perfil, que es donde vive un dato de
+  // cuenta que se mira de vez en cuando. Una pestaña es para aquello a lo que
+  // se VUELVE, y a lo que una persona con una rutina de trabajo vuelve es a su
+  // plan y a la moto que le toca mañana.
+  seguro: '/seguro',
   historial: '/historial',
   perfil: '/perfil'
 } as const);

@@ -528,6 +528,25 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
               detalle="Cómo entras y cómo cerrar tu cuenta"
               onPress={onFila === undefined ? undefined : () => onFila('seguridad')}
             />
+            {/* El saldo, SÓLO en el perfil de la pasajera.
+                Cedió su pestaña al Transporte Seguro y bajó aquí, que es el
+                vecindario que le corresponde: un dato de cuenta, al lado de los
+                datos personales y la seguridad.
+                El conductor no la ve porque él SÍ conserva su pestaña de Saldo,
+                y su cartera es otra cosa —liquidaciones, comisiones, retiros—.
+                Dos filas al mismo sitio desde dos oficios distintos sería
+                mandarle a la cartera de otro. */}
+            {barra === 'pasajera' ? (
+              <>
+                <Separador />
+                <Fila
+                  icono="billetera"
+                  titulo="Tu saldo"
+                  detalle="Lo que tienes y cómo pagas tus viajes"
+                  onPress={onFila === undefined ? undefined : () => onFila('saldo')}
+                />
+              </>
+            ) : null}
           </Grupo>
 
           <Grupo titulo="Preferencias">
