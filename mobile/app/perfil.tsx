@@ -105,15 +105,24 @@ export default function PantallaDePerfil() {
     );
   }
 
-  if (perfil === null) {
-    return <Centro><ActivityIndicator color={tema.color.acento} size="large" /></Centro>;
-  }
-
+  // SE PINTA CON LO QUE YA SE SABE, Y LA BARRA NO SE APAGA.
+  //
+  // Antes había aquí un indicador a pantalla completa mientras llegaba
+  // `/api/auth/me`: al tocar Perfil la barra se DESMONTABA, se esperaba a la
+  // red y volvía a montarse. Eso es lo que se sentía como un tirón sólo en esta
+  // pestaña —Saldo no pide nada e Historial pinta su pantalla mientras pide— y
+  // además cortaba en seco la animación del disco.
+  //
+  // La sesión ya trae nombre, apellido y si está verificada. Con eso el perfil
+  // sale entero menos dos datos, y la petición sólo añade «Miembro desde» y la
+  // foto cuando llega. No se inventa nada: lo que todavía no se sabe se queda
+  // vacío, igual que antes.
+  const identidad = sesion.usuario;
   const datos: DatosDelPerfil = {
-    iniciales: inicialesDe(perfil),
-    nombre: nombreDe(perfil),
-    desde: desdeCuando(perfil),
-    verificada: perfil.isVerified,
+    iniciales: inicialesDe(perfil ?? identidad),
+    nombre: nombreDe(perfil ?? identidad),
+    desde: perfil === null ? null : desdeCuando(perfil),
+    verificada: perfil === null ? identidad.isVerified : perfil.isVerified,
     // El backend NO devuelve cuántos viajes lleva alguien en `/api/auth/me`.
     // Se deja vacío y el sello no se pinta, en vez de inventar un número.
     viajes: null,

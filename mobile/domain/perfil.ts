@@ -119,8 +119,21 @@ export function leerPerfil(cuerpo: unknown): PerfilDeUsuario | null {
   };
 }
 
+/**
+ * Con quién se puede formar un nombre.
+ *
+ * No es el perfil entero a propósito. La identidad que ya trae la sesión tiene
+ * estos dos campos, así que el perfil puede escribir el nombre y las iniciales
+ * SIN esperar a `/api/auth/me`. Exigir el tipo grande obligaba a esperar a la
+ * red para pintar algo que ya se sabía.
+ */
+export interface ConNombre {
+  readonly firstName: string;
+  readonly lastName: string;
+}
+
 /** El nombre para saludar. Vacío si el backend no dio ninguno. */
-export function nombreDe(perfil: PerfilDeUsuario): string {
+export function nombreDe(perfil: ConNombre): string {
   return [perfil.firstName, perfil.lastName].filter(parte => parte !== '').join(' ');
 }
 
@@ -130,7 +143,7 @@ export function nombreDe(perfil: PerfilDeUsuario): string {
  * Sin nombre no se inventa una letra: se devuelve cadena vacía y el disco queda
  * liso, que es honesto. Una «U» de «Usuario» parecería el apellido de alguien.
  */
-export function inicialesDe(perfil: PerfilDeUsuario): string {
+export function inicialesDe(perfil: ConNombre): string {
   return [perfil.firstName, perfil.lastName]
     .map(parte => parte.trim().charAt(0).toUpperCase())
     .filter(letra => letra !== '')
