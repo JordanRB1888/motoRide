@@ -675,6 +675,65 @@ test('el emulador de Android traduce localhost al anfitrión, y sólo ahí', asy
   );
 });
 
+test('un teléfono de verdad NO traduce localhost, aunque sea Android en desarrollo', async () => {
+  // Viene de Antigravity, y arregla un caso que la versión anterior no
+  // distinguía: `esAndroid && enDesarrollo` era cierto también en un teléfono
+  // físico conectado por USB, así que la aplicación reescribía la dirección a
+  // 10.0.2.2 —que dentro de un teléfono real no es nada— y decía «no hay
+  // conexión» con el backend perfectamente vivo.
+  //
+  // Quien decide es `esEmulador`, y `services/api.ts` lo saca de las constantes
+  // de la plataforma (modelo, marca, huella). Aquí se comprueba la decisión
+  // pura, que es lo único que se puede comprobar sin emulador.
+  const { urlParaEstaPlataforma, ANFITRION_DEL_EMULADOR_ANDROID } =
+    await import('../domain/backendDelEntorno');
+
+  assert.equal(
+    urlParaEstaPlataforma('http://127.0.0.1:4000', {
+      esAndroid: true,
+      enDesarrollo: true,
+      esEmulador: false
+    }),
+    'http://127.0.0.1:4000',
+    'en un teléfono real la dirección se respeta'
+  );
+
+  // Y el emulador sigue traduciendo, que es lo que no puede romperse: es el
+  // runtime con el que se valida todo.
+  assert.equal(
+    urlParaEstaPlataforma('http://127.0.0.1:4000', {
+      esAndroid: true,
+      enDesarrollo: true,
+      esEmulador: true
+    }),
+    `http://${ANFITRION_DEL_EMULADOR_ANDROID}:4000`
+  );
+
+  // Omitirlo se comporta como el emulador. Es deliberado: quien no sabe dónde
+  // está, está en el laboratorio, que es de donde vienen casi todas las
+  // llamadas a esta función.
+  assert.equal(
+    urlParaEstaPlataforma('http://127.0.0.1:4000', { esAndroid: true, enDesarrollo: true }),
+    `http://${ANFITRION_DEL_EMULADOR_ANDROID}:4000`
+  );
+});
+
+test('la detección de emulador mira modelo, marca y huella, no una lista de nombres', async () => {
+  // Una lista de modelos concretos envejece mal. Lo que no cambia es que las
+  // imágenes del emulador de Android se identifican como `sdk`, `emulator`,
+  // `generic` o `sdk_gphone`, y eso es lo que se busca.
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const raiz = path.dirname(fileURLToPath(import.meta.url));
+  const api = fs.readFileSync(path.join(raiz, '..', 'services', 'api.ts'), 'utf8');
+
+  for (const marca of ['sdk', 'emulator', 'generic', 'sdk_gphone']) {
+    assert.ok(api.includes(marca), `la detección ya no reconoce «${marca}»`);
+  }
+  assert.match(api, /esEmulador/, 'api.ts no le dice a la función dónde está');
+});
+
 test('no hay ninguna IP personal escrita en el código', () => {
   // La máquina de cada quien vive en su `.env`, que git ignora. Una IP fija en
   // el código funciona en un ordenador y en ninguno más.
