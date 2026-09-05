@@ -1,4 +1,4 @@
-const CACHE_NAME = '58express-pwa-v11-modern-ui';
+const CACHE_NAME = '58express-pwa-v12-iconos-marca';
 // Prefijo común de todas las cachés de la aplicación: permite retirar las
 // versiones anteriores sin tocar cachés de terceros.
 const CACHE_PREFIX = '58express-pwa-';
