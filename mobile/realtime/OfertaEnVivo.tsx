@@ -21,10 +21,12 @@ import { aceptarCarrera, rechazarCarrera } from './socket';
 import {
   debeSustituirLaOferta,
   estaVencida,
+  estadoTrasRechazoDeAceptacion,
   leerOferta,
   segundosRestantes,
   sePuedeAceptar,
   sePuedeRechazar,
+  seQuedoSinRespuesta,
   type EstadoDeOferta,
   type OfertaDeViaje
 } from '../domain/ofertaDeViaje';
@@ -80,6 +82,21 @@ export function useOfertaEnVivo(): OfertaEnVivo {
     if (estaVencida(oferta, ahora)) setEstado('EXPIRADA');
   }, [estado, oferta, ahora]);
 
+  // LA RED DE SEGURIDAD DE LA ACEPTACIÓN EN VUELO
+  //
+  // El efecto de arriba sólo mira el estado `OFERTA`, así que una aceptación
+  // pulsada en el último segundo no vencía nunca: se quedaba en «aceptando…»
+  // para siempre, sin poder recibir la siguiente carrera y sin más salida que
+  // cerrar la aplicación.
+  //
+  // Lo normal es que el servidor conteste, y ahora se le escucha —ahí abajo—.
+  // Esto es para cuando esa respuesta no llega: la red se cayó justo entre el
+  // toque y el acuse. Pasado el vencimiento más un margen se cierra como
+  // perdida. Nunca como aceptada: eso sólo puede decirlo el servidor.
+  useEffect(() => {
+    if (seQuedoSinRespuesta(estado, oferta, ahora)) setEstado('EXPIRADA');
+  }, [estado, oferta, ahora]);
+
   // Sin conexión no puede llegar ninguna oferta, y la que hubiera ya no vale.
   useEffect(() => {
     if (estadoDeConexion === 'conectado') return;
@@ -132,6 +149,26 @@ export function useOfertaEnVivo(): OfertaEnVivo {
   // El servidor dijo que no: otro llegó antes, o la sesión de despacho ya pasó.
   useEvento('authorization:error', useCallback(() => {
     if (estadoActual.current === 'ACEPTANDO') setEstado('ERROR');
+  }, []));
+
+  // EL SERVIDOR RECHAZÓ LA ACEPTACIÓN, Y LO DICE CON SU MOTIVO.
+  //
+  // Este evento existía desde siempre y este cliente no lo escuchaba. Por eso
+  // aceptar en el último segundo dejaba la pantalla girando: el viaje ya estaba
+  // cancelado, el servidor contestaba `NO_ACTIVE_OFFER`, y aquí no lo oía nadie.
+  //
+  // El motivo decide cómo se cuenta: haber llegado tarde no es lo mismo que no
+  // poder tomar carreras.
+  useEvento('rideAcceptanceFailed', useCallback((cuerpo: unknown) => {
+    if (estadoActual.current !== 'ACEPTANDO') return;
+    const dato = cuerpo as { tripId?: unknown; reason?: unknown } | null;
+    setOferta(previa => {
+      // Si el rechazo es de OTRA carrera, no se toca la que está en pantalla.
+      if (previa === null) return previa;
+      if (typeof dato?.tripId === 'string' && dato.tripId !== previa.viajeId) return previa;
+      setEstado(estadoTrasRechazoDeAceptacion(dato?.reason));
+      return previa;
+    });
   }, []));
 
   // ---------------------------------------------------------------------

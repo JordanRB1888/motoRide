@@ -202,3 +202,67 @@ export function sePuedeRechazar(
 export function debeSustituirLaOferta(estado: EstadoDeOferta): boolean {
   return estado !== 'ACEPTANDO';
 }
+
+// ---------------------------------------------------------------------------
+// Cuando se acepta justo en el segundo malo
+// ---------------------------------------------------------------------------
+
+/**
+ * Los motivos con los que el servidor dice «esta carrera ya no es tuya».
+ *
+ * Los cuatro dicen lo mismo con distintas palabras, y para quien conduce
+ * significan lo de siempre: se le pasó el tiempo.
+ */
+const YA_NO_ERA_SUYA = [
+  'NO_ACTIVE_OFFER',    // la sesión de despacho ya pasó al siguiente
+  'NOT_CURRENT_OFFER',  // se la están ofreciendo a otro
+  'TRIP_NOT_SEARCHING', // el viaje ya tiene conductor, o se canceló
+  'ALREADY_ACCEPTED'    // otro llegó antes
+];
+
+/**
+ * A qué estado lleva una aceptación que el servidor no aceptó.
+ *
+ * Fuente: `rideAcceptanceFailed`, que llega con su motivo. Llegar tarde se
+ * cuenta como vencida —que es lo que pasó— y lo demás como error: no es lo
+ * mismo perder una carrera por unos segundos que no poder tomar ninguna.
+ */
+export function estadoTrasRechazoDeAceptacion(motivo: unknown): 'EXPIRADA' | 'ERROR' {
+  return typeof motivo === 'string' && YA_NO_ERA_SUYA.includes(motivo) ? 'EXPIRADA' : 'ERROR';
+}
+
+/**
+ * Lo que se espera a que el servidor conteste una aceptación, pasado el
+ * vencimiento, antes de darla por perdida.
+ *
+ * No es un tiempo de espera de red: la respuesta viaja por el mismo socket y
+ * tarda milisegundos. Es el margen para no cortar una aceptación que iba a
+ * llegar bien, cuando el reloj del teléfono y el del servidor no coinciden al
+ * milímetro.
+ */
+export const MARGEN_DE_RESPUESTA_MS = 3_000;
+
+/**
+ * Si una aceptación en vuelo se quedó sin respuesta.
+ *
+ * ESTO ES LA RED DE SEGURIDAD, Y HACE FALTA AUNQUE EL SERVIDOR CONTESTE.
+ *
+ * Aceptar en el último segundo dejaba la pantalla en «aceptando…» para siempre:
+ * el viaje ya estaba cancelado, el servidor mandaba su negativa y este cliente
+ * no la escuchaba. Ahora la escucha —y ése es el arreglo de verdad—, pero si esa
+ * respuesta no llegara nunca porque la red se cayó justo ahí, quien conduce se
+ * quedaría mirando un botón que gira, sin poder recibir la siguiente carrera y
+ * sin ninguna salida que no sea cerrar la aplicación.
+ *
+ * Así que pasado el vencimiento más un margen, se cierra. El servidor sigue
+ * siendo la autoridad: no se da por aceptada, se da por perdida, que es lo único
+ * que se puede afirmar cuando nadie contesta.
+ */
+export function seQuedoSinRespuesta(
+  estado: EstadoDeOferta,
+  oferta: OfertaDeViaje | null,
+  ahora: number
+): boolean {
+  if (estado !== 'ACEPTANDO' || oferta === null) return false;
+  return ahora >= oferta.venceEn + MARGEN_DE_RESPUESTA_MS;
+}

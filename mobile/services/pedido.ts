@@ -106,8 +106,22 @@ export async function crearViaje({
 
   if (!respuesta.ok) return respuesta;
 
-  const cuerpo = respuesta.datos as { trip?: unknown } | null;
-  const viaje = leerDetalle(cuerpo?.trip ?? cuerpo);
+  // SE LE PASA EL SOBRE ENTERO, NO EL VIAJE DE DENTRO.
+  //
+  // `leerDetalle` espera `{ trip, driver, passenger }` y busca `.trip` ella
+  // misma —así lee también quién conduce, que viaja fuera del viaje—. Aquí se
+  // le daba `cuerpo.trip`, o sea el viaje ya desenvuelto, y entonces buscaba
+  // `trip.trip`: no lo encontraba nunca y devolvía `null`.
+  //
+  // El resultado era que TODA creación contestaba «El viaje se creó pero no se
+  // pudo leer», aunque hubiera salido perfectamente. Se notaba poco porque el
+  // viaje sí se creaba y `useViajeActivo` lo recogía por su cuenta un instante
+  // después: el aviso rojo quedaba detrás de la pantalla nueva. Donde sí se
+  // quedaba a la vista era al reintentar con la misma clave sobre un viaje ya
+  // cerrado, porque ahí no hay ninguna pantalla nueva a la que ir.
+  //
+  // Los otros dos sitios que llaman a `leerDetalle` ya le pasaban el sobre.
+  const viaje = leerDetalle(respuesta.datos);
   if (viaje === null) {
     return {
       ok: false,

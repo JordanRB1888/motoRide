@@ -189,7 +189,23 @@ export const EVENTOS_DEL_SERVIDOR = [
    * la aplicación. Salió de los pendientes en TRIP-LIFECYCLE-ACTIONS-1, que es
    * cuando las acciones del conductor tuvieron pantalla.
    */
-  'tripStatusRejected'
+  'tripStatusRejected',
+
+  /**
+   * El servidor NO aceptó la aceptación de una carrera.
+   *
+   * Fuente: `socket.emit('rideAcceptanceFailed', { tripId, reason })` en el
+   * handler de `rideAccepted`. `reason` dice por qué: `NO_ACTIVE_OFFER` cuando
+   * la sesión de despacho ya pasó al siguiente candidato, `NOT_CURRENT_OFFER`
+   * si se le está ofreciendo a otro, `ALREADY_ACCEPTED` si alguien llegó antes,
+   * `TRIP_NOT_SEARCHING` si el viaje ya no busca conductor.
+   *
+   * ESTE ES EL QUE CIERRA EL «ACEPTANDO…» ETERNO. El servidor lo mandaba desde
+   * siempre y este cliente no lo escuchaba, así que aceptar en el último segundo
+   * —cuando el viaje ya se había cancelado— dejaba la pantalla girando sin más
+   * salida que cerrar la aplicación.
+   */
+  'rideAcceptanceFailed'
 ] as const;
 export type EventoDelServidor = (typeof EVENTOS_DEL_SERVIDOR)[number];
 
@@ -211,7 +227,10 @@ export const EVENTOS_PENDIENTES = [
   // recibe al aceptar es un `tripStatusUpdated`.
   // `tripStatusRejected` SALIÓ de aquí en TRIP-LIFECYCLE-ACTIONS-1: el botón
   // del conductor necesita saber que el servidor dijo que no.
-  'rideRequestFailed', 'rideAcceptanceFailed',
+  // `rideAcceptanceFailed` SALIÓ de aquí en el cierre de los casos de borde:
+  // sin escucharlo, aceptar en el último segundo dejaba la pantalla del
+  // conductor girando para siempre.
+  'rideRequestFailed',
   // Conductor — los tres de presencia salieron en DRIVER-AVAILABILITY-1.
   // No queda ninguno pendiente de esta familia.
   // Chat en vivo — CHAT-INTEGRATION

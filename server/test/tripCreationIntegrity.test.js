@@ -91,6 +91,51 @@ test('reintentar la misma solicitud devuelve el viaje propio ya creado', async (
   assert.equal(repetida.trip.fareUSD, creado.fareUSD, 'el reintento no cambia la tarifa');
 });
 
+test('reintentar sobre un viaje YA CANCELADO devuelve ese mismo viaje', async (t) => {
+  // El caso que se vio en el emulador. La pasajera pide, el viaje se cancela
+  // --nadie lo tomó-- y vuelve a tocar el botón con la misma clave. No puede
+  // salir un segundo viaje, y la respuesta tiene que ser legible: la pantalla
+  // se quedaba con «el viaje se creó pero no se pudo leer».
+  const { url } = await startServer(t);
+  const passenger = await registerPassenger(url, { email: 'idemcancel@58express.com', phone: '+584120002099' });
+
+  const primera = await crear(url, passenger.token, { ...BASE, id: 'trip_idem_cancel' });
+  assert.equal(primera.status, 200);
+  const creado = (await primera.json()).trip;
+
+  const admin = await asJson(`${url}/api/auth/login`, null, {
+    method: 'POST', body: JSON.stringify({ identifier: 'admin@58express.com', password: 'admin', role: 'admin' })
+  });
+  const { token: adminToken } = await admin.json();
+  const cancelacion = await asJson(`${url}/api/admin/trips/trip_idem_cancel`, adminToken, {
+    method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' })
+  });
+  assert.equal(cancelacion.status, 200);
+
+  const reintento = await crear(url, passenger.token, { ...BASE, id: 'trip_idem_cancel' });
+  assert.equal(reintento.status, 200);
+  const cuerpo = await reintento.json();
+
+  // Mismo viaje, cero duplicados, y el estado REAL: cancelado.
+  assert.equal(cuerpo.status, 'existing');
+  assert.equal(cuerpo.idempotentReplay, true);
+  assert.equal(cuerpo.trip.id, 'trip_idem_cancel');
+  assert.equal(cuerpo.trip.createdAt, creado.createdAt);
+  assert.equal(cuerpo.trip.status, 'CANCELLED', 'la respuesta tiene que decir la verdad del viaje');
+
+  // Y la forma es LA MISMA que la de una creación: un sobre con `trip` dentro.
+  // Si divergieran, el cliente tendría que aprender dos maneras de leer lo
+  // mismo, y ahí es justo donde se rompía.
+  assert.equal(typeof cuerpo.trip.id, 'string');
+  assert.equal(typeof cuerpo.trip.status, 'string');
+
+  // No se creó ningún viaje de más.
+  const historial = await asJson(`${url}/api/trips/me/history`, passenger.token, { method: 'GET' });
+  const viajes = await historial.json();
+  const lista = Array.isArray(viajes) ? viajes : (viajes.trips ?? []);
+  assert.equal(lista.filter(v => v.id === 'trip_idem_cancel').length, 1, 'el reintento duplicó el viaje');
+});
+
 test('otro pasajero no puede reutilizar un identificador ajeno', async (t) => {
   const { url } = await startServer(t);
   const dueno = await registerPassenger(url, { email: 'dueno2@58express.com', phone: '+584120002002' });
