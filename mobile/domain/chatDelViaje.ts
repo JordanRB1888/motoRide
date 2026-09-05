@@ -71,6 +71,23 @@ export interface MensajeEnPantalla {
   readonly pendiente: boolean;
   /** La clave del intento, sólo en los propios. Es lo que casa pendiente con durable. */
   readonly claveDeIntento: string | null;
+  /**
+   * El identificador PÚBLICO del adjunto, para pedir su contenido con sesión.
+   * `''` cuando el mensaje es sólo texto. La clave del almacén no viaja: el
+   * servidor no la publica y aquí no se echa de menos.
+   */
+  readonly adjuntoId: string;
+  /**
+   * El `file://` local de un adjunto que TODAVÍA se está subiendo, sólo para la
+   * vista previa. `null` en cuanto el servidor devuelve el mensaje durable —que
+   * ya trae `adjuntoId`— y en todo lo que no sea un pendiente propio con imagen.
+   */
+  readonly adjuntoLocal: string | null;
+  /**
+   * Un pendiente propio que el servidor rechazó pero se conserva a la vista para
+   * poder reintentarlo. Sólo tiene sentido con `pendiente`.
+   */
+  readonly fallida: boolean;
 }
 
 /** De lo que da el servidor a lo que se pinta. */
@@ -82,12 +99,27 @@ export function enPantalla(mensaje: MensajeReal & { readonly clientId?: string }
     texto: mensaje.texto,
     cuando: mensaje.cuando,
     pendiente: false,
-    claveDeIntento: typeof mensaje.clientId === 'string' && mensaje.clientId !== '' ? mensaje.clientId : null
+    claveDeIntento: typeof mensaje.clientId === 'string' && mensaje.clientId !== '' ? mensaje.clientId : null,
+    adjuntoId: mensaje.adjuntoId ?? '',
+    adjuntoLocal: null,
+    fallida: false
   };
 }
 
-/** Lo que se pinta nada más pulsar enviar, antes de que el servidor conteste. */
-export function pendienteDe(texto: string, claveDeIntento: string, miNombre: string, ahora: number): MensajeEnPantalla {
+/**
+ * Lo que se pinta nada más pulsar enviar, antes de que el servidor conteste.
+ *
+ * `adjuntoLocal` es el `file://` de la imagen elegida: se ve mientras sube. En
+ * cuanto el durable vuelve —con su `adjuntoId`—, `conMensaje` sustituye este
+ * pendiente por él y la vista previa local deja de usarse.
+ */
+export function pendienteDe(
+  texto: string,
+  claveDeIntento: string,
+  miNombre: string,
+  ahora: number,
+  adjuntoLocal: string | null = null
+): MensajeEnPantalla {
   return {
     id: `pendiente_${claveDeIntento}`,
     mio: true,
@@ -95,7 +127,10 @@ export function pendienteDe(texto: string, claveDeIntento: string, miNombre: str
     texto,
     cuando: new Date(ahora).toISOString(),
     pendiente: true,
-    claveDeIntento
+    claveDeIntento,
+    adjuntoId: '',
+    adjuntoLocal,
+    fallida: false
   };
 }
 
@@ -148,6 +183,24 @@ export function conHistorial(
 /** Un pendiente que el servidor rechazó deja de esperar. Se quita, no se marca. */
 export function sinPendiente(lista: readonly MensajeEnPantalla[], claveDeIntento: string): readonly MensajeEnPantalla[] {
   return lista.filter(m => !(m.pendiente && m.claveDeIntento === claveDeIntento));
+}
+
+/**
+ * Marca un pendiente como FALLIDO en vez de quitarlo.
+ *
+ * Para las imágenes: quitarla obligaría a volver a elegirla desde cero. Se deja
+ * a la vista, marcada, con el reintento a un toque —el mismo intento, la misma
+ * clave, así el servidor no crea una segunda—.
+ */
+export function marcarFallida(lista: readonly MensajeEnPantalla[], claveDeIntento: string): readonly MensajeEnPantalla[] {
+  return lista.map(m =>
+    m.pendiente && m.claveDeIntento === claveDeIntento ? { ...m, fallida: true } : m);
+}
+
+/** Vuelve a poner un pendiente fallido en «enviando»: es el reintento. */
+export function reactivarPendiente(lista: readonly MensajeEnPantalla[], claveDeIntento: string): readonly MensajeEnPantalla[] {
+  return lista.map(m =>
+    m.pendiente && m.claveDeIntento === claveDeIntento ? { ...m, fallida: false } : m);
 }
 
 // ---------------------------------------------------------------------------

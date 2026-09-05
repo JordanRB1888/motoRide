@@ -42,11 +42,17 @@ import {
   type ResultadoDeVideo,
   type UnidadDeDuracion
 } from '../domain/videoDePresentacion';
+import {
+  interpretarImagenDeChat,
+  type ResultadoDelPicker as ResultadoDeImagenDeChat
+} from '../domain/imagenDeChat';
 
 export type { FotoCapturada, MotivoDeCaptura, ResultadoDeCaptura } from '../domain/fotoDeDocumento';
 export { MENSAJES_DE_CAPTURA, nombreDeArchivo } from '../domain/fotoDeDocumento';
 export type { MotivoDeVideo, ResultadoDeVideo, VideoCapturado } from '../domain/videoDePresentacion';
 export { MENSAJES_DE_VIDEO, nombreDelVideo } from '../domain/videoDePresentacion';
+export type { ImagenDeChat, MotivoDelPicker, ResultadoDelPicker } from '../domain/imagenDeChat';
+export { FORMATOS_DE_CHAT, LIMITE_DATA_URL, motivoDelPickerEnPantalla } from '../domain/imagenDeChat';
 
 export type ModoDeCaptura = 'TAKE_PHOTO' | 'CHOOSE_PHOTO';
 export type ModoDeVideo = 'TAKE_VIDEO' | 'CHOOSE_VIDEO';
@@ -117,6 +123,77 @@ export async function capturar(modo: ModoDeCaptura): Promise<ResultadoDeCaptura>
     // que el archivo elegido no se pueda leer. A quien acaba de elegir una foto
     // de su galería no se le dice que falló la cámara: no la tocó.
     return { ok: false, motivo: falloDe(modo === 'TAKE_PHOTO') };
+  }
+}
+
+/** Opciones de la imagen de chat: con base64, que es lo que viaja por el socket. */
+const OPCIONES_DE_CHAT: ImagePicker.ImagePickerOptions = {
+  mediaTypes: ['images'],
+  quality: CALIDAD,
+  allowsEditing: false,
+  allowsMultipleSelection: false,
+  exif: false,
+  // A diferencia del documento, aquí SÍ hace falta el base64: la imagen del chat
+  // viaja como data URL por el socket, no como archivo multipart.
+  base64: true
+};
+
+/**
+ * Elige o toma una imagen para el chat del viaje.
+ *
+ * MISMA PUERTA, MISMO PERMISO. Nadie fuera de este fichero toca
+ * `expo-image-picker`. Lo único distinto de la foto de documento es que aquí se
+ * pide el base64 —el chat manda la imagen como data URL— y que la validación de
+ * formato y tamaño la hace `domain/imagenDeChat`, que se prueba sin dispositivo.
+ *
+ * Nunca lanza: todo lo que puede salir mal vuelve como motivo.
+ */
+export async function elegirImagenDeChat(modo: ModoDeCaptura): Promise<ResultadoDeImagenDeChat> {
+  try {
+    if (modo === 'TAKE_PHOTO') {
+      const permiso = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permiso.granted) return { ok: false, motivo: 'PERMISO' };
+    } else if (laGaleriaNecesitaPermiso()) {
+      const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permiso.granted) return { ok: false, motivo: 'PERMISO' };
+    }
+
+    const resultado = modo === 'TAKE_PHOTO'
+      ? await ImagePicker.launchCameraAsync(OPCIONES_DE_CHAT)
+      : await ImagePicker.launchImageLibraryAsync(OPCIONES_DE_CHAT);
+
+    if (resultado.canceled) return { ok: false, motivo: 'CANCELADO' };
+    return interpretarImagenDeChat(resultado.assets?.[0]);
+  } catch {
+    return { ok: false, motivo: 'ERROR' };
+  }
+}
+
+/**
+ * Recupera una imagen que el selector devolvió mientras la aplicación NO estaba.
+ *
+ * EL CASO QUE ESTO CIERRA
+ *
+ * En Android, con poca memoria, el sistema puede destruir la actividad de la
+ * aplicación mientras el selector o la cámara están abiertos. Al volver, la
+ * aplicación arranca de cero: la promesa de `launchCamera/launchImageLibrary`
+ * se perdió con el proceso, y la imagen que la persona ya eligió se quedaría en
+ * el aire. `getPendingResultAsync` la rescata: se llama al reabrir el chat, y si
+ * hay algo esperando, se manda como si nada hubiera pasado.
+ *
+ * Devuelve `null` cuando no hay nada pendiente —el caso de siempre—, así que es
+ * seguro llamarla en cada apertura. Consume el resultado: una sola vez.
+ */
+export async function recuperarImagenDeChatPendiente(): Promise<ResultadoDeImagenDeChat | null> {
+  try {
+    const pendiente = await ImagePicker.getPendingResultAsync();
+    const item = Array.isArray(pendiente) ? pendiente[0] : pendiente;
+    if (!item || typeof item !== 'object') return null;
+    if ('canceled' in item && item.canceled) return null;
+    if ('assets' in item && Array.isArray(item.assets)) return interpretarImagenDeChat(item.assets[0]);
+    return null; // un resultado de error: nada que mandar
+  } catch {
+    return null;
   }
 }
 

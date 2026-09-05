@@ -17,12 +17,21 @@
  * al abrir— y sin conexión no es un fallo del servidor. Con contenido en
  * pantalla, la red y los fallos de recarga se cuentan como aviso, sin tirar lo
  * que ya se leía.
+ *
+ * LAS IMÁGENES SON PRIVADAS DEL VIAJE
+ *
+ * Se eligen del carrete o de la cámara, se validan aquí y las vuelve a validar
+ * el servidor, que las guarda en su almacén privado. Al pintarlas se piden con
+ * la sesión a `/api/chat-media/:id/content`: sólo la pasajera y el conductor de
+ * ESE viaje las ven. La clave del almacén nunca sale del servidor, y aquí no se
+ * guarda ninguna URL pública ni permanente.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Redirect, router } from 'expo-router';
 import {
-  ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, TextInput, View
+  ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal,
+  Platform, Pressable, TextInput, View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,6 +40,11 @@ import { useSesion } from '../context/AuthContext';
 import { LARGO_MAXIMO, type MensajeEnPantalla } from '../domain/chatDelViaje';
 import { horaDe } from '../domain/viajes';
 import { useChatDelViaje } from '../realtime/ChatDelViaje';
+import { fuenteDeAdjunto } from '../services/viajes';
+import {
+  elegirImagenDeChat, motivoDelPickerEnPantalla, recuperarImagenDeChatPendiente,
+  type ModoDeCaptura, type ResultadoDelPicker
+} from '../media/captura';
 import { useTema } from '../theme/ThemeContext';
 import { Avatar, Boton, Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
@@ -40,6 +54,9 @@ const TITULAR_DEL_VIAJE: Readonly<Record<string, string>> = Object.freeze({
   ARRIVED: 'En el punto de recogida',
   IN_PROGRESS: 'Viaje en curso'
 });
+
+/** La imagen privada, con su cabecera de sesión, o `undefined` si aún no se resolvió. */
+type Fuente = { readonly uri: string; readonly headers?: Record<string, string> };
 
 export default function PantallaDeChat() {
   const tema = useTema();
@@ -52,7 +69,51 @@ export default function PantallaDeChat() {
   const miNombre = sesion.estado === 'AUTENTICADO' ? sesion.usuario.firstName : '';
   const chat = useChatDelViaje({ miId, miNombre });
   const [borrador, setBorrador] = useState('');
+  const [avisoImagen, setAvisoImagen] = useState<string | null>(null);
+  const [ampliada, setAmpliada] = useState<Fuente | null>(null);
   const lista = useRef<FlatList<MensajeEnPantalla>>(null);
+
+  // Las imágenes durables se resuelven a su fuente autenticada UNA vez y se
+  // guardan por su id público. Es un mapa de cadenas: ni blobs ni URLs de
+  // objeto que liberar —esto es React Native, y `<Image>` gestiona su propia
+  // caché nativa—. Vive lo que vive la pantalla; al salir, desaparece.
+  const adjuntos = useRef<Record<string, Fuente>>({});
+  const [, refrescarAdjuntos] = useReducer((x: number) => x + 1, 0);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      let cambio = false;
+      for (const mensaje of chat.mensajes) {
+        if (mensaje.adjuntoId === '' || adjuntos.current[mensaje.adjuntoId] !== undefined) continue;
+        const fuente = await fuenteDeAdjunto(mensaje.adjuntoId);
+        if (!vivo) return;
+        if (fuente !== null) { adjuntos.current[mensaje.adjuntoId] = fuente; cambio = true; }
+      }
+      if (vivo && cambio) refrescarAdjuntos();
+    })();
+    return () => { vivo = false; };
+  }, [chat.mensajes]);
+
+  // RESCATE TRAS UNA RECREACIÓN DE ANDROID.
+  //
+  // Si el sistema destruyó la aplicación mientras el selector o la cámara
+  // estaban abiertos, al volver se aterriza en el viaje, no aquí. Cuando se
+  // reabre el chat se pregunta si quedó una imagen esperando y, si la hay, se
+  // manda. Se hace una sola vez por montaje y sólo con un viaje cargado.
+  const yaSeRescato = useRef(false);
+  useEffect(() => {
+    if (yaSeRescato.current || chat.viaje === null) return;
+    yaSeRescato.current = true;
+    let vivo = true;
+    (async () => {
+      const pendiente = await recuperarImagenDeChatPendiente();
+      if (!vivo || pendiente === null) return;
+      if (pendiente.ok) { setAvisoImagen(null); chat.enviarImagen(pendiente.imagen); }
+      else if (pendiente.motivo !== 'CANCELADO') setAvisoImagen(motivoDelPickerEnPantalla(pendiente.motivo));
+    })();
+    return () => { vivo = false; };
+  }, [chat]);
 
   // Lo último abajo, y a la vista cuando llega algo nuevo.
   useEffect(() => {
@@ -66,6 +127,20 @@ export default function PantallaDeChat() {
     chat.enviar(borrador);
     setBorrador('');
   }, [borrador, chat]);
+
+  const conLaImagen = useCallback(async (modo: ModoDeCaptura) => {
+    const resultado: ResultadoDelPicker = await elegirImagenDeChat(modo);
+    if (resultado.ok) { setAvisoImagen(null); chat.enviarImagen(resultado.imagen); return; }
+    if (resultado.motivo !== 'CANCELADO') setAvisoImagen(motivoDelPickerEnPantalla(resultado.motivo));
+  }, [chat]);
+
+  const adjuntar = useCallback(() => {
+    Alert.alert('Adjuntar imagen', 'Elige de dónde', [
+      { text: 'Galería', onPress: () => { void conLaImagen('CHOOSE_PHOTO'); } },
+      { text: 'Cámara', onPress: () => { void conLaImagen('TAKE_PHOTO'); } },
+      { text: 'Cancelar', style: 'cancel' }
+    ]);
+  }, [conLaImagen]);
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (
@@ -156,13 +231,25 @@ export default function PantallaDeChat() {
               data={chat.mensajes}
               keyExtractor={m => m.id}
               contentContainerStyle={{ padding: 16, gap: 10 }}
-              renderItem={({ item }) => <Burbuja mensaje={item} />}
+              renderItem={({ item }) => (
+                <Burbuja
+                  mensaje={item}
+                  fuente={item.adjuntoId === '' ? undefined : adjuntos.current[item.adjuntoId]}
+                  onAmpliar={setAmpliada}
+                  onReintentar={chat.reintentarImagen}
+                />
+              )}
               keyboardShouldPersistTaps="handled"
             />
           )}
         </View>
 
         {/* ESCRIBIR. Sólo con la carrera viva y con red: si no, se dice por qué. */}
+        {avisoImagen !== null ? (
+          <View testID="aviso-de-imagen" style={{ paddingHorizontal: 16, paddingBottom: 6 }}>
+            <Txt nivel="pie" tono="peligro">{avisoImagen}</Txt>
+          </View>
+        ) : null}
         {chat.fallo !== null ? (
           <View testID="fallo-de-chat" style={{ paddingHorizontal: 16, paddingBottom: 6 }}>
             <Txt nivel="pie" tono="peligro">{chat.fallo}</Txt>
@@ -171,11 +258,27 @@ export default function PantallaDeChat() {
 
         {chat.sePuedeEscribir ? (
           <View style={{
-            flexDirection: 'row', alignItems: 'flex-end', gap: 10,
+            flexDirection: 'row', alignItems: 'flex-end', gap: 8,
             paddingHorizontal: 12, paddingTop: 8, paddingBottom: Math.max(inferior, 8) + 4,
             borderTopWidth: 1, borderTopColor: tema.color.borde,
             backgroundColor: tema.color.superficie
           }}>
+            <Pressable
+              testID="adjuntar-imagen"
+              onPress={adjuntar}
+              accessibilityRole="button"
+              accessibilityLabel="Adjuntar imagen"
+              hitSlop={8}
+              style={({ pressed }) => ({
+                width: 44, height: 44, borderRadius: 22,
+                alignItems: 'center', justifyContent: 'center',
+                backgroundColor: tema.color.superficieHundida,
+                borderWidth: 1, borderColor: tema.color.borde,
+                opacity: pressed ? 0.85 : 1
+              })}
+            >
+              <Icono nombre="imagen" color={tema.color.textoPrimario} tamano={20} />
+            </Pressable>
             <TextInput
               testID="campo-de-chat"
               value={borrador}
@@ -222,6 +325,9 @@ export default function PantallaDeChat() {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* VISTA AMPLIADA. Una imagen a pantalla completa, con su cierre. */}
+      <VistaAmpliada fuente={ampliada} onCerrar={() => setAmpliada(null)} />
     </Pantalla>
   );
 }
@@ -240,31 +346,190 @@ function Centro({ children, testID }: { readonly children: React.ReactNode; read
  * superficie, y la esquina que apunta a quien habla.
  *
  * Lo único que aquí sí cambia es el pendiente: propio, salió, y el servidor
- * todavía no lo devolvió. Se atenúa y se dice. No es «enviado».
+ * todavía no lo devolvió. Se atenúa y se dice. No es «enviado». Una imagen
+ * pendiente enseña su vista previa local mientras sube; si el servidor la
+ * rechaza, se queda a la vista, marcada, con el reintento a un toque.
  */
-function Burbuja({ mensaje }: { readonly mensaje: MensajeEnPantalla }) {
+function Burbuja({ mensaje, fuente, onAmpliar, onReintentar }: {
+  readonly mensaje: MensajeEnPantalla;
+  readonly fuente: Fuente | undefined;
+  readonly onAmpliar: (fuente: Fuente) => void;
+  readonly onReintentar: (claveDeIntento: string) => void;
+}) {
   const tema = useTema();
   const mia = mensaje.mio;
+  const tieneImagen = mensaje.adjuntoLocal !== null || mensaje.adjuntoId !== '';
+  const enviandose = mensaje.pendiente && !mensaje.fallida;
 
   return (
     <View
       testID={mensaje.pendiente ? 'mensaje-pendiente' : (mia ? 'mensaje-mio' : 'mensaje-ajeno')}
-      style={{ alignSelf: mia ? 'flex-end' : 'flex-start', maxWidth: '86%', gap: 4, opacity: mensaje.pendiente ? 0.6 : 1 }}
+      style={{ alignSelf: mia ? 'flex-end' : 'flex-start', maxWidth: '86%', gap: 4, opacity: enviandose ? 0.75 : 1 }}
     >
-      <View style={{
-        paddingVertical: 9, paddingHorizontal: 12,
-        borderRadius: tema.radio.campo,
-        borderBottomRightRadius: mia ? 4 : tema.radio.campo,
-        borderBottomLeftRadius: mia ? tema.radio.campo : 4,
-        backgroundColor: mia ? `${tema.color.acento}26` : tema.color.superficieHundida,
-        borderWidth: 1,
-        borderColor: mia ? `${tema.color.acento}44` : tema.color.borde
-      }}>
-        <Txt nivel="cuerpo">{mensaje.texto}</Txt>
-      </View>
-      <Txt nivel="pie" tono="tenue" estilo={{ alignSelf: mia ? 'flex-end' : 'flex-start' }}>
-        {mensaje.pendiente ? 'Enviando…' : `${horaDe(mensaje.cuando)} · ${mia ? 'Tú' : mensaje.autor}`}
-      </Txt>
+      {tieneImagen ? (
+        <ImagenDeBurbuja mensaje={mensaje} fuente={fuente} onAmpliar={onAmpliar} />
+      ) : null}
+
+      {mensaje.texto !== '' ? (
+        <View style={{
+          paddingVertical: 9, paddingHorizontal: 12,
+          borderRadius: tema.radio.campo,
+          borderBottomRightRadius: mia ? 4 : tema.radio.campo,
+          borderBottomLeftRadius: mia ? tema.radio.campo : 4,
+          backgroundColor: mia ? `${tema.color.acento}26` : tema.color.superficieHundida,
+          borderWidth: 1,
+          borderColor: mia ? `${tema.color.acento}44` : tema.color.borde
+        }}>
+          <Txt nivel="cuerpo">{mensaje.texto}</Txt>
+        </View>
+      ) : null}
+
+      {mensaje.fallida ? (
+        <Pressable
+          testID="reintentar-imagen"
+          onPress={() => mensaje.claveDeIntento !== null && onReintentar(mensaje.claveDeIntento)}
+          accessibilityRole="button"
+          accessibilityLabel="Reintentar el envío"
+          hitSlop={8}
+          style={{ alignSelf: mia ? 'flex-end' : 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+        >
+          <Icono nombre="flecha-arriba" color={tema.color.peligro} tamano={13} />
+          <Txt nivel="pie" tono="peligro">No se envió · Reintentar</Txt>
+        </Pressable>
+      ) : (
+        <Txt nivel="pie" tono="tenue" estilo={{ alignSelf: mia ? 'flex-end' : 'flex-start' }}>
+          {mensaje.pendiente ? 'Enviando…' : `${horaDe(mensaje.cuando)} · ${mia ? 'Tú' : mensaje.autor}`}
+        </Txt>
+      )}
     </View>
+  );
+}
+
+/**
+ * La imagen dentro de una burbuja.
+ *
+ * Mientras sube se enseña la vista previa local —el `file://` que dio el
+ * carrete—; en cuanto vuelve durable, se pide con la sesión al almacén privado.
+ * Un durable que todavía no se resolvió enseña un hueco cargando en vez de
+ * saltar. La pendiente no se puede ampliar: no hay nada durable que mirar.
+ */
+function ImagenDeBurbuja({ mensaje, fuente, onAmpliar }: {
+  readonly mensaje: MensajeEnPantalla;
+  readonly fuente: Fuente | undefined;
+  readonly onAmpliar: (fuente: Fuente) => void;
+}) {
+  const tema = useTema();
+  const [fallo, setFallo] = useState(false);
+  const source: Fuente | undefined = mensaje.adjuntoLocal !== null
+    ? { uri: mensaje.adjuntoLocal }
+    : fuente;
+
+  const marco = {
+    width: 220, height: 160, borderRadius: tema.radio.campo, overflow: 'hidden' as const,
+    backgroundColor: tema.color.superficieHundida,
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+    borderWidth: 1, borderColor: tema.color.borde
+  };
+
+  if (source === undefined) {
+    return (
+      <View testID="imagen-cargando" style={marco}>
+        <ActivityIndicator color={tema.color.acento} />
+      </View>
+    );
+  }
+  if (fallo) {
+    return (
+      <View testID="imagen-rota" style={marco}>
+        <Icono nombre="imagen" color={tema.color.textoTenue} tamano={22} />
+        <Txt nivel="pie" tono="tenue">No se pudo cargar</Txt>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      testID="imagen-de-chat"
+      onPress={() => { if (mensaje.adjuntoLocal === null) onAmpliar(source); }}
+      disabled={mensaje.adjuntoLocal !== null}
+      accessibilityRole="imagebutton"
+      accessibilityLabel="Imagen del chat"
+      style={marco}
+    >
+      <Image
+        source={source}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+        onError={() => setFallo(true)}
+        style={{ width: '100%', height: '100%' }}
+      />
+      {mensaje.pendiente && !mensaje.fallida ? (
+        <View testID="imagen-subiendo" style={{
+          ...marco, position: 'absolute', top: 0, left: 0, borderWidth: 0,
+          backgroundColor: '#00000055'
+        }}>
+          <ActivityIndicator color="#FFFFFF" />
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/**
+ * La imagen a pantalla completa. Fondo oscuro, la imagen entera —sin recortar—,
+ * y un único cierre. Respeta el área segura de arriba para no quedar bajo la
+ * muesca. Mientras carga hay un indicador; si falla, se dice y se puede cerrar.
+ */
+function VistaAmpliada({ fuente, onCerrar }: {
+  readonly fuente: Fuente | null;
+  readonly onCerrar: () => void;
+}) {
+  const arriba = useSafeAreaInsets().top;
+  const [cargando, setCargando] = useState(true);
+  const [fallo, setFallo] = useState(false);
+
+  useEffect(() => { setCargando(true); setFallo(false); }, [fuente?.uri]);
+
+  return (
+    <Modal
+      visible={fuente !== null}
+      transparent
+      animationType="fade"
+      onRequestClose={onCerrar}
+      statusBarTranslucent
+    >
+      <View testID={fuente !== null ? 'imagen-ampliada' : undefined} style={{ flex: 1, backgroundColor: '#000000EE' }}>
+        <Pressable
+          testID="cerrar-imagen"
+          onPress={onCerrar}
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar"
+          hitSlop={12}
+          style={{
+            position: 'absolute', top: arriba + 8, right: 16, zIndex: 2,
+            width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF22',
+            alignItems: 'center', justifyContent: 'center'
+          }}
+        >
+          <Txt nivel="titulo" estilo={{ color: '#FFFFFF' }}>✕</Txt>
+        </Pressable>
+
+        <Pressable onPress={onCerrar} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          {fuente !== null ? (
+            <Image
+              source={fuente}
+              resizeMode="contain"
+              accessibilityIgnoresInvertColors
+              accessibilityLabel="Imagen del chat"
+              onLoadEnd={() => setCargando(false)}
+              onError={() => { setCargando(false); setFallo(true); }}
+              style={{ width: '100%', height: '100%' }}
+            />
+          ) : null}
+          {cargando && !fallo ? <ActivityIndicator color="#FFFFFF" size="large" style={{ position: 'absolute' }} /> : null}
+          {fallo ? <Txt nivel="cuerpo" estilo={{ color: '#FFFFFF', position: 'absolute' }}>No se pudo cargar la imagen.</Txt> : null}
+        </Pressable>
+      </View>
+    </Modal>
   );
 }

@@ -224,8 +224,18 @@ test('el vídeo no se guarda en el teléfono ni se manda en base64', () => {
   for (const relativa of ['media/captura.ts', 'domain/videoDePresentacion.ts', 'services/postulacion.ts', 'app/postulacion/documentos.tsx']) {
     const codigo = sinComentarios(relativa);
     assert.equal(/AsyncStorage/.test(codigo), false, `${relativa} guarda algo`);
-    assert.equal(/base64: true|data:video/.test(codigo), false, `${relativa} usa base64`);
+    assert.equal(/data:video/.test(codigo), false, `${relativa} mete el vídeo en una data URL`);
     assert.equal(/MediaLibrary\.save|saveToLibraryAsync/.test(codigo), false, `${relativa} deja el vídeo en la galería`);
+  }
+  // El vídeo NUNCA se pide en base64: se sube como archivo. La única excepción de
+  // la puerta es la IMAGEN de chat, que sí viaja como data URL por el socket;
+  // por eso el `base64: true` de la puerta se comprueba fuera de las opciones de
+  // vídeo, no en toda la puerta a ciegas.
+  const captura = sinComentarios('media/captura.ts');
+  const opcionesDeVideo = captura.slice(captura.indexOf('capturarVideo'));
+  assert.equal(/base64: true/.test(opcionesDeVideo), false, 'el vídeo se pide en base64');
+  for (const relativa of ['domain/videoDePresentacion.ts', 'services/postulacion.ts', 'app/postulacion/documentos.tsx']) {
+    assert.equal(/base64: true/.test(sinComentarios(relativa)), false, `${relativa} usa base64`);
   }
 });
 

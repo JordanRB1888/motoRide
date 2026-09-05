@@ -26,8 +26,10 @@ import {
   conMensaje,
   enPantalla,
   estadoDeLaPantalla,
+  marcarFallida,
   motivoDelFallo,
   pendienteDe,
+  reactivarPendiente,
   sePuedeEscribir,
   sinPendiente,
   textoParaEnviar,
@@ -36,6 +38,7 @@ import {
 } from '../domain/chatDelViaje';
 import { leerMensajes, type DetalleReal, type MensajeReal } from '../domain/viajes';
 import { pedirMensajes } from '../services/viajes';
+import type { ImagenDeChat } from '../domain/imagenDeChat';
 import { enviarMensajeDeChat } from './socket';
 import { useEvento, useResync, useTiempoReal } from './ProveedorDeTiempoReal';
 import { useViajeActivo } from './ViajeActivo';
@@ -52,6 +55,10 @@ export interface ChatDelViaje {
   /** Qué rechazó el servidor la última vez, en castellano, o `null`. */
   readonly fallo: string | null;
   readonly enviar: (texto: string) => void;
+  /** Manda una imagen ya elegida y validada por `services/imagenDeChat`. */
+  readonly enviarImagen: (imagen: ImagenDeChat) => void;
+  /** Reintenta una imagen fallida por su clave, sin volver a elegirla. */
+  readonly reintentarImagen: (claveDeIntento: string) => void;
   readonly reintentar: () => void;
 }
 
@@ -78,6 +85,12 @@ export function useChatDelViaje({ miId, miNombre }: {
   // otra conversación y se empieza de cero.
   const viajeEnPantalla = useRef<string | null>(null);
 
+  // Los intentos de imagen que aún se pueden reintentar, por su clave. Se guarda
+  // la data URL —lo que hay que reenviar— y el `file://` de la vista previa. Se
+  // vacía al cambiar de viaje: la data URL es lo más pesado que hay en memoria,
+  // y arrastrarla de una conversación a otra sería una fuga.
+  const intentosDeImagen = useRef<Map<string, { readonly dataUrl: string; readonly uri: string }>>(new Map());
+
   // ---------------------------------------------------------------------
   // El historial: la fuente durable
   // ---------------------------------------------------------------------
@@ -95,6 +108,7 @@ export function useChatDelViaje({ miId, miNombre }: {
   useEffect(() => {
     if (viajeEnPantalla.current !== viajeId) {
       viajeEnPantalla.current = viajeId;
+      intentosDeImagen.current.clear();
       setMensajes([]);
       setFallo(null);
     }
@@ -113,19 +127,30 @@ export function useChatDelViaje({ miId, miNombre }: {
     if (typeof dato?.tripId !== 'string' || dato.tripId !== viajeEnPantalla.current) return;
     const [leido] = leerMensajes([cuerpo]);
     if (leido === undefined) return;
-    const durable = enPantalla({ ...leido, clientId: (dato as { clientId?: string }).clientId }, miId);
+    const clave = (dato as { clientId?: string }).clientId;
+    // Ya es durable: su reintento sobra. Se suelta la data URL guardada.
+    if (typeof clave === 'string' && clave !== '') intentosDeImagen.current.delete(clave);
+    const durable = enPantalla({ ...leido, clientId: clave }, miId);
     setMensajes(previos => conMensaje(previos, durable));
   }, [miId]));
 
-  // El servidor no aceptó uno de los nuestros. Se dice, y el pendiente se quita:
-  // dejarlo girando prometería un envío que no va a ocurrir.
+  // El servidor no aceptó uno de los nuestros. Se dice, y el pendiente se
+  // resuelve: el texto se quita —volver a escribirlo es barato—; la imagen se
+  // marca fallida y se conserva, porque volver a elegirla no lo es y su data URL
+  // sigue guardada para el reintento.
+  //
+  // `chat:error` no dice CUÁL falló —no trae la clave—, así que se resuelve el
+  // último intento, que es el caso real: se manda de a uno.
   const ultimaClave = useRef<string | null>(null);
   useEvento('chat:error', useCallback((cuerpo: unknown) => {
     const dato = cuerpo as { tripId?: unknown; error?: unknown } | null;
     if (typeof dato?.tripId === 'string' && dato.tripId !== viajeEnPantalla.current) return;
     setFallo(motivoDelFallo(dato?.error));
     const clave = ultimaClave.current;
-    if (clave !== null) setMensajes(previos => sinPendiente(previos, clave));
+    if (clave === null) return;
+    setMensajes(previos => intentosDeImagen.current.has(clave)
+      ? marcarFallida(previos, clave)
+      : sinPendiente(previos, clave));
   }, []));
 
   // ---------------------------------------------------------------------
@@ -150,6 +175,34 @@ export function useChatDelViaje({ miId, miNombre }: {
     setMensajes(previos => conMensaje(previos, pendienteDe(texto, clave, miNombre, Date.now())));
   }, [viajeId, puedeEscribir, miNombre]);
 
+  const enviarImagen = useCallback((imagen: ImagenDeChat) => {
+    if (viajeId === null || !puedeEscribir) return;
+    const clave = claveDeIntento();
+    ultimaClave.current = clave;
+    intentosDeImagen.current.set(clave, { dataUrl: imagen.dataUrl, uri: imagen.uri });
+    setFallo(null);
+
+    const salio = enviarMensajeDeChat(viajeId, '', clave, imagen.dataUrl);
+    // El pendiente se pinta con la vista previa local. Si el socket no pudo
+    // mandarlo, nace ya marcado fallido: nunca se enseña como enviado sin acuse,
+    // y queda a un toque de reintentarse cuando vuelva la señal.
+    setMensajes(previos => {
+      const conPendiente = conMensaje(previos, pendienteDe('', clave, miNombre, Date.now(), imagen.uri));
+      return salio ? conPendiente : marcarFallida(conPendiente, clave);
+    });
+    if (!salio) setFallo('Sin conexión. La imagen se reintenta cuando vuelva la señal.');
+  }, [viajeId, puedeEscribir, miNombre]);
+
+  const reintentarImagen = useCallback((clave: string) => {
+    const intento = intentosDeImagen.current.get(clave);
+    if (viajeId === null || intento === undefined) return;
+    ultimaClave.current = clave;
+    setFallo(null);
+    const salio = enviarMensajeDeChat(viajeId, '', clave, intento.dataUrl);
+    setMensajes(previos => salio ? reactivarPendiente(previos, clave) : marcarFallida(previos, clave));
+    if (!salio) setFallo('Sin conexión. La imagen se reintenta cuando vuelva la señal.');
+  }, [viajeId]);
+
   const reintentar = useCallback(() => { setFallo(null); void cargar(); }, [cargar]);
 
   const estado = estadoDeLaPantalla({ cargando, fallo: falloDeCarga, hayConexion, mensajes });
@@ -171,6 +224,8 @@ export function useChatDelViaje({ miId, miNombre }: {
     hayConexion,
     fallo,
     enviar,
+    enviarImagen,
+    reintentarImagen,
     reintentar
-  }), [viaje, estado, mensajes, aviso, puedeEscribir, hayConexion, fallo, enviar, reintentar]);
+  }), [viaje, estado, mensajes, aviso, puedeEscribir, hayConexion, fallo, enviar, enviarImagen, reintentarImagen, reintentar]);
 }

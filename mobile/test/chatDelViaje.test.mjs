@@ -11,13 +11,20 @@ import {
   conMensaje,
   enPantalla,
   estadoDeLaPantalla,
+  marcarFallida,
   motivoDelFallo,
   pendienteDe,
+  reactivarPendiente,
   sePuedeEscribir,
   sinPendiente,
   textoParaEnviar
 } from '../domain/chatDelViaje';
 import { EVENTOS_DEL_CLIENTE, EVENTOS_DEL_SERVIDOR, EVENTOS_PENDIENTES } from '../realtime/eventos';
+import {
+  FORMATOS_DE_CHAT,
+  LIMITE_DATA_URL,
+  interpretarImagenDeChat
+} from '../domain/imagenDeChat';
 
 /**
  * CHAT PASSENGER ↔ DRIVER 1 — la conversación del viaje.
@@ -187,7 +194,7 @@ test('el envío lleva tripId, text y clientId, y NUNCA la identidad del remitent
   const emisor = fuente.slice(fuente.indexOf('export function enviarMensajeDeChat'));
   const cuerpo = emisor.slice(0, emisor.indexOf('\n}'));
 
-  assert.match(cuerpo, /emit\('chat:send_message', \{ tripId: viajeId, text: texto, clientId: claveDeIntento \}\)/);
+  assert.match(cuerpo, /emit\('chat:send_message', \{[\s\S]*tripId: viajeId,[\s\S]*text: texto,[\s\S]*clientId: claveDeIntento/);
   assert.doesNotMatch(cuerpo, /senderId|userId|role/);
   // Sin socket no se manda y se dice: el pendiente no se pinta a ciegas.
   assert.match(cuerpo, /if \(socket === null \|\| !socket\.connected\) return false;/);
@@ -236,11 +243,142 @@ test('la pantalla del chat existe como ruta, respeta el tope y tiene sus cinco e
   }
 });
 
-test('la fase de texto no reabre la puerta a las imágenes desde el móvil', () => {
-  const fuentes = [
-    despojarComentarios(leer('app/chat.tsx')),
-    despojarComentarios(leer('realtime/ChatDelViaje.tsx')),
-    despojarComentarios(leer('domain/chatDelViaje.ts'))
-  ].join('\n');
-  assert.doesNotMatch(fuentes, /image:|imageStorageKey|data:image|<svg|blob:/);
+// ---------------------------------------------------------------------------
+// CHAT PASSENGER ↔ DRIVER 2 — imágenes privadas
+// ---------------------------------------------------------------------------
+
+/** Un mensaje del servidor con adjunto: sólo la referencia pública viaja. */
+const conAdjunto = (id, autorId, cuando, adjuntoId, extra = {}) =>
+  real(id, autorId, cuando, { adjuntoId, texto: '', ...extra });
+
+test('un mensaje durable con imagen lleva su id público de adjunto', () => {
+  const m = enPantalla(conAdjunto('m1', ELLA, '2026-09-05T10:00:00.000Z', 'media_abc'), YO);
+  assert.equal(m.adjuntoId, 'media_abc');
+  assert.equal(m.adjuntoLocal, null);       // durable: no hay vista previa local
+  assert.equal(m.fallida, false);
+});
+
+test('un pendiente de imagen enseña su vista previa local y aún no tiene id de adjunto', () => {
+  const p = pendienteDe('', 'clave_img', 'Ana', Date.parse('2026-09-05T10:00:00.000Z'), 'file:///tmp/foto.jpg');
+  assert.equal(p.pendiente, true);
+  assert.equal(p.adjuntoLocal, 'file:///tmp/foto.jpg');
+  assert.equal(p.adjuntoId, '');            // todavía no ha vuelto del servidor
+  assert.equal(p.texto, '');
+});
+
+test('el durable de una imagen sustituye a su pendiente: id de adjunto, sin vista previa local', () => {
+  const pend = pendienteDe('', 'clave_img', 'Ana', Date.parse('2026-09-05T10:00:00.000Z'), 'file:///tmp/foto.jpg');
+  const durable = enPantalla(conAdjunto('m2', YO, '2026-09-05T10:00:01.000Z', 'media_xyz', { clientId: 'clave_img' }), YO);
+  const lista = conMensaje([pend], durable);
+  assert.equal(lista.length, 1);            // sustituye, no se suma
+  assert.equal(lista[0].id, 'm2');
+  assert.equal(lista[0].adjuntoId, 'media_xyz');
+  assert.equal(lista[0].adjuntoLocal, null);
+  assert.equal(lista[0].pendiente, false);
+});
+
+test('una imagen rechazada se marca fallida y se conserva; el reintento la reactiva', () => {
+  const pend = pendienteDe('', 'clave_img', 'Ana', 0, 'file:///tmp/foto.jpg');
+  const fallada = marcarFallida([pend], 'clave_img');
+  assert.equal(fallada.length, 1);          // NO se quita: se conserva para reintentar
+  assert.equal(fallada[0].fallida, true);
+  assert.equal(fallada[0].adjuntoLocal, 'file:///tmp/foto.jpg'); // la previa sigue
+
+  const reactivada = reactivarPendiente(fallada, 'clave_img');
+  assert.equal(reactivada[0].fallida, false);
+  assert.equal(reactivada[0].pendiente, true);
+});
+
+test('un mensaje de sólo imagen cuenta como contenido, no como vacío', () => {
+  const soloImagen = [enPantalla(conAdjunto('m1', ELLA, '2026-09-05T10:00:00.000Z', 'media_abc'), YO)];
+  assert.equal(estadoDeLaPantalla({ cargando: false, fallo: false, hayConexion: true, mensajes: soloImagen }), 'CONTENIDO');
+});
+
+// --- Contratos de la imagen ---
+
+test('el emisor del socket manda la imagen sólo cuando la hay, y nunca la identidad', () => {
+  const fuente = despojarComentarios(leer('realtime/socket.ts'));
+  const emisor = fuente.slice(fuente.indexOf('export function enviarMensajeDeChat'));
+  const cuerpo = emisor.slice(0, emisor.indexOf('\n}'));
+  // La firma acepta una imagen opcional y sólo la incluye cuando existe.
+  assert.match(cuerpo, /imagen\?: string/);
+  assert.match(cuerpo, /\.\.\.\(imagen \? \{ image: imagen \} : \{\}\)/);
+  assert.doesNotMatch(cuerpo, /senderId|userId|role/);
+});
+
+test('la lista blanca de formatos y el tope son los del contrato', () => {
+  assert.deepEqual([...FORMATOS_DE_CHAT], ['image/jpeg', 'image/png', 'image/webp']);
+  // Por debajo del corte de 1 MB del socket, para dejar sitio al sobre del evento.
+  assert.equal(LIMITE_DATA_URL, 900_000);
+  assert.ok(LIMITE_DATA_URL < 1_000_000);
+});
+
+test('interpretarImagenDeChat: acepta los tres formatos y rechaza todo lo demás', () => {
+  const base64 = Buffer.from('bytes-de-una-imagen').toString('base64');
+  for (const mime of ['image/jpeg', 'image/png', 'image/webp']) {
+    const r = interpretarImagenDeChat({ uri: `file:///tmp/x`, mimeType: mime, base64 });
+    assert.equal(r.ok, true, mime);
+    if (r.ok) assert.equal(r.imagen.dataUrl, `data:${mime};base64,${base64}`);
+  }
+  // Formatos activos o no admitidos: fuera.
+  for (const mime of ['image/svg+xml', 'image/gif', 'image/bmp', 'image/tiff', 'text/html']) {
+    assert.equal(interpretarImagenDeChat({ uri: 'file:///tmp/x', mimeType: mime, base64 }).ok, false, mime);
+  }
+  // Sin base64 no hay nada que mandar.
+  assert.equal(interpretarImagenDeChat({ uri: 'file:///tmp/x.jpg', base64: null }).ok, false);
+  // Por encima del tope: se rechaza sin mandarlo.
+  const enorme = interpretarImagenDeChat({ uri: 'file:///tmp/x.jpg', mimeType: 'image/jpeg', base64: 'A'.repeat(LIMITE_DATA_URL) });
+  assert.equal(enorme.ok, false);
+  if (!enorme.ok) assert.equal(enorme.motivo, 'TAMANO');
+});
+
+test('el picker vive tras la puerta única, y su lógica es pura y sin orígenes externos', () => {
+  // La captura nativa está en la puerta; nadie más importa expo-image-picker
+  // (lo vigila fotoDeDocumento.test). Aquí sólo se confirma que la imagen de
+  // chat entra por esa puerta con base64.
+  const puerta = leer('media/captura.ts');
+  assert.match(puerta, /export async function elegirImagenDeChat/);
+  assert.match(puerta, /base64: true/);
+  // La lógica pura no toca red ni orígenes activos.
+  const dominio = despojarComentarios(leer('domain/imagenDeChat.ts'));
+  assert.doesNotMatch(dominio, /svg|image\/gif|http:\/\/|https:\/\/|blob:|data:text\/html/);
+});
+
+test('la imagen sobrevive a que Android destruya la aplicación: se rescata al reabrir', () => {
+  // La puerta expone el rescate con getPendingResultAsync, y el chat lo llama al
+  // montar con un viaje cargado y manda lo que quedó pendiente. Sin esto, una
+  // imagen elegida justo antes de una recreación de actividad se perdería.
+  const puerta = leer('media/captura.ts');
+  assert.match(puerta, /export async function recuperarImagenDeChatPendiente/);
+  assert.match(puerta, /getPendingResultAsync/);
+
+  const pantalla = despojarComentarios(leer('app/chat.tsx'));
+  assert.match(pantalla, /recuperarImagenDeChatPendiente\(\)/);
+  assert.match(pantalla, /pendiente\.ok[\s\S]{0,60}chat\.enviarImagen\(pendiente\.imagen\)/);
+});
+
+test('la pantalla del chat adjunta, pinta, amplía y reintenta imágenes con el loader autenticado', () => {
+  const fuente = leer('app/chat.tsx');
+  for (const testID of ['adjuntar-imagen', 'imagen-de-chat', 'imagen-subiendo', 'reintentar-imagen', 'cerrar-imagen']) {
+    assert.ok(fuente.includes(`testID="${testID}"`), testID);
+  }
+  // La vista ampliada sólo lleva su testID cuando está visible.
+  assert.ok(fuente.includes("'imagen-ampliada'"), 'imagen-ampliada');
+  // La imagen durable se pide con la sesión, por el mismo loader del historial.
+  assert.match(fuente, /fuenteDeAdjunto/);
+  // La pendiente enseña su `file://` local; la durable, la fuente autenticada.
+  assert.match(fuente, /mensaje\.adjuntoLocal !== null[\s\S]{0,40}\{ uri: mensaje\.adjuntoLocal \}/);
+  const limpio = despojarComentarios(fuente);
+  assert.doesNotMatch(limpio, /svg|image\/gif|http:\/\/|https:\/\/|blob:|data:text\/html/);
+});
+
+test('el hook expone el envío y el reintento de imágenes', () => {
+  const fuente = despojarComentarios(leer('realtime/ChatDelViaje.tsx'));
+  assert.match(fuente, /enviarImagen: \(imagen: ImagenDeChat\) => void/);
+  assert.match(fuente, /reintentarImagen: \(claveDeIntento: string\) => void/);
+  // Nunca se da por enviada una imagen sin acuse: el pendiente sale con su
+  // vista previa local y sólo el durable lo sustituye.
+  assert.match(fuente, /enviarMensajeDeChat\(viajeId, '', clave, imagen\.dataUrl\)/);
+  // Al cambiar de viaje se sueltan las data URL guardadas: sin fugas.
+  assert.match(fuente, /intentosDeImagen\.current\.clear\(\)/);
 });

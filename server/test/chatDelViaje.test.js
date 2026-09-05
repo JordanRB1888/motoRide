@@ -9,6 +9,16 @@ import { io } from 'socket.io-client';
 
 const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+/** PNG mínimo con firma válida: el almacén comprueba los bytes, no el MIME. */
+const PNG = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.from([0, 0, 0, 13]), Buffer.from('IHDR'),
+  Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]), Buffer.from([0x1f, 0x15, 0xc4, 0x89])
+]);
+const PNG_URL = `data:image/png;base64,${PNG.toString('base64')}`;
+// Un SVG con el MIME de un PNG: pasa el filtro del MIME pero NO la firma binaria.
+const SVG_COMO_PNG = `data:image/png;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64')}`;
+
 /**
  * CHAT-PASSENGER-DRIVER-1: la conversacion del viaje, por socket, contra el
  * servidor real.
@@ -260,4 +270,74 @@ test('con el viaje terminado el historial se lee, pero ya no se escribe', async 
   socketPasajera.emit('chat:send_message', { tripId, text: 'tarde', clientId: 'z' });
   assert.equal((await negativa)?.error, 'CHAT_CLOSED');
   assert.equal(await seColo, null, 'entro un mensaje en un viaje terminado');
+});
+
+// ---------------------------------------------------------------------------
+// CHAT-2: imágenes privadas del viaje
+// ---------------------------------------------------------------------------
+
+const contenido = (url, mediaId, token) =>
+  fetch(`${url}/api/chat-media/${mediaId}/content`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+
+test('una imagen del chat es privada del viaje: la ven los dos, nadie más, y la clave del almacén no sale', async (t) => {
+  const url = await arrancarServidor(t);
+  const { pasajera, conductor, tripId, socketPasajera, socketConductor } = await montarViaje(t, url);
+  const otra = await registrarPasajera(url, 2);
+
+  const loVe = esperarMensaje(socketConductor);
+  socketPasajera.emit('chat:send_message', { tripId, image: PNG_URL, clientId: 'img-1' });
+  const recibido = await loVe;
+  assert.ok(recibido, 'la imagen no le llegó al conductor');
+  assert.ok(recibido.imageRef && typeof recibido.imageRef.id === 'string', 'falta la referencia pública');
+  assert.equal(recibido.imageRef.mimeType, 'image/png');
+  assert.deepEqual(Object.keys(recibido.imageRef).sort(), ['id', 'mimeType'], 'la referencia trae más de lo debido');
+  assert.equal('imageStorageKey' in recibido, false, 'la clave del almacén salió al cliente');
+
+  const mediaId = recibido.imageRef.id;
+  // Los dos del viaje la ven.
+  assert.equal((await contenido(url, mediaId, pasajera.token)).status, 200);
+  assert.equal((await contenido(url, mediaId, conductor.token)).status, 200);
+  // Nadie más: ajena, sin sesión y clave inventada responden sin filtrar nada.
+  assert.equal((await contenido(url, mediaId, otra.token)).status, 403);
+  assert.equal((await contenido(url, mediaId, null)).status, 401);
+  assert.equal((await contenido(url, 'media_inventado', pasajera.token)).status, 403);
+
+  // Reabrir: la imagen sigue en el historial, con su referencia y sin la clave.
+  const { cuerpo } = await historial(url, pasajera.token, tripId);
+  const conImagen = cuerpo.find(m => m.imageRef);
+  assert.ok(conImagen, 'la imagen no quedó en el historial');
+  assert.equal('imageStorageKey' in conImagen, false);
+});
+
+test('el formato de la imagen lo decide el contenido: un SVG disfrazado de PNG se rechaza', async (t) => {
+  const url = await arrancarServidor(t);
+  const { tripId, socketPasajera, socketConductor } = await montarViaje(t, url);
+
+  const seColo = esperarMensaje(socketConductor, 800);
+  const negativa = esperarError(socketPasajera);
+  socketPasajera.emit('chat:send_message', { tripId, image: SVG_COMO_PNG, clientId: 'svg-1' });
+  const e = await negativa;
+  assert.ok(e && ['INVALID_CHAT_IMAGE', 'INVALID_FILE_TYPE'].includes(e.error), `motivo inesperado: ${e && e.error}`);
+  assert.equal(await seColo, null, 'un SVG disfrazado llegó a la contraparte');
+});
+
+test('con el viaje terminado la imagen de antes se sigue viendo, pero no entran nuevas', async (t) => {
+  const url = await arrancarServidor(t);
+  const { conductor, tripId, socketPasajera, socketConductor } = await montarViaje(t, url);
+
+  const loVe = esperarMensaje(socketConductor);
+  socketPasajera.emit('chat:send_message', { tripId, image: PNG_URL, clientId: 'img-2' });
+  const mediaId = (await loVe).imageRef.id;
+
+  for (const estado of ['ARRIVED', 'IN_PROGRESS', 'COMPLETED']) {
+    socketConductor.emit('tripStatusUpdated', { tripId, status: estado });
+    await respirar(300);
+  }
+
+  // La imagen de antes sigue siendo legible para los participantes: es el registro.
+  assert.equal((await contenido(url, mediaId, conductor.token)).status, 200);
+  // Pero no se suben nuevas: misma política que el texto.
+  const negativa = esperarError(socketPasajera);
+  socketPasajera.emit('chat:send_message', { tripId, image: PNG_URL, clientId: 'img-3' });
+  assert.equal((await negativa)?.error, 'CHAT_CLOSED');
 });

@@ -367,7 +367,14 @@ test('los adjuntos siguen siendo PRIVADOS', () => {
   // PÚBLICO. La clave del almacén nunca sale del servidor.
   assert.match(servicio, /\/api\/chat-media\/\$\{encodeURIComponent\(adjuntoId\)\}\/content/);
   assert.match(servicio, /authorization: `Bearer \$\{token\}`/);
-  assert.equal(/imageStorageKey|base64|dataUrl/i.test(servicio), false, 'se sale del contrato privado');
+  assert.equal(/imageStorageKey/.test(servicio), false, 'se sale del contrato privado');
+  // Los bytes se traen CON la sesión y se entregan a <Image> como data URI en
+  // memoria de la pantalla: no se le da al cargador nativo una URL http que
+  // dependa de que reenvíe cabeceras (en el dispositivo no lo hacía), ni queda
+  // nada en disco, ni existe una URL pública o permanente.
+  assert.match(servicio, /readAsDataURL\(blob\)/);
+  assert.doesNotMatch(sinComentarios('services/viajes.ts'), /uri: `\$\{configuracion\.urlBase\}/,
+    'vuelve a devolver la URL cruda para que <Image> la pida por su cuenta');
 });
 
 test('no se amplían los tipos de imagen aceptados', () => {

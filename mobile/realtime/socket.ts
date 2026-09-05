@@ -437,9 +437,18 @@ export function cambiarEstadoDeCarrera(
 export function enviarMensajeDeChat(
   viajeId: string,
   texto: string,
-  claveDeIntento: string
+  claveDeIntento: string,
+  imagen?: string
 ): boolean {
   if (socket === null || !socket.connected) return false;
-  socket.emit('chat:send_message', { tripId: viajeId, text: texto, clientId: claveDeIntento });
+  // La imagen viaja como data URL cuando la hay; el servidor la valida, la
+  // guarda en su almacén privado y devuelve sólo la referencia. La identidad
+  // del remitente NUNCA se manda: la pone el servidor con el token del socket.
+  socket.emit('chat:send_message', {
+    tripId: viajeId,
+    text: texto,
+    clientId: claveDeIntento,
+    ...(imagen ? { image: imagen } : {})
+  });
   return true;
 }

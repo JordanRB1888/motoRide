@@ -106,20 +106,31 @@ export async function pedirMensajes(id: string): Promise<Resultado<readonly Mens
 }
 
 /**
- * Cómo pedir la imagen de un adjunto.
+ * Cómo traer la imagen de un adjunto.
  *
  * `GET /api/chat-media/:id/content` EXIGE sesión y comprueba que quien pide
  * participó en ese viaje. Un identificador inexistente, uno malformado y uno
  * ajeno responden exactamente igual, así que desde fuera no se puede averiguar
  * nada.
  *
- * Aquí no se amplía nada de eso: se manda el identificador público —el mismo
- * que vino en el mensaje— con la cabecera de la sesión. La clave del almacén
+ * SE TRAEN LOS BYTES CON LA SESIÓN, NO SE LE DA UNA URL A `<Image>`.
+ *
+ * Antes se devolvía la URL con la cabecera para que `<Image source>` la
+ * pidiera por su cuenta. En el dispositivo esa carga fallaba: la imagen llegaba
+ * en blanco o como «no se pudo cargar» aunque el servidor la sirviera bien.
+ * Depender de que el cargador nativo de imágenes reenvíe cabeceras propias es
+ * frágil —cambia con la arquitectura y la versión—. Así que se pide con el
+ * mismo `fetch` que usa toda la API (ése SÍ lleva el token, siempre) y se
+ * entrega como data URI, que `<Image>` pinta sin pedir nada a nadie.
+ *
+ * Lo que vuelve vive en memoria de la pantalla que lo pidió y muere con ella:
+ * no hay URL pública, ni permanente, ni nada en disco. El identificador que se
+ * manda es el público —el mismo que vino en el mensaje— y la clave del almacén
  * nunca sale del servidor.
  */
 export async function fuenteDeAdjunto(
   adjuntoId: string
-): Promise<{ readonly uri: string; readonly headers: Record<string, string> } | null> {
+): Promise<{ readonly uri: string; readonly headers?: Record<string, string> } | null> {
   if (adjuntoId === '') return null;
   const token = await leerToken();
   if (!token) return null;
@@ -127,8 +138,21 @@ export async function fuenteDeAdjunto(
   const { configuracion } = await import('../config/environment');
   if (!configuracion.ok) return null;
 
-  return {
-    uri: `${configuracion.urlBase}/api/chat-media/${encodeURIComponent(adjuntoId)}/content`,
-    headers: { authorization: `Bearer ${token}` }
-  };
+  try {
+    const respuesta = await fetch(
+      `${configuracion.urlBase}/api/chat-media/${encodeURIComponent(adjuntoId)}/content`,
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    if (!respuesta.ok) return null;
+    const blob = await respuesta.blob();
+    const dataUri = await new Promise<string | null>(resolve => {
+      const lector = new FileReader();
+      lector.onloadend = () => resolve(typeof lector.result === 'string' ? lector.result : null);
+      lector.onerror = () => resolve(null);
+      lector.readAsDataURL(blob);
+    });
+    return dataUri === null ? null : { uri: dataUri };
+  } catch {
+    return null;
+  }
 }
