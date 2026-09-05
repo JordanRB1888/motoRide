@@ -9,11 +9,16 @@
  * estaban aprobados. Los radios y el aire son los mismos que los de la oferta,
  * para que las dos superficies del conductor se lean como una sola cosa.
  *
- * UN SOLO BOTÓN, EL QUE TOCA
+ * UN SOLO BOTÓN DE ACCIÓN, EL QUE TOCA
  *
  * Quien conduce mira esto en un semáforo, con casco y con una mano. No hay
  * menú, ni tres acciones a la vez, ni nada que obligue a elegir: el estado del
- * viaje decide cuál es el único botón posible, y ese es el que se pinta.
+ * viaje decide cuál es el único botón de acción posible, y ese es el que se
+ * pinta, grande y abajo.
+ *
+ * Aparte, y en segundo plano, el acceso a la conversación con la pasajera:
+ * «no te encuentro», «estoy en la esquina». No compite con la acción —es un
+ * botón secundario, sin relleno— y sólo se pinta cuando hay a dónde llevar.
  *
  * Del viaje se enseña lo mínimo para no equivocarse de sitio —de dónde a
  * dónde— y nada más. La tarifa ya se decidió al aceptar; repetirla aquí sólo
@@ -45,7 +50,7 @@ function Punto({
 }
 
 export function SuperficieDeCarrera({
-  titular, origen, destino, accion, fase, fallo, sePuede, onPulsar
+  titular, origen, destino, accion, fase, fallo, sePuede, onPulsar, onMensaje
 }: {
   readonly titular: string;
   readonly origen: string;
@@ -55,6 +60,8 @@ export function SuperficieDeCarrera({
   readonly fallo: string | null;
   readonly sePuede: boolean;
   readonly onPulsar: () => void;
+  /** Abrir la conversación con la pasajera. Sin esto no se pinta el acceso. */
+  readonly onMensaje?: () => void;
 }) {
   const tema = useTema();
   const enviando = fase === 'SUBMITTING';
@@ -95,6 +102,16 @@ export function SuperficieDeCarrera({
         <View testID="fallo-de-carrera">
           <Txt nivel="pie" tono="peligro">{fallo}</Txt>
         </View>
+      )}
+
+      {onMensaje === undefined ? null : (
+        <Boton
+          titulo="Mensaje"
+          icono="mensaje"
+          variante="secundario"
+          onPress={onMensaje}
+          testID="abrir-chat-conductor"
+        />
       )}
 
       <Boton

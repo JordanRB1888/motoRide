@@ -416,3 +416,30 @@ export function cambiarEstadoDeCarrera(
   socket.emit('tripStatusUpdated', { tripId: viajeId, status: estado });
   return true;
 }
+
+/**
+ * Escribir en la conversación del viaje.
+ *
+ * Sólo texto en esta fase. La imagen tiene su pipeline en el servidor, pero no
+ * tiene pantalla todavía, y mandar lo que no se puede ver no es una función.
+ *
+ * `claveDeIntento` es la que hace que un reintento no salga dos veces: el
+ * servidor, si ya guardó un mensaje de esta persona con esa clave, vuelve a
+ * anunciar el que tiene en vez de crear otro. Quien llama la genera UNA vez por
+ * mensaje y la conserva mientras lo reintenta.
+ *
+ * La identidad no viaja: sale del token. Un `senderId` en el payload lo
+ * ignoraría el servidor, y aquí ni se ofrece la tentación.
+ *
+ * `false` si no salió —sin socket o sin conexión— para que la pantalla lo diga
+ * en vez de dejar el mensaje girando.
+ */
+export function enviarMensajeDeChat(
+  viajeId: string,
+  texto: string,
+  claveDeIntento: string
+): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('chat:send_message', { tripId: viajeId, text: texto, clientId: claveDeIntento });
+  return true;
+}

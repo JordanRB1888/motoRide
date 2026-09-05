@@ -296,6 +296,7 @@ export default function InicioDeConductor() {
                 fallo={enCurso.fallo}
                 sePuede={enCurso.sePuede}
                 onPulsar={enCurso.pulsar}
+                onMensaje={() => router.push('/chat')}
               />
             )
           ) : null}

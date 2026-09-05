@@ -165,7 +165,10 @@ export default function PantallaDelViajeActivo() {
 
   return (
     <ProveedorDeNavegacion ir={irA}>
-      <C2Viaje datos={datos} mapa={mapa} onCentrar={centrar} />
+      {/* El botón de mensaje de la tarjeta del conductor ya estaba dibujado; ahora
+          lleva a la conversación del viaje. `push`, no `replace`: se vuelve a
+          esta pantalla al cerrar el chat. */}
+      <C2Viaje datos={datos} mapa={mapa} onCentrar={centrar} onMensaje={() => router.push('/chat')} />
     </ProveedorDeNavegacion>
   );
 }

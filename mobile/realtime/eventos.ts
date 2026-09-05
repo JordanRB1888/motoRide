@@ -205,7 +205,31 @@ export const EVENTOS_DEL_SERVIDOR = [
    * —cuando el viaje ya se había cancelado— dejaba la pantalla girando sin más
    * salida que cerrar la aplicación.
    */
-  'rideAcceptanceFailed'
+  'rideAcceptanceFailed',
+
+  /**
+   * Un mensaje de la conversación del viaje, para los DOS participantes.
+   *
+   * Fuente: `io.to(user:pasajera).to(user:conductor).emit('chat:message', …)`
+   * en el handler de `chat:send_message`. Llega ya proyectado —sin la clave
+   * privada del almacén de imágenes— con `id`, `tripId`, `senderId`,
+   * `senderName`, `text`, `timestamp` y, si el remitente la mandó, `clientId`.
+   *
+   * También le llega a quien lo escribió: es su acuse. Un mensaje no se da por
+   * enviado hasta que vuelve por aquí, y `clientId` es lo que casa el pendiente
+   * con el durable para que no aparezca dos veces.
+   */
+  'chat:message',
+
+  /**
+   * El servidor no aceptó un mensaje.
+   *
+   * Fuente: `socket.emit('chat:error', { error, tripId })`. `FORBIDDEN` si no
+   * es un participante, `CHAT_CLOSED` si el viaje ya terminó, `EMPTY_MESSAGE`
+   * si no traía nada, `CHAT_MESSAGE_FAILED` si no se pudo guardar, y los
+   * códigos de imagen del pipeline de media.
+   */
+  'chat:error'
 ] as const;
 export type EventoDelServidor = (typeof EVENTOS_DEL_SERVIDOR)[number];
 
@@ -233,8 +257,8 @@ export const EVENTOS_PENDIENTES = [
   'rideRequestFailed',
   // Conductor — los tres de presencia salieron en DRIVER-AVAILABILITY-1.
   // No queda ninguno pendiente de esta familia.
-  // Chat en vivo — CHAT-INTEGRATION
-  'chat:message', 'chat:error',
+  // Chat en vivo — `chat:message` y `chat:error` SALIERON de aquí en
+  // CHAT-PASSENGER-DRIVER-1: la conversación del viaje ya tiene pantalla.
   // Cartera y calificación
   'wallet:updated', 'tripRatingUpdated', 'tripRatingRejected'
 ] as const;

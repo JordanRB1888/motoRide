@@ -363,11 +363,15 @@ test('NO se emite ningún evento de despacho todavía', () => {
   // veto era justo eso: no emitirlo hasta que hubiera donde pulsarlo y donde
   // leer que no salio.
   //
-  // Siguen vedados `rideRequested` --lo emite el servidor, no el telefono--,
-  // la calificacion y el chat, que no tienen pantalla todavia.
+  // `chat:send_message` sale en CHAT-PASSENGER-DRIVER-1: la conversacion del
+  // viaje ya tiene pantalla, con su acuse por el socket y su clave de intento
+  // para que un reintento no salga dos veces.
+  //
+  // Siguen vedados `rideRequested` --lo emite el servidor, no el telefono-- y
+  // la calificacion, que no tiene pantalla todavia.
   const prohibidos = [
     'rideRequested',
-    'tripRated', 'chat:send_message'
+    'tripRated'
   ];
 
   for (const carpeta of carpetas) {
@@ -421,7 +425,12 @@ test('NO se emite ningún evento de despacho todavía', () => {
   // `cambiarEstadoDeCarrera`, con el mismo trato: evento escrito, sin identidad
   // en el payload, y con el servidor comprobando que quien lo pide es el
   // conductor asignado y que el salto es legal desde el estado actual.
+  //
+  // `chat:send_message` entra en CHAT-PASSENGER-DRIVER-1, en
+  // `enviarMensajeDeChat`: evento escrito, sin identidad en el payload, y con
+  // la clave del intento para que el servidor reconozca un reintento.
   assert.deepEqual(eventosEmitidos.sort(), [
+    'chat:send_message',
     'driver:connect', 'driver:location', 'driver:status', 'passenger:location_update',
     'rideAccepted', 'rideCancelled', 'rideRejected', 'tripStatusUpdated'
   ]);

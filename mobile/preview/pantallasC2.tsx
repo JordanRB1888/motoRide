@@ -1279,12 +1279,18 @@ const VIAJE_EN_BLANCO: DatosDelViajeEnCurso = {
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
 
-export function C2Viaje({ datos, mapa, onCentrar }: {
+export function C2Viaje({ datos, mapa, onCentrar, onMensaje }: {
   readonly datos?: DatosDelViajeEnCurso;
   /** Con modelo se pinta Google; sin él, el lienzo dibujado del recorrido. */
   readonly mapa?: ModeloDelMapa;
   /** Qué hace el botón de centrar, que ya estaba dibujado en esta pantalla. */
   readonly onCentrar?: () => void;
+  /**
+   * Qué hace el botón de mensaje, que también estaba dibujado y sin conectar.
+   * En el recorrido de diseño no viene, y el botón se pinta igual: ahí no hay a
+   * quién escribir.
+   */
+  readonly onMensaje?: () => void;
 } = {}) {
   const tema = useTema();
   const viaje = datos ?? (EN_DESARROLLO ? VIAJE_DE_EJEMPLO : VIAJE_EN_BLANCO);
@@ -1347,6 +1353,12 @@ export function C2Viaje({ datos, mapa, onCentrar }: {
                   key={accion}
                   accessibilityRole="button"
                   accessibilityLabel={accion}
+                  testID={accion === 'Mensaje' ? 'abrir-chat' : undefined}
+                  // Sólo «Mensaje» hace algo: es el acceso a la conversación
+                  // del viaje. «Llamar» sigue dibujado y sin conectar, como
+                  // estaba: el teléfono tiene su propia política y su fase.
+                  onPress={accion === 'Mensaje' ? onMensaje : undefined}
+                  disabled={accion === 'Mensaje' ? onMensaje === undefined : true}
                   style={{
                     width: 38, height: 38, borderRadius: 19,
                     alignItems: 'center', justifyContent: 'center',

@@ -282,9 +282,13 @@ test('sigue sin haber despacho', () => {
   //
   // `rideAccepted` y `rideRejected` salen en DISPATCH-DRIVER-SURFACES-1: el
   // conductor ya tiene la superficie de oferta con su cuenta atras, y los emite
-  // desde `realtime/socket.ts` con sus candados. Siguen vedados los que aun no
-  // tienen pantalla: calificar y el chat.
-  const prohibidos = ['tripRated', 'chat:send_message'];
+  // desde `realtime/socket.ts` con sus candados.
+  //
+  // `chat:send_message` sale en CHAT PASSENGER-DRIVER 1: la conversacion del
+  // viaje ya tiene pantalla y su emisor vive en `realtime/socket.ts`, con
+  // `clientId` y sin la identidad del remitente (lo vigila chatDelViaje.test).
+  // Sigue vedado lo que aun no tiene pantalla: calificar.
+  const prohibidos = ['tripRated'];
   for (const carpeta of carpetas) {
     for (const nombre of fs.readdirSync(path.join(raizMovil, carpeta), { recursive: true })) {
       const completa = path.join(raizMovil, carpeta, String(nombre));

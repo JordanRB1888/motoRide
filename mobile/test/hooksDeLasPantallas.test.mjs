@@ -40,7 +40,7 @@ import { despojarComentarios } from './ayudas.mjs';
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
 /** Las pantallas con salidas tempranas por estado de sesión o por rol. */
-const PANTALLAS = ['conductor.tsx', 'pedir.tsx', 'historial.tsx', 'perfil.tsx'];
+const PANTALLAS = ['conductor.tsx', 'pedir.tsx', 'historial.tsx', 'perfil.tsx', 'chat.tsx'];
 
 /** `useAlgo(` al principio de una expresión, no `.useAlgo(` de un objeto. */
 const LLAMADA_A_HOOK = /(^|[^.\w])(use[A-Z]\w*)\s*\(/g;

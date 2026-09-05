@@ -2149,7 +2149,14 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   if (!userCanAccessTrip(req.user.id, req.user.role, trip)) {
     return res.status(403).json({ error: 'FORBIDDEN' });
   }
-  res.json(publicChatMessages(database.messages.filter(message => message.tripId === trip.id)));
+  // ORDEN DETERMINISTA, y no el de insercion. En memoria coinciden, pero tras
+  // un reinicio la coleccion vuelve de la base y ese orden ya no es promesa de
+  // nadie. Se ordena por marca de tiempo, con el id como desempate para que
+  // dos mensajes del mismo milisegundo salgan siempre igual.
+  const conversacion = database.messages
+    .filter(message => message.tripId === trip.id)
+    .sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : a.id < b.id ? -1 : 1));
+  res.json(publicChatMessages(conversacion));
 });
 
 app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores.viajes, async (req, res) => {
@@ -2827,15 +2834,51 @@ io.on('connection', (socket) => {
 
   on('chat:send_message', async (data = {}) => {
     const trip = database.trips.find(item => item.id === data.tripId);
+    // La identidad sale de la sesion firmada. `data.senderId`, si viene, se
+    // ignora: nadie habla en nombre de otro por escribirlo en el payload.
     const { userId, role } = socket.data.auth;
     if (!trip || !userCanAccessTrip(userId, role, trip) || role === 'admin') {
       socket.emit('chat:error', { error: 'FORBIDDEN', tripId: data.tripId });
       return;
     }
+    // LA POLITICA DE CONTACTO YA EXISTIA; EL CHAT NO LA APLICABA.
+    //
+    // `isContactableTrip` es la que decide cuando viaja el telefono del
+    // conductor: solo mientras la carrera esta viva. Es la misma regla para
+    // escribir. Un viaje terminado conserva su historial --se lee igual-- pero
+    // no admite mensajes nuevos: no es una conversacion, es un registro.
+    if (!isContactableTrip(trip)) {
+      socket.emit('chat:error', { error: 'CHAT_CLOSED', tripId: trip.id });
+      return;
+    }
     const text = String(data.text || '').trim().slice(0, 1000);
     // Misma semantica que el productor de soporte, por el mismo pipeline.
     const tieneImagen = isChatImageDataUrl(data.image);
-    if (!text && !tieneImagen) return;
+    // Vacio se contesta, no se traga: el cliente que mando algo espera saber
+    // que paso con ello.
+    if (!text && !tieneImagen) {
+      socket.emit('chat:error', { error: 'EMPTY_MESSAGE', tripId: trip.id });
+      return;
+    }
+
+    // IDEMPOTENCIA DEL CLIENTE.
+    //
+    // Un reintento tras un corte --el mismo mensaje reenviado al reconectar--
+    // no puede aparecer dos veces. El cliente manda una clave por intento, y
+    // si ya hay un mensaje de ESTA persona en ESTE viaje con esa clave, se
+    // vuelve a anunciar el existente en vez de crear otro. La clave se acota
+    // para que no sirva de almacen de nada.
+    const clientId = typeof data.clientId === 'string'
+      ? data.clientId.trim().slice(0, 64)
+      : '';
+    if (clientId) {
+      const repetido = database.messages.find(m =>
+        m.tripId === trip.id && m.senderId === userId && m.clientId === clientId);
+      if (repetido) {
+        io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', publicChatMessage(repetido));
+        return;
+      }
+    }
     const sender = database.users.find(user => user.id === userId);
 
     const construir = async (media) => {
@@ -2847,6 +2890,9 @@ io.on('connection', (socket) => {
         recipientId: role === 'driver' ? trip.passengerId : trip.driverId,
         text,
         ...(media || {}),
+        // Se guarda para poder reconocer el reintento. Viaja al cliente, que es
+        // quien la genero, para casar su pendiente con el mensaje durable.
+        ...(clientId ? { clientId } : {}),
         timestamp: new Date().toISOString()
       };
       database.messages.push(message);

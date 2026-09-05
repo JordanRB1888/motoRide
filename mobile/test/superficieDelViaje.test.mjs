@@ -254,7 +254,10 @@ test('un fallo de red conserva la superficie', () => {
 test('el viaje terminado saca de la pantalla sin dejarla en la pila', () => {
   const ruta = sinComentarios('app/viaje-activo.tsx');
   assert.match(ruta, /router\.replace\('\/pasajero'\)/);
-  assert.equal(/router\.push\(/.test(ruta), false, 'apila la pantalla del viaje');
+  // El unico `push` es el del chat: se vuelve a esta pantalla al cerrarlo.
+  // Salir del viaje —terminado, cancelado— sigue siendo `replace`.
+  const apilados = [...ruta.matchAll(/router\.push\(([^)]*)\)/g)].map(m => m[1]);
+  assert.deepEqual(apilados, ["'/chat'"], 'apila la pantalla del viaje por algo que no es el chat');
 });
 
 // ---------------------------------------------------------------------------
