@@ -136,7 +136,7 @@ export function renderUsersManagement(container) {
       <td><strong>${escape(user.phone || 'No registrado')}</strong><small>${escape(user.email || 'Sin correo')}</small></td>
       <td><strong>${escape(user.role === 'driver' ? 'Conductor' : 'Pasajero')}</strong><small>${escape(vehicleText(user))}${user.vehiclePlate ? ` · ${escape(user.vehiclePlate)}` : ''}</small></td>
       <td><span class="user-verification ${isVerified(user) ? 'verified' : ''}">${icon(isVerified(user) ? 'checkCircle' : 'clock', 14)} ${isVerified(user) ? 'Verificado' : 'Pendiente'}</span><small>${formatDate(user.createdAt)}</small></td>
-      <td><strong class="user-rating">${icon('starFilled', 14)} ${Number(user.rating || 5).toFixed(1)}</strong><small>${completed} viajes</small></td>
+      <td><strong class="user-rating">${icon('starFilled', 14)} ${user.rating == null ? '—' : Number(user.rating).toFixed(1)}</strong><small>${completed} viajes</small></td>
       <td><span class="user-state ${isSuspended(user) ? 'suspended' : isVerified(user) ? 'enabled' : 'pending'}">${statusText(user)}</span></td>
       <td><button class="user-row-action" data-select-user="${escape(user.id)}" type="button" aria-label="Ver detalles">•••</button></td>
     </tr>`;

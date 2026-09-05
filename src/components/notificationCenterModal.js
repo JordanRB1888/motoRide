@@ -45,6 +45,7 @@ export function createNotificationCenterModal(user, onClose, { onNavigate } = {}
 
     const render = () => {
         let notifications = notificationService.getNotifications(userId);
+        if (user?.role === 'admin') notifications = [...notifications].sort((a,b)=>Number(a.read)-Number(b.read)||new Date(b.timestamp||b.createdAt)-new Date(a.timestamp||a.createdAt));
         if (filterCategory !== 'ALL') notifications = notifications.filter(item => item.category === filterCategory);
 
         const isMuted = audioEffects.isMuted();
@@ -74,6 +75,7 @@ export function createNotificationCenterModal(user, onClose, { onNavigate } = {}
                 <button class="cat-filter-btn trip ${filterCategory === 'TRIP' ? 'active' : ''}" data-cat="TRIP">${icon('navigation', 14)} Carreras</button>
                 <button class="cat-filter-btn finance ${filterCategory === 'FINANCE' ? 'active' : ''}" data-cat="FINANCE">${icon('dollarSign', 14)} Finanzas</button>
                 <button class="cat-filter-btn announcement ${filterCategory === 'ANNOUNCEMENT' ? 'active' : ''}" data-cat="ANNOUNCEMENT">${icon('bell', 14)} Anuncios</button>
+                ${user?.role === 'admin' ? `<button class="cat-filter-btn ${filterCategory === 'SUPPORT' ? 'active' : ''}" data-cat="SUPPORT">${icon('message',14)} Soporte</button><button class="cat-filter-btn ${filterCategory === 'SYSTEM' ? 'active' : ''}" data-cat="SYSTEM">${icon('settings',14)} Sistema y expedientes</button>` : ''}
             </nav>
 
             <div class="notification-list">
