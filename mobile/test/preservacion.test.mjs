@@ -586,7 +586,16 @@ test('el disco del conductor sobresale y los iconos de Passenger se elevan', () 
 
   const usos = (leer('ui/Navegacion.tsx').match(/marginTop: -SALIENTE/g) ?? []).length;
   assert.equal(usos, 1, 'el disco del conductor dejó de subir');
-  assert.match(leer('ui/Navegacion.tsx'), /\[0, -4\]/, 'el icono activo de Passenger no se eleva de forma sutil');
+
+  // En Passenger la elevación sutil dejó de ser el modo normal: con movimiento
+  // normal el icono activo va DENTRO del disco que emerge, y su pestaña se
+  // apaga. Los cuatro puntos se conservan para movimiento reducido, donde el
+  // disco no vuela y hace falta algo que diga cuál es el destino sin que nada
+  // cruce la pantalla.
+  const navegacion = leer('ui/Navegacion.tsx');
+  assert.match(navegacion, /const ELEVACION_QUIETA = -4/, 'se perdió la elevación sutil');
+  assert.match(navegacion, /\[0, ELEVACION_QUIETA\]/, 'la elevación sutil ya no se aplica');
+  assert.match(navegacion, /quieto \? withTiming\(activa \? 1 : 0/, 'la elevación dejó de ser sólo para movimiento reducido');
 });
 
 /** Las medidas del disco y su hueco, leídas del código. */
@@ -692,7 +701,17 @@ test('Passenger sólo enseña iconos y la curva viaja de forma continua', () => 
   assert.match(curva, /ultimoIndiceDePasajera/, 'la posición se reinicia entre rutas');
   assert.match(curva, /withSpring\(destino/, 'la curva salta en vez de viajar');
   assert.match(curva, /translateX: desplazamiento\.get\(\)/, 'la curva no se mueve en el hilo de UI');
-  assert.match(curva, /pulsacion\.get\(\) \* pulso\.get\(\)/, 'falta el feedback 0.94 y el micropulso');
+  assert.match(curva, /scale: pulsacion\.get\(\)/, 'la pestaña perdió el feedback al pulsar');
+  assert.match(curva, /withTiming\(0\.93/, 'el feedback al pulsar dejó de encoger el icono');
+
+  // El micropulso del icono se cambió por el compás de la referencia: el disco
+  // se retira, la muesca viaja medio compás después, y el disco vuelve a subir
+  // desde dentro de la barra. Un pulso del icono además de eso serían dos
+  // motivos compitiendo sobre el mismo elemento.
+  assert.match(curva, /withSequence\(\s*withTiming\(0, \{ duration: RETIRADA_MS \}\)/, 'el disco ya no se retira antes de viajar');
+  assert.match(curva, /withDelay\(RETIRADA_MS, withSpring\(destino/, 'la muesca sale sin esperar a que el disco se retire');
+  assert.match(curva, /\[ASCENSO, 0\]/, 'el disco ya no emerge desde dentro de la barra');
+
   assert.doesNotMatch(curva, /react-native-svg|MotionBar/, 'se añadió una dependencia para copiar la referencia');
 });
 

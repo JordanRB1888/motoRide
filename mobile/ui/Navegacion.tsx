@@ -1,13 +1,34 @@
 /**
  * Las barras inferiores de +58Express.
  *
- * PASSENGER: CINCO ICONOS Y UNA CURVA QUE VIAJA
+ * PASSENGER: CINCO ICONOS, UNA MUESCA QUE VIAJA Y UN DISCO QUE EMERGE
  *
  * Inicio, Historial, Pedir, Saldo y Perfil comparten la misma escala y no
- * llevan rótulos visibles. Una extensión orgánica de la superficie se desplaza
- * bajo el destino activo mientras ese icono sube y cambia al amarillo oficial.
- * La posición anterior se conserva al cambiar de ruta para que el movimiento
- * no se convierta en «desaparece aquí, aparece allá».
+ * llevan rótulos visibles. La posición anterior se conserva al cambiar de ruta
+ * para que el movimiento no se convierta en «desaparece aquí, aparece allá».
+ *
+ * El movimiento tiene tres piezas y un compás, y ese compás es lo que lo hace
+ * fluido en vez de correcto:
+ *
+ * 1. RETIRADA (50 ms). Al tocar, el disco amarillo se hunde y se apaga. Es lo
+ *    que despeja el camino: si la muesca arrancara con el disco todavía puesto,
+ *    lo que se vería es una pastilla resbalando, no algo que va y viene.
+ * 2. VIAJE. La muesca —el mordisco cóncavo de la superficie— se desliza con
+ *    muelle hasta la pestaña nueva. Sale medio compás después de la retirada.
+ * 3. ASCENSO. El disco vuelve a subir desde debajo de la barra, con un muelle
+ *    poco amortiguado que se pasa un poco de largo y se asienta. Es el rebote.
+ *
+ * Y mientras la muesca pasa, cada icono que queda debajo SE DESVANECE y vuelve.
+ * No es decoración: es lo que hace creer que la muesca es un hueco de verdad en
+ * la superficie y que los iconos están detrás de ella, no dibujados encima.
+ *
+ * El icono del destino activo viaja DENTRO del disco, no en su pestaña. Es la
+ * diferencia entre «el icono se ilumina» y «el disco trae el icono»: lo segundo
+ * es lo que se ve en la referencia, y es lo que se siente como una sola pieza.
+ *
+ * Todo va por `transform` y `opacity` sobre el hilo de interfaz. Ni una sola
+ * medida de caja se anima: en un teléfono modesto con el mapa moviéndose
+ * detrás, animar anchos o alturas es lo que convierte 60 cuadros en 20.
  *
  * CONDUCTOR: SE CONSERVA EL DISCO DE DISPONIBILIDAD
  *
@@ -68,7 +89,8 @@ import Reanimated, {
   withDelay,
   withRepeat,
   withSpring,
-  withTiming
+  withTiming,
+  type SharedValue
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icono, type NombreDeIcono } from './Icono';
@@ -444,7 +466,39 @@ const ALTO_DE_LA_FILA = 58;
 export const ALTO_DE_LA_BARRA = INICIO_DE_LA_SUPERFICIE + ALTO_DE_LA_FILA;
 
 const DIAMETRO_CIRCULO_ACTIVO = 48;
-const ELEVACION_ICONO_ACTIVO = -21;
+
+/**
+ * El compás del movimiento.
+ *
+ * `RETIRADA_MS` es el silencio: el disco se hunde antes de que la muesca salga.
+ * Es corto a propósito —cincuenta milisegundos no se perciben como espera— pero
+ * sin él las dos piezas arrancan a la vez y el conjunto se lee como una sola
+ * pastilla deslizándose.
+ */
+const RETIRADA_MS = 50;
+
+/** Desde cuánto más abajo emerge el disco. Sale de dentro de la barra. */
+const ASCENSO = 34;
+
+/**
+ * El muelle de la muesca: firme, casi sin rebote. Es superficie, y una
+ * superficie que rebota se lee como gelatina.
+ */
+const MUELLE_DE_LA_MUESCA = { duration: 420, dampingRatio: 0.82 } as const;
+
+/**
+ * El muelle del disco: poco amortiguado a propósito. El disco sí rebota —es un
+ * objeto que sale de un sitio— y ese pasarse de largo es justo lo que se ve en
+ * la referencia.
+ */
+const MUELLE_DEL_ASCENSO = { duration: 460, dampingRatio: 0.7 } as const;
+
+/**
+ * Con movimiento reducido el disco no vuela: se coloca. Pero el icono activo
+ * sigue subiendo lo justo para que se note cuál es, sin que nada cruce la
+ * pantalla.
+ */
+const ELEVACION_QUIETA = -4;
 
 /**
  * La última posición sobrevive al cambio de ruta.
@@ -469,60 +523,60 @@ function indiceDelDestino(clave: string): number {
 }
 
 /**
- * Icono táctil sin rótulo visible. El icono activo se eleva de forma suave
- * hacia el círculo flotante superior sobre la hendidura orgánica, cambiando
- * a grafito oscuro sobre el amarillo oficial +58Express.
+ * Icono táctil sin rótulo visible.
+ *
+ * Aquí SÓLO vive el icono apagado. El del destino activo no está en su pestaña:
+ * viaja dentro del disco, que es lo que hace que disco e icono se lean como una
+ * sola pieza en vez de como dos cosas que coinciden.
+ *
+ * Lo que hace este icono es apartarse. Su opacidad la manda la posición REAL de
+ * la muesca, no si la pestaña está activa: cuando la muesca le pasa por encima
+ * se desvanece, y vuelve en cuanto se aleja. Por eso el hueco parece un hueco.
  */
 function PestanaCurva({
   icono,
   etiqueta,
   activa,
+  desplazamiento,
+  centroDeLaMuesca,
+  anchoDePestana,
   onPress
 }: {
   readonly icono: NombreDeIcono;
   readonly etiqueta: string;
   readonly activa: boolean;
+  /** La posición viva de la muesca. Es lo que apaga y enciende este icono. */
+  readonly desplazamiento: SharedValue<number>;
+  /** Dónde queda la muesca cuando está sobre ESTA pestaña. */
+  readonly centroDeLaMuesca: number;
+  /** Lo que hay que alejarse para volver a encenderse del todo. */
+  readonly anchoDePestana: number;
   readonly onPress?: () => void;
 }) {
   const tema = useTema();
   const quieto = useMovimientoReducido();
-  const seleccion = useSharedValue(activa ? 1 : 0);
   const pulsacion = useSharedValue(1);
-  const pulso = useSharedValue(1);
+  const seleccion = useSharedValue(activa && quieto ? 1 : 0);
 
+  // La elevación sutil es SÓLO para movimiento reducido: sin el disco volando,
+  // hace falta algo que diga cuál es el destino, y cuatro puntos no cruzan la
+  // pantalla. Con movimiento normal este icono está apagado justo cuando esa
+  // elevación ocurriría, así que no se anima por gusto.
   useEffect(() => {
-    seleccion.set(quieto
-      ? withTiming(activa ? 1 : 0, { duration: 100 })
-      : withSpring(activa ? 1 : 0, { duration: 280, dampingRatio: 0.82 }));
+    seleccion.set(quieto ? withTiming(activa ? 1 : 0, { duration: 120 }) : 0);
+  }, [activa, quieto, seleccion]);
 
-    if (activa && !quieto) {
-      pulso.set(withSequence(
-        withTiming(1.08, { duration: 110, easing: EasingAnimada.bezier(0.23, 1, 0.32, 1) }),
-        withSpring(1, { duration: 170, dampingRatio: 0.88 })
-      ));
-    } else {
-      pulso.set(1);
-    }
-  }, [activa, pulso, quieto, seleccion]);
-
-  // Elevación orgánica: el icono activo sube con physics spring para centrarse
-  // perfectamente dentro del círculo flotante amarillo (+58Express).
-  // La escala base histórica [0, -4] se expande hacia el círculo flotante superior.
   const estiloDelIcono = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      desplazamiento.get(),
+      [centroDeLaMuesca - anchoDePestana, centroDeLaMuesca, centroDeLaMuesca + anchoDePestana],
+      [1, 0, 1],
+      Extrapolation.CLAMP
+    ),
     transform: [
-      {
-        translateY: quieto
-          ? interpolate(seleccion.get(), [0, 1], [0, -4], Extrapolation.CLAMP)
-          : interpolate(seleccion.get(), [0, 1], [0, ELEVACION_ICONO_ACTIVO], Extrapolation.CLAMP)
-      },
-      { scale: pulsacion.get() * pulso.get() }
+      { translateY: interpolate(seleccion.get(), [0, 1], [0, ELEVACION_QUIETA], Extrapolation.CLAMP) },
+      { scale: pulsacion.get() }
     ]
-  }));
-  const estiloInactivo = useAnimatedStyle(() => ({
-    opacity: interpolate(seleccion.get(), [0, 1], [1, 0], Extrapolation.CLAMP)
-  }));
-  const estiloActivo = useAnimatedStyle(() => ({
-    opacity: interpolate(seleccion.get(), [0, 1], [0, 1], Extrapolation.CLAMP)
   }));
 
   const presionar = () => {
@@ -534,21 +588,6 @@ function PestanaCurva({
   const soltar = () => {
     pulsacion.set(quieto ? 1 : withSpring(1, { duration: 160, dampingRatio: 1 }));
   };
-
-  const tamanoDelIcono = 25;
-  const iconoInactivo = (
-    <Icono nombre={icono} color={tema.color.textoSecundario} tamano={tamanoDelIcono} />
-  );
-  // El icono activo dentro del círculo flotante amarillo lleva color grafito profundo
-  // (#111315 / sobreAcento) para máximo contraste y legibilidad impecable.
-  const iconoActivo = (
-    <Icono
-      nombre={icono}
-      color={tema.color.sobreAcento}
-      tamano={tamanoDelIcono}
-      activo={icono !== 'moto'}
-    />
-  );
 
   return (
     <Pressable
@@ -563,8 +602,7 @@ function PestanaCurva({
       style={{ flex: 1, minWidth: 48, height: ALTO_DE_LA_FILA, alignItems: 'center', justifyContent: 'center' }}
     >
       <Reanimated.View style={[{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }, estiloDelIcono]}>
-        <Reanimated.View style={estiloInactivo}>{iconoInactivo}</Reanimated.View>
-        <Reanimated.View style={[{ position: 'absolute' }, estiloActivo]}>{iconoActivo}</Reanimated.View>
+        <Icono nombre={icono} color={tema.color.textoSecundario} tamano={25} />
       </Reanimated.View>
     </Pressable>
   );
@@ -586,27 +624,65 @@ function BarraCurvaDePasajera({
   const tema = useTema();
   const quieto = useMovimientoReducido();
   const indiceActivo = indiceDelDestino(activo);
+  const anchoDePestana = ancho / CANTIDAD_DE_PESTANAS;
   const desplazamiento = useSharedValue(posicionDeCurva(ancho, ultimoIndiceDePasajera));
+
+  // Cada pantalla monta su propia barra, así que «cambiar de pestaña» aquí es
+  // casi siempre «montar con otro índice que el de antes». Se arranca con el
+  // disco hundido para que el ascenso ocurra igual en los dos casos: al navegar
+  // entre pantallas y al tocar con la barra ya montada.
+  const indiceAlMontar = useRef(ultimoIndiceDePasajera).current;
+  const ascenso = useSharedValue(indiceAlMontar === indiceActivo ? 1 : 0);
+  const indicePrevio = useRef(indiceAlMontar);
 
   useEffect(() => {
     const destino = posicionDeCurva(ancho, indiceActivo);
+    const cambio = indicePrevio.current !== indiceActivo;
+    indicePrevio.current = indiceActivo;
+    ultimoIndiceDePasajera = indiceActivo;
+
     if (quieto) {
       desplazamiento.set(destino);
-    } else {
-      desplazamiento.set(withSpring(destino, {
-        duration: 280,
-        dampingRatio: 0.82
-      }));
+      ascenso.set(1);
+      return;
     }
-    ultimoIndiceDePasajera = indiceActivo;
-  }, [ancho, desplazamiento, indiceActivo, quieto]);
+    if (!cambio) {
+      desplazamiento.set(withSpring(destino, MUELLE_DE_LA_MUESCA));
+      ascenso.set(1);
+      return;
+    }
+    // El compás: el disco se retira, la muesca sale medio compás después, y el
+    // disco vuelve a subir donde ella acaba de llegar.
+    ascenso.set(withSequence(
+      withTiming(0, { duration: RETIRADA_MS }),
+      withSpring(1, MUELLE_DEL_ASCENSO)
+    ));
+    desplazamiento.set(withDelay(RETIRADA_MS, withSpring(destino, MUELLE_DE_LA_MUESCA)));
+  }, [ancho, ascenso, desplazamiento, indiceActivo, quieto]);
 
   const estiloDeLaCurva = useAnimatedStyle(() => ({
     transform: [{ translateX: desplazamiento.get() }]
   }));
 
+  // El disco emerge de dentro de la barra. Sube y se enciende a la vez, y la
+  // opacidad va por delante del recorrido para que lo que asoma por debajo del
+  // filo ya sea invisible: sin eso se vería un trozo de amarillo cruzando la
+  // franja del sistema.
+  const estiloDelDisco = useAnimatedStyle(() => ({
+    opacity: interpolate(ascenso.get(), [0, 0.5, 1], [0, 0.5, 1], Extrapolation.CLAMP),
+    transform: [{ translateY: interpolate(ascenso.get(), [0, 1], [ASCENSO, 0], Extrapolation.CLAMP) }]
+  }));
+
   const [inicio, historial, saldo, perfil] = destinos;
   if (inicio === undefined || historial === undefined || saldo === undefined || perfil === undefined) return null;
+
+  // Qué icono lleva el disco. En el centro no lleva ninguno: ese sitio es del
+  // FAB de pedir, que tiene su propio disco y no se toca.
+  const iconoDelDisco = indiceActivo === 0 ? inicio.icono
+    : indiceActivo === 1 ? historial.icono
+      : indiceActivo === 3 ? saldo.icono
+        : indiceActivo === 4 ? perfil.icono
+          : null;
 
   return (
     <View style={{
@@ -681,22 +757,42 @@ function BarraCurvaDePasajera({
           borderColor: tema.color.borde
         }} />
 
-        {/* Círculo activo flotante (+58Express amarillo oficial) */}
-        <View style={{
-          position: 'absolute',
-          top: INICIO_DE_LA_SUPERFICIE - 14,
-          width: DIAMETRO_CIRCULO_ACTIVO,
-          height: DIAMETRO_CIRCULO_ACTIVO,
-          borderRadius: DIAMETRO_CIRCULO_ACTIVO / 2,
-          backgroundColor: tema.color.acento,
-          borderWidth: 2.5,
-          borderColor: tema.color.superficieElevada,
-          shadowColor: '#000000',
-          shadowOpacity: 0.32,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 8
-        }} />
+        {/* El disco amarillo, con el icono del destino DENTRO. Emerge de la
+            barra y se asienta en la muesca; los dos son la misma pieza. */}
+        {iconoDelDisco === null ? null : (
+          <Reanimated.View style={[
+            {
+              position: 'absolute',
+              top: INICIO_DE_LA_SUPERFICIE - 14,
+              width: DIAMETRO_CIRCULO_ACTIVO,
+              height: DIAMETRO_CIRCULO_ACTIVO,
+              borderRadius: DIAMETRO_CIRCULO_ACTIVO / 2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: tema.color.acento,
+              borderWidth: 2.5,
+              borderColor: tema.color.superficieElevada,
+              shadowColor: '#000000',
+              shadowOpacity: 0.32,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 8
+            },
+            estiloDelDisco
+          ]}>
+            {/* De TRAZO, no relleno. La variante rellena de `Icono` pinta los
+                detalles interiores en `#0b0a09`, que está pensado para un icono
+                AMARILLO sobre barra oscura. Aquí el icono es grafito sobre
+                amarillo, así que rellenarlo dejaba las agujas del reloj a un dos
+                por ciento de luminancia de su propia esfera: un borrón. El
+                trazo se lee igual de bien con los cuatro destinos. */}
+            <Icono
+              nombre={iconoDelDisco}
+              color={tema.color.sobreAcento}
+              tamano={25}
+            />
+          </Reanimated.View>
+        )}
       </Reanimated.View>
 
       <View style={{
@@ -709,12 +805,18 @@ function BarraCurvaDePasajera({
           icono={inicio.icono}
           etiqueta={inicio.etiqueta}
           activa={indiceActivo === 0}
+          desplazamiento={desplazamiento}
+          centroDeLaMuesca={posicionDeCurva(ancho, 0)}
+          anchoDePestana={anchoDePestana}
           onPress={() => alTocar(inicio.clave)}
         />
         <PestanaCurva
           icono={historial.icono}
           etiqueta={historial.etiqueta}
           activa={indiceActivo === 1}
+          desplazamiento={desplazamiento}
+          centroDeLaMuesca={posicionDeCurva(ancho, 1)}
+          anchoDePestana={anchoDePestana}
           onPress={() => alTocar(historial.clave)}
         />
         <View style={{ flex: 1, minWidth: 48, alignItems: 'center' }}>{control}</View>
@@ -722,12 +824,18 @@ function BarraCurvaDePasajera({
           icono={saldo.icono}
           etiqueta={saldo.etiqueta}
           activa={indiceActivo === 3}
+          desplazamiento={desplazamiento}
+          centroDeLaMuesca={posicionDeCurva(ancho, 3)}
+          anchoDePestana={anchoDePestana}
           onPress={() => alTocar(saldo.clave)}
         />
         <PestanaCurva
           icono={perfil.icono}
           etiqueta={perfil.etiqueta}
           activa={indiceActivo === 4}
+          desplazamiento={desplazamiento}
+          centroDeLaMuesca={posicionDeCurva(ancho, 4)}
+          anchoDePestana={anchoDePestana}
           onPress={() => alTocar(perfil.clave)}
         />
       </View>
