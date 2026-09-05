@@ -26,6 +26,7 @@ import { useSesion } from '../context/AuthContext';
 import { useAvisosEnVivo } from '../realtime/avisosEnVivo';
 import { marcarLeido, marcarTodosLeidos, pedirAvisos } from '../services/avisos';
 import { shellDelRol } from '../domain/shellDeRol';
+import { ControlCentralDelRol } from '../navegacion/controlCentral';
 import {
   conAvisoLeido,
   conTodosLeidos,
@@ -123,7 +124,7 @@ export default function PantallaDeAvisos() {
   }));
 
   function irA(clave: string) {
-    if (clave === 'inicio') router.replace(barraDelRol === 'conductor' ? '/conductor' : '/pasajero');
+    if (clave === 'inicio' || clave === 'mapa') router.replace(barraDelRol === 'conductor' ? '/conductor' : '/pasajero');
     if (clave === 'historial') router.replace('/historial');
     if (clave === 'saldo') router.replace(barraDelRol === 'conductor' ? '/conductor-saldo' : '/saldo');
     if (clave === 'perfil') router.replace('/perfil');
@@ -133,6 +134,7 @@ export default function PantallaDeAvisos() {
     <ProveedorDeNavegacion ir={irA}>
       <C2Avisos
         barra={barraDelRol}
+        control={<ControlCentralDelRol barra={barraDelRol} />}
         avisos={enPantalla}
         estado={estado}
         // El pie del diseño promete que cada aviso lleva a donde pasó. Con

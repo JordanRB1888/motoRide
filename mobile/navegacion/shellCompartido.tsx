@@ -36,6 +36,7 @@ export function crearNavegacionDeConductor() {
     // La cartera sigue apagada en el servidor, asi que la pantalla no inventa
     // ninguna cifra --eso ya lo garantiza una prueba sobre la superficie--.
     if (clave === 'saldo') router.replace('/conductor-saldo');
+    if (clave === 'avisos') router.push('/avisos');
   };
 }
 

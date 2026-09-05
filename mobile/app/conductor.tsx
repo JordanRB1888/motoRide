@@ -344,6 +344,9 @@ function irA(clave: string) {
   if (clave === 'historial') router.replace('/historial');
   if (clave === 'mapa') router.replace('/conductor');
   if (clave === 'saldo') router.replace('/conductor-saldo');
+  // La campana APILA en vez de sustituir: se mira un aviso y se vuelve a lo
+  // que se estaba haciendo. Con `replace` no habría a dónde volver.
+  if (clave === 'avisos') router.push('/avisos');
 }
 
 /**

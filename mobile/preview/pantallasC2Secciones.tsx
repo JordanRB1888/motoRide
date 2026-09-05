@@ -205,7 +205,7 @@ function Seccion({ titulo, activo, conCampana = true, resumen, barra = 'pasajera
       <BarraDeNavegacion
         destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo={activo}
-        control={control ?? (barra === 'conductor' ? <ControlDeDisponibilidad enLinea /> : <ControlDePedido abierto={false} />)}
+        control={control ?? (barra === 'conductor' ? <ControlDeDisponibilidad enLinea={false} /> : <ControlDePedido abierto={false} />)}
       />
     </View>
   );
@@ -568,7 +568,7 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
       <BarraDeNavegacion
         destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo="perfil"
-        control={control ?? (barra === 'conductor' ? <ControlDeDisponibilidad enLinea /> : <ControlDePedido abierto={false} />)}
+        control={control ?? (barra === 'conductor' ? <ControlDeDisponibilidad enLinea={false} /> : <ControlDePedido abierto={false} />)}
       />
     </View>
   );
@@ -913,7 +913,7 @@ const AVISOS_DE_EJEMPLO: readonly AvisoEnPantalla[] = AVISOS_DEMO.map(aviso => (
   navegable: true
 }));
 
-export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, onReintentar, barra = 'pasajera' }: {
+export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, onReintentar, barra = 'pasajera', control: _control }: {
   readonly avisos?: readonly AvisoEnPantalla[];
   readonly estado?: 'cargando' | 'listo' | 'error';
   /** El texto del final. Cambia según si los avisos llevan a alguna parte. */
@@ -923,6 +923,7 @@ export function C2Avisos({ avisos, estado = 'listo', pie, onAviso, onLeerTodos, 
   readonly onReintentar?: () => void;
   /** De quién es la barra inferior: pasajera o conductor. */
   readonly barra?: 'pasajera' | 'conductor';
+  readonly control?: React.ReactNode;
 } = {}) {
   const tema = useTema();
   const lista = avisos ?? (EN_DESARROLLO ? AVISOS_DE_EJEMPLO : []);

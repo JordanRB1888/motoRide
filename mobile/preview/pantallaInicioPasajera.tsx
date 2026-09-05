@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Image, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, BackHandler, Easing, Image, PanResponder, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import Reanimated, {
   cancelAnimation,
   Easing as EasingAnimada,
@@ -41,7 +41,7 @@ import { useTema } from '../theme/ThemeContext';
 import { Carrusel } from '../ui/Carrusel';
 import { useAireDeArriba } from '../ui/seguro';
 import { useIr } from '../ui/navegar';
-import { ARTE_DE_CAMPANA, ARTE_DE_SERVICIO } from '../theme/marca';
+import { ARTE_DE_CAMPANA, ARTE_DE_SERVICIO, VEHICULOS } from '../theme/marca';
 import {
   AVISOS_DEMO,
   CAMPANAS_DEMO,
@@ -56,6 +56,7 @@ import { CampoDeDestino, LugaresGuardados } from '../ui/Trayecto';
 import { LienzoDeMapa } from '../ui/Mapa';
 import type { ModeloDelMapa } from '../mapa/modelo';
 import { AvisoPostulacionDriver, type PropiedadesAvisoPostulacion, type VarianteAvisoPostulacion } from '../ui/AvisoPostulacionDriver';
+import { PassengerHomeCommercial } from '../ui/PassengerHomeCommercial';
 
 import { useMovimientoReducido } from '../ui/movimiento';
 
@@ -275,6 +276,234 @@ function Voluta({ retraso, tamano, opacidad, color }: {
  *
  * El texto se queda a la izquierda, que es donde se empieza a leer.
  */
+/**
+ * Emblemas vectoriales de alta gama para los servicios.
+ *
+ * Sustituyen a los renders oscuros por piezas geométricas limpias, centradas,
+ * con trazo nítido en el amarillo y grafito de la marca +58express.
+ */
+function EmblemaDeServicio({
+  clave,
+  listo,
+  tema
+}: {
+  readonly clave: string;
+  readonly listo: boolean;
+  readonly tema: ReturnType<typeof useTema>;
+}) {
+  const trazoColor = listo ? tema.color.acento : '#8E8E93';
+  const fondoBadge = listo ? `${tema.color.acento}14` : 'rgba(255, 255, 255, 0.04)';
+  const bordeBadge = listo ? `${tema.color.acento}44` : 'rgba(255, 255, 255, 0.08)';
+
+  return (
+    <View style={{
+      width: 54,
+      height: 54,
+      borderRadius: 27,
+      backgroundColor: fondoBadge,
+      borderWidth: 1.5,
+      borderColor: bordeBadge,
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      {dibujarEmblema(clave, trazoColor, listo)}
+    </View>
+  );
+}
+
+function dibujarEmblema(clave: string, color: string, _listo?: boolean) {
+  switch (clave) {
+    case 'comercios':
+      return (
+        <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{
+            width: 26,
+            height: 7,
+            backgroundColor: color,
+            borderTopLeftRadius: 3,
+            borderTopRightRadius: 3
+          }} />
+          <View style={{
+            flexDirection: 'row',
+            width: 26,
+            justifyContent: 'space-between',
+            marginTop: -1,
+            marginBottom: 2
+          }}>
+            {[0, 1, 2, 3].map(i => (
+              <View
+                key={i}
+                style={{
+                  width: 5.5,
+                  height: 3,
+                  backgroundColor: color,
+                  borderBottomLeftRadius: 3,
+                  borderBottomRightRadius: 3
+                }}
+              />
+            ))}
+          </View>
+          <View style={{
+            width: 24,
+            height: 13,
+            borderWidth: 1.5,
+            borderColor: color,
+            borderTopWidth: 0,
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            paddingHorizontal: 3,
+            paddingBottom: 1
+          }}>
+            <View style={{ width: 7, height: 7, borderWidth: 1, borderColor: color, borderRadius: 1 }} />
+            <View style={{ width: 7, height: 10, borderWidth: 1, borderColor: color, borderBottomWidth: 0, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 1 }}>
+              <View style={{ width: 1.5, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+            </View>
+          </View>
+        </View>
+      );
+
+    case 'seguro':
+      return (
+        <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{
+            width: 22,
+            height: 25,
+            borderWidth: 1.8,
+            borderColor: color,
+            borderTopLeftRadius: 6,
+            borderTopRightRadius: 6,
+            borderBottomLeftRadius: 11,
+            borderBottomRightRadius: 11,
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <View style={{
+              width: 10,
+              height: 5,
+              borderBottomWidth: 2,
+              borderLeftWidth: 2,
+              borderColor: color,
+              transform: [{ rotate: '-45deg' }],
+              marginTop: -2
+            }} />
+          </View>
+        </View>
+      );
+
+    case 'envios':
+      return (
+        <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{
+            width: 24,
+            height: 20,
+            borderWidth: 1.8,
+            borderColor: color,
+            borderRadius: 3,
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <View style={{ position: 'absolute', width: '100%', height: 1.8, backgroundColor: color }} />
+            <View style={{ position: 'absolute', height: '100%', width: 1.8, backgroundColor: color }} />
+          </View>
+          <View style={{ position: 'absolute', left: 0, bottom: 2, width: 4, height: 1.5, backgroundColor: color }} />
+        </View>
+      );
+
+    case 'comida':
+      return (
+        <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: color, marginBottom: 1 }} />
+          <View style={{
+            width: 24,
+            height: 12,
+            borderTopLeftRadius: 12,
+            borderTopRightRadius: 12,
+            borderWidth: 1.8,
+            borderColor: color,
+            borderBottomWidth: 0
+          }} />
+          <View style={{
+            width: 26,
+            height: 2.2,
+            borderRadius: 1,
+            backgroundColor: color,
+            marginTop: 1
+          }} />
+        </View>
+      );
+
+    case 'mercado':
+      return (
+        <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{
+            width: 14,
+            height: 7,
+            borderTopLeftRadius: 7,
+            borderTopRightRadius: 7,
+            borderWidth: 1.8,
+            borderColor: color,
+            borderBottomWidth: 0,
+            marginBottom: -1
+          }} />
+          <View style={{
+            width: 24,
+            height: 14,
+            borderWidth: 1.8,
+            borderColor: color,
+            borderRadius: 3,
+            borderTopLeftRadius: 1,
+            borderTopRightRadius: 1,
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <View style={{ width: '80%', height: 1.5, backgroundColor: color }} />
+          </View>
+        </View>
+      );
+
+    case 'tienda':
+    default:
+      return (
+        <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginBottom: 4 }}>
+            <View style={{ width: 14, height: 2, backgroundColor: color, borderRadius: 1 }} />
+            <View style={{
+              width: 0,
+              height: 0,
+              borderTopWidth: 3,
+              borderBottomWidth: 3,
+              borderLeftWidth: 5,
+              borderTopColor: 'transparent',
+              borderBottomColor: 'transparent',
+              borderLeftColor: color
+            }} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end' }}>
+            <View style={{
+              width: 0,
+              height: 0,
+              borderTopWidth: 3,
+              borderBottomWidth: 3,
+              borderRightWidth: 5,
+              borderTopColor: 'transparent',
+              borderBottomColor: 'transparent',
+              borderRightColor: color
+            }} />
+            <View style={{ width: 14, height: 2, backgroundColor: color, borderRadius: 1 }} />
+          </View>
+        </View>
+      );
+  }
+}
+
+/**
+ * La casilla ANCHA: composición combinada de Moto y Auto amarillo oficial.
+ *
+ * El auto amarillo mira hacia la izquierda (hacia el botón «Pedir») y la moto
+ * mira hacia la derecha, quedando ambos de frente cubriendo el espacio
+ * armónicamente.
+ */
 function CasillaAncha({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
   const ir = useIr();
@@ -287,53 +516,98 @@ function CasillaAncha({ dato }: { readonly dato: Servicio }) {
       onPress={() => ir('servicio', { servicio: dato.clave })}
       style={({ pressed }) => ({
         width: '100%',
-        height: 126,
+        height: 136,
         padding: 16,
-        borderRadius: tema.radio.tarjeta,
+        borderRadius: 22,
         backgroundColor: tema.color.superficieElevada,
         overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: tema.color.borde,
+        borderWidth: 1.2,
+        borderColor: `${tema.color.acento}40`,
         transform: [{ scale: pressed && !quieto ? 0.985 : 1 }],
         opacity: pressed ? 0.92 : 1,
         ...tema.superficie.sombra
       })}
     >
-      <View style={{
-        position: 'absolute',
-        right: -6,
-        bottom: -4,
-        width: 176,
-        height: 116
-      }}>
+      {/* Flota combinada: Auto amarillo oficial a la izquierda mirando a Pedir, Moto a la derecha */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          right: -8,
+          bottom: -4,
+          width: 215,
+          height: 128
+        }}
+      >
+        {/* Auto amarillo oficial: mirando hacia el botón de pedir (scaleX: -1) */}
+        <View
+          style={{
+            position: 'absolute',
+            left: 2,
+            bottom: 12,
+            width: 134,
+            height: 84,
+            transform: [{ scaleX: -1 }],
+            zIndex: 1,
+            opacity: 0.96
+          }}
+        >
+          <Image
+            source={VEHICULOS.AUTO.tarjeta}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
+
         <Humo />
-        <Image
-          source={ARTE_DE_SERVICIO.moto}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-          style={{ width: '100%', height: '100%' }}
-        />
+
+        {/* Moto oficial de la marca: en primer plano mirando hacia la derecha */}
+        <View
+          style={{
+            position: 'absolute',
+            right: 2,
+            bottom: 0,
+            width: 146,
+            height: 96,
+            zIndex: 2
+          }}
+        >
+          <Image
+            source={ARTE_DE_SERVICIO.moto}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
       </View>
 
-      <View style={{ width: '56%', height: '100%', justifyContent: 'space-between', zIndex: 2 }}>
+      <View style={{ width: '48%', height: '100%', justifyContent: 'space-between', zIndex: 3 }}>
         <View style={{ gap: 3 }}>
-          <Txt nivel="encabezado" estilo={{ fontWeight: '800', letterSpacing: -0.2 }}>{dato.titulo}</Txt>
-          <Txt nivel="pie" tono="secundario" estilo={{ fontSize: 12, lineHeight: 16 }}>{dato.detalle}</Txt>
+          <Txt nivel="encabezado" estilo={{ fontWeight: '800', fontSize: 18, letterSpacing: -0.3 }}>
+            {dato.titulo}
+          </Txt>
+          <Txt nivel="pie" tono="secundario" estilo={{ fontSize: 12, lineHeight: 16 }}>
+            {dato.detalle}
+          </Txt>
         </View>
         <View style={{
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 5,
+          gap: 6,
           alignSelf: 'flex-start',
-          paddingVertical: 4.5,
-          paddingHorizontal: 11,
-          borderRadius: 8,
-          backgroundColor: `${tema.color.acento}1e`,
-          borderWidth: 1,
-          borderColor: `${tema.color.acento}44`
+          paddingVertical: 6,
+          paddingHorizontal: 14,
+          borderRadius: 10,
+          backgroundColor: tema.color.acento,
+          shadowColor: tema.color.acento,
+          shadowOpacity: 0.35,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: 3
         }}>
-          <Txt nivel="etiqueta" tono="acento" estilo={{ fontWeight: '700', fontSize: 12 }}>Pedir</Txt>
-          <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: tema.color.acento }} />
+          <Text style={{ fontWeight: '800', fontSize: 13, color: '#111113' }}>Pedir</Text>
+          <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#111113' }} />
         </View>
       </View>
     </Pressable>
@@ -341,10 +615,10 @@ function CasillaAncha({ dato }: { readonly dato: Servicio }) {
 }
 
 /**
- * Una casilla estrecha: el arte ENCIMA del texto.
+ * Una casilla estrecha centrada y organizada.
  *
- * En media columna, ponerlo al lado le deja al título unos noventa puntos y
- * «Transporte Seguro» se queda en «Transporte…».
+ * Emblema vectorial limpio en el centro, tipografía centrada y badge PRONTO
+ * en la esquina superior derecha sin desviar la simetría.
  */
 function Casilla({ dato }: { readonly dato: Servicio }) {
   const tema = useTema();
@@ -352,28 +626,21 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
   const quieto = useMovimientoReducido();
   const arte = ARTE_DE_SERVICIO[dato.arte];
 
-  const lado = 44;
-
   const emblema = arte === undefined ? (
     <View style={{
-      width: lado,
-      height: lado,
+      width: 44,
+      height: 44,
       alignItems: 'center',
       justifyContent: 'center'
     }}>
       <Icono
         nombre={dato.icono}
         color={dato.listo ? tema.color.acentoTexto : tema.color.textoTenue}
-        tamano={20}
+        tamano={22}
       />
     </View>
   ) : (
-    <Image
-      source={arte}
-      resizeMode="contain"
-      accessibilityIgnoresInvertColors
-      style={{ width: lado, height: lado }}
-    />
+    <EmblemaDeServicio clave={dato.clave} listo={dato.listo} tema={tema} />
   );
 
   return (
@@ -386,41 +653,61 @@ function Casilla({ dato }: { readonly dato: Servicio }) {
         flexBasis: '48%',
         flexGrow: 1,
         maxWidth: '49%',
-        minHeight: 136,
-        padding: 14,
-        borderRadius: tema.radio.tarjeta,
+        minHeight: 148,
+        paddingVertical: 18,
+        paddingHorizontal: 10,
+        borderRadius: 20,
         backgroundColor: tema.color.superficie,
-        justifyContent: 'space-between',
-        borderWidth: 1,
-        borderColor: dato.listo ? `${tema.color.acento}33` : tema.color.borde,
-        opacity: dato.listo ? 1 : 0.82,
-        transform: [{ scale: pressed && !quieto ? 0.98 : 1 }],
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1.2,
+        borderColor: dato.listo ? `${tema.color.acento}38` : tema.color.borde,
+        opacity: dato.listo ? 1 : 0.85,
+        transform: [{ scale: pressed && !quieto ? 0.975 : 1 }],
+        position: 'relative',
         ...tema.superficie.sombra
       })}
     >
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View style={{
-          width: 50,
-          height: 50,
-          borderRadius: 14,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: dato.listo ? `${tema.color.acento}14` : tema.color.superficieHundida,
-          borderWidth: 1,
-          borderColor: dato.listo ? `${tema.color.acento}33` : tema.color.borde
-        }}>
-          {emblema}
+      {!dato.listo && (
+        <View style={{ position: 'absolute', top: 10, right: 10, zIndex: 3 }}>
+          <RotuloPronto />
         </View>
-        {!dato.listo && <RotuloPronto />}
+      )}
+
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        {emblema}
       </View>
 
-      <View style={{ gap: 2, marginTop: 8 }}>
-        <Txt nivel="etiqueta" estilo={{ fontWeight: '700', fontSize: 13.5 }}>{dato.titulo}</Txt>
-        <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11, lineHeight: 14 }}>{dato.detalle}</Txt>
+      <View style={{ gap: 3, marginTop: 10, alignItems: 'center' }}>
+        <Txt
+          nivel="etiqueta"
+          estilo={{
+            fontWeight: '700',
+            fontSize: 13.5,
+            textAlign: 'center',
+            letterSpacing: -0.2
+          }}
+        >
+          {dato.titulo}
+        </Txt>
+        <Txt
+          nivel="pie"
+          tono="tenue"
+          numberOfLines={1}
+          estilo={{
+            fontSize: 11,
+            lineHeight: 14,
+            textAlign: 'center',
+            opacity: 0.85
+          }}
+        >
+          {dato.detalle}
+        </Txt>
       </View>
     </Pressable>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Campañas
@@ -521,9 +808,19 @@ export function C2InicioPasajera({
   readonly slotBanner?: React.ReactNode;
 } = {}) {
   const tema = useTema();
-  const ir = useIr();
+  const irOriginal = useIr();
   const quieto = useMovimientoReducido();
   const { height: altoDePantalla } = useWindowDimensions();
+  const [modoMapa, setModoMapa] = useState(false);
+
+  const ir = useCallback((clave: string, parametros?: Record<string, string>) => {
+    if (clave === 'pedir') {
+      setModoMapa(true);
+      irOriginal('servicio', { servicio: 'viajes' });
+      return;
+    }
+    irOriginal(clave, parametros);
+  }, [irOriginal]);
   const progreso = useSharedValue(0);
   const reaccionDeCerrar = useSharedValue(0);
   const [hojaMontada, setHojaMontada] = useState(false);
@@ -535,6 +832,28 @@ export function C2InicioPasajera({
     setHojaAbierta(true);
   }, []);
   const cerrarHoja = useCallback(() => setHojaAbierta(false), []);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return gestureState.dy > 6 && Math.abs(gestureState.dx) < Math.abs(gestureState.dy);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          const arrastre = Math.max(0, Math.min(1, 1 - gestureState.dy / (altoDePantalla * 0.45)));
+          progreso.value = arrastre;
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 50 || gestureState.vy > 0.35) {
+          cerrarHoja();
+        } else {
+          progreso.value = withSpring(1, { dampingRatio: 0.85 });
+        }
+      }
+    })
+  ).current;
 
   // Llegar desde otra pestaña con el botón amarillo abre la hoja. Sólo al
   // montar: si se cierra, no se vuelve a abrir sola.
@@ -604,34 +923,85 @@ export function C2InicioPasajera({
 
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
-      <LienzoDeMapa modelo={modeloDelMapa} conControles={false}>
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          left: 0,
-          paddingBottom: 10,
-          backgroundColor: tema.color.fondo,
-          borderBottomWidth: 1,
-          borderBottomColor: tema.color.borde,
-          shadowColor: '#000000',
-          shadowOpacity: 0.16,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 5 },
-          elevation: 6
-        }}>
-          <Cabecera datos={datos} />
-          <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
-            <CampoDeDestino onPress={() => ir('pedir')} />
-            {avisoPostulacion ? (
-              <View style={{ marginTop: 8 }}>
-                <AvisoPostulacionDriver {...avisoPostulacion} />
-              </View>
-            ) : null}
-            {slotBanner ?? null}
+      {modoMapa ? (
+        <LienzoDeMapa modelo={modeloDelMapa} conControles={false}>
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            left: 0,
+            paddingBottom: 10,
+            backgroundColor: tema.color.fondo,
+            borderBottomWidth: 1,
+            borderBottomColor: tema.color.borde,
+            shadowColor: '#000000',
+            shadowOpacity: 0.16,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 5 },
+            elevation: 6
+          }}>
+            <Cabecera datos={datos} />
+            <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
+              <CampoDeDestino onPress={() => ir('pedir')} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Volver al inicio comercial"
+                onPress={() => setModoMapa(false)}
+                style={{
+                  marginTop: 8,
+                  alignSelf: 'flex-start',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingVertical: 5,
+                  paddingHorizontal: 12,
+                  borderRadius: 8,
+                  backgroundColor: tema.color.superficieElevada,
+                  borderWidth: 1,
+                  borderColor: tema.color.borde
+                }}
+              >
+                <Text style={{ color: tema.color.acento, fontWeight: '700', fontSize: 12.5 }}>← Volver a promociones</Text>
+              </Pressable>
+              {avisoPostulacion ? (
+                <View style={{ marginTop: 8 }}>
+                  <AvisoPostulacionDriver {...avisoPostulacion} />
+                </View>
+              ) : null}
+              {slotBanner ?? null}
+            </View>
+          </View>
+        </LienzoDeMapa>
+      ) : (
+        <View style={{ flex: 1 }}>
+          {/* Header fijo superior con saludo, campana y buscador */}
+          <View style={{
+            backgroundColor: tema.color.fondo,
+            borderBottomWidth: 1,
+            borderBottomColor: tema.color.borde,
+            paddingBottom: 10
+          }}>
+            <Cabecera datos={datos} />
+            <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
+              <CampoDeDestino onPress={() => ir('pedir')} />
+              {avisoPostulacion ? (
+                <View style={{ marginTop: 8 }}>
+                  <AvisoPostulacionDriver {...avisoPostulacion} />
+                </View>
+              ) : null}
+              {slotBanner ?? null}
+            </View>
+          </View>
+
+          {/* Gran superficie comercial plana y premium: banners auto-slide, aliados y promociones */}
+          <View style={{ flex: 1 }}>
+            <PassengerHomeCommercial
+              onPedirViaje={() => ir('pedir')}
+              onVerAliados={() => ir('comercios')}
+            />
           </View>
         </View>
-      </LienzoDeMapa>
+      )}
 
       {hojaMontada ? (
         <View pointerEvents="box-none" style={{ position: 'absolute', inset: 0, zIndex: 20 }}>
@@ -672,39 +1042,43 @@ export function C2InicioPasajera({
               estiloDeHoja
             ]}
           >
-            <View style={{
-              minHeight: 62,
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingHorizontal: tema.ritmo.margenPantalla,
-              borderBottomWidth: 1,
-              borderBottomColor: tema.color.borde
-            }}>
+            <View
+              {...panResponder.panHandlers}
+              style={{
+                minHeight: 64,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: tema.ritmo.margenPantalla,
+                borderBottomWidth: 1,
+                borderBottomColor: tema.color.borde,
+                backgroundColor: tema.color.fondo
+              }}
+            >
               <View style={{
                 position: 'absolute',
-                top: 8,
-                width: 38,
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: tema.color.borde
+                top: 10,
+                width: 44,
+                height: 5,
+                borderRadius: 2.5,
+                backgroundColor: `${tema.color.textoTenue}66`
               }} />
-              <Txt nivel="encabezado" accessibilityRole="header">
+              <Txt nivel="encabezado" accessibilityRole="header" estilo={{ marginTop: 6, fontWeight: '700' }}>
                 ¿Qué necesitas hoy?
               </Txt>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Cerrar"
-                hitSlop={8}
+                hitSlop={12}
                 onPress={cerrarHoja}
                 onPressIn={() => reaccionDeCerrar.set(quieto ? 0 : withTiming(1, { duration: 100 }))}
                 onPressOut={() => reaccionDeCerrar.set(quieto ? 0 : withSpring(0, { duration: 170, dampingRatio: 1 }))}
                 style={({ pressed }) => ({
                   position: 'absolute',
                   right: tema.ritmo.margenPantalla,
-                  top: 11,
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
+                  top: 12,
+                  width: 38,
+                  height: 38,
+                  borderRadius: 19,
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: pressed ? tema.color.superficieHundida : tema.color.superficieElevada,
@@ -713,7 +1087,7 @@ export function C2InicioPasajera({
                 })}
               >
                 <Reanimated.View style={estiloDeCerrar}>
-                  <Text style={{ color: tema.color.textoPrimario, fontSize: 24, lineHeight: 26, fontWeight: '500' }}>×</Text>
+                  <Text style={{ color: tema.color.textoPrimario, fontSize: 22, lineHeight: 24, fontWeight: '500' }}>×</Text>
                 </Reanimated.View>
               </Pressable>
             </View>
@@ -721,6 +1095,11 @@ export function C2InicioPasajera({
             <ScrollView
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              onScrollEndDrag={e => {
+                if (e.nativeEvent.contentOffset.y < -35) {
+                  cerrarHoja();
+                }
+              }}
               contentContainerStyle={{
                 paddingHorizontal: tema.ritmo.margenPantalla,
                 paddingTop: 14,
