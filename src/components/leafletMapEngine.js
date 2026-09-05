@@ -33,7 +33,7 @@ export function createLeafletEngine({ container, center, zoom = 14, theme = 'dar
      * getLatLng, getElement, remove--, asi que se devuelve tal cual, con el
      * mismo divIcon de siempre.
      */
-    crearMarcadorHtml({ lat, lng, html, className = '', anchor = [0, 0], size = null, tooltip = '', tooltipClass = '', tooltipAnchor = [0, 0] }) {
+    crearMarcadorHtml({ lat, lng, html, className = '', anchor = [0, 0], size = null, tooltip = '', tooltipClass = '', tooltipAnchor = [0, 0], title = '', zIndex = 1 }) {
       const iconoHtml = L.divIcon({
         className,
         html,
@@ -41,10 +41,26 @@ export function createLeafletEngine({ container, center, zoom = 14, theme = 'dar
         iconAnchor: anchor,
         tooltipAnchor
       });
-      const marcador = L.marker([lat, lng], { icon: iconoHtml, riseOnHover: true }).addTo(map);
+      const marcador = L.marker([lat, lng], {
+        icon: iconoHtml,
+        riseOnHover: true,
+        keyboard: true,
+        title,
+        zIndexOffset: zIndex
+      }).addTo(map);
       if (tooltip) {
         marcador.bindTooltip(tooltip, { direction: 'top', className: tooltipClass, opacity: 0.96 });
       }
+
+      // Superficie comun con el motor Google. El Admin filtra marcadores sin
+      // destruirlos y abre su ficha al activarlos; mantener este contrato en
+      // el respaldo evita que el proveedor del mapa se filtre a la pantalla.
+      marcador.onClick = callback => marcador.on('click', callback);
+      marcador.setVisible = visible => {
+        const mounted = map.hasLayer(marcador);
+        if (visible && !mounted) marcador.addTo(map);
+        if (!visible && mounted) marcador.remove();
+      };
       return marcador;
     },
 
@@ -60,6 +76,10 @@ export function createLeafletEngine({ container, center, zoom = 14, theme = 'dar
 
     setView(lat, lng, zoom = null) {
       map.setView([lat, lng], zoom ?? map.getZoom(), { animate: true });
+    },
+
+    getZoom() {
+      return map.getZoom();
     },
 
     onClick(callback) {

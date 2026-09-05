@@ -28,7 +28,7 @@ test('Enter en command search evita reactivar el botón que recupera el foco', (
   assert.match(source, /if \(e.key === 'Enter'\) \{\s*e.preventDefault\(\);\s*e.stopPropagation\(\);/);
 });
 
-test('los mapas admin usan el cargador Google compartido y se desmontan', () => {
+test('los mapas admin prefieren Google, conservan respaldo gratuito y se desmontan', () => {
   for (const file of ['src/pages/admin/adminApp.js', 'src/pages/admin/fleetMap.js']) {
     const source = read(file);
     assert.match(source, /createAdminGoogleMap/);
@@ -36,6 +36,9 @@ test('los mapas admin usan el cargador Google compartido y se desmontan', () => 
     assert.match(source, /\.destroy\(\)/);
   }
   const loader = read('src/components/adminControlCenter/adminGoogleMap.js');
-  assert.match(loader, /getGoogleMapsLoader\(\)\.load\(\)/);
+  assert.match(loader, /const loader = getGoogleMapsLoader\(\)/);
+  assert.match(loader, /await loader\.load\(\)/);
+  assert.match(loader, /createLeafletEngine/);
+  assert.match(loader, /loader\.isConfigured\(\)/);
   assert.match(loader, /58express:theme-change/);
 });
