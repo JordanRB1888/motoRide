@@ -319,40 +319,56 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
     }
 
     // Escudo / Seguridad: candado con arco superior y cerradura.
+    // Escudo: silueta heráldica y una tilde dentro.
+    //
+    // ERA UN CANDADO, Y ESO DECÍA OTRA COSA
+    //
+    // Este icono se llamaba «escudo» y dibujaba un candado: arco arriba, cuerpo
+    // abajo y bocallave en medio. La web nunca lo hizo así —en
+    // `scripts/pantallasWeb.mjs` es un escudo con su tilde— y los sitios que lo
+    // usan tampoco lo pedían: «Seguridad y respaldo oficial», «Verificar a tu
+    // conductor», «¿Qué es Transporte Seguro?», «Cómo se reparte cada viaje».
+    // Todos quieren decir PROTECCIÓN y RESPALDO, no «cerrado con llave».
+    //
+    // Se vio al poner Transporte Seguro en la barra: un candado en la pestaña
+    // que promete que a alguien lo van a ir a buscar se lee como que la función
+    // está bloqueada, que es justo lo contrario.
+    //
+    // Se arregla el GLIFO y no los veinticinco sitios que lo usan: todos
+    // querían lo mismo y ninguno tiene que cambiar. Hay incluso una guarda
+    // —«el escudo, igual que en la web»— que hasta hoy no era cierta.
+    //
+    // La silueta sale del techo de las vistas, sin trampa: una caja con las
+    // esquinas de abajo redondeadas a media anchura da el escudo heráldico
+    // —lados rectos, base curva— y la tilde es el truco de los bordes que ya
+    // usa el resto de la familia: dos lados pintados y un giro de 45 grados.
     case 'escudo':
       return (
-        <>
+        <View style={{
+          width: t.tamano * 0.66,
+          height: t.tamano * 0.78,
+          borderWidth: t.trazo,
+          borderColor: t.color,
+          borderTopLeftRadius: t.tamano * 0.12,
+          borderTopRightRadius: t.tamano * 0.12,
+          borderBottomLeftRadius: t.tamano * 0.33,
+          borderBottomRightRadius: t.tamano * 0.33,
+          backgroundColor: t.activo ? t.color : 'transparent',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
           <View style={{
-            position: 'absolute',
-            top: t.tamano * 0.10,
-            width: t.tamano * 0.42,
-            height: t.tamano * 0.38,
-            borderTopLeftRadius: t.tamano * 0.21,
-            borderTopRightRadius: t.tamano * 0.21,
-            borderWidth: t.trazo,
-            borderBottomWidth: 0,
-            borderColor: t.color
+            width: t.tamano * 0.24,
+            height: t.tamano * 0.13,
+            borderLeftWidth: t.trazo,
+            borderBottomWidth: t.trazo,
+            borderColor: t.activo ? '#0b0a09' : t.color,
+            transform: [{ rotate: '-45deg' }],
+            // La tilde girada queda con su masa por debajo del centro óptico;
+            // este medio punto la devuelve al medio del escudo.
+            marginTop: -t.tamano * 0.05
           }} />
-          <View style={{
-            position: 'absolute',
-            bottom: t.tamano * 0.12,
-            width: t.tamano * 0.68,
-            height: t.tamano * 0.48,
-            borderRadius: t.trazo * 2.5,
-            borderWidth: t.trazo,
-            borderColor: t.color,
-            backgroundColor: t.activo ? t.color : 'transparent',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <View style={{
-              width: t.trazo * 1.3,
-              height: t.tamano * 0.16,
-              borderRadius: t.trazo * 0.65,
-              backgroundColor: t.activo ? '#0b0a09' : t.color
-            }} />
-          </View>
-        </>
+        </View>
       );
 
     // Reloj: esfera y dos agujas.
