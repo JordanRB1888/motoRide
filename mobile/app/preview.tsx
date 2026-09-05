@@ -65,6 +65,16 @@ import {
   C2Saldo,
   C2ViajeSeguro
 } from '../preview/pantallasC2Secciones';
+import {
+  PreviewChatPasajeraLight,
+  PreviewChatPasajeraDark,
+  PreviewChatConductorLight,
+  PreviewChatConductorDark,
+  PreviewViajeActivoPasajera,
+  PreviewViajeActivoConductor,
+  PreviewChatImagenes,
+  PreviewChatEstados
+} from '../preview/pantallasChatTrip';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -136,7 +146,16 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'saldo', nombre: 'Saldo', Componente: C2Saldo },
   { clave: 'avisos', nombre: 'Avisos', Componente: C2Avisos },
   { clave: 'ayuda', nombre: 'Ayuda', Componente: C2Ayuda },
-  { clave: 'configuracion', nombre: 'Configuración', Componente: C2Configuracion }
+  { clave: 'configuracion', nombre: 'Configuración', Componente: C2Configuracion },
+  // Chat & Viaje Activo Premium (CHAT-TRIP-VISUAL-PASS)
+  { clave: 'chat-pasajera-light', nombre: 'Chat Pasajera (Día)', Componente: PreviewChatPasajeraLight },
+  { clave: 'chat-pasajera-dark', nombre: 'Chat Pasajera (Noche)', Componente: PreviewChatPasajeraDark },
+  { clave: 'chat-conductor-light', nombre: 'Chat Conductor (Día)', Componente: PreviewChatConductorLight },
+  { clave: 'chat-conductor-dark', nombre: 'Chat Conductor (Noche)', Componente: PreviewChatConductorDark },
+  { clave: 'chat-imagenes', nombre: 'Chat con imágenes', Componente: PreviewChatImagenes },
+  { clave: 'chat-estados', nombre: 'Chat estados', Componente: PreviewChatEstados },
+  { clave: 'viaje-pasajera-activo', nombre: 'Viaje activo (Pasajera)', Componente: PreviewViajeActivoPasajera },
+  { clave: 'viaje-conductor-activo', nombre: 'Viaje activo (Conductor)', Componente: PreviewViajeActivoConductor }
 ];
 
 export function catalogoDePantallas(clave: ClaveDeDireccion): CatalogoDePantallas {

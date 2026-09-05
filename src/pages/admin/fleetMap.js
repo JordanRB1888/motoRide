@@ -20,7 +20,7 @@ const ACTIVE_TRIP_STATES = new Set(['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'I
 export function renderFleetMap(container) {
   container.innerHTML = `<div class="fleet-command-view">
     <section class="fleet-command-bar">
-      <div class="fleet-command-title"><span>${icon('mapPin', 20)}</span><div><h2>Monitoreo de Flota GPS en Tiempo Real</h2><p>Supervisión directa con Socket.IO y PostgreSQL</p></div></div>
+      <div class="fleet-command-title"><span>${icon('mapPin', 20)}</span><div><h2>Mapa de flota</h2><p>Ubicaciones y estados recibidos de los conductores</p></div></div>
       <div class="fleet-command-kpis">
         <span class="total">TOTAL: <b id="tot-drv">0</b></span>
         <span class="available">DISPONIBLES: <b id="on-drv">0</b></span>

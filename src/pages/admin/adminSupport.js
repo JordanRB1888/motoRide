@@ -256,20 +256,20 @@ export async function renderAdminSupport(container) {
     container.innerHTML = `<div class="support-command-view">
       <header class="support-command-head">
         <div><div class="support-title-line"><h1>Centro de Soporte</h1><span><i></i> Operación en tiempo real</span></div><p>Conversaciones persistentes con pasajeros y conductores.</p></div>
-        <div class="support-head-tools"><span class="support-operators"><i></i><small>Operadores en línea</small><strong>1</strong></span><label class="support-global-search">${icon('search', 16)}<input id="support-global-search" value="${escapeHtml(search)}" placeholder="Buscar conversación, pasajero o ID…"></label><button class="support-filter-trigger" type="button">${icon('filter', 16)} Filtros</button><button id="broadcast" class="support-broadcast" type="button">${icon('volume2', 16)} Nuevo comunicado</button></div>
+        <div class="support-head-tools"><span class="support-operators"><i></i><small>Sesión administrativa</small><strong>—</strong></span><label class="support-global-search">${icon('search', 16)}<input id="support-global-search" value="${escapeHtml(search)}" placeholder="Buscar conversación, pasajero o ID…"></label><button class="support-filter-trigger" type="button">${icon('filter', 16)} Filtros</button><button id="broadcast" class="support-broadcast" type="button">${icon('volume2', 16)} Nuevo comunicado</button></div>
       </header>
 
-      <section class="support-metrics">
+      <p class="cc-footnote">Las conversaciones y mensajes están conectados. Las marcas de resolución se guardan solo en este navegador; asignación y prioridad compartidas están pendientes de integración.</p><section class="support-metrics">
         <article class="amber"><span>${icon('message', 24)}</span><div><small>Conversaciones</small><strong>${open}</strong><em>Abiertas ahora</em></div></article>
         <article class="cyan"><span>${icon('bell', 24)}</span><div><small>Sin leer</small><strong>${unread}</strong><em>Requieren atención</em></div></article>
         <article class="green"><span>${icon('clock', 24)}</span><div><small>Tiempo medio</small><strong>${formatResponseTime(averageResponseMs)}</strong><em>Primera respuesta</em></div></article>
-        <article class="lime"><span>${icon('checkCircle', 24)}</span><div><small>Resueltos</small><strong>${resolved}</strong><em>Casos cerrados</em></div></article>
+        <article class="lime"><span>${icon('checkCircle', 24)}</span><div><small>Resueltos</small><strong>${resolved}</strong><em>Marcados en este navegador</em></div></article>
       </section>
 
       <section class="support-workspace ${active ? '' : 'no-active'}">
         <aside class="support-inbox">
           <header><h2>Conversaciones</h2><span>${threadTotal}</span></header>
-          <nav>${[['all','Todas',threadTotal],['unread','Sin leer',unread],['open','Abiertas',open],['resolved','Resueltas',resolved]].map(([id,label,count]) => `<button class="${filter === id ? 'active' : ''}" data-support-filter="${id}" type="button">${label}<b>${count}</b></button>`).join('')}</nav>
+          <nav>${[['all','Todas',threadTotal],['unread','Sin leer',unread],['open','Abiertas',open],['resolved','Resueltas aquí',resolved]].map(([id,label,count]) => `<button class="${filter === id ? 'active' : ''}" data-support-filter="${id}" type="button">${label}<b>${count}</b></button>`).join('')}</nav>
           <label class="support-list-search">${icon('search', 14)}<input id="support-list-search" value="${escapeHtml(search)}" placeholder="Buscar conversación"></label>
           <div class="support-thread-list">${loading ? '<div class="support-empty">Cargando conversaciones…</div>' : (filtered.map(threadCard).join('') || '<div class="support-empty">No hay conversaciones con este filtro.</div>') + (threadsCursor ? `<button id="support-more-threads" class="support-load-more" type="button" ${loadingMoreThreads ? 'disabled' : ''}>${loadingMoreThreads ? 'Cargando…' : `Cargar más conversaciones (${Math.max(0, threadTotal - threads.length)} restantes)`}</button>` : '')}</div>
         </aside>
@@ -284,8 +284,8 @@ export async function renderAdminSupport(container) {
         ${active ? `<aside class="support-context">
           <section><header><h3>Información del ${user.role === 'driver' ? 'conductor' : 'pasajero'}</h3></header><div class="support-profile-row"><span class="support-avatar large ${user.role === 'driver' ? 'driver' : ''}">${neutralizePrivatePhoto(user.avatar) ? `<img src="${escapeHtml(neutralizePrivatePhoto(user.avatar))}" alt="">` : escapeHtml(initials(user))}</span><div><strong>${escapeHtml(fullName(user))}</strong><small>${user.role === 'driver' ? 'Conductor' : 'Pasajero'} verificado</small></div></div><dl><div><dt>${icon('phone',14)} Teléfono</dt><dd>${escapeHtml(user.phone || 'No disponible')}</dd></div><div><dt>${icon('message',14)} Correo</dt><dd>${escapeHtml(user.email || 'No disponible')}</dd></div></dl></section>
           <section class="support-trip-context"><header><h3>${activeTrip ? 'Viaje activo' : 'Último viaje'}</h3><span class="${activeTrip ? 'live' : ''}">${tripStatus(latestTrip?.status)}</span></header>${latestTrip ? `<code>#${escapeHtml(String(latestTrip.id).slice(-12))}</code><div class="support-route"><p><i class="pickup"></i><span>${escapeHtml(routeFrom)}</span></p><p><i class="destination"></i><span>${escapeHtml(routeTo)}</span></p></div><footer><span>${fullDate(latestTrip.updatedAt || latestTrip.createdAt)}</span><strong>$${Number(latestTrip.fareUSD || latestTrip.fareEUR || latestTrip.pricing?.fareUSD || 0).toFixed(2)}</strong></footer>` : '<p class="support-context-empty">Este usuario no tiene viajes registrados.</p>'}</section>
-          <section class="support-case"><header><h3>Información del caso</h3><span>${active.unread ? 'Prioridad media' : resolvedIds.has(user.id) ? 'Resuelto' : 'En seguimiento'}</span></header><dl><div><dt>Estado</dt><dd>${resolvedIds.has(user.id) ? 'Resuelto' : 'En progreso'}</dd></div><div><dt>Asignado a</dt><dd>Admin Soporte</dd></div><div><dt>Última actividad</dt><dd>${shortTime(active.lastMessage?.createdAt)}</dd></div></dl><div class="support-tags"><span>soporte</span><span>${user.role === 'driver' ? 'conductor' : 'pasajero'}</span>${activeTrip ? '<span>viaje activo</span>' : ''}</div></section>
-          <section class="support-context-actions"><button id="support-resolve" class="${resolvedIds.has(user.id) ? 'resolved' : ''}" type="button">${icon(resolvedIds.has(user.id) ? 'history' : 'checkCircle',17)} ${resolvedIds.has(user.id) ? 'Reabrir caso' : 'Marcar como resuelto'}</button><button data-copy-user type="button">${icon('copy',16)} Copiar datos</button></section>
+          <section class="support-case"><header><h3>Información del caso</h3><span>${active.unread ? 'Sin prioridad asignada' : resolvedIds.has(user.id) ? 'Resuelto' : 'En seguimiento'}</span></header><dl><div><dt>Estado</dt><dd>${resolvedIds.has(user.id) ? 'Resuelto' : 'En progreso'}</dd></div><div><dt>Asignado a</dt><dd>Sin asignación de agente</dd></div><div><dt>Última actividad</dt><dd>${shortTime(active.lastMessage?.createdAt)}</dd></div></dl><div class="support-tags"><span>soporte</span><span>${user.role === 'driver' ? 'conductor' : 'pasajero'}</span>${activeTrip ? '<span>viaje activo</span>' : ''}</div></section>
+          <section class="support-context-actions"><button id="support-resolve" class="${resolvedIds.has(user.id) ? 'resolved' : ''}" type="button">${icon(resolvedIds.has(user.id) ? 'history' : 'checkCircle',17)} ${resolvedIds.has(user.id) ? 'Reabrir caso' : 'Marcar resuelto aquí'}</button><button data-copy-user type="button">${icon('copy',16)} Copiar datos</button></section>
         </aside>` : ''}
       </section>
     </div>`;
@@ -359,7 +359,7 @@ export async function renderAdminSupport(container) {
     container.querySelector('#support-resolve')?.addEventListener('click', () => {
       if (resolvedIds.has(activeId)) resolvedIds.delete(activeId); else resolvedIds.add(activeId);
       saveResolved(); draw();
-      showToast(resolvedIds.has(activeId) ? 'Caso marcado como resuelto' : 'Caso reabierto', 'success');
+      showToast(resolvedIds.has(activeId) ? 'Marcado como resuelto en este navegador' : 'Caso reabierto', 'success');
     });
     container.querySelector('#broadcast')?.addEventListener('click', openBroadcast);
   };

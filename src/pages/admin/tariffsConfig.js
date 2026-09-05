@@ -3,37 +3,37 @@ import { showToast } from '../../components/toast.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 
 export async function renderTariffsConfig(container) {
-    container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">Cargando tarifas vigentes…</div>';
+    container.innerHTML = '<div class="admin-loading">Cargando tarifas vigentes…</div>';
     const config = await apiService.get('/pricing/config');
-    if (!config) return container.innerHTML = '<div class="diorama-card-3d" style="padding:30px;color:var(--danger)">No se pudo consultar la configuración del servidor.</div>';
+    if (!config) return container.innerHTML = '<div class="admin-empty">No se pudo consultar la configuración del servidor.</div>';
     const moto = config.vehicleTypes?.MOTO || {};
     const car = config.vehicleTypes?.CAR || {};
-    const field = (id, label, value, step = '0.01') => `<label style="display:grid;gap:6px;color:var(--text-secondary);font-size:.85rem">${label}<input id="${id}" type="number" min="0" step="${step}" value="${Number(value || 0)}" required style="padding:12px;border-radius:12px;border:1px solid var(--border-color);background:var(--surface-input);color:var(--text-primary)"></label>`;
+    const field = (id, label, value, step = '0.01') => `<label class="tariff-field">${label}<input id="${id}" type="number" min="0" step="${step}" value="${Number(value || 0)}" required></label>`;
     container.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px"><div><h2 style="margin:0">Tarifas operativas</h2><small style="color:var(--text-secondary)">Estos valores alimentan las cotizaciones reales de cliente, conductor y administración.</small></div><span class="badge badge-warning">BCV: Bs. ${Number(config.bcvRate || 0).toFixed(2)}</span></div>
-      <form id="pricing-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px">
-        <section class="diorama-card-3d" style="padding:22px;border-radius:22px;background:var(--surface-card)"><h3 class="pricing-vehicle-heading">${vehicleImage('MOTO', { decorative: true })}<span>Mototaxi</span></h3><div style="display:grid;gap:13px">${field('m-base','Tarifa base USD',moto.baseFareUSD)}${field('m-km','Precio por km',moto.pricePerKmUSD)}${field('m-min','Precio por minuto',moto.pricePerMinuteUSD)}${field('m-minimum','Tarifa mínima',moto.minimumFareUSD)}</div></section>
-        <section class="diorama-card-3d" style="padding:22px;border-radius:22px;background:var(--surface-card)"><h3 class="pricing-vehicle-heading">${vehicleImage('CAR', { decorative: true })}<span>Automóvil</span></h3><div style="display:grid;gap:13px">${field('c-base','Tarifa base USD',car.baseFareUSD)}${field('c-km','Precio por km',car.pricePerKmUSD)}${field('c-min','Precio por minuto',car.pricePerMinuteUSD)}${field('c-minimum','Tarifa mínima',car.minimumFareUSD)}</div></section>
-        <section class="diorama-card-3d" style="padding:22px;border-radius:22px;background:var(--surface-card)"><h3>Parámetros generales</h3><div style="display:grid;gap:13px">${field('night','Multiplicador nocturno',config.nightMultiplier)}${field('peak','Multiplicador hora pico',config.peakMultiplier)}${field('commission','Comisión de plataforma (%)',Number(config.commissionRate || .15)*100,'1')}${field('bcv','Tasa BCV Bs./USD',config.bcvRate)}${field('parallel','Tasa alternativa Bs./USD',config.parallelRate)}</div><button class="btn btn-3d primary-btn" style="width:100%;margin-top:18px;padding:14px" type="submit">Guardar y aplicar</button></section>
-      </form>`;
+      <div class="tariffs-command-view">
+        <header class="tariffs-heading"><div><span class="eyebrow"><i></i> CONFIGURACIÓN COMERCIAL</span><h1>Tarifas operativas</h1><p>Valores reales para las cotizaciones de pasajeros, conductores y administración.</p></div><span class="tariffs-bcv">BCV <strong>Bs. ${Number(config.bcvRate || 0).toFixed(2)}</strong></span></header>
+        <form id="pricing-form" class="tariffs-grid">
+          <section class="tariff-card"><h3 class="pricing-vehicle-heading">${vehicleImage('MOTO', { decorative: true })}<span>Mototaxi</span></h3><div class="tariff-fields">${field('m-base','Tarifa base USD',moto.baseFareUSD)}${field('m-km','Precio por km',moto.pricePerKmUSD)}${field('m-min','Precio por minuto',moto.pricePerMinuteUSD)}${field('m-minimum','Tarifa mínima',moto.minimumFareUSD)}</div></section>
+          <section class="tariff-card"><h3 class="pricing-vehicle-heading">${vehicleImage('CAR', { decorative: true })}<span>Automóvil</span></h3><div class="tariff-fields">${field('c-base','Tarifa base USD',car.baseFareUSD)}${field('c-km','Precio por km',car.pricePerKmUSD)}${field('c-min','Precio por minuto',car.pricePerMinuteUSD)}${field('c-minimum','Tarifa mínima',car.minimumFareUSD)}</div></section>
+          <section class="tariff-card tariff-general"><h3>Parámetros generales</h3><div class="tariff-fields">${field('night','Multiplicador nocturno',config.nightMultiplier)}${field('peak','Multiplicador hora pico',config.peakMultiplier)}${field('commission','Comisión de plataforma (%)',Number(config.commissionRate || .15)*100,'1')}${field('bcv','Tasa BCV Bs./USD',config.bcvRate)}${field('parallel','Tasa alternativa Bs./USD',config.parallelRate)}</div><button class="tariff-save" type="submit">Guardar y aplicar</button></section>
+        </form>
+      </div>`;
     // SAFE-2B: tarifas del PLAN de Transporte Seguro (fijas por carrera +
     // comisión propia del plan), con su formulario y guardado independientes.
     const st = await apiService.get('/admin/safe-transport/pricing');
     if (st?.perRide) {
       const seccion = document.createElement('section');
-      seccion.className = 'diorama-card-3d';
-      seccion.style.cssText = 'padding:22px;border-radius:22px;background:var(--surface-card);margin-top:18px';
+      seccion.className = 'tariff-safe-card';
       seccion.innerHTML = `
-        <h3 style="display:flex;align-items:center;gap:8px;margin-top:0">Transporte Seguro — plan quincenal</h3>
-        <small style="color:var(--text-secondary);display:block;margin-bottom:14px">
+        <header><h3>Transporte Seguro — plan quincenal</h3><small>
           Tarifa FIJA por carrera del plan (se descuenta de la wallet de la clienta al completarse;
           el conductor recibe el resto tras la comisión del plan). Rige en caliente para las próximas carreras.
-        </small>
-        <form id="st-pricing-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:13px">
+        </small></header>
+        <form id="st-pricing-form" class="tariff-safe-form">
           ${field('st-moto', 'Carrera en MOTO (USD)', st.perRide.MOTO)}
           ${field('st-car', 'Carrera en AUTO (USD)', st.perRide.CAR)}
           ${field('st-fee', 'Comisión del plan (%)', Number(st.platformFeeRate || 0.2) * 100, '1')}
-          <button class="btn btn-3d primary-btn" style="padding:14px;align-self:end" type="submit">Guardar plan</button>
+          <button class="tariff-save" type="submit">Guardar plan</button>
         </form>`;
       container.querySelector('#pricing-form')?.after(seccion);
       seccion.querySelector('#st-pricing-form').addEventListener('submit', async event => {
