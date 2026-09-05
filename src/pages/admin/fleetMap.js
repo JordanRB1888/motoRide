@@ -4,7 +4,7 @@ import { showToast } from '../../components/toast.js';
 import { icon } from '../../utils/icons.js';
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 import { accumulatePage } from '../../utils/liveUpdates.js';
-import { OSM_TILE_URL, tileLayerOptionsForTheme } from '../../utils/mapTiles.js';
+import { createAdminGoogleMap } from '../../components/adminControlCenter/adminGoogleMap.js';
 
 import { neutralizePrivatePhoto } from '../../utils/privatePhoto.js';
 import { localAvatarHtml } from '../../utils/localAvatar.js';
@@ -31,7 +31,7 @@ export function renderFleetMap(container) {
         <option value="all">Todos los estados</option>
         <option value="AVAILABLE">Solo disponibles</option>
         <option value="IN_TRIP">Solo en viaje</option>
-        <option value="OFFLINE">Solo offline</option>
+        <option value="OFFLINE">Solo fuera de línea</option>
       </select>
     </section>
 
@@ -44,7 +44,7 @@ export function renderFleetMap(container) {
       </aside>
       <aside id="fleet-driver-panel" class="fleet-driver-panel hidden" aria-live="polite"></aside>
       <div class="fleet-map-legend">
-        <span><i class="available"></i>Disponibles</span><span><i class="trip"></i>En viaje</span><span><i class="sos"></i>SOS activos</span><span><i class="offline"></i>Offline</span>
+        <span><i class="available"></i>Disponibles</span><span><i class="trip"></i>En viaje</span><span><i class="sos"></i>SOS activos</span><span><i class="offline"></i>Fuera de línea</span>
       </div>
     </section>
   </div>`;
@@ -54,10 +54,9 @@ export function renderFleetMap(container) {
 
 async function initializeFleetMap(container) {
   const mapElement = container.querySelector('#fleet-map');
-  if (!mapElement || typeof L === 'undefined') return;
+  if (!mapElement) return;
 
-  const map = L.map(mapElement, { zoomControl: true, attributionControl: true }).setView([10.6427, -71.6125], 13);
-  L.tileLayer(OSM_TILE_URL, tileLayerOptionsForTheme('dark')).addTo(map);
+  const map = await createAdminGoogleMap({ mapElement, container: mapElement, center: { lat: 10.6427, lng: -71.6125 }, zoom: 13 });
 
   const markers = new Map();
   const drivers = new Map();
@@ -82,7 +81,7 @@ async function initializeFleetMap(container) {
     return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
   };
   const activeTripFor = id => trips.find(trip => (trip.driverId === id || trip.assignedDriverId === id) && ACTIVE_TRIP_STATES.has(String(trip.status).toUpperCase()));
-  const statusText = status => status === 'AVAILABLE' ? 'Disponible' : status === 'IN_TRIP' ? 'En viaje' : status === 'SOS' ? 'SOS activado' : 'Offline';
+  const statusText = status => status === 'AVAILABLE' ? 'Disponible' : status === 'IN_TRIP' ? 'En viaje' : status === 'SOS' ? 'SOS activado' : 'Fuera de línea';
   const relativeTime = value => {
     const timestamp = new Date(value || 0).getTime();
     if (!timestamp) return 'Sin registro';
@@ -95,12 +94,7 @@ async function initializeFleetMap(container) {
   function markerIcon(driver) {
     const status = statusOf(driver);
     const vehicleIcon = vehicleImage(driver.vehicleType, { variant: 'map', className: 'fleet-real-vehicle', decorative: true });
-    return L.divIcon({
-      className: 'fleet-driver-leaflet-marker',
-      html: `<span class="${status.toLowerCase()}">${vehicleIcon}<i></i></span>`,
-      iconSize: [42, 50],
-      iconAnchor: [21, 44]
-    });
+    return `<span class="${status.toLowerCase()}">${vehicleIcon}<i></i></span>`;
   }
 
   function matchesFilter(driver) {
@@ -111,18 +105,17 @@ async function initializeFleetMap(container) {
   function renderMarker(driver) {
     const id = driverId(driver);
     const coordinates = coordinatesOf(driver);
-    if (!id || !coordinates) return;
+    if (!map || !id || !coordinates) return;
     let marker = markers.get(id);
     if (!marker) {
-      marker = L.marker(coordinates, { icon: markerIcon(driver), riseOnHover: true }).addTo(map);
-      marker.on('click', () => selectDriver(id, true));
+      marker = map.crearMarcadorHtml({ lat: coordinates[0], lng: coordinates[1], html: markerIcon(driver), className: 'fleet-driver-leaflet-marker', anchor: [21, 44], title: `${nameOf(driver)} · ${statusText(statusOf(driver))}` });
+      marker.onClick(() => selectDriver(id, true));
       markers.set(id, marker);
     } else {
       marker.setLatLng(coordinates);
-      marker.setIcon(markerIcon(driver));
+      marker.getElement().innerHTML = markerIcon(driver);
     }
-    if (matchesFilter(driver) && !map.hasLayer(marker)) marker.addTo(map);
-    if (!matchesFilter(driver) && map.hasLayer(marker)) marker.removeFrom(map);
+    marker.setVisible(matchesFilter(driver));
   }
 
   function drawRoute(driver, fit = false) {
@@ -136,8 +129,9 @@ async function initializeFleetMap(container) {
     const destination = ['IN_PROGRESS', 'IN_TRIP'].includes(String(trip.status).toUpperCase()) ? trip.destination : trip.pickup;
     const target = [Number(destination?.lat), Number(destination?.lng)];
     if (!Number.isFinite(target[0]) || !Number.isFinite(target[1])) return;
-    activeRoute = L.polyline([coordinates, target], { color: '#ffc400', weight: 5, opacity: .9, dashArray: '2 9', lineCap: 'round' }).addTo(map);
-    if (fit) map.fitBounds(activeRoute.getBounds(), { padding: [80, 80], maxZoom: 15 });
+    if (!map) return;
+    activeRoute = map.crearPolyline([coordinates, target], { color: '#ffc400', weight: 5, opacity: .9 });
+    if (fit) map.fitBounds([coordinates, target]);
   }
 
   function selectDriver(id, center = false) {
@@ -174,7 +168,7 @@ async function initializeFleetMap(container) {
     };
     drawRoute(driver, false);
     const coordinates = coordinatesOf(driver);
-    if (center && coordinates) map.flyTo(coordinates, Math.max(map.getZoom(), 14), { duration: .7 });
+    if (center && coordinates && map) map.setView(coordinates[0], coordinates[1], Math.max(map.getZoom() || 13, 14));
   }
 
   function updateCounters() {
@@ -252,8 +246,8 @@ async function initializeFleetMap(container) {
     trips = initialTrips;
     if (Array.isArray(initialDrivers)) initialDrivers.forEach(upsertDriver);
     const located = [...drivers.values()].map(coordinatesOf).filter(Boolean);
-    if (located.length > 1) map.fitBounds(located, { padding: [70, 70], maxZoom: 14 });
-    else if (located.length === 1) map.setView(located[0], 14);
+    if (located.length > 1 && map) map.fitBounds(located);
+    else if (located.length === 1 && map) map.setView(located[0][0], located[0][1], 14);
   } catch {
     showToast('No se pudo cargar toda la telemetría de la flota.', 'warning');
   }
@@ -267,7 +261,7 @@ async function initializeFleetMap(container) {
     container.querySelector('#status-filter').value = 'all';
     drivers.forEach(renderMarker);
     const located = [...drivers.values()].map(coordinatesOf).filter(Boolean);
-    if (located.length) map.fitBounds(located, { padding: [70, 70], maxZoom: 14 });
+    if (located.length && map) map.fitBounds(located);
   };
 
   const onLocation = payload => payload && upsertDriver(payload);
@@ -275,14 +269,13 @@ async function initializeFleetMap(container) {
   socketClient.connect();
   socketClient.on('admin:driver_location', onLocation);
   socketClient.on('admin:driver_updated', onUpdated);
-  window.setTimeout(() => map.invalidateSize(), 180);
-
   const observer = new MutationObserver(() => {
     if (document.body.contains(container) && container.contains(mapElement)) return;
     disposed = true;
     socketClient.off('admin:driver_location', onLocation);
     socketClient.off('admin:driver_updated', onUpdated);
-    map.remove();
+    markers.forEach(marker => marker.remove());
+    map?.destroy();
     observer.disconnect();
   });
   observer.observe(document.body, { childList: true, subtree: true });

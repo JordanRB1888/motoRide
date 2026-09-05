@@ -2,15 +2,25 @@
  * Pantallas de demostración del Laboratorio Visual para Chat y Viaje Activo.
  * CHAT-TRIP-VISUAL-PASS — +58Express
  *
- * Catálogo de 8 escenarios requeridos:
+ * Catálogo completo de escenarios (A hasta R):
  * A. PreviewChatPasajeraLight: Chat Pasajero en Modo Claro
  * B. PreviewChatPasajeraDark: Chat Pasajero en Modo Oscuro
  * C. PreviewChatConductorLight: Chat Conductor en Modo Claro
  * D. PreviewChatConductorDark: Chat Conductor en Modo Oscuro
- * E. PreviewViajeActivoPasajera: Viaje Activo Pasajero con selector de estados
- * F. PreviewViajeActivoConductor: Viaje Activo Conductor con ciclo de acciones
- * G. PreviewChatImagenes: Chat con previsualización de imágenes CHAT-2
- * H. PreviewChatEstados: Demostración interactiva de estados del Chat
+ * E. PreviewChatTexto: Chat de texto con agrupación y delivery ticks
+ * F. PreviewChatImagenes: Chat con imágenes CHAT-2 y visor fullscreen
+ * G. PreviewChatUploading: Chat con subida activa de imagen (porcentaje + spinner)
+ * H. PreviewChatFailedRetry: Chat con envío fallido y acción de reintento
+ * I. PreviewChatOffline: Chat en modo fuera de línea con cola de mensajes
+ * J. PreviewChatEmpty: Chat vacío amigable con cifrado de seguridad
+ * K. PreviewChatError: Chat con error de sincronización y reintento
+ * L. PreviewPassengerDriverAssigned: Viaje activo pasajera en DRIVER_ASSIGNED
+ * M. PreviewPassengerArrived: Viaje activo pasajera en ARRIVED
+ * N. PreviewPassengerInProgress: Viaje activo pasajera en IN_PROGRESS
+ * O. PreviewDriverDriverAssigned: Viaje activo conductor con botón LLEGUÉ
+ * P. PreviewDriverArrived: Viaje activo conductor con botón INICIAR VIAJE
+ * Q. PreviewDriverInProgress: Viaje activo conductor con botón FINALIZAR VIAJE
+ * R. PreviewHistorialDetalleConImagen: Detalle de viaje con adjuntos multimedia
  *
  * 100% AISLADO DE LA LÓGICA DE PRODUCCIÓN Y DE CHAT-2 EN MOTORIDE-CURRENT.
  */
@@ -20,7 +30,8 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable
+  Pressable,
+  ScrollView
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,8 +42,9 @@ import {
   ViajeActivoConductorSheet,
   type EstadoViajeCiclo
 } from '../ui/TripVisual';
+import { AdjuntoDetalleViaje } from '../ui/AdjuntoDetalleViaje';
 import { LienzoDeMapa, type HitoEnMapa, type VehiculoEnMapa } from '../ui/Mapa';
-import { HojaInferior } from '../ui/HojaInferior';
+import { HojaInferior, Separador } from '../ui/HojaInferior';
 
 // ---------------------------------------------------------------------------
 // Datos de Demostración para Chat y Viaje
@@ -55,7 +67,7 @@ const PASAJERA_FIXTURE = {
   enLinea: true
 } as const;
 
-const MENSAJES_BASE_PASAJERA: readonly MensajeVisual[] = [
+const MENSAJES_TEXTO_PASAJERA: readonly MensajeVisual[] = [
   {
     id: 'm1',
     remitente: 'CONTRAPARTE',
@@ -84,7 +96,7 @@ const MENSAJES_BASE_PASAJERA: readonly MensajeVisual[] = [
   }
 ];
 
-const MENSAJES_BASE_CONDUCTOR: readonly MensajeVisual[] = [
+const MENSAJES_TEXTO_CONDUCTOR: readonly MensajeVisual[] = [
   {
     id: 'mc1',
     remitente: 'CONTRAPARTE',
@@ -136,19 +148,44 @@ const MENSAJES_CON_IMAGENES: readonly MensajeVisual[] = [
   },
   {
     id: 'img4',
+    remitente: 'CONTRAPARTE',
+    texto: 'Foto de referencia recibida del conductor:',
+    imagenUri: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=600&auto=format&fit=crop',
+    hora: '11:08 AM'
+  }
+];
+
+const MENSAJES_UPLOADING: readonly MensajeVisual[] = [
+  {
+    id: 'up1',
+    remitente: 'CONTRAPARTE',
+    texto: '¿Me puedes enviar una foto de la fachada?',
+    hora: '10:40 AM'
+  },
+  {
+    id: 'up2',
     remitente: 'PROPIO',
     texto: 'Subiendo referencia de la fachada...',
     imagenUri: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=600&auto=format&fit=crop',
-    hora: '11:08 AM',
+    hora: '10:41 AM',
     estadoEnvio: 'ENVIANDO',
     progresoSubida: 68
+  }
+];
+
+const MENSAJES_FAILED_RETRY: readonly MensajeVisual[] = [
+  {
+    id: 'fail1',
+    remitente: 'CONTRAPARTE',
+    texto: '¿Pudiste enviar la foto de la entrada?',
+    hora: '09:15 AM'
   },
   {
-    id: 'img5',
+    id: 'fail2',
     remitente: 'PROPIO',
-    texto: 'Foto de comprobante de punto',
+    texto: 'Foto de comprobante de punto de encuentro',
     imagenUri: 'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?w=600&auto=format&fit=crop',
-    hora: '11:09 AM',
+    hora: '09:16 AM',
     estadoEnvio: 'FALLIDO',
     motivoFallo: 'Error de conexión'
   }
@@ -168,18 +205,7 @@ const VEHICULOS_MAPA_PREVIEW: readonly VehiculoEnMapa[] = [
 // ---------------------------------------------------------------------------
 
 export function PreviewChatPasajeraLight() {
-  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_BASE_PASAJERA);
-
-  const handleEnviar = (texto: string) => {
-    const nuevo: MensajeVisual = {
-      id: `msj_${Date.now()}`,
-      remitente: 'PROPIO',
-      texto,
-      hora: '12:15 PM',
-      estadoEnvio: 'ENTREGADO'
-    };
-    setMensajes(prev => [...prev, nuevo]);
-  };
+  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_TEXTO_PASAJERA);
 
   return (
     <ProveedorDeTema inicial="C2" esquemaForzado="claro">
@@ -194,7 +220,15 @@ export function PreviewChatPasajeraLight() {
         mensajes={mensajes}
         onVolver={() => undefined}
         onLlamar={() => undefined}
-        onEnviarTexto={handleEnviar}
+        onEnviarTexto={texto => {
+          setMensajes(prev => [...prev, {
+            id: `m_${Date.now()}`,
+            remitente: 'PROPIO',
+            texto,
+            hora: '12:15 PM',
+            estadoEnvio: 'ENTREGADO'
+          }]);
+        }}
       />
     </ProveedorDeTema>
   );
@@ -205,18 +239,7 @@ export function PreviewChatPasajeraLight() {
 // ---------------------------------------------------------------------------
 
 export function PreviewChatPasajeraDark() {
-  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_BASE_PASAJERA);
-
-  const handleEnviar = (texto: string) => {
-    const nuevo: MensajeVisual = {
-      id: `msj_${Date.now()}`,
-      remitente: 'PROPIO',
-      texto,
-      hora: '12:15 PM',
-      estadoEnvio: 'ENTREGADO'
-    };
-    setMensajes(prev => [...prev, nuevo]);
-  };
+  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_TEXTO_PASAJERA);
 
   return (
     <ProveedorDeTema inicial="C2" esquemaForzado="oscuro">
@@ -231,7 +254,15 @@ export function PreviewChatPasajeraDark() {
         mensajes={mensajes}
         onVolver={() => undefined}
         onLlamar={() => undefined}
-        onEnviarTexto={handleEnviar}
+        onEnviarTexto={texto => {
+          setMensajes(prev => [...prev, {
+            id: `m_${Date.now()}`,
+            remitente: 'PROPIO',
+            texto,
+            hora: '12:15 PM',
+            estadoEnvio: 'ENTREGADO'
+          }]);
+        }}
       />
     </ProveedorDeTema>
   );
@@ -242,18 +273,7 @@ export function PreviewChatPasajeraDark() {
 // ---------------------------------------------------------------------------
 
 export function PreviewChatConductorLight() {
-  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_BASE_CONDUCTOR);
-
-  const handleEnviar = (texto: string) => {
-    const nuevo: MensajeVisual = {
-      id: `msj_${Date.now()}`,
-      remitente: 'PROPIO',
-      texto,
-      hora: '02:35 PM',
-      estadoEnvio: 'ENTREGADO'
-    };
-    setMensajes(prev => [...prev, nuevo]);
-  };
+  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_TEXTO_CONDUCTOR);
 
   return (
     <ProveedorDeTema inicial="C2" esquemaForzado="claro">
@@ -268,7 +288,15 @@ export function PreviewChatConductorLight() {
         mensajes={mensajes}
         onVolver={() => undefined}
         onLlamar={() => undefined}
-        onEnviarTexto={handleEnviar}
+        onEnviarTexto={texto => {
+          setMensajes(prev => [...prev, {
+            id: `m_${Date.now()}`,
+            remitente: 'PROPIO',
+            texto,
+            hora: '02:35 PM',
+            estadoEnvio: 'ENTREGADO'
+          }]);
+        }}
       />
     </ProveedorDeTema>
   );
@@ -279,18 +307,7 @@ export function PreviewChatConductorLight() {
 // ---------------------------------------------------------------------------
 
 export function PreviewChatConductorDark() {
-  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_BASE_CONDUCTOR);
-
-  const handleEnviar = (texto: string) => {
-    const nuevo: MensajeVisual = {
-      id: `msj_${Date.now()}`,
-      remitente: 'PROPIO',
-      texto,
-      hora: '02:35 PM',
-      estadoEnvio: 'ENTREGADO'
-    };
-    setMensajes(prev => [...prev, nuevo]);
-  };
+  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_TEXTO_CONDUCTOR);
 
   return (
     <ProveedorDeTema inicial="C2" esquemaForzado="oscuro">
@@ -305,14 +322,501 @@ export function PreviewChatConductorDark() {
         mensajes={mensajes}
         onVolver={() => undefined}
         onLlamar={() => undefined}
-        onEnviarTexto={handleEnviar}
+        onEnviarTexto={texto => {
+          setMensajes(prev => [...prev, {
+            id: `m_${Date.now()}`,
+            remitente: 'PROPIO',
+            texto,
+            hora: '02:35 PM',
+            estadoEnvio: 'ENTREGADO'
+          }]);
+        }}
       />
     </ProveedorDeTema>
   );
 }
 
 // ---------------------------------------------------------------------------
-// E. PreviewViajeActivoPasajera (Con Selector de Estados)
+// E. PreviewChatTexto
+// ---------------------------------------------------------------------------
+
+export function PreviewChatTexto() {
+  return (
+    <ChatVisual
+      rolUsuario="PASAJERA"
+      contraparte={CONDUCTOR_FIXTURE}
+      contextoViaje={{
+        estado: 'EN_CAMINO',
+        etiqueta: 'Conversación de texto',
+        aclaracion: 'Agrupación y timestamps'
+      }}
+      mensajes={MENSAJES_TEXTO_PASAJERA}
+      onVolver={() => undefined}
+      onLlamar={() => undefined}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// F. PreviewChatImagenes
+// ---------------------------------------------------------------------------
+
+export function PreviewChatImagenes() {
+  return (
+    <ChatVisual
+      rolUsuario="PASAJERA"
+      contraparte={CONDUCTOR_FIXTURE}
+      contextoViaje={{
+        estado: 'EN_CAMINO',
+        etiqueta: 'Fotografías adjuntas',
+        aclaracion: 'Miniaturas y visor fullscreen'
+      }}
+      mensajes={MENSAJES_CON_IMAGENES}
+      onVolver={() => undefined}
+      onLlamar={() => undefined}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// G. PreviewChatUploading
+// ---------------------------------------------------------------------------
+
+export function PreviewChatUploading() {
+  return (
+    <ChatVisual
+      rolUsuario="PASAJERA"
+      contraparte={CONDUCTOR_FIXTURE}
+      contextoViaje={{
+        estado: 'EN_CAMINO',
+        etiqueta: 'Subiendo imagen',
+        aclaracion: 'Progreso y spinner de subida'
+      }}
+      mensajes={MENSAJES_UPLOADING}
+      onVolver={() => undefined}
+      onLlamar={() => undefined}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// H. PreviewChatFailedRetry
+// ---------------------------------------------------------------------------
+
+export function PreviewChatFailedRetry() {
+  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_FAILED_RETRY);
+
+  const handleReintentar = (id: string) => {
+    setMensajes(prev => prev.map(m => m.id === id ? { ...m, estadoEnvio: 'ENTREGADO' } : m));
+  };
+
+  return (
+    <ChatVisual
+      rolUsuario="PASAJERA"
+      contraparte={CONDUCTOR_FIXTURE}
+      contextoViaje={{
+        estado: 'EN_CAMINO',
+        etiqueta: 'Envío fallido',
+        aclaracion: 'Botón táctil de reintento'
+      }}
+      mensajes={mensajes}
+      onVolver={() => undefined}
+      onLlamar={() => undefined}
+      onReintentarEnvio={handleReintentar}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// I. PreviewChatOffline
+// ---------------------------------------------------------------------------
+
+export function PreviewChatOffline() {
+  return (
+    <ChatVisual
+      rolUsuario="PASAJERA"
+      contraparte={CONDUCTOR_FIXTURE}
+      contextoViaje={{
+        estado: 'EN_CAMINO',
+        etiqueta: 'Modo sin conexión',
+        aclaracion: 'Mensajes en espera de red'
+      }}
+      estadoChat="OFFLINE"
+      mensajes={MENSAJES_TEXTO_PASAJERA}
+      onVolver={() => undefined}
+      onLlamar={() => undefined}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// J. PreviewChatEmpty
+// ---------------------------------------------------------------------------
+
+export function PreviewChatEmpty() {
+  return (
+    <ChatVisual
+      rolUsuario="PASAJERA"
+      contraparte={CONDUCTOR_FIXTURE}
+      contextoViaje={{
+        estado: 'EN_CAMINO',
+        etiqueta: 'Chat vacío',
+        aclaracion: 'Inicio amigable'
+      }}
+      estadoChat="VACIO"
+      mensajes={[]}
+      onVolver={() => undefined}
+      onLlamar={() => undefined}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// K. PreviewChatError
+// ---------------------------------------------------------------------------
+
+export function PreviewChatError() {
+  const [recargando, setRecargando] = useState(false);
+
+  return (
+    <ChatVisual
+      rolUsuario="PASAJERA"
+      contraparte={CONDUCTOR_FIXTURE}
+      contextoViaje={{
+        estado: 'EN_CAMINO',
+        etiqueta: 'Error de sincronización',
+        aclaracion: 'Reintento de conexión'
+      }}
+      estadoChat={recargando ? 'CARGANDO' : 'ERROR'}
+      errorTexto="No fue posible conectar con el canal de mensajería del viaje"
+      mensajes={[]}
+      onVolver={() => undefined}
+      onLlamar={() => undefined}
+      onReintentarCarga={() => {
+        setRecargando(true);
+        setTimeout(() => setRecargando(false), 800);
+      }}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// L. PreviewPassengerDriverAssigned
+// ---------------------------------------------------------------------------
+
+export function PreviewPassengerDriverAssigned() {
+  return (
+    <View style={estilos.contenedorTodo}>
+      <LienzoDeMapa
+        vehiculos={VEHICULOS_MAPA_PREVIEW}
+        hitos={HITOS_MAPA_PREVIEW}
+        conRuta
+      >
+        <HojaInferior estado="baja" conAsa alturaAutomatica>
+          <ViajeActivoPasajeraSheet
+            estado="DRIVER_ASSIGNED"
+            conductor={CONDUCTOR_FIXTURE}
+            origen="Av. 4 Bella Vista, Calle 72"
+            destino="C.C. Sambil Maracaibo"
+            tiempoLlegadaTexto="Llega en 3 min"
+            distanciaTexto="A 850 metros"
+            mensajesSinLeer={1}
+            onAbrirChat={() => undefined}
+            onLlamar={() => undefined}
+            onViajeSeguro={() => undefined}
+          />
+        </HojaInferior>
+      </LienzoDeMapa>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// M. PreviewPassengerArrived
+// ---------------------------------------------------------------------------
+
+export function PreviewPassengerArrived() {
+  return (
+    <View style={estilos.contenedorTodo}>
+      <LienzoDeMapa
+        vehiculos={VEHICULOS_MAPA_PREVIEW}
+        hitos={HITOS_MAPA_PREVIEW}
+        conRuta
+      >
+        <HojaInferior estado="baja" conAsa alturaAutomatica>
+          <ViajeActivoPasajeraSheet
+            estado="ARRIVED"
+            conductor={CONDUCTOR_FIXTURE}
+            origen="Av. 4 Bella Vista, Calle 72"
+            destino="C.C. Sambil Maracaibo"
+            mensajesSinLeer={0}
+            onAbrirChat={() => undefined}
+            onLlamar={() => undefined}
+            onViajeSeguro={() => undefined}
+          />
+        </HojaInferior>
+      </LienzoDeMapa>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// N. PreviewPassengerInProgress
+// ---------------------------------------------------------------------------
+
+export function PreviewPassengerInProgress() {
+  return (
+    <View style={estilos.contenedorTodo}>
+      <LienzoDeMapa
+        vehiculos={VEHICULOS_MAPA_PREVIEW}
+        hitos={HITOS_MAPA_PREVIEW}
+        conRuta
+      >
+        <HojaInferior estado="baja" conAsa alturaAutomatica>
+          <ViajeActivoPasajeraSheet
+            estado="IN_PROGRESS"
+            conductor={CONDUCTOR_FIXTURE}
+            origen="Av. 4 Bella Vista, Calle 72"
+            destino="C.C. Sambil Maracaibo"
+            mensajesSinLeer={0}
+            onAbrirChat={() => undefined}
+            onLlamar={() => undefined}
+            onViajeSeguro={() => undefined}
+          />
+        </HojaInferior>
+      </LienzoDeMapa>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// O. PreviewDriverDriverAssigned
+// ---------------------------------------------------------------------------
+
+export function PreviewDriverDriverAssigned() {
+  return (
+    <View style={estilos.contenedorTodo}>
+      <LienzoDeMapa
+        vehiculos={VEHICULOS_MAPA_PREVIEW}
+        hitos={HITOS_MAPA_PREVIEW}
+        conRuta
+      >
+        <HojaInferior estado="baja" conAsa alturaAutomatica>
+          <ViajeActivoConductorSheet
+            estado="DRIVER_ASSIGNED"
+            pasajero={{
+              nombre: PASAJERA_FIXTURE.nombre,
+              iniciales: PASAJERA_FIXTURE.iniciales
+            }}
+            origen="Av. 4 Bella Vista, Calle 72"
+            destino="C.C. Sambil Maracaibo"
+            metodoPago="Efectivo $3.50"
+            tarifaBs="Bs. 210,00"
+            mensajesSinLeer={1}
+            onAccionPrincipal={() => undefined}
+            onAbrirChat={() => undefined}
+            onLlamar={() => undefined}
+          />
+        </HojaInferior>
+      </LienzoDeMapa>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// P. PreviewDriverArrived
+// ---------------------------------------------------------------------------
+
+export function PreviewDriverArrived() {
+  return (
+    <View style={estilos.contenedorTodo}>
+      <LienzoDeMapa
+        vehiculos={VEHICULOS_MAPA_PREVIEW}
+        hitos={HITOS_MAPA_PREVIEW}
+        conRuta
+      >
+        <HojaInferior estado="baja" conAsa alturaAutomatica>
+          <ViajeActivoConductorSheet
+            estado="ARRIVED"
+            pasajero={{
+              nombre: PASAJERA_FIXTURE.nombre,
+              iniciales: PASAJERA_FIXTURE.iniciales
+            }}
+            origen="Av. 4 Bella Vista, Calle 72"
+            destino="C.C. Sambil Maracaibo"
+            metodoPago="Efectivo $3.50"
+            tarifaBs="Bs. 210,00"
+            mensajesSinLeer={0}
+            onAccionPrincipal={() => undefined}
+            onAbrirChat={() => undefined}
+            onLlamar={() => undefined}
+          />
+        </HojaInferior>
+      </LienzoDeMapa>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Q. PreviewDriverInProgress
+// ---------------------------------------------------------------------------
+
+export function PreviewDriverInProgress() {
+  return (
+    <View style={estilos.contenedorTodo}>
+      <LienzoDeMapa
+        vehiculos={VEHICULOS_MAPA_PREVIEW}
+        hitos={HITOS_MAPA_PREVIEW}
+        conRuta
+      >
+        <HojaInferior estado="baja" conAsa alturaAutomatica>
+          <ViajeActivoConductorSheet
+            estado="IN_PROGRESS"
+            pasajero={{
+              nombre: PASAJERA_FIXTURE.nombre,
+              iniciales: PASAJERA_FIXTURE.iniciales
+            }}
+            origen="Av. 4 Bella Vista, Calle 72"
+            destino="C.C. Sambil Maracaibo"
+            metodoPago="Efectivo $3.50"
+            tarifaBs="Bs. 210,00"
+            mensajesSinLeer={0}
+            onAccionPrincipal={() => undefined}
+            onAbrirChat={() => undefined}
+            onLlamar={() => undefined}
+          />
+        </HojaInferior>
+      </LienzoDeMapa>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// R. PreviewHistorialDetalleConImagen
+// ---------------------------------------------------------------------------
+
+export function PreviewHistorialDetalleConImagen() {
+  const tema = useTema();
+  const insets = useSafeAreaInsets();
+  const [estadoAdjunto, setEstadoAdjunto] = useState<'cargado' | 'cargando' | 'error' | 'placeholder'>('cargado');
+
+  return (
+    <View style={[estilos.contenedorTodo, { backgroundColor: tema.color.fondo }]}>
+      {/* Barra superior de control para probar estados del adjunto */}
+      <View style={[
+        estilos.barraSelectorEstados,
+        {
+          top: insets.top + 8,
+          backgroundColor: tema.color.superficieElevada,
+          borderColor: tema.color.borde,
+          marginHorizontal: 16
+        }
+      ]}>
+        <Text style={[estilos.tituloSelectorEstados, { color: tema.color.textoTenue }]}>
+          ESTADO DEL ADJUNTO EN HISTORIAL:
+        </Text>
+        <View style={estilos.filaBotonesSelector}>
+          {(['cargado', 'cargando', 'error', 'placeholder'] as const).map(est => {
+            const activo = est === estadoAdjunto;
+            return (
+              <Pressable
+                key={est}
+                onPress={() => setEstadoAdjunto(est)}
+                style={[
+                  estilos.botonPildoraEstado,
+                  {
+                    backgroundColor: activo ? tema.color.acento : tema.color.superficieHundida,
+                    borderColor: activo ? tema.color.acento : 'transparent'
+                  }
+                ]}
+              >
+                <Text style={[
+                  estilos.textoPildoraEstado,
+                  {
+                    color: activo ? tema.color.sobreAcento : tema.color.textoPrimario,
+                    fontWeight: activo ? '700' : '500'
+                  }
+                ]}>
+                  {est}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1, marginTop: insets.top + 64 }}
+        contentContainerStyle={{ padding: 16, gap: 14 }}
+      >
+        {/* Tarjeta Resumen del Viaje */}
+        <View style={{
+          backgroundColor: tema.color.superficieElevada,
+          borderRadius: 16,
+          padding: 16,
+          borderWidth: 1,
+          borderColor: tema.color.borde,
+          gap: 10
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: tema.color.textoPrimario }}>
+              Viaje #TRIP-1082
+            </Text>
+            <View style={{
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: 6,
+              backgroundColor: 'rgba(30, 160, 100, 0.16)'
+            }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: tema.color.exito }}>
+                COMPLETADO
+              </Text>
+            </View>
+          </View>
+
+          <Text style={{ fontSize: 13, color: tema.color.textoSecundario }}>
+            Hoy · 11:15 AM · Luis Gómez (Bera SBR 150)
+          </Text>
+
+          <Separador />
+
+          {/* Sección de Conversación y Adjunto */}
+          <Text style={{ fontSize: 14, fontWeight: '700', color: tema.color.textoPrimario, marginTop: 4 }}>
+            Conversación y comprobantes registrados
+          </Text>
+
+          <View style={{
+            backgroundColor: tema.color.superficieHundida,
+            borderRadius: 12,
+            padding: 12,
+            gap: 10
+          }}>
+            <Text style={{ fontSize: 13, color: tema.color.textoPrimario, lineHeight: 18 }}>
+              «Hola Luis, te comparto la fotografía del portón negro donde estoy esperando para facilitar el encuentro:»
+            </Text>
+
+            {/* Componente Presentacional del Adjunto */}
+            <AdjuntoDetalleViaje
+              rotulo="Referencia de fachada · Portón de encuentro"
+              fuente={{
+                uri: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=600&auto=format&fit=crop'
+              }}
+              estadoForzado={estadoAdjunto}
+              onReintentar={() => setEstadoAdjunto('cargado')}
+            />
+
+            <Text style={{ fontSize: 11, color: tema.color.textoTenue, alignSelf: 'flex-end' }}>
+              11:06 AM · Entregado
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Switcher Interactivo de Pasajera (Para el Laboratorio)
 // ---------------------------------------------------------------------------
 
 export function PreviewViajeActivoPasajera() {
@@ -329,13 +833,11 @@ export function PreviewViajeActivoPasajera() {
 
   return (
     <View style={estilos.contenedorTodo}>
-      {/* Mapa como fondo */}
       <LienzoDeMapa
         vehiculos={VEHICULOS_MAPA_PREVIEW}
         hitos={HITOS_MAPA_PREVIEW}
         conRuta
       >
-        {/* Selector de Estado Flotante en la parte superior para pruebas */}
         <View style={[
           estilos.barraSelectorEstados,
           {
@@ -357,9 +859,7 @@ export function PreviewViajeActivoPasajera() {
                   style={[
                     estilos.botonPildoraEstado,
                     {
-                      backgroundColor: activo
-                        ? tema.color.acento
-                        : (tema.color.superficieHundida),
+                      backgroundColor: activo ? tema.color.acento : tema.color.superficieHundida,
                       borderColor: activo ? tema.color.acento : 'transparent'
                     }
                   ]}
@@ -367,9 +867,7 @@ export function PreviewViajeActivoPasajera() {
                   <Text style={[
                     estilos.textoPildoraEstado,
                     {
-                      color: activo
-                        ? tema.color.sobreAcento
-                        : tema.color.textoPrimario,
+                      color: activo ? tema.color.sobreAcento : tema.color.textoPrimario,
                       fontWeight: activo ? '700' : '500'
                     }
                   ]}>
@@ -381,17 +879,10 @@ export function PreviewViajeActivoPasajera() {
           </View>
         </View>
 
-        {/* Hoja Inferior con el Componente de Viaje */}
         <HojaInferior estado="baja" conAsa alturaAutomatica>
           <ViajeActivoPasajeraSheet
             estado={estadoActual}
-            conductor={{
-              nombre: CONDUCTOR_FIXTURE.nombre,
-              iniciales: CONDUCTOR_FIXTURE.iniciales,
-              vehiculo: CONDUCTOR_FIXTURE.vehiculo,
-              placa: CONDUCTOR_FIXTURE.placa,
-              calificacion: CONDUCTOR_FIXTURE.calificacion
-            }}
+            conductor={CONDUCTOR_FIXTURE}
             origen="Av. 4 Bella Vista, Calle 72"
             destino="C.C. Sambil Maracaibo"
             tiempoLlegadaTexto={estadoActual === 'DRIVER_ASSIGNED' ? 'Llega en 3 min' : null}
@@ -408,7 +899,7 @@ export function PreviewViajeActivoPasajera() {
 }
 
 // ---------------------------------------------------------------------------
-// F. PreviewViajeActivoConductor (Con Ciclo de Acciones)
+// Switcher Interactivo de Conductor (Para el Laboratorio)
 // ---------------------------------------------------------------------------
 
 export function PreviewViajeActivoConductor() {
@@ -447,7 +938,6 @@ export function PreviewViajeActivoConductor() {
         hitos={HITOS_MAPA_PREVIEW}
         conRuta
       >
-        {/* Selector de Estado Flotante en la parte superior para pruebas */}
         <View style={[
           estilos.barraSelectorEstados,
           {
@@ -469,9 +959,7 @@ export function PreviewViajeActivoConductor() {
                   style={[
                     estilos.botonPildoraEstado,
                     {
-                      backgroundColor: activo
-                        ? tema.color.acento
-                        : (tema.color.superficieHundida),
+                      backgroundColor: activo ? tema.color.acento : tema.color.superficieHundida,
                       borderColor: activo ? tema.color.acento : 'transparent'
                     }
                   ]}
@@ -479,9 +967,7 @@ export function PreviewViajeActivoConductor() {
                   <Text style={[
                     estilos.textoPildoraEstado,
                     {
-                      color: activo
-                        ? tema.color.sobreAcento
-                        : tema.color.textoPrimario,
+                      color: activo ? tema.color.sobreAcento : tema.color.textoPrimario,
                       fontWeight: activo ? '700' : '500'
                     }
                   ]}>
@@ -493,7 +979,6 @@ export function PreviewViajeActivoConductor() {
           </View>
         </View>
 
-        {/* Hoja Inferior con el Componente de Conductor */}
         <HojaInferior estado="baja" conAsa alturaAutomatica>
           <ViajeActivoConductorSheet
             estado={estadoActual}
@@ -518,47 +1003,7 @@ export function PreviewViajeActivoConductor() {
 }
 
 // ---------------------------------------------------------------------------
-// G. PreviewChatImagenes (CHAT-2 Media Previews)
-// ---------------------------------------------------------------------------
-
-export function PreviewChatImagenes() {
-  const [mensajes, setMensajes] = useState<readonly MensajeVisual[]>(MENSAJES_CON_IMAGENES);
-
-  const handleReintentar = (id: string) => {
-    setMensajes(prev => prev.map(m => m.id === id ? { ...m, estadoEnvio: 'ENTREGADO' } : m));
-  };
-
-  const handleEnviar = (texto: string) => {
-    const nuevo: MensajeVisual = {
-      id: `msj_${Date.now()}`,
-      remitente: 'PROPIO',
-      texto,
-      hora: '11:10 AM',
-      estadoEnvio: 'ENTREGADO'
-    };
-    setMensajes(prev => [...prev, nuevo]);
-  };
-
-  return (
-    <ChatVisual
-      rolUsuario="PASAJERA"
-      contraparte={CONDUCTOR_FIXTURE}
-      contextoViaje={{
-        estado: 'EN_CAMINO',
-        etiqueta: 'Conductor en camino',
-        aclaracion: 'Prueba de imágenes'
-      }}
-      mensajes={mensajes}
-      onVolver={() => undefined}
-      onLlamar={() => undefined}
-      onEnviarTexto={handleEnviar}
-      onReintentarEnvio={handleReintentar}
-    />
-  );
-}
-
-// ---------------------------------------------------------------------------
-// H. PreviewChatEstados (LOADING, EMPTY, ERROR, OFFLINE)
+// Switcher Interactivo de Estados del Chat (Para el Laboratorio)
 // ---------------------------------------------------------------------------
 
 export function PreviewChatEstados() {
@@ -575,7 +1020,6 @@ export function PreviewChatEstados() {
 
   return (
     <View style={estilos.contenedorTodo}>
-      {/* Selector superior de estados para el laboratorio */}
       <View style={[
         estilos.barraSelectorEstados,
         {
@@ -598,9 +1042,7 @@ export function PreviewChatEstados() {
                 style={[
                   estilos.botonPildoraEstado,
                   {
-                    backgroundColor: activo
-                      ? tema.color.acento
-                      : (tema.color.superficieHundida),
+                    backgroundColor: activo ? tema.color.acento : tema.color.superficieHundida,
                     borderColor: activo ? tema.color.acento : 'transparent'
                   }
                 ]}
@@ -608,9 +1050,7 @@ export function PreviewChatEstados() {
                 <Text style={[
                   estilos.textoPildoraEstado,
                   {
-                    color: activo
-                      ? tema.color.sobreAcento
-                      : tema.color.textoPrimario,
+                    color: activo ? tema.color.sobreAcento : tema.color.textoPrimario,
                     fontWeight: activo ? '700' : '500'
                   }
                 ]}>
@@ -633,7 +1073,7 @@ export function PreviewChatEstados() {
           }}
           estadoChat={estadoActual}
           errorTexto="Fallo al contactar el servicio de mensajería cifrada"
-          mensajes={estadoActual === 'OFFLINE' ? MENSAJES_BASE_PASAJERA : []}
+          mensajes={estadoActual === 'OFFLINE' ? MENSAJES_TEXTO_PASAJERA : []}
           onVolver={() => undefined}
           onLlamar={() => undefined}
           onReintentarCarga={() => setEstadoActual('CARGANDO')}

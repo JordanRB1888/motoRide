@@ -31,7 +31,7 @@
  * desaparecer, porque que falten dice tanto como que estén.
  */
 
-import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { Boton, Insignia, Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
 import {
@@ -43,6 +43,7 @@ import { useTema } from '../theme/ThemeContext';
 import { useIr } from '../ui/navegar';
 import { CabeceraAmarilla } from './pantallasSaldo';
 import { CONSERVACION_DEMO, detalleDeViaje } from './fixtures';
+import { AdjuntoDetalleViaje } from '../ui/AdjuntoDetalleViaje';
 
 const ALTO_DE_LA_BARRA = 76;
 
@@ -461,44 +462,7 @@ function Adjunto({ rotulo, fuente }: {
   /** La imagen privada, con su cabecera de sesión. */
   readonly fuente?: { readonly uri: string; readonly headers?: Record<string, string> };
 }) {
-  const tema = useTema();
-
-  // Con imagen de verdad se enseña la imagen. El marco discontinuo se queda
-  // para la maqueta y para cuando el adjunto no se puede cargar.
-  if (fuente !== undefined) {
-    return (
-      <View style={{
-        borderRadius: tema.radio.campo,
-        overflow: 'hidden',
-        backgroundColor: tema.color.superficieHundida
-      }}>
-        <Image
-          source={fuente}
-          resizeMode="cover"
-          accessibilityIgnoresInvertColors
-          accessibilityLabel={rotulo}
-          style={{ width: '100%', height: 160 }}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 9,
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      borderRadius: tema.radio.campo,
-      borderWidth: 1,
-      borderStyle: 'dashed',
-      borderColor: tema.color.borde
-    }}>
-      <Icono nombre="imagen" color={tema.color.textoSecundario} tamano={18} />
-      <Txt nivel="pie" tono="secundario" estilo={{ flex: 1 }}>{rotulo}</Txt>
-    </View>
-  );
+  return <AdjuntoDetalleViaje rotulo={rotulo} fuente={fuente} />;
 }
 
 // ---------------------------------------------------------------------------

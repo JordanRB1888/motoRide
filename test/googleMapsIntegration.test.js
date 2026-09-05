@@ -179,9 +179,13 @@ test('el motor google crea el mapa con estilos del tema y sin UI de Google', asy
     assert.equal(opciones.disableDefaultUI, true);
     assert.equal(opciones.clickableIcons, false, 'los POI de Google no roban los toques');
 
-    // El tema claro se aplica EN CALIENTE, que es la razon de no usar mapId.
+    // El tema claro se aplica EN CALIENTE con una paleta desaturada propia;
+    // no vuelve al estilo multicolor predeterminado de Google.
+    const darkStyles = opciones.styles;
     motor.setTheme('light');
-    assert.deepEqual(registro.mapas[0].opciones.styles, []);
+    assert.ok(registro.mapas[0].opciones.styles.length > 0, 'tema claro = estilos JSON sobrios');
+    assert.notDeepEqual(registro.mapas[0].opciones.styles, darkStyles);
+    assert.match(JSON.stringify(registro.mapas[0].opciones.styles), /saturation/);
   } finally { limpiar(); }
 });
 

@@ -178,10 +178,10 @@ export function renderAdsCms(container) {
 
                 <div class="cc-field-grid" style="grid-template-columns:1fr 1fr;gap:18px;">
                   <label class="cc-field">
-                    Ubicación en Passenger Home
+                    Ubicación en inicio de Pasajeros
                     <select name="placement" id="form-field-placement">
-                      <option value="home_top" ${editingCampaign.placement === 'home_top' ? 'selected' : ''}>Home superior (carrusel principal)</option>
-                      <option value="home_feed" ${editingCampaign.placement === 'home_feed' ? 'selected' : ''}>Feed central (tarjeta destacada)</option>
+                      <option value="home_top" ${editingCampaign.placement === 'home_top' ? 'selected' : ''}>Inicio superior (carrusel principal)</option>
+                      <option value="home_feed" ${editingCampaign.placement === 'home_feed' ? 'selected' : ''}>Contenido central (tarjeta destacada)</option>
                     </select>
                   </label>
 
@@ -261,7 +261,7 @@ export function renderAdsCms(container) {
             </form>
           </main>
 
-          <!-- COLUMNA DERECHA: LIVE PREVIEW REALISTA PASSENGER HOME -->
+          <!-- COLUMNA DERECHA: VISTA PREVIA REALISTA DEL INICIO DEL PASAJERO -->
           <aside class="cc-workspace-preview-col">
             <!-- SELECTOR DE VISTA PREVIA (INNOVACIÓN UX) -->
             <div class="cc-preview-switcher" role="tablist" aria-label="Modo de vista previa">
@@ -285,7 +285,7 @@ export function renderAdsCms(container) {
                 </div>
               </div>
 
-              <!-- PANTALLA SCROLLABLE DE PASSENGER -->
+              <!-- PANTALLA DESPLAZABLE DEL PASAJERO -->
               <div class="cc-phone-screen">
                 <!-- CABECERA DE LA APP DE PASAJERO -->
                 <div class="cc-pass-header">

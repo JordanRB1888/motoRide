@@ -27,3 +27,15 @@ test('Enter en command search evita reactivar el botón que recupera el foco', (
   const source = read('src/components/adminControlCenter/ui.js');
   assert.match(source, /if \(e.key === 'Enter'\) \{\s*e.preventDefault\(\);\s*e.stopPropagation\(\);/);
 });
+
+test('los mapas admin usan el cargador Google compartido y se desmontan', () => {
+  for (const file of ['src/pages/admin/adminApp.js', 'src/pages/admin/fleetMap.js']) {
+    const source = read(file);
+    assert.match(source, /createAdminGoogleMap/);
+    assert.doesNotMatch(source, /\bL\.(map|tileLayer|marker|polyline)/);
+    assert.match(source, /\.destroy\(\)/);
+  }
+  const loader = read('src/components/adminControlCenter/adminGoogleMap.js');
+  assert.match(loader, /getGoogleMapsLoader\(\)\.load\(\)/);
+  assert.match(loader, /58express:theme-change/);
+});

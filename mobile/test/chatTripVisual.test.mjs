@@ -15,12 +15,13 @@ const sinComentarios = relativa => despojarComentarios(leer(relativa));
 // 1. Aislamiento e integridad
 // ---------------------------------------------------------------------------
 
-test('ChatVisual y TripVisual no importan socket, backend ni auth', () => {
+test('ChatVisual, TripVisual y AdjuntoDetalleViaje no importan socket, backend ni auth', () => {
   const chatSrc = sinComentarios('ui/ChatVisual.tsx');
   const tripSrc = sinComentarios('ui/TripVisual.tsx');
+  const adjuntoSrc = sinComentarios('ui/AdjuntoDetalleViaje.tsx');
   const previewSrc = sinComentarios('preview/pantallasChatTrip.tsx');
 
-  for (const src of [chatSrc, tripSrc, previewSrc]) {
+  for (const src of [chatSrc, tripSrc, adjuntoSrc, previewSrc]) {
     assert.doesNotMatch(src, /socket\.io/i, 'No debe haber socket.io');
     assert.doesNotMatch(src, /realtime/i, 'No debe importar de realtime');
     assert.doesNotMatch(src, /AuthContext/i, 'No debe importar de AuthContext');
@@ -30,21 +31,31 @@ test('ChatVisual y TripVisual no importan socket, backend ni auth', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Registro de las 8 pantallas en el catálogo de C2
+// 2. Registro de las 18 pantallas (A hasta R) en el catálogo de C2
 // ---------------------------------------------------------------------------
 
-test('el catálogo C2 del laboratorio visual incluye las 8 pantallas requeridas', () => {
+test('el catálogo C2 del laboratorio visual incluye las 18 pantallas (A hasta R)', () => {
   const previewApp = sinComentarios('app/preview.tsx');
 
   const pantallasRequeridas = [
-    'chat-pasajera-light',
-    'chat-pasajera-dark',
-    'chat-conductor-light',
-    'chat-conductor-dark',
-    'chat-imagenes',
-    'chat-estados',
-    'viaje-pasajera-activo',
-    'viaje-conductor-activo'
+    'chat-pasajera-light',          // A
+    'chat-pasajera-dark',           // B
+    'chat-conductor-light',         // C
+    'chat-conductor-dark',          // D
+    'chat-texto',                   // E
+    'chat-imagenes',                // F
+    'chat-uploading',               // G
+    'chat-failed-retry',            // H
+    'chat-offline',                 // I
+    'chat-empty',                   // J
+    'chat-error',                   // K
+    'passenger-driver-assigned',    // L
+    'passenger-arrived',            // M
+    'passenger-in-progress',        // N
+    'driver-driver-assigned',       // O
+    'driver-arrived',               // P
+    'driver-in-progress',           // Q
+    'historial-detalle-imagen'      // R
   ];
 
   for (const clave of pantallasRequeridas) {
@@ -56,10 +67,10 @@ test('el catálogo C2 del laboratorio visual incluye las 8 pantallas requeridas'
 });
 
 // ---------------------------------------------------------------------------
-// 3. Paridad de temas y componentes
+// 3. Exportación de componentes de preview
 // ---------------------------------------------------------------------------
 
-test('pantallasChatTrip exporta los 8 componentes de preview requeridos', () => {
+test('pantallasChatTrip exporta todos los componentes de preview requeridos', () => {
   const previewHarness = sinComentarios('preview/pantallasChatTrip.tsx');
 
   const componentesRequeridos = [
@@ -67,9 +78,22 @@ test('pantallasChatTrip exporta los 8 componentes de preview requeridos', () => 
     'PreviewChatPasajeraDark',
     'PreviewChatConductorLight',
     'PreviewChatConductorDark',
+    'PreviewChatTexto',
+    'PreviewChatImagenes',
+    'PreviewChatUploading',
+    'PreviewChatFailedRetry',
+    'PreviewChatOffline',
+    'PreviewChatEmpty',
+    'PreviewChatError',
+    'PreviewPassengerDriverAssigned',
+    'PreviewPassengerArrived',
+    'PreviewPassengerInProgress',
+    'PreviewDriverDriverAssigned',
+    'PreviewDriverArrived',
+    'PreviewDriverInProgress',
+    'PreviewHistorialDetalleConImagen',
     'PreviewViajeActivoPasajera',
     'PreviewViajeActivoConductor',
-    'PreviewChatImagenes',
     'PreviewChatEstados'
   ];
 
@@ -102,4 +126,13 @@ test('TripVisual implementa jerarquía lifecycle primaria y mensaje secundario p
   assert.ok(tripSrc.includes('INICIAR VIAJE'), 'Debe incluir acción INICIAR VIAJE');
   assert.ok(tripSrc.includes('FINALIZAR VIAJE'), 'Debe incluir acción FINALIZAR VIAJE');
   assert.ok(tripSrc.includes('botonLifecyclePrincipal'), 'La acción del ciclo de vida debe ser la principal');
+});
+
+test('AdjuntoDetalleViaje soporta todos los estados requeridos (cargando, cargado, error, placeholder)', () => {
+  const adjuntoSrc = sinComentarios('ui/AdjuntoDetalleViaje.tsx');
+
+  assert.ok(adjuntoSrc.includes('overlayCargando'), 'Debe incluir estado de carga');
+  assert.ok(adjuntoSrc.includes('overlayError'), 'Debe incluir estado de error con reintento');
+  assert.ok(adjuntoSrc.includes('marcoPlaceholder'), 'Debe incluir estado de placeholder con marco discontinuo');
+  assert.ok(adjuntoSrc.includes('Modal'), 'Debe incluir visor modal fullscreen');
 });

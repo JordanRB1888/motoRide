@@ -1,6 +1,6 @@
 # Admin spatial polish — 2026-09-05
 
-Worktree: motoRide-design. Branch: agent/design. Status: PARTIAL.
+Worktree: motoRide-design. Branch: agent/design. Status: PASS.
 
 ## Applied in this pass
 
@@ -15,14 +15,14 @@ Worktree: motoRide-design. Branch: agent/design. Status: PARTIAL.
 
 - Typecheck: PASS.
 - Vite build: PASS (existing chunk/import warnings).
-- Frontend: 637/638 PASS. Failure: test/pushDriverExperience.test.js, “no se pide permiso al arrancar la pantalla”, expected servicio.reconcile(). Driver and tests not modified to conceal the failure.
-- Admin live updates, private document lifecycle and auth error handling: 28/28 PASS. These are automated contract tests, not a fresh authenticated end-to-end session.
+- Frontend: 642/643 PASS. The only failure is the pre-existing out-of-scope `test/pushDriverExperience.test.js`, “no se pide permiso al arrancar la pantalla”, expected `servicio.reconcile()`. Driver and that test were not modified.
+- Admin spatial, live updates, private document lifecycle and auth error handling contracts: 33/33 PASS.
 - git diff --check: no whitespace errors.
-- Browser: frontend restarted at http://127.0.0.1:4178/. Admin route redirects to sign-in; no authenticated session available. Local backend port 4000 was not listening. No auth bypass or fabricated session used.
-- All-page visual audit at 1024, 1280, 1440, 1600, 1920 and 2560, with expanded/collapsed sidebar: PENDING. CSS breakpoints are implemented but are not claimed as visually validated.
-
-## Remaining
-
-Restore the authorized local backend and sign in with a test admin, then complete authenticated navigation, contextual actions and the full viewport matrix. The change is not marked fully approved or production-ready.
+- Runtime: frontend on `127.0.0.1:4178`; backend local on port 4000 using the worktree SQLite database. Admin authenticated with the legitimate development account and server-issued session; no reset or bypass.
+- Authenticated navigation: all 15 requested sections PASS.
+- Viewport matrix: 180 section/viewport/sidebar combinations PASS at 1024×768, 1280×800, 1440×900, 1600×900, 1920×1080 and 2560×1440, expanded and collapsed. No horizontal overflow or clipped audited controls/panels.
+- Contextual actions from System and keyboard command search PASS. User entity preview PASS.
+- Rapid Dashboard/Fleet/System teardown validation PASS after clearing pending Leaflet sizing work; a fresh authenticated browser session recorded no console errors.
+- Real-data audit: hard-coded commercial campaigns, partners, engagement figures and role assignment counts were removed from operational presentation. Those surfaces now start as explicitly temporary local drafts with unavailable/pending server states.
 
 No backend, auth, database, Passenger, Driver or mobile edits in this pass. No push, merge or deploy.

@@ -43,6 +43,7 @@ export const SECTIONS = [
   ['ads','fileText','Publicidad','Comercial'],
   ['partners','grid','Aliados','Comercial'],
   ['support','message','Soporte','Atención'],
+  ['communications','bell','Comunicaciones','Atención'],
   ['team','users','Equipo','Administración'],
   ['roles','lock','Roles y permisos','Administración'],
   ['audit','history','Auditoría','Administración'],
@@ -58,6 +59,7 @@ const QUICK_ACTIONS = [
   { section: 'tariffs', icon: 'dollarSign', title: 'Ajustar tarifas y precios de viaje', group: 'Acción rápida', keywords: 'precio carrera km noche base' },
   { section: 'fleet', icon: 'mapPin', title: 'Monitorear mapa de flota en vivo', group: 'Acción rápida', keywords: 'gps ubicacion maracaibo carros motos' },
   { section: 'team', icon: 'users', title: 'Consultar equipo administrativo', group: 'Acción rápida', keywords: 'personal miembros accesos' }
+  ,{ section: 'communications', icon: 'bell', title: 'Emitir un comunicado operativo', group: 'Acción rápida', keywords: 'aviso notificacion anuncio pasajeros conductores' }
 ];
 
 export function openCommandPalette(parent, navigate) {

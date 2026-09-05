@@ -54,7 +54,7 @@ const PERMISSION_DOMAINS = [
     id: 'MARKETING',
     name: 'Marketing',
     icon: 'grid',
-    description: 'Campañas promocionales, carruseles de Passenger Home y convenios comerciales.',
+    description: 'Campañas promocionales, carruseles del inicio de Pasajeros y convenios comerciales.',
     permissions: [
       { id: 'crear_campanas', name: 'Crear campañas', desc: 'Diseñar y programar nuevos banners publicitarios en la app.' },
       { id: 'editar_banners', name: 'Editar banners', desc: 'Modificar títulos, textos de CTA y vigencia de anuncios activos.' },
@@ -161,7 +161,7 @@ const PREDEFINED_ROLES = [
   {
     id: 'marketing',
     name: 'Comercial y Mercadeo',
-    description: 'Diseño de campañas, carruseles de Passenger Home, promociones y catálogo de aliados.',
+    description: 'Diseño de campañas, carruseles del inicio de Pasajeros, promociones y catálogo de aliados.',
     assignedUsers: 1,
     permissions: {
       'OPERACIONES.gestionar_viajes': false, 'OPERACIONES.monitoreo_flota': false, 'OPERACIONES.tarifas_base': false, 'OPERACIONES.zonas_servicio': false,

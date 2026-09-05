@@ -16,32 +16,38 @@
  * servicio. Pinta lo que le pidan.
  */
 
-/**
- * Estilo nocturno estandar de Google (su ejemplo oficial de mapa oscuro).
- * El claro es el estilo por defecto: styles = [].
- */
+/** Graphite, low-saturation operational theme for the Control Center. */
 const ESTILO_OSCURO = [
-  { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] },
-  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#d59563' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#d59563' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#263c3f' }] },
-  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#6b9a76' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#746855' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1f2835' }] },
-  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#f3d19c' }] },
-  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2f3948' }] },
-  { featureType: 'transit.station', elementType: 'labels.text.fill', stylers: [{ color: '#d59563' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#17263c' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#515c6d' }] },
-  { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#17263c' }] }
+  { elementType: 'geometry', stylers: [{ color: '#171717' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#171717' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#a3a3a3' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#3f3f46' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#202020' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#858585' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1d211e' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#303030' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#111111' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#b7b7b7' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#484338' }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#f0d78a' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#252525' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d0d0d' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#696969' }] }
 ];
 
-const estilosPara = theme => (theme === 'dark' ? ESTILO_OSCURO : []);
+const ESTILO_CLARO = [
+  { elementType: 'geometry', stylers: [{ saturation: -70 }, { lightness: 10 }] },
+  { elementType: 'labels.icon', stylers: [{ saturation: -85 }, { lightness: 5 }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#555b60' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eceeeb' }] },
+  { featureType: 'poi.business', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#d7dadb' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#dfe3e3' }] }
+];
+
+const estilosPara = theme => (theme === 'dark' ? ESTILO_OSCURO : ESTILO_CLARO);
 
 /**
  * @param {object} opciones
@@ -82,6 +88,8 @@ export function createGoogleMapEngine({ maps, container, center, zoom = 14, them
       this.raiz.style.zIndex = String(zIndex);
       if (title) this.raiz.title = title;
       this.raiz.innerHTML = html;
+      this.raiz.setAttribute('role', 'button');
+      this.raiz.tabIndex = 0;
       this.setMap(map);
     }
 
@@ -114,6 +122,20 @@ export function createGoogleMapEngine({ maps, container, center, zoom = 14, them
 
     remove() {
       this.setMap(null);
+    }
+
+    onClick(callback) {
+      const activate = event => {
+        if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+        if (event.type === 'keydown') event.preventDefault();
+        callback(event);
+      };
+      this.raiz.addEventListener('click', activate);
+      this.raiz.addEventListener('keydown', activate);
+    }
+
+    setVisible(visible) {
+      this.raiz.hidden = !visible;
     }
 
     onRemove() {
@@ -161,6 +183,10 @@ export function createGoogleMapEngine({ maps, container, center, zoom = 14, them
     setView(lat, lng, zoom = null) {
       map.panTo({ lat: Number(lat), lng: Number(lng) });
       if (zoom !== null) map.setZoom(zoom);
+    },
+
+    getZoom() {
+      return map.getZoom();
     },
 
     onClick(callback) {

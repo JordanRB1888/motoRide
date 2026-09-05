@@ -1,5 +1,5 @@
 import { db, apiService } from '../../services/apiService.js';
-import { OSM_TILE_URL, tileLayerOptionsForTheme } from '../../utils/mapTiles.js';
+import { createAdminGoogleMap } from '../../components/adminControlCenter/adminGoogleMap.js';
 import { mergeById, createCoalescer, withCanonicalId, accumulatePage } from '../../utils/liveUpdates.js';
 import { authService } from '../../services/authService.js';
 import { renderFleetMap } from './fleetMap.js';
@@ -8,6 +8,7 @@ import { renderTariffsConfig } from './tariffsConfig.js';
 import { renderFinances } from './finances.js';
 import { renderWalletTopups } from './walletTopups.js';
 import { renderAdminSupport } from './adminSupport.js';
+import { renderCommunications } from './communications.js';
 import { renderDriverApplicationsManagement, disposeDriverApplicationsManagement } from './driverApplicationsManagement.js';
 import { initThemeToggle } from '../../utils/themeToggle.js';
 import { createNotificationCenterModal } from '../../components/notificationCenterModal.js';
@@ -23,7 +24,7 @@ import { renderRbacMatrix } from '../../components/adminControlCenter/rbacMatrix
 import { vehicleImage } from '../../utils/vehicleMedia.js';
 
 const ACTIVE_STATUSES = ['SEARCHING','DRIVER_ASSIGNED','EN_ROUTE','ARRIVED','IN_PROGRESS','IN_TRIP'];
-const statusLabel = status => ({SEARCHING:'Buscando',DRIVER_ASSIGNED:'Asignado',EN_ROUTE:'En camino',ARRIVED:'En recogida',IN_PROGRESS:'En viaje',IN_TRIP:'En viaje',COMPLETED:'Completado',CANCELLED:'Cancelado'}[status] || status || 'Pendiente');
+const statusLabel = status => ({SEARCHING:'Buscando',DRIVER_ASSIGNED:'Asignado',EN_ROUTE:'En camino',ARRIVED:'En recogida',IN_PROGRESS:'En viaje',IN_TRIP:'En viaje',COMPLETED:'Completado',CANCELLED:'Cancelado'}[status] || (status ? 'Estado no reconocido' : 'Pendiente'));
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 
 export function renderAdminApp(container) {
@@ -69,18 +70,21 @@ export function renderAdminApp(container) {
   // Tocar un aviso abre su sección (finanzas, soporte, operación) de una vez.
   container.querySelector('#admin-bell').onclick=()=>container.querySelector('.cc-app').appendChild(createNotificationCenterModal(admin,null,{onNavigate:id=>switchTab(id)}));
 
-  const initDashboardMap = users => requestAnimationFrame(() => {
+  const initDashboardMap = users => requestAnimationFrame(async () => {
     const target=container.querySelector('#operations-map');
     if(!target || disposed) return;
-    if(typeof L==='undefined') {target.innerHTML='<div class="cc-empty"><h3>Mapa no disponible</h3><p>No se pudo cargar la biblioteca de mapas.</p></div>';return;}
-    if(dashboardMap){dashboardMap.remove();dashboardMap=null;}
-    dashboardMap=L.map(target,{zoomControl:false,attributionControl:true,dragging:true,scrollWheelZoom:false}).setView([10.6427,-71.6125],12);
-    L.tileLayer(OSM_TILE_URL,tileLayerOptionsForTheme('dark')).addTo(dashboardMap);
+    if(dashboardMap){dashboardMap.destroy();dashboardMap=null;}
+    const nextMap=await createAdminGoogleMap({container:target,center:{lat:10.6427,lng:-71.6125},zoom:12});
+    if(!nextMap||disposed||!target.isConnected){nextMap?.destroy();return;}
+    dashboardMap=nextMap;
+    const located=[];
     users.filter(u=>u.role==='driver'&&Number.isFinite(u.location?.lat)&&Number.isFinite(u.location?.lng)).forEach(driver=>{
       const tone=['AVAILABLE','ONLINE'].includes(driver.status)?'#20dc8e':['BUSY','IN_TRIP'].includes(driver.status)?'#e5b94d':'#ffb800';
-      const marker=L.divIcon({className:'ops-driver-marker',html:`<span style="--marker-tone:${tone}">${vehicleImage(driver.vehicleType,{variant:'map',className:'ops-real-vehicle',decorative:true})}</span>`,iconSize:[38,38],iconAnchor:[19,19]});
-      L.marker([driver.location.lat,driver.location.lng],{icon:marker}).addTo(dashboardMap).bindTooltip(`${escapeHtml(driver.firstName)} · ${statusLabel(driver.status)}`);
+      const lat=Number(driver.location.lat),lng=Number(driver.location.lng);
+      located.push([lat,lng]);
+      nextMap.crearMarcadorHtml({lat,lng,className:'ops-driver-marker',anchor:[19,19],title:`${driver.firstName||'Conductor'} · ${statusLabel(driver.status)}`,html:`<span style="--marker-tone:${tone}">${vehicleImage(driver.vehicleType,{variant:'map',className:'ops-real-vehicle',decorative:true})}</span>`});
     });
+    if(located.length>1)nextMap.fitBounds(located);
   });
 
   const dashboard = () => {
@@ -101,6 +105,7 @@ export function renderAdminApp(container) {
     'topups': () => renderWalletTopups(content),
     'finances': () => renderFinances(content),
     'support': () => renderAdminSupport(content),
+    'communications': () => renderCommunications(content),
     'trips': () => renderTrips(content),
     'ads': () => renderAdsCms(content),
     'partners': () => renderPartnersManagement(content),
@@ -111,7 +116,7 @@ export function renderAdminApp(container) {
   };
   // Vaciar el contenido desconecta el DOM pero no libera las Blob URLs de los
   // documentos protegidos: hay que cerrar la pantalla antes de sustituirla.
-  const switchTab=id=>{if(!renderers[id] || disposed)return;if(dashboardMap){dashboardMap.remove();dashboardMap=null;}disposeDriverApplicationsManagement(content);container.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.target===id));title.textContent=nav.find(item=>item[0]===id)?.[2]||id;content.innerHTML='';container.querySelector('.admin-main').scrollTop=0;content.scrollTop=0;renderers[id]?.();};
+  const switchTab=id=>{if(!renderers[id] || disposed)return;if(dashboardMap){dashboardMap.destroy();dashboardMap=null;}disposeDriverApplicationsManagement(content);container.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.target===id));title.textContent=nav.find(item=>item[0]===id)?.[2]||id;content.innerHTML='';container.querySelector('.admin-main').scrollTop=0;content.scrollTop=0;renderers[id]?.();};
   const onTab = event => switchTab(event.detail);
   window.addEventListener('58express:admin-tab', onTab);
   const search = () => {if(!container.querySelector('.cc-dialog-backdrop'))openCommandPalette(container.querySelector('.cc-app'),switchTab);};
@@ -119,7 +124,7 @@ export function renderAdminApp(container) {
   const onKey=event=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();search();}};
   window.addEventListener('keydown',onKey);
   const shell=container.querySelector('.cc-app');
-  const teardown=new MutationObserver(()=>{if(shell.isConnected)return;disposed=true;publicVisualClasses.forEach(name=>document.documentElement.classList.add(name));window.removeEventListener('keydown',onKey);window.removeEventListener('58express:admin-tab',onTab);window.removeEventListener('58express:notifications-updated',updateBadge);if(dashboardMap){dashboardMap.remove();dashboardMap=null;}teardown.disconnect();});
+  const teardown=new MutationObserver(()=>{if(shell.isConnected)return;disposed=true;publicVisualClasses.forEach(name=>document.documentElement.classList.add(name));window.removeEventListener('keydown',onKey);window.removeEventListener('58express:admin-tab',onTab);window.removeEventListener('58express:notifications-updated',updateBadge);if(dashboardMap){dashboardMap.destroy();dashboardMap=null;}teardown.disconnect();});
   teardown.observe(container,{childList:true});
   container.querySelectorAll('.nav-item').forEach(button=>button.onclick=()=>switchTab(button.dataset.target));
   const redrawIfDashboard=()=>{if(!disposed&&container.querySelector('.nav-item.active')?.dataset.target==='dashboard')dashboard();};

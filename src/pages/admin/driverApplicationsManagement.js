@@ -62,6 +62,7 @@ const STATUS = {
   rejected: 'Rechazada',
   suspended: 'Suspendida'
 };
+const friendlyApplication = value => `#SOL-${[...String(value||'')].reduce((sum,char)=>(sum*31+char.charCodeAt(0))%9000,0)+1000}`;
 const DOCS = { identity_front:'Cédula (frente)',identity_back:'Cédula (reverso)',rif:'RIF',driver_license:'Licencia de conducir',medical_certificate:'Certificado médico',vehicle_registration:'Documento legal del vehículo',vehicle_insurance:'Seguro del vehículo (RCV)',vehicle_photo:'Foto del vehículo',vehicle_front:'Vehículo (frente)',vehicle_rear:'Vehículo (atrás)',plate_photo:'Foto de la placa',driver_selfie:'Selfie del conductor',moto_helmets:'Cascos disponibles',car_rear_interior:'Interior trasero del carro',presentation_video:'Vídeo de presentación' };
 const SERVICES = { PASSENGER_TRANSPORT:'Personas', DELIVERY:'Delivery' };
 const LEGAL_DOCS = { CIRCULATION_CARD:'Carnet de circulación', OWNERSHIP_TITLE:'Título de propiedad', ORIGIN_CERTIFICATE:'Certificado de origen' };
@@ -200,7 +201,7 @@ export function renderDriverApplicationsManagement(container) {
         <div class="driver-admin-filters">${FILTER_TABS.map(([itemKey, itemLabel])=>`<button data-filter="${itemKey}" class="${status===itemKey?'active':''}">${itemLabel} <em>${itemKey==='all'?'':Number(data.counts?.[itemKey]||0)}</em></button>`).join('')}</div>
         <form id="driver-application-search"><span>${icon('search',16)}</span><input value="${escape(query)}" placeholder="Nombre, cédula, teléfono, correo o placa"><button>Buscar</button></form>
       </section>
-      <div class="cc-review-list-tools"><span>Cola de revisión documental</span><select id="application-sort" aria-label="Ordenar solicitudes"><option value="newest" ${sort==='newest'?'selected':''}>Más recientes</option><option value="oldest" ${sort==='oldest'?'selected':''}>Más antiguas primero</option></select></div><section class="driver-admin-table-card"><div class="ops-table-wrap"><table class="data-table"><thead><tr><th>Solicitante</th><th>Vehículo</th><th>Documentos</th><th>Enviada</th><th>Estado</th><th></th></tr></thead><tbody>${apps.map(app=>`<tr><td><div class="applicant-cell"><span>${escape(app.applicantName?.[0]||'C')}</span><div><strong>${escape(app.applicantName)}</strong><small>${escape(app.id.slice(-8).toUpperCase())}</small></div></div></td><td><div class="cc-vehicle-cell"><strong>${app.vehicleType==='CAR'?'Automóvil':'Moto'}</strong><span class="cc-badge ${app.vehicleType==='CAR'?'info':'warning'}">${app.vehicleType==='CAR'?'CAR':'MOTO'}</span></div><small class="table-subline">${escape(app.vehiclePlate)}</small><small class="table-subline">${escape(servicesLabel(app.servicesAppliedFor))}</small></td><td><strong>${app.documentCount} / ${app.documentCount + (app.documentsPendingCount || 0)} completados</strong><small class="table-subline">${app.documentsPendingCount?app.documentsPendingCount+' por revisar':'todos revisados'}</small></td><td>${new Date(app.submittedAt||app.createdAt).toLocaleDateString('es-VE')}</td><td><span class="application-status-badge ${app.status}">${STATUS[app.status] || app.status}</span></td><td><button class="review-application" data-review="${app.id}">${icon('eye',14)} Revisar</button></td></tr>`).join('') || '<tr><td colspan="6" class="empty-cell">No hay solicitudes con este filtro.</td></tr>'}</tbody></table></div></section>
+      <div class="cc-review-list-tools"><span>Cola de revisión documental</span><select id="application-sort" aria-label="Ordenar solicitudes"><option value="newest" ${sort==='newest'?'selected':''}>Más recientes</option><option value="oldest" ${sort==='oldest'?'selected':''}>Más antiguas primero</option></select></div><section class="driver-admin-table-card"><div class="ops-table-wrap"><table class="data-table"><thead><tr><th>Solicitante</th><th>Vehículo</th><th>Documentos</th><th>Enviada</th><th>Estado</th><th></th></tr></thead><tbody>${apps.map(app=>`<tr><td><div class="applicant-cell"><span>${escape(app.applicantName?.[0]||'C')}</span><div><strong>${escape(app.applicantName)}</strong><small>${friendlyApplication(app.id)}</small></div></div></td><td><div class="cc-vehicle-cell"><strong>${app.vehicleType==='CAR'?'Automóvil':'Moto'}</strong><span class="cc-badge ${app.vehicleType==='CAR'?'info':'warning'}">${app.vehicleType==='CAR'?'AUTOMÓVIL':'MOTO'}</span></div><small class="table-subline">${escape(app.vehiclePlate)}</small><small class="table-subline">${escape(servicesLabel(app.servicesAppliedFor))}</small></td><td><strong>${app.documentCount} / ${app.documentCount + (app.documentsPendingCount || 0)} completados</strong><small class="table-subline">${app.documentsPendingCount?app.documentsPendingCount+' por revisar':'todos revisados'}</small></td><td>${new Date(app.submittedAt||app.createdAt).toLocaleDateString('es-VE')}</td><td><span class="application-status-badge ${app.status}">${STATUS[app.status] || 'Estado no reconocido'}</span></td><td><button class="review-application" data-review="${app.id}">${icon('eye',14)} Revisar</button></td></tr>`).join('') || '<tr><td colspan="6" class="empty-cell">No hay solicitudes con este filtro.</td></tr>'}</tbody></table></div></section>
       ${selected ? detailTemplate(selected) : ''}
     </div>`;
     container.querySelector('#application-sort').onchange = event => {sort=event.target.value;render();};
@@ -208,6 +209,11 @@ export function renderDriverApplicationsManagement(container) {
     container.querySelector('#driver-application-search').onsubmit = event => { event.preventDefault(); query=event.currentTarget.querySelector('input').value.trim(); selected=null; load(); };
     container.querySelectorAll('[data-review]').forEach(button => button.onclick = () => openDetail(button.dataset.review));
     container.querySelector('[data-close-application]')?.addEventListener('click',closeDetail);
+    container.querySelector('[data-copy-application-id]')?.addEventListener('click', async () => {
+      if (!selected?.id) return;
+      await navigator.clipboard?.writeText(selected.id);
+      showToast('ID técnico del expediente copiado.', 'success');
+    });
     container.querySelectorAll('[data-decision]').forEach(button=>button.onclick=()=>decide(button.dataset.decision));
 
     // Visor Pro controls
@@ -244,12 +250,13 @@ export function renderDriverApplicationsManagement(container) {
     <header class="cc-review-panel-header">
       <div class="cc-review-header-info">
         <div class="cc-review-header-badges">
-          <small class="cc-badge">EXPEDIENTE ${escape(app.id.slice(-8).toUpperCase())}</small>
+          <small class="cc-badge">EXPEDIENTE ${friendlyApplication(app.id)}</small>
           <span class="application-status-badge ${app.status}">${STATUS[app.status] || app.status}</span>
           <span class="cc-badge ${app.vehicleType === 'CAR' ? 'info' : 'warning'}">${app.vehicleType === 'CAR' ? 'CAR · Auto' : 'MOTO'}</span>
         </div>
         <h2>${escape(app.personal.firstName)} ${escape(app.personal.lastName)}</h2>
         <span class="cc-review-subline">Enviada el ${new Date(app.submittedAt || app.createdAt).toLocaleDateString('es-VE', { dateStyle: 'long' })}</span>
+        <details class="cc-review-technical"><summary>Información técnica</summary><code>${escape(app.id)}</code><button type="button" data-copy-application-id>${icon('copy',14)} Copiar ID</button></details>
       </div>
       <button class="cc-dialog-close-btn" aria-label="Cerrar expediente" data-close-application>${icon('close', 20)}</button>
     </header>
