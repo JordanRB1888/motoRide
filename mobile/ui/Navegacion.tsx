@@ -468,6 +468,21 @@ export const ALTO_DE_LA_BARRA = INICIO_DE_LA_SUPERFICIE + ALTO_DE_LA_FILA;
 const DIAMETRO_CIRCULO_ACTIVO = 48;
 
 /**
+ * Lo que la muesca abre, y lo hondo que muerde.
+ *
+ * Ceñida al disco: cuatro puntos de aire a cada lado. Antes abría dieciocho
+ * puntos más que el disco y el hueco se leía como una bahía con el disco dentro
+ * en vez de como el sitio del disco. El aire tiene que ser el justo para que se
+ * vea que son dos piezas y no una sola.
+ *
+ * Sale de una constante y no de tres números escritos a mano porque el ancho lo
+ * usan la muesca y sus dos hombros: con números sueltos, mover uno deja los
+ * otros donde estaban y aparece un escalón.
+ */
+const ANCHO_DE_LA_MUESCA = DIAMETRO_CIRCULO_ACTIVO + 8;
+const HONDURA_DE_LA_MUESCA = 26;
+
+/**
  * El compás del movimiento.
  *
  * `RETIRADA_MS` es el silencio: el disco se hunde antes de que la muesca salga.
@@ -719,11 +734,11 @@ function BarraCurvaDePasajera({
         <View style={{
           position: 'absolute',
           top: INICIO_DE_LA_SUPERFICIE - 1,
-          width: 66,
-          height: 28,
+          width: ANCHO_DE_LA_MUESCA,
+          height: HONDURA_DE_LA_MUESCA,
           backgroundColor: tema.color.fondo,
-          borderBottomLeftRadius: 33,
-          borderBottomRightRadius: 33,
+          borderBottomLeftRadius: ANCHO_DE_LA_MUESCA / 2,
+          borderBottomRightRadius: ANCHO_DE_LA_MUESCA / 2,
           borderTopLeftRadius: 8,
           borderTopRightRadius: 8,
           borderWidth: 1,
@@ -735,7 +750,7 @@ function BarraCurvaDePasajera({
         <View style={{
           position: 'absolute',
           top: INICIO_DE_LA_SUPERFICIE,
-          left: (ANCHO_DE_LA_CURVA - 66) / 2 - 8,
+          left: (ANCHO_DE_LA_CURVA - ANCHO_DE_LA_MUESCA) / 2 - 8,
           width: 8,
           height: 8,
           borderBottomRightRadius: 8,
@@ -747,7 +762,7 @@ function BarraCurvaDePasajera({
         <View style={{
           position: 'absolute',
           top: INICIO_DE_LA_SUPERFICIE,
-          right: (ANCHO_DE_LA_CURVA - 66) / 2 - 8,
+          right: (ANCHO_DE_LA_CURVA - ANCHO_DE_LA_MUESCA) / 2 - 8,
           width: 8,
           height: 8,
           borderBottomLeftRadius: 8,
