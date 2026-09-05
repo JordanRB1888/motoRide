@@ -60,7 +60,7 @@ export function movimientoSugerido(nombre: NombreDeIcono): VarianteDeMovimientoD
   if (nombre === 'flecha-arriba') return 'subir';
   if (nombre === 'flecha-abajo') return 'bajar';
   if (nombre === 'papelera') return 'ninguna';
-  if (nombre === 'perfil' || nombre === 'servicios') return 'pulso';
+  if (nombre === 'perfil' || nombre === 'servicios' || nombre === 'estrella') return 'pulso';
   return 'pulso';
 }
 
