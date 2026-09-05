@@ -392,3 +392,27 @@ export function rechazarCarrera(viajeId: string): boolean {
   socket.emit('rideRejected', { tripId: viajeId });
   return true;
 }
+
+/**
+ * Mover la carrera al siguiente estado: llegué, arranco, termino.
+ *
+ * SE MANDA LO QUE SE QUIERE, NO LO QUE PASA. El servidor comprueba otra vez que
+ * quien lo pide es el conductor asignado y que ese salto es legal desde el
+ * estado actual; si no, contesta `tripStatusRejected` y aquí no cambia nada. El
+ * estado del viaje NUNCA lo decide este lado.
+ *
+ * Tampoco viaja la identidad: sale del token de la sesión, como en el resto de
+ * las acciones del conductor.
+ *
+ * `false` significa que no salió —sin socket o sin conexión— y quien llama lo
+ * dice en pantalla, en vez de dejar a alguien esperando una respuesta que no va
+ * a llegar.
+ */
+export function cambiarEstadoDeCarrera(
+  viajeId: string,
+  estado: 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED'
+): boolean {
+  if (socket === null || !socket.connected) return false;
+  socket.emit('tripStatusUpdated', { tripId: viajeId, status: estado });
+  return true;
+}

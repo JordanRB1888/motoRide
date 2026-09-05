@@ -137,21 +137,26 @@ test('cada estado del negocio tiene su superficie, o se declara que no', () => {
   assert.equal(superficieDe(leerDetalle(enCurso('SEARCHING'))), 'buscando');
   assert.equal(superficieDe(leerDetalle(enCurso('DRIVER_ASSIGNED'))), 'viaje');
   assert.equal(superficieDe(leerDetalle(enCurso('IN_PROGRESS'))), 'viaje');
-  // El hueco declarado: ARRIVED no tiene pantalla aprobada.
-  assert.equal(superficieDe(leerDetalle(enCurso('ARRIVED'))), null);
+  // El hueco se cerró en TRIP-LIFECYCLE-ACTIONS-1: el copy de ARRIVED ya
+  // existía —«Tu conductor llegó»— y sólo faltaba el mapeo. Dejarlo en `null`
+  // sacaba a la pasajera de la pantalla del viaje justo cuando el conductor
+  // aparecía abajo, que es cuando más mira el teléfono.
+  assert.equal(superficieDe(leerDetalle(enCurso('ARRIVED'))), 'viaje');
   // Terminales: ya no son viaje activo.
   assert.equal(superficieDe(leerDetalle(enCurso('COMPLETED'))), null);
   assert.equal(superficieDe(leerDetalle(enCurso('CANCELLED'))), null);
   assert.equal(superficieDe(null), null);
 });
 
-test('ARRIVED se SOPORTA aunque no tenga pantalla', () => {
-  // El estado se guarda tal cual: el hueco es visual, no del modelo. Si el
-  // store lo descartara, el día que exista la pantalla habría que rehacerlo.
+test('ARRIVED es un viaje activo con pantalla propia', () => {
+  // El estado se guarda tal cual —eso no cambió— y ahora además tiene dónde
+  // pintarse. Lo que se protege sigue siendo lo mismo: que el store no lo
+  // descarte, porque un viaje en el que el conductor ya llegó es el MÁS activo
+  // de todos.
   const viaje = leerDetalle(enCurso('ARRIVED'));
   assert.equal(viaje.estado, 'ARRIVED');
   assert.equal(alRecibirViaje(viaje).fase, 'CON_VIAJE');
-  assert.equal(SUPERFICIE_DEL_ESTADO.ARRIVED, null, 'se inventó una pantalla para ARRIVED');
+  assert.equal(SUPERFICIE_DEL_ESTADO.ARRIVED, 'viaje');
 });
 
 test('los terminales no se fabrican en el cliente', () => {

@@ -219,9 +219,14 @@ test('el evento y los dos emisores son los que el servidor ya tenía', () => {
 
   // Y el cliente lo escucha y lo emite con el mismo nombre.
   const eventos = leer('realtime/eventos.ts');
-  // Que esté en los ESCUCHADOS —el array que termina en `EventoDelServidor`— y
-  // no en la lista de pendientes, que es donde vivía antes de esta fase.
-  assert.match(eventos, /'rideRequested'\s*\]\s*as const;\s*export type EventoDelServidor/);
+  // Que esté en los ESCUCHADOS y no en la lista de pendientes, que es donde
+  // vivía antes de esta fase.
+  //
+  // Se mira DENTRO del array, no que sea el ÚLTIMO elemento. Atarlo al final
+  // rompía el test el día que otro evento saliera de pendientes, sin que nada
+  // de lo que aquí se protege hubiera cambiado: pasó con `tripStatusRejected`.
+  const escuchados = /EVENTOS_DEL_SERVIDOR = \[([\s\S]*?)\] as const;/.exec(eventos);
+  assert.ok(escuchados && escuchados[1].includes("'rideRequested'"), 'ya no se escucha');
   const pendientes = /EVENTOS_PENDIENTES = \[([\s\S]*?)\] as const;/.exec(eventos);
   assert.ok(pendientes && !pendientes[1].includes("'rideRequested'"), 'ya no está pendiente');
 

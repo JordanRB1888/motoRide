@@ -50,6 +50,17 @@ export function transitionTrip(trip, nextStatus, metadata = {}) {
     error.code = 'INVALID_TRIP_TRANSITION';
     throw error;
   }
+  // REPETIR NO ES VOLVER A PASAR.
+  //
+  // `canTransitionTrip` acepta ir de un estado a si mismo a proposito: un
+  // reintento tras un timeout ambiguo, o el segundo toque de un boton, no
+  // pueden fallar. Pero aceptarlo no es lo mismo que anotarlo. Sin esta salida,
+  // dos toques de LLEGUE dejaban DOS entradas en el historial y el viaje
+  // contaba que el conductor llego dos veces, que no paso.
+  //
+  // El historial es el registro de lo que ocurrio, y ocurrio una vez.
+  if (normalizeTripStatus(trip.status) === normalizedNext) return trip;
+
   const now = new Date().toISOString();
   trip.status = normalizedNext;
   trip.updatedAt = now;

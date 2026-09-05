@@ -356,9 +356,18 @@ test('NO se emite ningún evento de despacho todavía', () => {
   // `rideCancelled` sale en PASSENGER-TRIP-1: la pasajera ya puede cancelar la
   // busqueda, con la confirmacion del servidor y sin limpiar nada por su
   // cuenta. Siguen vedados los que mueven un viaje sin pantalla propia.
+  //
+  // `tripStatusUpdated` sale en TRIP-LIFECYCLE-ACTIONS-1, que es la fase que le
+  // da su superficie: un boton por estado --llegue, arranco, termino--, con el
+  // candado del doble toque y el rechazo del servidor contado en pantalla. El
+  // veto era justo eso: no emitirlo hasta que hubiera donde pulsarlo y donde
+  // leer que no salio.
+  //
+  // Siguen vedados `rideRequested` --lo emite el servidor, no el telefono--,
+  // la calificacion y el chat, que no tienen pantalla todavia.
   const prohibidos = [
     'rideRequested',
-    'tripStatusUpdated', 'tripRated', 'chat:send_message'
+    'tripRated', 'chat:send_message'
   ];
 
   for (const carpeta of carpetas) {
@@ -407,9 +416,14 @@ test('NO se emite ningún evento de despacho todavía', () => {
   // uno en su funcion concreta --`aceptarCarrera`, `rechazarCarrera`-- con su
   // evento escrito y sin identidad en el payload: el servidor la saca de la
   // sesion firmada.
+  //
+  // `tripStatusUpdated` entra en TRIP-LIFECYCLE-ACTIONS-1, en
+  // `cambiarEstadoDeCarrera`, con el mismo trato: evento escrito, sin identidad
+  // en el payload, y con el servidor comprobando que quien lo pide es el
+  // conductor asignado y que el salto es legal desde el estado actual.
   assert.deepEqual(eventosEmitidos.sort(), [
     'driver:connect', 'driver:location', 'driver:status', 'passenger:location_update',
-    'rideAccepted', 'rideCancelled', 'rideRejected'
+    'rideAccepted', 'rideCancelled', 'rideRejected', 'tripStatusUpdated'
   ]);
 });
 

@@ -173,7 +173,23 @@ export const EVENTOS_DEL_SERVIDOR = [
    * que calculo el servidor, y es contra ella contra la que cuenta la pantalla
    * --no contando quince hacia atras, que prometeria mas tiempo del que hay.
    */
-  'rideRequested'
+  'rideRequested',
+
+  /**
+   * El servidor NO aplicó el cambio de estado que pidió el conductor.
+   *
+   * Fuente: `socket.emit('tripStatusRejected', { tripId, status, error })` en
+   * el handler de `tripStatusUpdated` entrante. `error` es
+   * `INVALID_TRIP_TRANSITION` cuando el salto no es legal desde el estado
+   * actual, `INVALID_TRIP_STATUS` si el estado no venía, o
+   * `DATABASE_WRITE_FAILED` si no se pudo guardar.
+   *
+   * IMPORTA ESCUCHARLO. Sin esto, un «Llegué» rechazado deja el botón girando
+   * para siempre: quien conduce no sabe si salió, y la única salida es cerrar
+   * la aplicación. Salió de los pendientes en TRIP-LIFECYCLE-ACTIONS-1, que es
+   * cuando las acciones del conductor tuvieron pantalla.
+   */
+  'tripStatusRejected'
 ] as const;
 export type EventoDelServidor = (typeof EVENTOS_DEL_SERVIDOR)[number];
 
@@ -193,8 +209,9 @@ export const EVENTOS_PENDIENTES = [
   // OJO: `rideAccepted` NO está aquí ni entre los escuchados, y es a propósito:
   // el servidor NO lo emite. Es sólo cliente→servidor. Lo que el conductor
   // recibe al aceptar es un `tripStatusUpdated`.
+  // `tripStatusRejected` SALIÓ de aquí en TRIP-LIFECYCLE-ACTIONS-1: el botón
+  // del conductor necesita saber que el servidor dijo que no.
   'rideRequestFailed', 'rideAcceptanceFailed',
-  'tripStatusRejected',
   // Conductor — los tres de presencia salieron en DRIVER-AVAILABILITY-1.
   // No queda ninguno pendiente de esta familia.
   // Chat en vivo — CHAT-INTEGRATION

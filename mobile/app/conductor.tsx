@@ -50,6 +50,9 @@ import {
 import { AvisoDeUbicacionEnMapa } from '../ui/AvisoDeUbicacion';
 import { useOfertaEnVivo } from '../realtime/OfertaEnVivo';
 import { CierreDeOferta, SuperficieDeOferta } from '../conductor/SuperficieDeOferta';
+import { useCarreraDelConductor } from '../realtime/CarreraDelConductor';
+import { SuperficieDeCarrera } from '../conductor/SuperficieDeCarrera';
+import { titularDelConductor } from '../domain/accionesDelConductor';
 
 export default function InicioDeConductor() {
   const { sesion, salir } = useSesion();
@@ -178,6 +181,17 @@ export default function InicioDeConductor() {
   // por disponible, asi que recibir una oferta ya es la prueba de estarlo.
   const carrera = useOfertaEnVivo();
 
+  //
+  // LA CARRERA QUE YA ES SUYA
+  //
+  // Va aquí arriba con el resto de los hooks, por lo mismo que `useOfertaEnVivo`:
+  // debajo hay salidas condicionales y un hook por debajo de ellas rompe la
+  // pantalla entera en el arranque en frío.
+  //
+  // No compite con la oferta: el despacho no ofrece carreras a quien ya lleva
+  // una, así que las dos superficies nunca tienen algo que enseñar a la vez.
+  const enCurso = useCarreraDelConductor();
+
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (
       <Pantalla>
@@ -257,11 +271,34 @@ export default function InicioDeConductor() {
             || carrera.estado === 'EXPIRADA' || carrera.estado === 'ERROR' ? (
               <CierreDeOferta
                 estado={carrera.estado}
-                onCerrar={carrera.estado === 'ACEPTADA'
-                  ? () => { carrera.descartar(); router.replace('/viaje-activo'); }
-                  : carrera.descartar}
+                onCerrar={carrera.descartar}
               />
             ) : null}
+
+          {/* LA CARRERA EN CURSO, DEBAJO DEL MISMO MAPA
+            *
+            * Y no en `/viaje-activo`, que es la pantalla de la pasajera:
+            * mandarle allí al conductor le enseñaba «En camino» con sus propios
+            * datos de conductor, y le quitaba el mapa en el que va mirando por
+            * dónde tiene que ir. Se queda donde está y le aparece el botón que
+            * toca.
+            *
+            * La oferta manda mientras haya oferta: si las dos tuvieran algo que
+            * decir a la vez —que no puede pasar—, se enseña la que tiene reloj. */}
+          {carrera.estado === 'ESPERANDO' || carrera.estado === 'OFFLINE' ? (
+            enCurso.viaje === null || enCurso.accion === null ? null : (
+              <SuperficieDeCarrera
+                titular={titularDelConductor(enCurso.viaje.estado) ?? 'Carrera en curso'}
+                origen={enCurso.viaje.origen}
+                destino={enCurso.viaje.destino}
+                accion={enCurso.accion}
+                fase={enCurso.fase}
+                fallo={enCurso.fallo}
+                sePuede={enCurso.sePuede}
+                onPulsar={enCurso.pulsar}
+              />
+            )
+          ) : null}
         </View>
         </View>
       </ProveedorDeNavegacion>

@@ -128,19 +128,23 @@ export function alCerrarSesion(): EstadoDelViajeActivo {
 // ---------------------------------------------------------------------------
 
 /**
- * Las pantallas que ya existen, y el hueco que no.
+ * Las pantallas que ya existen.
  *
- * `ARRIVED` no tiene superficie propia aprobada. El store lo soporta —es un
- * estado real del servidor y se guarda tal cual— pero mandarlo a `viaje` es
- * enseñar «tu conductor está en camino» cuando ya llegó.
+ * `ARRIVED` estuvo un tiempo en `null` —el hueco declarado— porque mandarlo a
+ * `viaje` habría enseñado «tu conductor está en camino» cuando ya estaba abajo
+ * esperando, y eso es peor que no enseñar nada.
  *
- * No se inventa una pantalla. Se declara el hueco y decide el dueño.
+ * Ya no hace falta el hueco: `superficieDelViaje` resuelve el titular por
+ * estado, y para `ARRIVED` dice «Tu conductor llegó · Ya está en el punto de
+ * recogida». Mismo layout, otro texto, que era exactamente lo que faltaba. Con
+ * el copy resuelto, dejarlo en `null` haría lo contrario de lo que se buscaba:
+ * sacar a la pasajera de la pantalla del viaje justo en el momento en el que
+ * más mira el teléfono.
  */
 export const SUPERFICIE_DEL_ESTADO: Readonly<Record<string, string | null>> = Object.freeze({
   SEARCHING: 'buscando',
   DRIVER_ASSIGNED: 'viaje',
-  // El hueco. Ver `ARRIVED_VISUAL_GAP` en el informe.
-  ARRIVED: null,
+  ARRIVED: 'viaje',
   IN_PROGRESS: 'viaje',
   // Terminales: ya no son un viaje activo, son historial.
   COMPLETED: null,
