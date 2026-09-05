@@ -466,8 +466,15 @@ function Adjunto({ rotulo, fuente }: {
   // Con imagen de verdad se enseña la imagen. El marco discontinuo se queda
   // para la maqueta y para cuando el adjunto no se puede cargar.
   if (fuente !== undefined) {
+    // El marco lleva su propio ancho. Vive dentro de una burbuja que se ajusta
+    // a su contenido (`alignSelf`, sin ancho fijo), y en ese padre un
+    // `width: '100%'` no tiene de qué ser el cien por cien: se resolvía a cero
+    // y la imagen —ya cargada— se pintaba como un recuadro vacío. El mismo
+    // marco que la miniatura del chat en vivo, para que se lean igual.
     return (
       <View style={{
+        width: 220,
+        height: 160,
         borderRadius: tema.radio.campo,
         overflow: 'hidden',
         backgroundColor: tema.color.superficieHundida
@@ -477,7 +484,7 @@ function Adjunto({ rotulo, fuente }: {
           resizeMode="cover"
           accessibilityIgnoresInvertColors
           accessibilityLabel={rotulo}
-          style={{ width: '100%', height: 160 }}
+          style={{ width: '100%', height: '100%' }}
         />
       </View>
     );
