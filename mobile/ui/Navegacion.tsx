@@ -10,7 +10,7 @@
  * El movimiento tiene tres piezas y un compás, y ese compás es lo que lo hace
  * fluido en vez de correcto:
  *
- * 1. RETIRADA (50 ms). Al tocar, el disco amarillo se hunde y se apaga. Es lo
+ * 1. RETIRADA (50 ms). Al tocar, el disco se hunde y se apaga. Es lo
  *    que despeja el camino: si la muesca arrancara con el disco todavía puesto,
  *    lo que se vería es una pastilla resbalando, no algo que va y viene.
  * 2. VIAJE. La muesca —el mordisco cóncavo de la superficie— se desliza con
@@ -25,6 +25,14 @@
  * El icono del destino activo viaja DENTRO del disco, no en su pestaña. Es la
  * diferencia entre «el icono se ilumina» y «el disco trae el icono»: lo segundo
  * es lo que se ve en la referencia, y es lo que se siente como una sola pieza.
+ *
+ * EL AMARILLO ES DEL BOTÓN CENTRAL, Y DE NADIE MÁS
+ *
+ * El disco viajero es NEUTRO: la superficie elevada del tema, con el icono en
+ * tinta primaria. Con los dos círculos en amarillo, la barra tenía dos
+ * protagonistas y por tanto ninguno — el que se pulsa para pedir un viaje y el
+ * que sólo dice dónde estás pesaban igual. El color se reserva para la acción;
+ * la posición se indica con la forma, que ya la trae el mordisco.
  *
  * Todo va por `transform` y `opacity` sobre el hilo de interfaz. Ni una sola
  * medida de caja se anima: en un teléfono modesto con el mapa moviéndose
@@ -772,8 +780,18 @@ function BarraCurvaDePasajera({
           borderColor: tema.color.borde
         }} />
 
-        {/* El disco amarillo, con el icono del destino DENTRO. Emerge de la
-            barra y se asienta en la muesca; los dos son la misma pieza. */}
+        {/* El disco de la pestaña activa, con el icono del destino DENTRO.
+            Emerge de la barra y se asienta en la muesca; los dos son la misma
+            pieza.
+
+            NEUTRO, NO AMARILLO. Con el disco en amarillo había dos círculos
+            amarillos a la vez en la misma barra —éste y el central de pedir— y
+            ninguno de los dos mandaba: el ojo no sabía cuál era la acción y
+            cuál el sitio donde estás. El amarillo se queda entero para el
+            central, que es el que se pulsa para pedir un viaje. Éste dice
+            dónde estás, y para eso le basta con la superficie más alta del
+            tema: blanco en día, grafito elevado en noche. El relieve lo siguen
+            haciendo la sombra, el filo y el hecho de sobresalir. */}
         {iconoDelDisco === null ? null : (
           <Reanimated.View style={[
             {
@@ -784,9 +802,13 @@ function BarraCurvaDePasajera({
               borderRadius: DIAMETRO_CIRCULO_ACTIVO / 2,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: tema.color.acento,
+              backgroundColor: tema.color.superficieElevada,
               borderWidth: 2.5,
-              borderColor: tema.color.superficieElevada,
+              // El filo era del color de la superficie elevada, que ahora es el
+              // del propio disco: se habría fundido con él. Pasa al borde del
+              // tema, que es lo que separa una superficie de lo que tiene
+              // detrás.
+              borderColor: tema.color.borde,
               shadowColor: '#000000',
               shadowOpacity: 0.32,
               shadowRadius: 8,
@@ -796,14 +818,13 @@ function BarraCurvaDePasajera({
             estiloDelDisco
           ]}>
             {/* De TRAZO, no relleno. La variante rellena de `Icono` pinta los
-                detalles interiores en `#0b0a09`, que está pensado para un icono
-                AMARILLO sobre barra oscura. Aquí el icono es grafito sobre
-                amarillo, así que rellenarlo dejaba las agujas del reloj a un dos
-                por ciento de luminancia de su propia esfera: un borrón. El
-                trazo se lee igual de bien con los cuatro destinos. */}
+                detalles interiores en `#0b0a09`: sobre un disco claro, las
+                agujas del reloj quedaban a un paso de su propia esfera y se
+                leía como un borrón. El trazo se lee igual de bien con los
+                cuatro destinos. */}
             <Icono
               nombre={iconoDelDisco}
-              color={tema.color.sobreAcento}
+              color={tema.color.textoPrimario}
               tamano={25}
             />
           </Reanimated.View>
