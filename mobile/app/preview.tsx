@@ -65,6 +65,29 @@ import {
   C2Saldo,
   C2ViajeSeguro
 } from '../preview/pantallasC2Secciones';
+import {
+  PreviewChatPasajeraLight,
+  PreviewChatPasajeraDark,
+  PreviewChatConductorLight,
+  PreviewChatConductorDark,
+  PreviewChatTexto,
+  PreviewChatImagenes,
+  PreviewChatUploading,
+  PreviewChatFailedRetry,
+  PreviewChatOffline,
+  PreviewChatEmpty,
+  PreviewChatError,
+  PreviewPassengerDriverAssigned,
+  PreviewPassengerArrived,
+  PreviewPassengerInProgress,
+  PreviewDriverDriverAssigned,
+  PreviewDriverArrived,
+  PreviewDriverInProgress,
+  PreviewHistorialDetalleConImagen,
+  PreviewViajeActivoPasajera,
+  PreviewViajeActivoConductor,
+  PreviewChatEstados
+} from '../preview/pantallasChatTrip';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -136,7 +159,30 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'saldo', nombre: 'Saldo', Componente: C2Saldo },
   { clave: 'avisos', nombre: 'Avisos', Componente: C2Avisos },
   { clave: 'ayuda', nombre: 'Ayuda', Componente: C2Ayuda },
-  { clave: 'configuracion', nombre: 'Configuración', Componente: C2Configuracion }
+  { clave: 'configuracion', nombre: 'Configuración', Componente: C2Configuracion },
+  // Chat & Viaje Activo Premium (CHAT-TRIP-VISUAL-PASS: A hasta R)
+  { clave: 'chat-pasajera-light', nombre: 'A. Chat Pasajera (Día)', Componente: PreviewChatPasajeraLight },
+  { clave: 'chat-pasajera-dark', nombre: 'B. Chat Pasajera (Noche)', Componente: PreviewChatPasajeraDark },
+  { clave: 'chat-conductor-light', nombre: 'C. Chat Conductor (Día)', Componente: PreviewChatConductorLight },
+  { clave: 'chat-conductor-dark', nombre: 'D. Chat Conductor (Noche)', Componente: PreviewChatConductorDark },
+  { clave: 'chat-texto', nombre: 'E. Chat solo texto', Componente: PreviewChatTexto },
+  { clave: 'chat-imagenes', nombre: 'F. Chat con imágenes', Componente: PreviewChatImagenes },
+  { clave: 'chat-uploading', nombre: 'G. Chat subiendo imagen', Componente: PreviewChatUploading },
+  { clave: 'chat-failed-retry', nombre: 'H. Chat envío fallido', Componente: PreviewChatFailedRetry },
+  { clave: 'chat-offline', nombre: 'I. Chat sin conexión', Componente: PreviewChatOffline },
+  { clave: 'chat-empty', nombre: 'J. Chat vacío', Componente: PreviewChatEmpty },
+  { clave: 'chat-error', nombre: 'K. Chat error de red', Componente: PreviewChatError },
+  { clave: 'passenger-driver-assigned', nombre: 'L. Pasajera: Conductor en camino', Componente: PreviewPassengerDriverAssigned },
+  { clave: 'passenger-arrived', nombre: 'M. Pasajera: Conductor llegó', Componente: PreviewPassengerArrived },
+  { clave: 'passenger-in-progress', nombre: 'N. Pasajera: Viaje en curso', Componente: PreviewPassengerInProgress },
+  { clave: 'driver-driver-assigned', nombre: 'O. Conductor: Llegué al punto', Componente: PreviewDriverDriverAssigned },
+  { clave: 'driver-arrived', nombre: 'P. Conductor: Iniciar viaje', Componente: PreviewDriverArrived },
+  { clave: 'driver-in-progress', nombre: 'Q. Conductor: Finalizar viaje', Componente: PreviewDriverInProgress },
+  { clave: 'historial-detalle-imagen', nombre: 'R. Historial: Detalle con imagen', Componente: PreviewHistorialDetalleConImagen },
+  // Switchers interactivos combinados
+  { clave: 'viaje-pasajera-activo', nombre: 'Viaje activo (Pasajera · Switcher)', Componente: PreviewViajeActivoPasajera },
+  { clave: 'viaje-conductor-activo', nombre: 'Viaje activo (Conductor · Switcher)', Componente: PreviewViajeActivoConductor },
+  { clave: 'chat-estados', nombre: 'Chat estados (Switcher interactivo)', Componente: PreviewChatEstados }
 ];
 
 export function catalogoDePantallas(clave: ClaveDeDireccion): CatalogoDePantallas {

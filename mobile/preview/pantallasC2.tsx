@@ -841,6 +841,9 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
   const conectado = onAlternar === undefined ? propio : enLinea;
   const ALTO_DE_LA_BARRA = 76;
 
+  const colorIconoMetrica = esNoche ? '#FACC15' : '#101112';
+  const fondoIconoMetrica = esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(0, 0, 0, 0.05)';
+
   const mio: VehiculoEnMapa = {
     clave: 'yo', tipo: 'MOTO', en: { x: 48, y: 30 }, rumbo: 12, destacado: true
   };
@@ -909,7 +912,7 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
           >
             <IconoAnimado
               nombre="campana"
-              color="#FACC15"
+              color={esNoche ? '#FACC15' : '#101112'}
               tamano={22}
             />
           </Pressable>
@@ -938,7 +941,7 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
           >
             <IconoAnimado
               nombre="destino"
-              color="#FACC15"
+              color={esNoche ? '#FACC15' : '#101112'}
               tamano={21}
               variante="elevar"
             />
@@ -954,13 +957,13 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
             alturaAutomatica
             espacioInferior={ALTO_DE_LA_BARRA}
           >
-            <View style={{ gap: 8, paddingBottom: 2 }}>
-              {/* Cabecera interactiva sobria en grafito y amarillo corporativo */}
+            <View style={{ gap: 6, paddingBottom: 0 }}>
+              {/* Cabecera interactiva con puntito verde de turno activo */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
                   <View style={{
                     width: 7, height: 7, borderRadius: 4,
-                    backgroundColor: '#FACC15'
+                    backgroundColor: '#10B981'
                   }} />
                   <Txt nivel="etiqueta" tono="tenue" estilo={{ fontWeight: '700', fontSize: 11, letterSpacing: 0.8 }}>
                     TURNO ACTIVO
@@ -994,115 +997,172 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
               </View>
 
               {/* Fila 1 de métricas: Ganado hoy y Viajes hoy */}
-              <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flexDirection: 'row', gap: 7 }}>
                 <View style={{
                   flex: 1,
-                  paddingVertical: 7,
-                  paddingHorizontal: 10,
-                  borderRadius: 12,
+                  paddingVertical: 5.5,
+                  paddingHorizontal: 9,
+                  borderRadius: 11,
                   backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
                   borderWidth: 1,
                   borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-                  gap: 3
+                  gap: 2
                 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={{
-                      width: 20, height: 20, borderRadius: 5,
+                      width: 19, height: 19, borderRadius: 5,
                       alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(250, 204, 21, 0.18)'
+                      backgroundColor: fondoIconoMetrica
                     }}>
-                      <IconoAnimado nombre="dolar" color="#FACC15" tamano={12} />
+                      <IconoAnimado nombre="dolar" color={colorIconoMetrica} tamano={12} />
                     </View>
-                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11 }}>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 10.5 }}>
                       Ganado hoy
                     </Txt>
                   </View>
-                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 16, color: tema.color.textoPrimario } as never}>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 15.5, color: tema.color.textoPrimario } as never}>
                     $0,00
                   </Txt>
                 </View>
 
                 <View style={{
                   flex: 1,
-                  paddingVertical: 7,
-                  paddingHorizontal: 10,
-                  borderRadius: 12,
+                  paddingVertical: 5.5,
+                  paddingHorizontal: 9,
+                  borderRadius: 11,
                   backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
                   borderWidth: 1,
                   borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-                  gap: 3
+                  gap: 2
                 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={{
-                      width: 20, height: 20, borderRadius: 5,
+                      width: 19, height: 19, borderRadius: 5,
                       alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(250, 204, 21, 0.18)'
+                      backgroundColor: fondoIconoMetrica
                     }}>
-                      <IconoAnimado nombre="moto" color="#FACC15" tamano={12} />
+                      <IconoAnimado nombre="moto" color={colorIconoMetrica} tamano={12} />
                     </View>
-                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11 }}>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 10.5 }}>
                       Viajes hoy
                     </Txt>
                   </View>
-                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 16, color: tema.color.textoPrimario } as never}>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 15.5, color: tema.color.textoPrimario } as never}>
                     {JORNADA_DEMO.viajes}
                   </Txt>
                 </View>
               </View>
 
               {/* Fila 2 de métricas: En ruta y Aceptación */}
-              <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flexDirection: 'row', gap: 7 }}>
                 <View style={{
                   flex: 1,
-                  paddingVertical: 7,
-                  paddingHorizontal: 10,
-                  borderRadius: 12,
+                  paddingVertical: 5.5,
+                  paddingHorizontal: 9,
+                  borderRadius: 11,
                   backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
                   borderWidth: 1,
                   borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-                  gap: 3
+                  gap: 2
                 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={{
-                      width: 20, height: 20, borderRadius: 5,
+                      width: 19, height: 19, borderRadius: 5,
                       alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(250, 204, 21, 0.18)'
+                      backgroundColor: fondoIconoMetrica
                     }}>
-                      <IconoAnimado nombre="reloj" color="#FACC15" tamano={12} />
+                      <IconoAnimado nombre="reloj" color={colorIconoMetrica} tamano={12} />
                     </View>
-                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11 }}>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 10.5 }}>
                       En ruta
                     </Txt>
                   </View>
-                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 16, color: tema.color.textoPrimario } as never}>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 15.5, color: tema.color.textoPrimario } as never}>
                     {JORNADA_DEMO.horas}
                   </Txt>
                 </View>
 
                 <View style={{
                   flex: 1,
-                  paddingVertical: 7,
-                  paddingHorizontal: 10,
-                  borderRadius: 12,
+                  paddingVertical: 5.5,
+                  paddingHorizontal: 9,
+                  borderRadius: 11,
                   backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
                   borderWidth: 1,
                   borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-                  gap: 3
+                  gap: 2
                 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={{
-                      width: 20, height: 20, borderRadius: 5,
+                      width: 19, height: 19, borderRadius: 5,
                       alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(250, 204, 21, 0.18)'
+                      backgroundColor: fondoIconoMetrica
                     }}>
-                      <IconoAnimado nombre="escudo" color="#FACC15" tamano={12} />
+                      <IconoAnimado nombre="escudo" color={colorIconoMetrica} tamano={12} />
                     </View>
-                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11 }}>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 10.5 }}>
                       Aceptación
                     </Txt>
                   </View>
-                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 16, color: tema.color.textoPrimario } as never}>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 15.5, color: tema.color.textoPrimario } as never}>
                     100%
+                  </Txt>
+                </View>
+              </View>
+
+              {/* Fila 3 de métricas: Calificación y Cancelación */}
+              <View style={{ flexDirection: 'row', gap: 7 }}>
+                <View style={{
+                  flex: 1,
+                  paddingVertical: 5.5,
+                  paddingHorizontal: 9,
+                  borderRadius: 11,
+                  backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+                  borderWidth: 1,
+                  borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                  gap: 2
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{
+                      width: 19, height: 19, borderRadius: 5,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: fondoIconoMetrica
+                    }}>
+                      <IconoAnimado nombre="estrella" color={colorIconoMetrica} tamano={12} />
+                    </View>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 10.5 }}>
+                      Calificación
+                    </Txt>
+                  </View>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 15.5, color: tema.color.textoPrimario } as never}>
+                    4.9
+                  </Txt>
+                </View>
+
+                <View style={{
+                  flex: 1,
+                  paddingVertical: 5.5,
+                  paddingHorizontal: 9,
+                  borderRadius: 11,
+                  backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+                  borderWidth: 1,
+                  borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                  gap: 2
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{
+                      width: 19, height: 19, borderRadius: 5,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: fondoIconoMetrica
+                    }}>
+                      <IconoAnimado nombre="escudo" color={colorIconoMetrica} tamano={12} />
+                    </View>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 10.5 }}>
+                      Cancelación
+                    </Txt>
+                  </View>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 15.5, color: tema.color.textoPrimario } as never}>
+                    0%
                   </Txt>
                 </View>
               </View>
@@ -1141,9 +1201,9 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
             <View style={{
               width: 18, height: 18, borderRadius: 5,
               alignItems: 'center', justifyContent: 'center',
-              backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.15)' : 'rgba(250, 204, 21, 0.22)'
+              backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.15)' : 'rgba(0, 0, 0, 0.06)'
             }}>
-              <IconoAnimado nombre="flecha-arriba" color="#FACC15" tamano={11} />
+              <IconoAnimado nombre="flecha-arriba" color={esNoche ? '#FACC15' : '#101112'} tamano={11} />
             </View>
             <Txt nivel="pie" estilo={{ fontWeight: '700', fontSize: 12, color: tema.color.textoPrimario } as never}>
               Métricas

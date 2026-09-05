@@ -59,7 +59,8 @@ export const NOMBRES_DE_ICONO = [
   'flecha-abajo',
   'servicios',
   'telefono',
-  'mas'
+  'mas',
+  'estrella'
 ] as const;
 export type NombreDeIcono = (typeof NOMBRES_DE_ICONO)[number];
 
@@ -910,6 +911,39 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
         <View style={{ position: 'absolute', width: largo, height: largo, alignItems: 'center', justifyContent: 'center' }}>
           <View style={{ position: 'absolute', width: largo, height: t.trazo, borderRadius: t.trazo / 2, backgroundColor: t.color }} />
           <View style={{ position: 'absolute', width: t.trazo, height: largo, borderRadius: t.trazo / 2, backgroundColor: t.color }} />
+        </View>
+      );
+    }
+
+    // Estrella: cuatro puntas de triángulo alrededor de un núcleo.
+    //
+    // Viene de Antigravity, y es el mismo techo de siempre: sin SVG no hay una
+    // estrella de cinco puntas, así que se hace de cuatro con el truco de los
+    // bordes que ya usa el resto de la familia. El cuadrado del centro tapa la
+    // junta donde se encuentran las cuatro.
+    case 'estrella': {
+      const mitad = t.tamano * 0.42;
+      return (
+        <View style={{ width: t.tamano, height: t.tamano, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ position: 'absolute', top: t.tamano * 0.08 }}>
+            <Triangulo base={mitad} alto={mitad * 0.9} color={t.color} />
+          </View>
+          <View style={{ position: 'absolute', bottom: t.tamano * 0.08, transform: [{ rotate: '180deg' }] }}>
+            <Triangulo base={mitad} alto={mitad * 0.9} color={t.color} />
+          </View>
+          <View style={{ position: 'absolute', left: t.tamano * 0.08, transform: [{ rotate: '270deg' }] }}>
+            <Triangulo base={mitad} alto={mitad * 0.9} color={t.color} />
+          </View>
+          <View style={{ position: 'absolute', right: t.tamano * 0.08, transform: [{ rotate: '90deg' }] }}>
+            <Triangulo base={mitad} alto={mitad * 0.9} color={t.color} />
+          </View>
+          <View style={{
+            position: 'absolute',
+            width: mitad * 0.5,
+            height: mitad * 0.5,
+            backgroundColor: t.color,
+            borderRadius: 1
+          }} />
         </View>
       );
     }
