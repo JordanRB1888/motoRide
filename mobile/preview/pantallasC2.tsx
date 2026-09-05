@@ -37,10 +37,12 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Boton, Insignia, Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
+import { IconoAnimado } from '../ui/IconoAnimado';
 import { Arranque } from '../ui/Arranque';
 import { LienzoDeMapa, type HitoEnMapa, type VehiculoEnMapa } from '../ui/Mapa';
 import type { ModeloDelMapa } from '../mapa/modelo';
 import { HojaInferior, Separador } from '../ui/HojaInferior';
+import { useIr } from '../ui/navegar';
 import {
   BarraDeNavegacion,
   ControlDeDisponibilidad,
@@ -827,12 +829,17 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
   readonly avisoDeUbicacion?: ReactNode;
 }) {
   const tema = useTema();
+  const esquema = useEsquema();
+  const esNoche = esquema === 'oscuro';
   const arriba = useAireDeArriba();
+  const ir = useIr();
   const [propio, setPropio] = useState(enLinea);
+  const [jornadaMinimizada, setJornadaMinimizada] = useState(false);
 
   // Con manejador externo el estado viene de fuera y esta pantalla no
   // guarda ninguno: dos fuentes para lo mismo acaban discrepando.
   const conectado = onAlternar === undefined ? propio : enLinea;
+  const ALTO_DE_LA_BARRA = 76;
 
   const mio: VehiculoEnMapa = {
     clave: 'yo', tipo: 'MOTO', en: { x: 48, y: 30 }, rumbo: 12, destacado: true
@@ -843,6 +850,7 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
       <LienzoDeMapa
         modelo={modeloDelMapa}
         onCentrar={onCentrar}
+        conControles={false}
         vehiculos={modeloDelMapa === undefined ? [mio] : []}
       >
         {/* Dónde está y si le llegan viajes, en una línea. Conectado enseña
@@ -851,7 +859,7 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
         <View style={{
           position: 'absolute',
           left: tema.ritmo.margenPantalla,
-          right: tema.ritmo.margenPantalla,
+          right: tema.ritmo.margenPantalla + 58,
           top: 18 + arriba,
           alignItems: 'flex-start'
         }}>
@@ -866,45 +874,281 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
           {avisoDeUbicacion}
         </View>
 
-        {/* DESCONECTADO NO HAY HOJA.
-            Antes salía una tarjeta con el vehículo, la placa y el sello de
-            verificado. Nada de eso hace falta ahí: quien todavía no se ha
-            conectado no tiene ninguna decisión que tomar salvo conectarse, y
-            para eso ya está el disco de la barra.
-
-            Los datos no se pierden —están en el panel del disco y en el
-            perfil—, sólo dejan de ocupar la pantalla donde no se usan. El
-            conductor gana mapa, que es lo que mira mientras decide si sale. */}
-        {conectado ? (
-          <HojaInferior estado="baja" conAsa={false} alturaAutomatica>
-            {/* Dos cifras y pequeñas. Eran tres en tamaño de encabezado,
-                separadas por rayas, y ocupaban casi tanto como la hoja entera:
-                se abren en marcha, así que van juntas y centradas.
-
-                «Resumen» se va por lo mismo que en el panel del disco: un dato
-                vacío ocupando el sitio de un dato no es un dato. */}
-            <View style={{
-              flexDirection: 'row',
+        {/* Controles superiores derechos:
+            Arriba la campanita de notificaciones del teléfono, y debajo el botón de rastrear ubicación.
+            Ambos circulares, superficie blanca con sombra, e icono amarillo en el centro. */}
+        <View style={{
+          position: 'absolute',
+          right: 14,
+          top: 18 + arriba,
+          gap: 10,
+          alignItems: 'center',
+          zIndex: 20
+        }}>
+          {/* Campanita de notificaciones / avisos */}
+          <Pressable
+            onPress={() => ir('avisos')}
+            accessibilityRole="button"
+            accessibilityLabel="Notificaciones y avisos"
+            style={({ pressed }) => ({
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 18
-            }}>
-              {[
-                { etiqueta: 'Viajes de hoy', valor: JORNADA_DEMO.viajes },
-                { etiqueta: 'En ruta', valor: JORNADA_DEMO.horas }
-              ].map((dato, indice) => (
-                <View key={dato.etiqueta} style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
-                  {indice > 0 ? (
-                    <View style={{ width: 1, height: 26, backgroundColor: tema.color.borde }} />
-                  ) : null}
-                  <View style={{ gap: 1 }}>
-                    <Txt nivel="etiqueta" centrado>{dato.valor}</Txt>
-                    <Txt nivel="pie" tono="tenue" centrado>{dato.etiqueta}</Txt>
-                  </View>
+              backgroundColor: '#FFFFFF',
+              borderWidth: 1,
+              borderColor: 'rgba(0, 0, 0, 0.08)',
+              shadowColor: '#000000',
+              shadowOpacity: 0.22,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 8,
+              opacity: pressed ? 0.85 : 1
+            })}
+          >
+            <IconoAnimado
+              nombre="campana"
+              color="#FACC15"
+              tamano={22}
+            />
+          </Pressable>
+
+          {/* Rastrear / centrar ubicación (debajo de la campanita) */}
+          <Pressable
+            onPress={onCentrar}
+            accessibilityRole="button"
+            accessibilityLabel="Centrar y rastrear mi ubicación"
+            style={({ pressed }) => ({
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#FFFFFF',
+              borderWidth: 1,
+              borderColor: 'rgba(0, 0, 0, 0.08)',
+              shadowColor: '#000000',
+              shadowOpacity: 0.22,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 8,
+              opacity: pressed ? 0.85 : 1
+            })}
+          >
+            <IconoAnimado
+              nombre="destino"
+              color="#FACC15"
+              tamano={21}
+              variante="elevar"
+            />
+          </Pressable>
+        </View>
+
+        {/* Resumen de jornada en servicio: métricas relevantes del día
+            en paleta estricta grafito/amarillo/blanco/negro y minimizable al 100%. */}
+        {conectado && !jornadaMinimizada ? (
+          <HojaInferior
+            estado="baja"
+            conAsa={false}
+            alturaAutomatica
+            espacioInferior={ALTO_DE_LA_BARRA}
+          >
+            <View style={{ gap: 8, paddingBottom: 2 }}>
+              {/* Cabecera interactiva sobria en grafito y amarillo corporativo */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                  <View style={{
+                    width: 7, height: 7, borderRadius: 4,
+                    backgroundColor: '#FACC15'
+                  }} />
+                  <Txt nivel="etiqueta" tono="tenue" estilo={{ fontWeight: '700', fontSize: 11, letterSpacing: 0.8 }}>
+                    TURNO ACTIVO
+                  </Txt>
                 </View>
-              ))}
+
+                <Pressable
+                  onPress={() => setJornadaMinimizada(true)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Minimizar resumen de jornada"
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingVertical: 3,
+                    paddingHorizontal: 9,
+                    borderRadius: 999,
+                    backgroundColor: pressed
+                      ? (esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)')
+                      : (esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)'),
+                    borderWidth: 1,
+                    borderColor: tema.color.borde
+                  })}
+                >
+                  <Txt nivel="pie" tono="tenue" estilo={{ fontWeight: '600', fontSize: 11 }}>
+                    Minimizar
+                  </Txt>
+                  <IconoAnimado nombre="flecha-abajo" color={tema.color.textoSecundario} tamano={11} />
+                </Pressable>
+              </View>
+
+              {/* Fila 1 de métricas: Ganado hoy y Viajes hoy */}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{
+                  flex: 1,
+                  paddingVertical: 7,
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+                  borderWidth: 1,
+                  borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                  gap: 3
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{
+                      width: 20, height: 20, borderRadius: 5,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(250, 204, 21, 0.18)'
+                    }}>
+                      <IconoAnimado nombre="dolar" color="#FACC15" tamano={12} />
+                    </View>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11 }}>
+                      Ganado hoy
+                    </Txt>
+                  </View>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 16, color: tema.color.textoPrimario } as never}>
+                    $0,00
+                  </Txt>
+                </View>
+
+                <View style={{
+                  flex: 1,
+                  paddingVertical: 7,
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+                  borderWidth: 1,
+                  borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                  gap: 3
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{
+                      width: 20, height: 20, borderRadius: 5,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(250, 204, 21, 0.18)'
+                    }}>
+                      <IconoAnimado nombre="moto" color="#FACC15" tamano={12} />
+                    </View>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11 }}>
+                      Viajes hoy
+                    </Txt>
+                  </View>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 16, color: tema.color.textoPrimario } as never}>
+                    {JORNADA_DEMO.viajes}
+                  </Txt>
+                </View>
+              </View>
+
+              {/* Fila 2 de métricas: En ruta y Aceptación */}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{
+                  flex: 1,
+                  paddingVertical: 7,
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+                  borderWidth: 1,
+                  borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                  gap: 3
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{
+                      width: 20, height: 20, borderRadius: 5,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(250, 204, 21, 0.18)'
+                    }}>
+                      <IconoAnimado nombre="reloj" color="#FACC15" tamano={12} />
+                    </View>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11 }}>
+                      En ruta
+                    </Txt>
+                  </View>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 16, color: tema.color.textoPrimario } as never}>
+                    {JORNADA_DEMO.horas}
+                  </Txt>
+                </View>
+
+                <View style={{
+                  flex: 1,
+                  paddingVertical: 7,
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+                  borderWidth: 1,
+                  borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                  gap: 3
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{
+                      width: 20, height: 20, borderRadius: 5,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.12)' : 'rgba(250, 204, 21, 0.18)'
+                    }}>
+                      <IconoAnimado nombre="escudo" color="#FACC15" tamano={12} />
+                    </View>
+                    <Txt nivel="pie" tono="tenue" numberOfLines={1} estilo={{ fontSize: 11 }}>
+                      Aceptación
+                    </Txt>
+                  </View>
+                  <Txt nivel="cuerpo" estilo={{ fontWeight: '800', fontSize: 16, color: tema.color.textoPrimario } as never}>
+                    100%
+                  </Txt>
+                </View>
+              </View>
             </View>
           </HojaInferior>
+        ) : null}
+
+        {/* Al minimizar, la tarjeta desaparece completamente y sólo queda
+            el botón de maximizar al ladito de la barra */}
+        {conectado && jornadaMinimizada ? (
+          <Pressable
+            onPress={() => setJornadaMinimizada(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Maximizar métricas de jornada"
+            style={({ pressed }) => ({
+              position: 'absolute',
+              bottom: ALTO_DE_LA_BARRA + 12,
+              right: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 20,
+              backgroundColor: esNoche ? '#181A1E' : '#FFFFFF',
+              borderWidth: 1,
+              borderColor: esNoche ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.10)',
+              shadowColor: '#000000',
+              shadowOpacity: 0.25,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 3 },
+              elevation: 6,
+              opacity: pressed ? 0.85 : 1
+            })}
+          >
+            <View style={{
+              width: 18, height: 18, borderRadius: 5,
+              alignItems: 'center', justifyContent: 'center',
+              backgroundColor: esNoche ? 'rgba(250, 204, 21, 0.15)' : 'rgba(250, 204, 21, 0.22)'
+            }}>
+              <IconoAnimado nombre="flecha-arriba" color="#FACC15" tamano={11} />
+            </View>
+            <Txt nivel="pie" estilo={{ fontWeight: '700', fontSize: 12, color: tema.color.textoPrimario } as never}>
+              Métricas
+            </Txt>
+          </Pressable>
         ) : null}
       </LienzoDeMapa>
 

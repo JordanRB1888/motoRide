@@ -60,6 +60,7 @@ export default function InicioDeConductor() {
     sacadoDeServicioPorElPermiso,
     abrirAjustesDeUbicacion
   } = useDisponibilidad();
+  const carrera = useOfertaEnVivo();
 
   // LO QUE HAY QUE CONTAR CUANDO FALTA EL PERMISO
   //
@@ -183,11 +184,6 @@ export default function InicioDeConductor() {
 
   // APROBADO: su pantalla de verdad.
   //
-  // LAS CARRERAS QUE LE OFRECEN
-  //
-  // No se le pasa si esta en servicio: el despacho solo ofrece a quien tiene
-  // por disponible, asi que recibir una oferta ya es la prueba de estarlo.
-  const carrera = useOfertaEnVivo();
 
   // La misma que se aprobó en el recorrido de diseño, con el disco de la barra
   // —que ya estaba dibujado y sin conectar— pidiendo el cambio de estado al
@@ -295,6 +291,7 @@ function irA(clave: string) {
   if (clave === 'historial') router.replace('/historial');
   if (clave === 'mapa') router.replace('/conductor');
   if (clave === 'saldo') router.replace('/conductor-saldo');
+  if (clave === 'avisos') router.push('/avisos');
 }
 
 /**

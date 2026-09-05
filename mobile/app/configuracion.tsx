@@ -15,6 +15,7 @@ import { C2Configuracion } from '../preview/pantallaConfiguracion';
 import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useSesion } from '../context/AuthContext';
 import { shellDelRol } from '../domain/shellDeRol';
+import { ControlCentralDelRol } from '../navegacion/controlCentral';
 
 export default function PantallaDeConfiguracion() {
   const { sesion } = useSesion();
@@ -37,17 +38,19 @@ export default function PantallaDeConfiguracion() {
     if (clave === 'perfil') router.replace('/perfil');
   }
 
+  const controlCentral = <ControlCentralDelRol barra={barraDelRol} />;
+
   if (barraDelRol === 'conductor') {
     return (
       <ProveedorDeNavegacion ir={irA}>
-        <C2Configuracion real barra="conductor" />
+        <C2Configuracion real barra="conductor" control={controlCentral} />
       </ProveedorDeNavegacion>
     );
   }
 
   return (
     <ProveedorDeNavegacion ir={irA}>
-      <C2Configuracion real />
+      <C2Configuracion real control={controlCentral} />
     </ProveedorDeNavegacion>
   );
 }

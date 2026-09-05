@@ -29,6 +29,7 @@ import { Redirect } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 import { C2SaldoConductor } from '../preview/pantallaSaldoConductor';
+import { ControlCentralDelRol } from '../navegacion/controlCentral';
 import { ShellCompartido } from '../navegacion/shellCompartido';
 import { useSesion } from '../context/AuthContext';
 import { puedeOperarComoConductor } from '../domain/authState';
@@ -53,7 +54,7 @@ export default function SaldoDelConductor() {
 
   return (
     <ShellCompartido cargando={<Cargando />}>
-      <C2SaldoConductor />
+      <C2SaldoConductor control={<ControlCentralDelRol barra="conductor" />} />
     </ShellCompartido>
   );
 }

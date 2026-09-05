@@ -39,10 +39,21 @@ import { leerToken } from './session';
  * `domain/backendDelEntorno`, sin nada de React Native, para poder comprobarla
  * sin levantar un emulador.
  */
+const esAndroid = Platform.OS === 'android';
+const constantes = Platform.constants as { Model?: string; Brand?: string; Fingerprint?: string } | undefined;
+const esEmulador = esAndroid && (
+  Boolean(constantes?.Model?.toLowerCase().includes('sdk')) ||
+  Boolean(constantes?.Model?.toLowerCase().includes('emulator')) ||
+  Boolean(constantes?.Fingerprint?.toLowerCase().includes('generic')) ||
+  Boolean(constantes?.Fingerprint?.toLowerCase().includes('sdk_gphone')) ||
+  constantes?.Brand === 'generic'
+);
+
 const URL_BASE = configuracion.ok
   ? urlParaEstaPlataforma(configuracion.urlBase, {
-    esAndroid: Platform.OS === 'android',
-    enDesarrollo: EN_DESARROLLO
+    esAndroid,
+    enDesarrollo: EN_DESARROLLO,
+    esEmulador
   })
   : '';
 

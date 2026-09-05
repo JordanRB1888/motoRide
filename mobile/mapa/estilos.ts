@@ -88,23 +88,25 @@ export const MAPA_DE_NOCHE: readonly ReglaDeEstilo[] = Object.freeze([
  * tema no cambie la información.
  */
 export const MAPA_DE_DIA: readonly ReglaDeEstilo[] = Object.freeze([
-  { elementType: 'geometry', stylers: [{ color: '#f2f1ee' }] },
+  { elementType: 'geometry', stylers: [{ color: '#fcfaf6' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#6b6862' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
 
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#dcd9d2' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#e2decb' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
 
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e6e3dc' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#f3eccf' }] },
   { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a867f' }] },
-  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#fdf6df' }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#fef3c7' }] },
+  { featureType: 'road.arterial', elementType: 'geometry.stroke', stylers: [{ color: '#fde68a' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#fde047' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#eab308' }] },
 
-  { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#eeece7' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d9e4e3' }] },
+  { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#faf6ea' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d8eae8' }] },
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9aa5a4' }] }
 ]);
 

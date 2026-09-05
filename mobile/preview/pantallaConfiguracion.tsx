@@ -48,7 +48,7 @@ const OPCIONES: readonly {
   { clave: 'oscuro', titulo: 'Noche', detalle: 'Siempre oscuro', icono: 'inicio' }
 ];
 
-export function C2Configuracion({ real = false, barra = 'pasajera' }: {
+export function C2Configuracion({ real = false, barra = 'pasajera', control }: {
   /**
    * `true` dentro de la aplicación autenticada.
    *
@@ -63,6 +63,7 @@ export function C2Configuracion({ real = false, barra = 'pasajera' }: {
   readonly real?: boolean;
   /** De quién es la barra inferior: pasajera o conductor. */
   readonly barra?: 'pasajera' | 'conductor';
+  readonly control?: React.ReactNode;
 } = {}) {
   const tema = useTema();
   const { apariencia, esquema, cambiarApariencia } = useApariencia();
@@ -193,7 +194,7 @@ export function C2Configuracion({ real = false, barra = 'pasajera' }: {
       <BarraDeNavegacion
         destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo="perfil"
-        control={barra === 'conductor' ? <ControlDeDisponibilidad enLinea /> : <ControlDePedido abierto={false} />}
+        control={control ?? (barra === 'conductor' ? <ControlDeDisponibilidad enLinea={false} /> : <ControlDePedido abierto={false} />)}
       />
     </View>
   );

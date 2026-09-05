@@ -428,6 +428,8 @@ const ANCHO_DE_LA_CURVA = 58;
 const ALTO_DE_LA_CURVA = 26;
 const INICIO_DE_LA_SUPERFICIE = 18;
 const ALTO_DE_LA_FILA = 58;
+const DIAMETRO_CIRCULO_ACTIVO = 48;
+const ELEVACION_ICONO_ACTIVO = -21;
 
 /**
  * La última posición sobrevive al cambio de ruta.
@@ -445,15 +447,16 @@ function posicionDeCurva(ancho: number, indice: number): number {
 function indiceDelDestino(clave: string): number {
   if (clave === 'inicio') return 0;
   if (clave === 'historial') return 1;
+  if (clave === 'pedir') return 2;
   if (clave === 'saldo') return 3;
   if (clave === 'perfil') return 4;
   return 0;
 }
 
 /**
- * Icono táctil sin rótulo visible. Los dos dibujos superpuestos permiten que
- * el color cambie en el hilo de UI por opacidad, sin recalcular el icono en
- * cada frame ni convertir su prop `color` en estado de React.
+ * Icono táctil sin rótulo visible. El icono activo se eleva de forma suave
+ * hacia el círculo flotante superior sobre la hendidura orgánica, cambiando
+ * a grafito oscuro sobre el amarillo oficial +58Express.
  */
 function PestanaCurva({
   icono,
@@ -475,11 +478,11 @@ function PestanaCurva({
   useEffect(() => {
     seleccion.set(quieto
       ? withTiming(activa ? 1 : 0, { duration: 100 })
-      : withSpring(activa ? 1 : 0, { duration: 270, dampingRatio: 0.84 }));
+      : withSpring(activa ? 1 : 0, { duration: 280, dampingRatio: 0.82 }));
 
     if (activa && !quieto) {
       pulso.set(withSequence(
-        withTiming(1.10, { duration: 110, easing: EasingAnimada.bezier(0.23, 1, 0.32, 1) }),
+        withTiming(1.08, { duration: 110, easing: EasingAnimada.bezier(0.23, 1, 0.32, 1) }),
         withSpring(1, { duration: 170, dampingRatio: 0.88 })
       ));
     } else {
@@ -487,9 +490,16 @@ function PestanaCurva({
     }
   }, [activa, pulso, quieto, seleccion]);
 
+  // Elevación orgánica: el icono activo sube con physics spring para centrarse
+  // perfectamente dentro del círculo flotante amarillo (+58Express).
+  // La escala base histórica [0, -4] se expande hacia el círculo flotante superior.
   const estiloDelIcono = useAnimatedStyle(() => ({
     transform: [
-      { translateY: quieto ? 0 : interpolate(seleccion.get(), [0, 1], [0, -4], Extrapolation.CLAMP) },
+      {
+        translateY: quieto
+          ? interpolate(seleccion.get(), [0, 1], [0, -4], Extrapolation.CLAMP)
+          : interpolate(seleccion.get(), [0, 1], [0, ELEVACION_ICONO_ACTIVO], Extrapolation.CLAMP)
+      },
       { scale: pulsacion.get() * pulso.get() }
     ]
   }));
@@ -510,14 +520,16 @@ function PestanaCurva({
     pulsacion.set(quieto ? 1 : withSpring(1, { duration: 160, dampingRatio: 1 }));
   };
 
-  const tamanoDelIcono = 27.5;
+  const tamanoDelIcono = 25;
   const iconoInactivo = (
     <Icono nombre={icono} color={tema.color.textoSecundario} tamano={tamanoDelIcono} />
   );
+  // El icono activo dentro del círculo flotante amarillo lleva color grafito profundo
+  // (#111315 / sobreAcento) para máximo contraste y legibilidad impecable.
   const iconoActivo = (
     <Icono
       nombre={icono}
-      color={tema.color.acento}
+      color={tema.color.sobreAcento}
       tamano={tamanoDelIcono}
       activo={icono !== 'moto'}
     />
@@ -567,8 +579,8 @@ function BarraCurvaDePasajera({
       desplazamiento.set(destino);
     } else {
       desplazamiento.set(withSpring(destino, {
-        duration: 270,
-        dampingRatio: 0.84
+        duration: 280,
+        dampingRatio: 0.82
       }));
     }
     ultimoIndiceDePasajera = indiceActivo;
@@ -586,6 +598,7 @@ function BarraCurvaDePasajera({
       height: INICIO_DE_LA_SUPERFICIE + ALTO_DE_LA_FILA + Math.max(inferior, 8),
       backgroundColor: 'transparent'
     }}>
+      {/* Superficie base de la barra (grafito profundo C2) */}
       <View pointerEvents="none" style={{
         position: 'absolute',
         top: INICIO_DE_LA_SUPERFICIE,
@@ -597,37 +610,77 @@ function BarraCurvaDePasajera({
         borderTopColor: tema.color.borde
       }} />
 
-      {/* Una extensión elíptica fundida con la superficie, no un círculo
-          añadido. El rectángulo inferior borra su arco de abajo y deja sólo
-          el hombro orgánico que viaja entre las cinco posiciones. */}
+      {/* Notch orgánico con hendidura cóncava y círculo flotante amarillo que viaja
+          suavemente entre los destinos seleccionados con física spring */}
       <Reanimated.View pointerEvents="none" style={[
         {
           position: 'absolute',
-          top: INICIO_DE_LA_SUPERFICIE - 8,
+          top: 0,
+          left: 0,
           width: ANCHO_DE_LA_CURVA,
-          height: ALTO_DE_LA_CURVA,
-          borderTopLeftRadius: ANCHO_DE_LA_CURVA / 2,
-          borderTopRightRadius: ANCHO_DE_LA_CURVA / 2,
-          borderBottomLeftRadius: 12,
-          borderBottomRightRadius: 12,
-          backgroundColor: tema.color.superficieElevada,
-          borderWidth: 1,
-          borderColor: tema.color.borde,
-          shadowColor: '#000000',
-          shadowOpacity: 0.16,
-          shadowRadius: 5,
-          shadowOffset: { width: 0, height: -2 },
-          elevation: 4
+          height: INICIO_DE_LA_SUPERFICIE + ALTO_DE_LA_CURVA,
+          alignItems: 'center',
+          zIndex: 1
         },
         estiloDeLaCurva
       ]}>
+        {/* Notch / Hendidura cóncava que abraza el círculo flotante */}
         <View style={{
           position: 'absolute',
-          top: 8,
-          right: -1,
-          bottom: -2,
-          left: -1,
-          backgroundColor: tema.color.superficieElevada
+          top: INICIO_DE_LA_SUPERFICIE - 1,
+          width: 66,
+          height: 28,
+          backgroundColor: tema.color.fondo,
+          borderBottomLeftRadius: 33,
+          borderBottomRightRadius: 33,
+          borderTopLeftRadius: 8,
+          borderTopRightRadius: 8,
+          borderWidth: 1,
+          borderColor: tema.color.borde,
+          borderTopWidth: 0
+        }} />
+
+        {/* Hombros cóncavos laterales para transición orgánica con el borde horizontal */}
+        <View style={{
+          position: 'absolute',
+          top: INICIO_DE_LA_SUPERFICIE,
+          left: (ANCHO_DE_LA_CURVA - 66) / 2 - 8,
+          width: 8,
+          height: 8,
+          borderBottomRightRadius: 8,
+          backgroundColor: tema.color.superficieElevada,
+          borderRightWidth: 1,
+          borderBottomWidth: 1,
+          borderColor: tema.color.borde
+        }} />
+        <View style={{
+          position: 'absolute',
+          top: INICIO_DE_LA_SUPERFICIE,
+          right: (ANCHO_DE_LA_CURVA - 66) / 2 - 8,
+          width: 8,
+          height: 8,
+          borderBottomLeftRadius: 8,
+          backgroundColor: tema.color.superficieElevada,
+          borderLeftWidth: 1,
+          borderBottomWidth: 1,
+          borderColor: tema.color.borde
+        }} />
+
+        {/* Círculo activo flotante (+58Express amarillo oficial) */}
+        <View style={{
+          position: 'absolute',
+          top: INICIO_DE_LA_SUPERFICIE - 14,
+          width: DIAMETRO_CIRCULO_ACTIVO,
+          height: DIAMETRO_CIRCULO_ACTIVO,
+          borderRadius: DIAMETRO_CIRCULO_ACTIVO / 2,
+          backgroundColor: tema.color.acento,
+          borderWidth: 2.5,
+          borderColor: tema.color.superficieElevada,
+          shadowColor: '#000000',
+          shadowOpacity: 0.32,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 8
         }} />
       </Reanimated.View>
 

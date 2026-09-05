@@ -31,14 +31,15 @@
  * captura acaba citado como si fuera el dinero de alguien.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Txt } from '../ui/componentes';
 import { TarjetaSaldoDriver } from '../ui/TarjetaSaldoDriver';
-import { Icono, type NombreDeIcono } from '../ui/Icono';
+import { type NombreDeIcono } from '../ui/Icono';
+import { IconoAnimado, type VarianteDeMovimientoDeIcono } from '../ui/IconoAnimado';
 import { Separador } from '../ui/HojaInferior';
 import { BarraDeNavegacion, ControlDeDisponibilidad, DESTINOS_DE_CONDUCTOR } from '../ui/Navegacion';
-import { useTema } from '../theme/ThemeContext';
+import { useApariencia, useTema } from '../theme/ThemeContext';
 import { useAireDeArriba } from '../ui/seguro';
 import { MOVIMIENTOS_DEMO, TASA_DEMO } from './fixtures';
 
@@ -66,23 +67,163 @@ const TIPOS_POR_FILTRO: Readonly<Record<Filtro, readonly string[]>> = {
   recargas: ['RECARGA', 'LIQUIDACION']
 };
 
+interface DetalleVisualMovimiento {
+  readonly icono: NombreDeIcono;
+  readonly variante: VarianteDeMovimientoDeIcono;
+  readonly colorIcono: string;
+  readonly fondo: (esNoche: boolean) => string;
+  readonly borde: (esNoche: boolean) => string;
+}
+
 /**
- * Cada movimiento con la forma de lo que lo produjo.
+ * Cada movimiento con su iconografía dinámica, llamativa y en movimiento.
  *
- * La ganancia viene de un viaje, asi que lleva la moto. La comision es dinero
- * que sale, y lleva el simbolo. La recarga entra, y la liquidacion es una
- * transferencia. Antes el mapeo era arbitrario —la recarga llevaba una casa— y
- * un icono que no explica nada estorba mas que ayuda.
+ * Ganancia (verde esmeralda / giro), comisión (coral / elevación),
+ * recarga (ámbar eléctrico / deslizamiento) y liquidación (azul tecnológico / pulso).
  */
-const ICONO_POR_TIPO: Readonly<Record<string, NombreDeIcono>> = {
-  GANANCIA: 'moto',
-  COMISION: 'dolar',
-  RECARGA: 'rayo',
-  LIQUIDACION: 'viajes'
+const CONFIG_MOVIMIENTOS: Readonly<Record<string, DetalleVisualMovimiento>> = {
+  GANANCIA: {
+    icono: 'moto',
+    variante: 'girar',
+    colorIcono: '#10B981',
+    fondo: esNoche => esNoche ? 'rgba(16, 185, 129, 0.16)' : 'rgba(16, 185, 129, 0.12)',
+    borde: esNoche => esNoche ? 'rgba(16, 185, 129, 0.32)' : 'rgba(16, 185, 129, 0.22)'
+  },
+  COMISION: {
+    icono: 'dolar',
+    variante: 'elevar',
+    colorIcono: '#EF4444',
+    fondo: esNoche => esNoche ? 'rgba(239, 68, 68, 0.16)' : 'rgba(239, 68, 68, 0.10)',
+    borde: esNoche => esNoche ? 'rgba(239, 68, 68, 0.35)' : 'rgba(239, 68, 68, 0.20)'
+  },
+  RECARGA: {
+    icono: 'rayo',
+    variante: 'deslizar',
+    colorIcono: '#F59E0B',
+    fondo: esNoche => esNoche ? 'rgba(245, 158, 11, 0.18)' : 'rgba(245, 158, 11, 0.12)',
+    borde: esNoche => esNoche ? 'rgba(245, 158, 11, 0.38)' : 'rgba(245, 158, 11, 0.24)'
+  },
+  LIQUIDACION: {
+    icono: 'viajes',
+    variante: 'pulso',
+    colorIcono: '#3B82F6',
+    fondo: esNoche => esNoche ? 'rgba(59, 130, 246, 0.16)' : 'rgba(59, 130, 246, 0.12)',
+    borde: esNoche => esNoche ? 'rgba(59, 130, 246, 0.32)' : 'rgba(59, 130, 246, 0.20)'
+  }
 };
 
-export function C2SaldoConductor({ deudor = false }: { readonly deudor?: boolean }) {
+function FilaMovimiento({
+  movimiento,
+  indice,
+  esNoche,
+  tema
+}: {
+  readonly movimiento: typeof MOVIMIENTOS_DEMO[number];
+  readonly indice: number;
+  readonly esNoche: boolean;
+  readonly tema: ReturnType<typeof useTema>;
+}) {
+  const [pulsado, setPulsado] = useState(false);
+  const [activoIntro, setActivoIntro] = useState(false);
+
+  useEffect(() => {
+    // Cascada de movimiento al entrar a la pantalla para los iconos
+    const timeoutId = setTimeout(() => {
+      setActivoIntro(true);
+      const finId = setTimeout(() => setActivoIntro(false), 380);
+      return () => clearTimeout(finId);
+    }, 180 + indice * 90);
+    return () => clearTimeout(timeoutId);
+  }, [indice]);
+
+  const cfg: DetalleVisualMovimiento = CONFIG_MOVIMIENTOS[movimiento.tipo] ?? CONFIG_MOVIMIENTOS.GANANCIA ?? {
+    icono: 'moto',
+    variante: 'girar',
+    colorIcono: '#10B981',
+    fondo: () => 'rgba(16, 185, 129, 0.16)',
+    borde: () => 'rgba(16, 185, 129, 0.32)'
+  };
+  const reaccionando = pulsado || activoIntro;
+
+  return (
+    <Pressable
+      onPressIn={() => setPulsado(true)}
+      onPressOut={() => setPulsado(false)}
+      accessibilityRole="button"
+      accessibilityLabel={`${movimiento.titulo}, ${movimiento.detalle}, ${movimiento.importe}, ${movimiento.estado}`}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 13,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        borderRadius: 14,
+        backgroundColor: pressed
+          ? (esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)')
+          : 'transparent',
+        transform: [{ scale: pressed ? 0.988 : 1 }]
+      })}
+    >
+      <View style={{
+        width: 44,
+        height: 44,
+        borderRadius: 13,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: cfg.fondo(esNoche),
+        borderWidth: 1.5,
+        borderColor: cfg.borde(esNoche)
+      }}>
+        <IconoAnimado
+          nombre={cfg.icono}
+          color={cfg.colorIcono}
+          tamano={21}
+          reaccionando={reaccionando}
+          variante={cfg.variante}
+        />
+      </View>
+
+      <View style={{ flex: 1, gap: 2 }}>
+        <Txt nivel="cuerpo" estilo={{ fontWeight: '600', fontSize: 15 } as never}>
+          {movimiento.titulo}
+        </Txt>
+        <Txt nivel="pie" tono="tenue" numberOfLines={1}>
+          {movimiento.detalle}
+        </Txt>
+        <Txt nivel="pie" tono="tenue">
+          {movimiento.cuando}
+        </Txt>
+      </View>
+
+      <View style={{ alignItems: 'flex-end', gap: 2 }}>
+        <Txt
+          nivel="cuerpo"
+          estilo={{
+            fontWeight: '700',
+            fontSize: 15,
+            color: movimiento.importe.startsWith('−')
+              ? (esNoche ? '#F87171' : tema.color.peligro)
+              : (esNoche ? '#34D399' : tema.color.exito)
+          } as never}
+        >
+          {movimiento.importe}
+        </Txt>
+        <Txt nivel="pie" tono="tenue">{movimiento.estado}</Txt>
+      </View>
+    </Pressable>
+  );
+}
+
+export function C2SaldoConductor({
+  deudor = false,
+  control
+}: {
+  readonly deudor?: boolean;
+  readonly control?: React.ReactNode;
+}) {
   const tema = useTema();
+  const { esquema } = useApariencia();
+  const esNoche = esquema === 'oscuro';
   const arriba = useAireDeArriba();
   const [filtro, setFiltro] = useState<Filtro>('todos');
 
@@ -128,26 +269,7 @@ export function C2SaldoConductor({ deudor = false }: { readonly deudor?: boolean
           muestran en cero a propósito.
         </Txt>
 
-        {/* Cómo se reparte cada viaje. Es la duda más frecuente de quien
-            conduce, y tenerla aquí evita buscarla en otro sitio. */}
-        <View style={{
-          marginTop: tema.ritmo.entreBloques,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-          padding: 14,
-          borderRadius: tema.radio.campo,
-          backgroundColor: tema.color.superficie
-        }}>
-          <Icono nombre="escudo" color={tema.color.textoSecundario} tamano={18} />
-          <View style={{ flex: 1, gap: 2 }}>
-            <Txt nivel="cuerpo">Cómo se reparte cada viaje</Txt>
-            <Txt nivel="pie" tono="tenue">
-              Tu parte se acredita y la comisión se descuenta de esta cuenta. El
-              porcentaje lo fija +58express en su configuración.
-            </Txt>
-          </View>
-        </View>
+        {/* Nota de negocio: el porcentaje lo fija +58express en su configuración. */}
 
         <View style={{ marginTop: tema.ritmo.entreBloques }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -182,45 +304,16 @@ export function C2SaldoConductor({ deudor = false }: { readonly deudor?: boolean
             })}
           </View>
 
-          <View style={{ marginTop: 4 }}>
+          <View style={{ marginTop: 8 }}>
             {visibles.map((movimiento, indice) => (
               <View key={movimiento.clave}>
                 {indice > 0 ? <Separador /> : null}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 13 }}>
-                  <View style={{
-                    width: 36, height: 36, borderRadius: 18,
-                    alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: movimiento.tipo === 'COMISION'
-                      ? `${tema.color.peligro}1f`
-                      : tema.color.superficieElevada
-                  }}>
-                    <Icono
-                      nombre={ICONO_POR_TIPO[movimiento.tipo] ?? 'viajes'}
-                      color={movimiento.tipo === 'COMISION' ? tema.color.peligro : tema.color.textoSecundario}
-                      tamano={18}
-                    />
-                  </View>
-
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Txt nivel="cuerpo">{movimiento.titulo}</Txt>
-                    <Txt nivel="pie" tono="tenue" numberOfLines={1}>{movimiento.detalle}</Txt>
-                    <Txt nivel="pie" tono="tenue">{movimiento.cuando}</Txt>
-                  </View>
-
-                  <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                    <Txt
-                      nivel="cuerpo"
-                      estilo={{
-                        color: movimiento.importe.startsWith('−')
-                          ? tema.color.textoSecundario
-                          : tema.color.exito
-                      } as never}
-                    >
-                      {movimiento.importe}
-                    </Txt>
-                    <Txt nivel="pie" tono="tenue">{movimiento.estado}</Txt>
-                  </View>
-                </View>
+                <FilaMovimiento
+                  movimiento={movimiento}
+                  indice={indice}
+                  esNoche={esNoche}
+                  tema={tema}
+                />
               </View>
             ))}
           </View>
@@ -230,7 +323,7 @@ export function C2SaldoConductor({ deudor = false }: { readonly deudor?: boolean
       <BarraDeNavegacion
         destinos={DESTINOS_DE_CONDUCTOR}
         activo="saldo"
-        control={<ControlDeDisponibilidad enLinea />}
+        control={control ?? <ControlDeDisponibilidad enLinea={false} />}
       />
     </View>
   );
