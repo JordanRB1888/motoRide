@@ -96,6 +96,20 @@ export interface EsquemaDeColor {
    * que ellas, no mas oscuro.
    */
   readonly calleDelMapa: string;
+  /**
+   * La ruta trazada sobre el mapa.
+   *
+   * VERDE, Y NO AMARILLO. El amarillo es la identidad de +58express: el botón
+   * de pedir, el disco del conductor, la cabecera. Una ruta amarilla competía
+   * con todos ellos y, sobre las calles amarillas del propio mapa de Maracaibo,
+   * directamente se perdía.
+   *
+   * El verde no significa nada más en esta aplicación —el de «activo» del
+   * conductor es otro token— así que al aparecer sólo puede querer decir «por
+   * aquí vas». Y aguanta los dos esquemas: sobre marfil y sobre grafito
+   * mantiene contraste sin encenderse.
+   */
+  readonly rutaDelMapa: string;
 }
 
 /**
@@ -121,7 +135,9 @@ export const ESQUEMA_OSCURO: EsquemaDeColor = {
   informacion: ESTADO.informacion,
   veloDelMapa: '#0b0a09',
   fondoDelMapa: '#15140f',
-  calleDelMapa: TEXTO.tenue
+  calleDelMapa: TEXTO.tenue,
+  // Sobre grafito el verde puede subir un punto sin deslumbrar.
+  rutaDelMapa: '#22C55E'
 };
 
 /**
@@ -157,7 +173,10 @@ export const ESQUEMA_CLARO: EsquemaDeColor = {
   // Un escalón por debajo del fondo. Es el `--x58-surface-sunken` de la web, y
   // aquí hace de asfalto: sobre él, las calles blancas se ven.
   fondoDelMapa: '#e8e5df',
-  calleDelMapa: '#ffffff'
+  calleDelMapa: '#ffffff',
+  // Un punto mas profundo que en noche: sobre marfil y calles blancas, el
+  // #22C55E puro empieza a lavarse.
+  rutaDelMapa: '#15A34A'
 };
 
 /**

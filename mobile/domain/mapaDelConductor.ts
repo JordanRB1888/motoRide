@@ -26,6 +26,7 @@ import {
   CAMARA_DE_MARACAIBO,
   ZOOM_DE_CIUDAD,
   type Camara,
+  type Coordenada,
   type Marcador,
   type ModeloDelMapa
 } from '../mapa/modelo';
@@ -149,17 +150,27 @@ export function camaraCentradaEn(posicion: MuestraDeUbicacion): Camara {
 export function modeloDelMapaDelConductor({
   posicion,
   camara,
-  aireInferior = 0
+  aireInferior = 0,
+  ruta = []
 }: {
   readonly posicion: MuestraDeUbicacion | null;
   readonly camara: Camara;
   readonly aireInferior?: number;
+  /**
+   * La geometría de la ruta, trazada por el SERVIDOR. Vacía si no hay.
+   *
+   * El conductor ve exactamente la misma línea que la pasajera y por el mismo
+   * camino: los dos la piden a `/api/trips/:id/route` y el servidor decide el
+   * tramo. Dos trazados calculados por separado se habrían separado a la
+   * primera corrección.
+   */
+  readonly ruta?: readonly Coordenada[];
 }): ModeloDelMapa {
   const marcador = marcadorPropio(posicion);
   return {
     camara,
     marcadores: marcador === null ? [] : [marcador],
-    ruta: [],
+    ruta,
     eligiendoPunto: false,
     aireInferior
   };

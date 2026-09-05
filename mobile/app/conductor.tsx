@@ -51,6 +51,7 @@ import { AvisoDeUbicacionEnMapa } from '../ui/AvisoDeUbicacion';
 import { useOfertaEnVivo } from '../realtime/OfertaEnVivo';
 import { CierreDeOferta, SuperficieDeOferta } from '../conductor/SuperficieDeOferta';
 import { useCarreraDelConductor } from '../realtime/CarreraDelConductor';
+import { useRutaDelViaje } from '../realtime/rutaDelViaje';
 import { SuperficieDeCarrera } from '../conductor/SuperficieDeCarrera';
 import { titularDelConductor } from '../domain/accionesDelConductor';
 
@@ -158,10 +159,6 @@ export default function InicioDeConductor() {
   }, [ubicacion.posicion, refrescarUbicacion]);
 
   const aviso = avisoDeUbicacion(ubicacion, Date.now());
-  const modeloDelMapa = useMemo(
-    () => modeloDelMapaDelConductor({ posicion: ubicacion.posicion, camara }),
-    [ubicacion.posicion, camara]
-  );
 
   //
   // LAS CARRERAS QUE LE OFRECEN
@@ -191,6 +188,37 @@ export default function InicioDeConductor() {
   // No compite con la oferta: el despacho no ofrece carreras a quien ya lleva
   // una, así que las dos superficies nunca tienen algo que enseñar a la vez.
   const enCurso = useCarreraDelConductor();
+
+  // LA RUTA DE LA CARRERA, TRAZADA POR EL SERVIDOR.
+  //
+  // La misma que ve la pasajera y pedida por el mismo camino: los dos llaman a
+  // `/api/trips/:id/route` y el servidor decide el tramo. Dos trazados
+  // calculados por separado se habrían separado a la primera corrección, y
+  // entonces cada uno vería una calle distinta.
+  //
+  // El origen del tramo lo pone el servidor con la ÚLTIMA POSICIÓN ACEPTADA del
+  // conductor, no con la que diga este teléfono: aquí sólo se le dice dónde
+  // está para decidir si merece la pena volver a preguntar.
+  const rutaDeLaCarrera = useRutaDelViaje(
+    enCurso.viaje?.id ?? null,
+    enCurso.viaje?.estado ?? '',
+    ubicacion.posicion === null
+      ? null
+      : { lat: ubicacion.posicion.lat, lng: ubicacion.posicion.lng }
+  );
+
+  // EL MAPA VA DESPUÉS DE LA CARRERA, y no antes.
+  //
+  // Necesita la ruta, y la ruta necesita saber qué carrera hay en curso. Estaba
+  // más arriba cuando el mapa no dependía de nada más que del GPS.
+  const modeloDelMapa = useMemo(
+    () => modeloDelMapaDelConductor({
+      posicion: ubicacion.posicion,
+      camara,
+      ruta: rutaDeLaCarrera.puntos
+    }),
+    [ubicacion.posicion, camara, rutaDeLaCarrera.puntos]
+  );
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (

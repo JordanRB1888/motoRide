@@ -18,9 +18,11 @@
  *     está conectado. Hasta entonces, no hay moto en el mapa — y es preferible
  *     a poner una donde no está.
  *
- *   · No hay geometría de ruta. El servidor calcula distancias para el
- *     despacho pero no publica el trazado, y pedírselo a Google desde el
- *     teléfono exigiría otra clave y otro coste sólo para dibujar una línea.
+ *   · La geometría de la ruta ya NO es una de estas ausencias: la traza el
+ *     servidor y llega por `ruta`. Lo que sigue en pie es la regla — si el
+ *     servidor no la publica, aquí no se dibuja una recta entre los extremos.
+ *     Una recta sobre un mapa se lee como «por aquí se va», y por ahí puede no
+ *     haber calle.
  */
 
 import {
@@ -52,6 +54,15 @@ export function mapaDelViaje(
   opciones: {
     readonly conductorEn?: Coordenada | null;
     readonly rumboDelConductor?: number | null;
+    /**
+     * La geometría de la ruta, tal como la trazó el SERVIDOR.
+     *
+     * Entra aparte, igual que la posición del conductor, porque tampoco viene
+     * en el viaje: se pide a `/api/trips/:id/route` y llega después. Vacía
+     * significa que no hay ruta que dibujar, y eso ocurre a menudo y a
+     * propósito — al llegar, al terminar, o sin proveedor configurado.
+     */
+    readonly ruta?: readonly Coordenada[];
     /** Dónde está quien mira la pantalla, si el GPS lo sabe. */
     readonly usuarioEn?: Coordenada | null;
     /**
@@ -150,8 +161,8 @@ export function mapaDelViaje(
       ? (usuarioEn === null ? CAMARA_DE_MARACAIBO : camaraQueAbarca([usuarioEn]))
       : camaraQueAbarca(puntos),
     marcadores,
-    // Pendiente: el servidor no publica geometría de ruta.
-    ruta: [],
+    // La traza el SERVIDOR; aquí sólo se pinta. Vacía cuando no hay.
+    ruta: opciones.ruta ?? [],
     eligiendoPunto: opciones.eligiendoPunto === true,
     aireInferior: opciones.aireInferior ?? AIRE_BAJO_LA_HOJA
   };

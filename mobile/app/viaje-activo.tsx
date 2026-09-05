@@ -31,6 +31,7 @@ import { cancelarViaje, escuchar } from '../realtime/socket';
 import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
 import { useUbicacionEnVivo } from '../realtime/UbicacionEnVivo';
 import { mapaDelViaje } from '../domain/mapaDelViaje';
+import { useRutaDelViaje } from '../realtime/rutaDelViaje';
 import {
   datosDelViaje,
   tipoQueSeBusca,
@@ -43,6 +44,20 @@ export default function PantallaDelViajeActivo() {
   const { estado, viaje } = useViajeActivo();
   const { estado: ubicacion, pedirUbicacion, refrescar } = useUbicacion();
   const { conductor } = useUbicacionEnVivo();
+
+  // LA RUTA, TRAZADA POR EL SERVIDOR.
+  //
+  // Aquí arriba con los demás ganchos, antes de cualquier salida condicional:
+  // llamarlo más abajo lo saltaría en los estados que retornan antes, y React
+  // exige que el orden de los ganchos no cambie entre fotogramas.
+  //
+  // No se le pasa origen ni destino: sólo el viaje, su estado y dónde está la
+  // moto. Quién va a dónde en cada momento lo decide el servidor.
+  const ruta = useRutaDelViaje(
+    viaje?.id ?? null,
+    viaje?.estado ?? '',
+    conductor?.en ?? null
+  );
 
   // Se pide el permiso AQUI y no al abrir la aplicacion.
   //
@@ -141,6 +156,9 @@ export default function PantallaDelViajeActivo() {
       : { lat: ubicacion.posicion.lat, lng: ubicacion.posicion.lng },
     conductorEn: conductor?.en ?? null,
     rumboDelConductor: conductor?.rumbo ?? null,
+    // Vacía mientras no haya ruta, y eso es lo normal al llegar, al terminar y
+    // sin proveedor configurado. No se sustituye por una recta.
+    ruta: ruta.puntos,
     centrarEn
   });
 

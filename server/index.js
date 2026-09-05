@@ -14,7 +14,9 @@ import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
 import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS, TRIP_STATUS_ALIASES } from './domain/tripStateMachine.js';
 import { calculateDistance, estadosActivos, metricasDelRecorrido } from './domain/tripMetrics.js';
 import { createRouteMatrixClient } from './services/routeMatrixClient.js';
+import { createRouteGeometryClient } from './services/routeGeometryClient.js';
 import { crearCacheDeRecorridos } from './services/routeMetricsCache.js';
+import { SIN_RUTA, tramoDeLaRuta } from './domain/rutaDelViaje.js';
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
 import { passengerPublicProfile, driverPublicProfile, sanitizeEmbeddedTripDriver } from './domain/userProjections.js';
 import { canViewUserPhoto, userPhotoUrl } from './domain/photoAccess.js';
@@ -106,6 +108,11 @@ const limitadores = {
   cercania: createIdentityLimiter({ name: 'cercania', limit: 180, windowMs: MINUTO }),
   // Leen de disco en cada peticion. El panel abre una por ficha desplegada.
   archivos: createIdentityLimiter({ name: 'archivos', limit: 180, windowMs: MINUTO }),
+  // La geometria de la ruta puede acabar en una llamada de PAGO a Google. La
+  // cache absorbe la mayoria --dos minutos, clave redondeada-- pero el techo lo
+  // pone esto: sesenta por minuto es un pulso cada segundo, cuatro veces mas de
+  // lo que el movil pide, y aun asi acotado si alguien decide insistir.
+  rutas: createIdentityLimiter({ name: 'rutas', limit: 60, windowMs: MINUTO }),
   // Subidas: caras y raras.
   subidas: createIdentityLimiter({ name: 'subidas', limit: 30, windowMs: CUARTO_DE_HORA }),
 
@@ -331,6 +338,24 @@ const chatMediaPipeline = createChatMediaPipeline({
  */
 const routeMatrix = createRouteMatrixClient({ logger: console });
 const cacheDeRecorridos = crearCacheDeRecorridos();
+
+/**
+ * Quien traza la GEOMETRIA de la ruta, y su propia cache (ROUTE-1).
+ *
+ * Aparte del medidor a proposito. El medidor pregunta CUANTO y pide
+ * expresamente que no le manden polilineas; este pregunta POR DONDE y pide
+ * justo la polilinea. Juntarlos habria hecho que ordenar conductores para el
+ * despacho empezara a descargar geometria que se tira.
+ *
+ * La credencial es la misma --DISPATCH_ROUTES_API_KEY, dedicada de servidor-- y
+ * las reglas tambien: no sale de este proceso y no se imprime.
+ *
+ * Cache propia y mas larga que la del medidor: por donde se va a un sitio no
+ * cambia en dos minutos, y una carrera entera son decenas de posiciones del
+ * conductor que caen todas en la misma clave redondeada.
+ */
+const clienteDeGeometria = createRouteGeometryClient({ logger: console });
+const cacheDeGeometria = crearCacheDeRecorridos({ ttlMs: 120_000 });
 
 /** Los estados que ocupan a una pasajera. Derivados, no escritos a mano. */
 const ESTADOS_DE_VIAJE_ACTIVO = estadosActivos(TRIP_STATUS, TRIP_STATUS_ALIASES);
@@ -2135,6 +2160,74 @@ app.get('/api/trips/:id', requireAuth, (req, res) => {
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
   if (!userCanAccessTrip(req.user.id, req.user.role, trip)) return res.status(403).json({ error: 'FORBIDDEN' });
   res.json(tripParticipantsView(trip, req.user));
+});
+
+/**
+ * La GEOMETRIA de la ruta del viaje (ROUTE-1).
+ *
+ * EL SERVIDOR SIGUE SIENDO LA AUTORIDAD
+ *
+ * El telefono no dice por donde va la ruta: la pide. Aqui se decide que tramo
+ * toca segun el estado --`rutaDelViaje.js`, funcion pura-- y se traza con el
+ * proveedor. Lo que el cliente aporta es CERO: ni origen, ni destino, ni
+ * posicion del conductor, que sale del registro del propio conductor.
+ *
+ * SOLO LAS DOS PARTES, Y DE FORMA EXPLICITA
+ *
+ * Ni administracion. `userCanAccessTrip` la autorizaria por herencia y aqui no
+ * debe: el mapa de flota tiene su propio canal, y la ruta de una carrera
+ * concreta es de quien la hace y de quien la va a hacer. Misma decision que ya
+ * se tomo para los adjuntos del chat.
+ *
+ * SIN PROVEEDOR NO HAY GEOMETRIA, Y SE DICE
+ *
+ * Nunca una recta entre los dos extremos. Una recta sobre un mapa se lee como
+ * «por aqui se va», y por ahi puede no haber calle. Se responde
+ * `available:false` con el motivo, y la pantalla degrada con honestidad.
+ */
+app.get('/api/trips/:id/route', requireAuth, limitadores.rutas, async (req, res) => {
+  const trip = database.trips.find(item => item.id === req.params.id);
+  if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
+  const esParte = trip.passengerId === req.user.id || trip.driverId === req.user.id;
+  if (!esParte) return res.status(403).json({ error: 'FORBIDDEN' });
+
+  // La posicion del conductor sale de SU registro, nunca del cuerpo de la
+  // peticion. Un telefono que dijera donde esta la moto podria dibujar la ruta
+  // desde donde quisiera.
+  const conductor = trip.driverId ? database.users.find(item => item.id === trip.driverId) : null;
+  const conductorEn = conductor?.location ? { lat: conductor.location.lat, lng: conductor.location.lng } : null;
+
+  const tramo = tramoDeLaRuta(trip, conductorEn);
+  if (!tramo.ok) return res.json({ available: false, reason: tramo.motivo });
+
+  if (!clienteDeGeometria.isConfigured()) {
+    return res.json({ available: false, reason: 'ROUTE_PROVIDER_NOT_CONFIGURED', leg: tramo.tramo });
+  }
+
+  try {
+    // La cache reparte una misma llamada entre quien la pida y guarda el
+    // resultado dos minutos: una carrera son decenas de posiciones que caen en
+    // la misma clave redondeada.
+    const geometria = await cacheDeGeometria.medir(
+      tramo.origen,
+      tramo.destino,
+      () => clienteDeGeometria.computeRoute(tramo.origen, tramo.destino)
+    );
+    return res.json({
+      available: true,
+      leg: tramo.tramo,
+      source: 'GOOGLE_ROUTES',
+      points: geometria.puntos,
+      distanceMeters: geometria.metros,
+      durationMillis: geometria.duracionMs,
+      origin: tramo.origen,
+      destination: tramo.destino
+    });
+  } catch (error) {
+    // Caido, lento o ilegible: no hay geometria. No se sustituye por una recta.
+    console.warn(`[+58express Ruta] sin geometria para el viaje (${error?.message || 'sin detalle'})`);
+    return res.json({ available: false, reason: 'ROUTE_PROVIDER_UNAVAILABLE', leg: tramo.tramo });
+  }
 });
 
 app.get('/api/trips/:id/messages', requireAuth, (req, res) => {

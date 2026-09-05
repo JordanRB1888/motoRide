@@ -24,6 +24,19 @@
 
 import { AMARILLO, ESPACIO, ESTADO, GRAFITO, TEXTO, AREA_TACTIL_MINIMA } from './primitives';
 
+/**
+ * El verde de la ruta, igual en las tres direcciones.
+ *
+ * No es un rasgo de carácter, y por eso no cambia entre ellas: es la única
+ * forma de que una ruta no compita con el amarillo de la marca ni se pierda
+ * sobre las avenidas —también amarillas— del mapa de Maracaibo.
+ *
+ * Quien afina el tono definitivo por esquema es `esquemas.ts`, que en día lo
+ * baja un punto porque sobre marfil el #22C55E puro empieza a lavarse. Estas
+ * tres direcciones son el arranque, y las tres son de noche.
+ */
+const RUTA_VERDE = '#22C55E';
+
 export const DIRECCIONES = ['A', 'B', 'C', 'C2'] as const;
 export type ClaveDeDireccion = (typeof DIRECCIONES)[number];
 
@@ -68,6 +81,8 @@ export interface Direccion {
     readonly fondoDelMapa: string;
     /** Las calles del mapa. Claras sobre las manzanas en los dos esquemas. */
     readonly calleDelMapa: string;
+    /** La ruta trazada. VERDE: el amarillo es la identidad. Ver `esquemas.ts`. */
+    readonly rutaDelMapa: string;
   };
 
   /** Cuánto aire respira la interfaz. */
@@ -153,7 +168,8 @@ const PREMIUM_MINIMAL: Direccion = {
     informacion: ESTADO.informacion,
     veloDelMapa: GRAFITO.fondo,
     fondoDelMapa: GRAFITO.superficie,
-    calleDelMapa: TEXTO.tenue
+    calleDelMapa: TEXTO.tenue,
+    rutaDelMapa: RUTA_VERDE
   },
   ritmo: {
     margenPantalla: ESPACIO['6'],
@@ -207,7 +223,8 @@ const URBAN_FUNCTIONAL: Direccion = {
     informacion: ESTADO.informacion,
     veloDelMapa: GRAFITO.fondo,
     fondoDelMapa: GRAFITO.superficie,
-    calleDelMapa: TEXTO.tenue
+    calleDelMapa: TEXTO.tenue,
+    rutaDelMapa: RUTA_VERDE
   },
   ritmo: {
     margenPantalla: ESPACIO['4'],
@@ -271,7 +288,8 @@ const SIGNATURE: Direccion = {
     informacion: ESTADO.informacion,
     veloDelMapa: GRAFITO.fondo,
     fondoDelMapa: GRAFITO.superficie,
-    calleDelMapa: TEXTO.tenue
+    calleDelMapa: TEXTO.tenue,
+    rutaDelMapa: RUTA_VERDE
   },
   ritmo: {
     margenPantalla: ESPACIO['5'],

@@ -452,9 +452,27 @@ test('no se registran coordenadas', () => {
   assert.equal(/descripcionDe\([^)]*lat/.test(capa), false);
 });
 
-test('el mapa sigue sin conductor en vivo y sin ruta', () => {
+test('el mapa no inventa ni la moto ni la ruta', () => {
+  // LA PREMISA DE LA RUTA CAMBIÓ, Y SE ACTUALIZA EN VEZ DE SILENCIARSE.
+  //
+  // Esta guarda exigía `ruta: []` porque el servidor no publicaba geometría y
+  // lo único honesto era no dibujar nada. Desde ROUTE-1 sí la publica
+  // —`GET /api/trips/:id/route`— así que el mapa la pinta.
+  //
+  // Lo que NO cambia es la razón por la que aquella línea existía: que el
+  // teléfono no se invente el trazado. Por eso ahora se comprueba lo que de
+  // verdad importaba — que la ruta ENTRA por parámetro y no se calcula aquí.
   const presenter = sinComentarios('domain/mapaDelViaje.ts');
-  assert.match(presenter, /ruta: \[\]/);
+  assert.match(presenter, /ruta: opciones\.ruta \?\? \[\]/,
+    'la ruta ya no llega del servidor por parámetro');
+
+  // Ni una recta entre los extremos: eso sería exactamente la mentira que la
+  // guarda anterior evitaba. Sin geometría del servidor, no hay línea.
+  for (const inventado of ['interpolar', 'lineaRecta', 'haversine', 'geodesic']) {
+    assert.equal(presenter.includes(inventado), false,
+      `el mapa se fabrica la ruta con ${inventado}`);
+  }
+
   // El conductor sólo si de verdad se sabe dónde está; nunca alrededor del
   // pasajero por decoración.
   assert.match(presenter, /const conductorEn = opciones\.conductorEn \?\? null;/);

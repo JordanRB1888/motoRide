@@ -178,12 +178,34 @@ export function MapaDeMovilidad({ modelo, onCentro }: {
         rotateEnabled={false}
         pitchEnabled={false}
       >
+        {/* LA RUTA. Verde, y no amarilla.
+            El amarillo es la identidad de +58express —el botón de pedir, el
+            disco del conductor, la cabecera— y además es el color de las vías
+            principales en el propio mapa de Maracaibo: una ruta amarilla se
+            perdía justo encima de las calles por las que pasa. El token la
+            resuelve por esquema, más profunda en día que en noche.
+
+            Dos trazos, no uno: debajo va un contorno más ancho y translúcido
+            que la separa del asfalto pase por donde pase. Sin él, sobre una
+            avenida clara la línea se confunde con la propia calle. No es un
+            resplandor —eso sería adorno— es el filo que la hace legible. */}
         {modelo.ruta.length > 1 ? (
-          <Polyline
-            coordinates={modelo.ruta.map(punto => ({ latitude: punto.lat, longitude: punto.lng }))}
-            strokeColor={tema.color.acento}
-            strokeWidth={4}
-          />
+          <>
+            <Polyline
+              coordinates={modelo.ruta.map(punto => ({ latitude: punto.lat, longitude: punto.lng }))}
+              strokeColor={`${tema.color.rutaDelMapa}55`}
+              strokeWidth={11}
+              lineCap="round"
+              lineJoin="round"
+            />
+            <Polyline
+              coordinates={modelo.ruta.map(punto => ({ latitude: punto.lat, longitude: punto.lng }))}
+              strokeColor={tema.color.rutaDelMapa}
+              strokeWidth={6}
+              lineCap="round"
+              lineJoin="round"
+            />
+          </>
         ) : null}
 
         {modelo.marcadores.map(marcador => (
