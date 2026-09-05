@@ -31,9 +31,10 @@
  * desaparecer, porque que falten dice tanto como que estén.
  */
 
-import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { Boton, Insignia, Txt } from '../ui/componentes';
 import { Icono, type NombreDeIcono } from '../ui/Icono';
+import { AdjuntoDetalleViaje } from '../ui/AdjuntoDetalleViaje';
 import {
   BarraDeNavegacion,
   ControlDePedido,
@@ -461,51 +462,24 @@ function Adjunto({ rotulo, fuente }: {
   /** La imagen privada, con su cabecera de sesión. */
   readonly fuente?: { readonly uri: string; readonly headers?: Record<string, string> };
 }) {
-  const tema = useTema();
-
-  // Con imagen de verdad se enseña la imagen. El marco discontinuo se queda
-  // para la maqueta y para cuando el adjunto no se puede cargar.
-  if (fuente !== undefined) {
-    // El marco lleva su propio ancho. Vive dentro de una burbuja que se ajusta
-    // a su contenido (`alignSelf`, sin ancho fijo), y en ese padre un
-    // `width: '100%'` no tiene de qué ser el cien por cien: se resolvía a cero
-    // y la imagen —ya cargada— se pintaba como un recuadro vacío. El mismo
-    // marco que la miniatura del chat en vivo, para que se lean igual.
-    return (
-      <View style={{
-        width: 220,
-        height: 160,
-        borderRadius: tema.radio.campo,
-        overflow: 'hidden',
-        backgroundColor: tema.color.superficieHundida
-      }}>
-        <Image
-          source={fuente}
-          resizeMode="cover"
-          accessibilityIgnoresInvertColors
-          accessibilityLabel={rotulo}
-          style={{ width: '100%', height: '100%' }}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 9,
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      borderRadius: tema.radio.campo,
-      borderWidth: 1,
-      borderStyle: 'dashed',
-      borderColor: tema.color.borde
-    }}>
-      <Icono nombre="imagen" color={tema.color.textoSecundario} tamano={18} />
-      <Txt nivel="pie" tono="secundario" estilo={{ flex: 1 }}>{rotulo}</Txt>
-    </View>
-  );
+  // LA PRESENTACIÓN ES DE ANTIGRAVITY; LA FUENTE, DE AQUÍ.
+  //
+  // `AdjuntoDetalleViaje` trae los cuatro estados —sin adjunto, cargando, error
+  // con reintento y cargado— y el visor a pantalla completa. Aquí sólo se le
+  // entrega lo que ya resolvió `fuenteDeAdjunto`, que es quien pide los bytes
+  // CON LA SESIÓN y devuelve un data URI.
+  //
+  // Ese detalle es el que hace que la imagen se pinte de verdad en Android:
+  // `<Image>` no reenvía cabeceras propias en el dispositivo, así que una URL
+  // autenticada se quedaba en blanco aunque el servidor la sirviera con un 200.
+  // Con el data URI no hay nada que autenticar en el momento de pintar, y la
+  // autorización ya ocurrió al pedirlo. NO se genera ninguna URL pública ni se
+  // expone la clave de almacenamiento.
+  //
+  // Lo que se conservó del marco de aquí es el suelo de anchura: el componente
+  // traía `width: '100%'`, y dentro de esta burbuja —que se ajusta a su
+  // contenido— eso se resuelve a cero. Está explicado en su hoja de estilos.
+  return <AdjuntoDetalleViaje rotulo={rotulo} fuente={fuente} />;
 }
 
 // ---------------------------------------------------------------------------

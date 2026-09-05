@@ -136,3 +136,53 @@ test('AdjuntoDetalleViaje soporta todos los estados requeridos (cargando, cargad
   assert.ok(adjuntoSrc.includes('marcoPlaceholder'), 'Debe incluir estado de placeholder con marco discontinuo');
   assert.ok(adjuntoSrc.includes('Modal'), 'Debe incluir visor modal fullscreen');
 });
+
+// ---------------------------------------------------------------------------
+// Lo que la maqueta no puede enseñar: la fuente llega TARDE
+// ---------------------------------------------------------------------------
+
+test('el adjunto reacciona a una fuente que llega después de montarse', () => {
+  // Guarda de un fallo real, y de los que no dan ninguna señal.
+  //
+  // El estado del componente se calculaba una sola vez, al montar. En las
+  // maquetas eso basta —el adjunto viene del fixture y ya está en el primer
+  // render—, pero en la aplicación de verdad la pantalla se monta SIN imagen:
+  // `fuenteDeAdjunto` va al servidor con la sesión y el data URI aparece un
+  // momento después.
+  //
+  // Sin reaccionar a esa llegada, el estado quedaba clavado en «placeholder» y
+  // la imagen no se pintaba nunca, aunque el servidor devolviera sus 200 y sus
+  // veintisiete kilobytes. En el historial se veía un marco vacío.
+  const adjuntoSrc = sinComentarios('ui/AdjuntoDetalleViaje.tsx');
+
+  assert.match(
+    adjuntoSrc,
+    /useEffect\(\(\) => \{[\s\S]*?setEstadoCarga\(uri === undefined \? 'placeholder' : 'cargando'\)/,
+    'el adjunto no se entera de que la fuente llegó'
+  );
+  assert.match(
+    adjuntoSrc,
+    /\}, \[uri, estadoForzado\]\)/,
+    'el efecto no depende de la fuente, así que no vuelve a correr cuando cambia'
+  );
+});
+
+test('el marco de la imagen no puede colapsar a cero de ancho', () => {
+  // El componente traía `width: '100%'`, y en el detalle del viaje vive dentro
+  // de una burbuja que se ajusta a su contenido: ahí un porcentaje no tiene
+  // contra qué medirse y se resuelve a cero. La imagen se cargaba y no había
+  // dónde pintarla.
+  const adjuntoSrc = sinComentarios('ui/AdjuntoDetalleViaje.tsx');
+  assert.match(adjuntoSrc, /minWidth: 220/, 'el marco perdió su suelo de anchura');
+});
+
+test('el detalle del viaje usa la presentación de Antigravity con la fuente privada de aquí', () => {
+  // La mitad visual es de la rama de diseño; la fuente la resuelve
+  // `fuenteDeAdjunto`, que pide los bytes CON LA SESIÓN y devuelve un data URI.
+  // Si alguien volviera a pintar aquí una URL directa, la imagen dejaría de
+  // verse en el dispositivo —`<Image>` no reenvía cabeceras propias— y además
+  // sería una dirección sin autenticar.
+  const detalle = sinComentarios('preview/pantallaDetalleDeViaje.tsx');
+  assert.match(detalle, /<AdjuntoDetalleViaje rotulo=\{rotulo\} fuente=\{fuente\} \/>/);
+  assert.doesNotMatch(detalle, /imageStorageKey/, 'la clave del almacén no se nombra en el cliente');
+});

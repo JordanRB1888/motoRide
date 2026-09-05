@@ -14,7 +14,7 @@
  * AISLADO: No toca loaders del backend ni llamadas de red de producción.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -59,6 +59,21 @@ export function AdjuntoDetalleViaje({
   const estadoEfectivo = estadoForzado ?? (fuente ? estadoCarga : 'placeholder');
 
   const uri = fuente?.uri;
+
+  // LA FUENTE LLEGA TARDE, Y HAY QUE ENTERARSE.
+  //
+  // El estado de arriba se calcula UNA vez, al montar. En el laboratorio eso
+  // basta porque el adjunto viene del fixture y ya está en el primer render;
+  // en la aplicación real no: la pantalla se monta sin imagen, `fuenteDeAdjunto`
+  // va al servidor con la sesión y el data URI aparece un momento después.
+  //
+  // Sin esto, el estado inicial quedaba en «placeholder» y ya nunca salía de
+  // ahí: la imagen llegaba entera —200, sus 27 KB, su data URI— y la pantalla
+  // seguía enseñando el marco vacío. No fallaba nada, y por eso costó verlo.
+  useEffect(() => {
+    if (estadoForzado !== undefined) return;
+    setEstadoCarga(uri === undefined ? 'placeholder' : 'cargando');
+  }, [uri, estadoForzado]);
   const colorAcento = tema.color.acento;
 
   const handleAbrir = () => {
@@ -292,8 +307,22 @@ const estilos = StyleSheet.create({
     fontWeight: '400',
     marginTop: 2
   },
+  // EL MARCO NO PUEDE DEPENDER SÓLO DEL PORCENTAJE.
+  //
+  // En el detalle del viaje este adjunto vive dentro de una burbuja que se
+  // ajusta a su contenido —`alignSelf`, sin ancho fijo—, y en un padre así un
+  // `width: '100%'` no tiene contra qué medirse: se resuelve a cero y la
+  // imagen, ya cargada, se pintaba como un recuadro vacío. Costó descubrirlo
+  // porque no falla nada: el `onLoad` llega, el estado pasa a «cargado», y lo
+  // que no hay es sitio donde pintar.
+  //
+  // El `minWidth` es el suelo que lo impide, y se conserva el porcentaje para
+  // que en un padre ancho —las maquetas del laboratorio— siga ocupándolo todo.
+  // Doscientos veinte es la misma medida que la miniatura del chat en vivo,
+  // para que las dos se lean igual.
   marcoImagen: {
     width: '100%',
+    minWidth: 220,
     height: 180,
     borderWidth: 1,
     overflow: 'hidden',
