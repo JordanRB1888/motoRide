@@ -428,6 +428,21 @@ const ANCHO_DE_LA_CURVA = 58;
 const ALTO_DE_LA_CURVA = 26;
 const INICIO_DE_LA_SUPERFICIE = 18;
 const ALTO_DE_LA_FILA = 58;
+
+/**
+ * Lo que la barra ocupa, sin contar el área segura de abajo.
+ *
+ * Se exporta para que una pantalla con hoja inferior pueda reservar el hueco en
+ * lugar de adivinarlo. La hoja de pedir se lo dejaba, y el resultado era que el
+ * botón «Pedir viaje» quedaba DEBAJO de la barra: se veía entero, pero el toque
+ * se lo llevaba el disco central —que cierra la petición— o una pestaña, que
+ * navegaba a otra pantalla. Pulsarlo no pedía el viaje nunca.
+ *
+ * Quien la use tiene que sumarle el área segura, igual que hace la barra:
+ * `ALTO_DE_LA_BARRA + Math.max(inferior, 8)`.
+ */
+export const ALTO_DE_LA_BARRA = INICIO_DE_LA_SUPERFICIE + ALTO_DE_LA_FILA;
+
 const DIAMETRO_CIRCULO_ACTIVO = 48;
 const ELEVACION_ICONO_ACTIVO = -21;
 

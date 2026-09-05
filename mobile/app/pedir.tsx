@@ -33,9 +33,13 @@ import { Redirect, router } from 'expo-router';
 import { Boton } from '../components/Boton';
 import { Txt } from '../ui/componentes';
 import { HojaInferior } from '../ui/HojaInferior';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { LienzoDeMapa } from '../ui/Mapa';
 import { Trayecto } from '../ui/Trayecto';
-import { BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA } from '../ui/Navegacion';
+import {
+  ALTO_DE_LA_BARRA, BarraDeNavegacion, ControlDePedido, DESTINOS_DE_PASAJERA
+} from '../ui/Navegacion';
 import { FilaDeVehiculo, type PrecioDeTarjeta } from '../preview/pantallasC2';
 import { crearNavegacionDePasajero } from '../navegacion/shellDePasajero';
 import { ProveedorDeNavegacion } from '../ui/navegar';
@@ -79,6 +83,9 @@ const AVISO: Readonly<Record<QueFalta, string>> = Object.freeze({
 
 export default function PantallaDePedir() {
   const tema = useTema();
+  // Lo que la barra deja ocupado abajo. La hoja necesita saberlo para no
+  // meter su botón por debajo de ella.
+  const margenSeguroInferior = useSafeAreaInsets().bottom;
   const { sesion } = useSesion();
   const { estado: viajeActivo, refrescar: refrescarViaje } = useViajeActivo();
   const { estado: ubicacion, pedirUbicacion } = useUbicacion();
@@ -313,7 +320,28 @@ export default function PantallaDePedir() {
             });
           }}
         >
-          <HojaInferior estado="media" desplazable>
+          {/* LA HOJA CRECE CON SU CONTENIDO, Y DEJA EL HUECO DE LA BARRA
+            *
+            * Las dos cosas hacen falta y ninguna basta sola.
+            *
+            * `espacioInferior` porque la hoja llega hasta el fondo de la
+            * pantalla y la barra de navegación se pinta encima: sin él, el
+            * botón «Pedir viaje» quedaba DEBAJO de la barra. Se veía entero y
+            * era imposible pulsarlo — en el centro el toque se lo llevaba el
+            * disco, que cierra la petición, y a los lados una pestaña, que
+            * navegaba a otra pantalla. Se llegaba a ver el precio y ahí se
+            * acababa el camino.
+            *
+            * `alturaAutomatica` porque con la altura fija del estado «media» el
+            * contenido crece al llegar el precio y el botón se salía por abajo
+            * del área visible: el hueco lo apartaba de la barra y a cambio lo
+            * dejaba fuera de la hoja. Creciendo con el contenido no se recorta
+            * nada, que es como lo hace el recorrido de diseño. */}
+          <HojaInferior
+            alturaAutomatica
+            desplazable
+            espacioInferior={ALTO_DE_LA_BARRA + Math.max(margenSeguroInferior, 8)}
+          >
             <Trayecto
               origen={origen === null ? 'Buscando tu ubicación…' : 'Tu ubicación ahora'}
               destino={destino === null ? undefined : 'El punto que elegiste'}
@@ -398,6 +426,7 @@ export default function PantallaDePedir() {
                 deshabilitado={trabajando || !puedePedir(fase, estimacion, false, falta)}
               />
             )}
+
           </HojaInferior>
         </LienzoDeMapa>
 

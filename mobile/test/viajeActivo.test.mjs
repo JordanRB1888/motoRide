@@ -288,10 +288,21 @@ test('hay UNA autoridad del viaje activo, para los dos roles', () => {
     assert.equal(fs.existsSync(path.join(raizMovil, `realtime/${inventado}.tsx`)), false);
   }
 
-  // El mismo endpoint sirve a los dos: el servidor filtra por rol.
+  // El mismo endpoint sirve a los dos, y el filtro por rol vive en el dominio
+  // desde TRIP-LIFECYCLE-ACTIONS-1.1: `/api/trips/active/me` y el despacho
+  // preguntaban por su cuenta y con ventanas distintas, y un conductor podía
+  // quedar ocupado por un viaje que su propia aplicación ya no le enseñaba.
+  const dominio = fs.readFileSync(
+    path.join(raizProyecto, 'server/domain/viajeActivo.js'), 'utf8'
+  );
+  assert.match(dominio, /trip\.passengerId === userId \|\| trip\.driverId === userId/);
+
+  // Y el endpoint usa ESA autoridad, no una lista suya.
   const servidor = fs.readFileSync(path.join(raizProyecto, 'server/index.js'), 'utf8');
   const ruta = servidor.slice(servidor.indexOf("app.get('/api/trips/active/me'"));
-  assert.match(ruta.slice(0, 600), /item\.passengerId === req\.user\.id \|\| item\.driverId === req\.user\.id/);
+  assert.match(ruta.slice(0, 900), /viajeVivoDe\(database\.trips, req\.user\.id\)/);
+  // Lo que bloquea al conductor sale del mismo sitio.
+  assert.match(servidor, /function activeTripForDriver[\s\S]{0,220}viajeQueOcupaAlConductor/);
 });
 
 // ---------------------------------------------------------------------------

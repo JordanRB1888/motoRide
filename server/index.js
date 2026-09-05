@@ -39,6 +39,15 @@ import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
 import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch.js';
 import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_TRIP_USER_IDS } from './domain/tripFilters.js';
+// Con alias porque aqui abajo ya hay un `viajeActivoDe(passengerId)` que
+// resuelve otra pregunta: la invariante de «una pasajera, un viaje». Esta
+// responde «que viaje esta vivo para esta persona», que es la que tenian
+// contestada de dos maneras distintas el despacho y `/api/trips/active/me`.
+import {
+  esViajeObsoleto,
+  viajeActivoDe as viajeVivoDe,
+  viajeQueOcupaAlConductor
+} from './domain/viajeActivo.js';
 import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
 import { createHash } from 'node:crypto';
@@ -1131,11 +1140,12 @@ function tripLocation(location) {
 // Un conductor solo existe para administración, para sí mismo y para el
 // pasajero con el que comparte un viaje activo. Ese es el alcance máximo de
 // cualquier evento de flota.
+// La lista de estados vivia aqui a mano y en `/api/trips/active/me` por
+// separado, con ventanas distintas. Ahora las dos preguntan a `domain/viajeActivo`,
+// que es la unica autoridad: si divergen, un conductor puede quedar ocupado por
+// un viaje que su propia aplicacion ya no le ensenia.
 function activeTripForDriver(driverId) {
-  return database.trips.findLast(trip =>
-    trip.driverId === driverId &&
-    ['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(trip.status)
-  ) || null;
+  return viajeQueOcupaAlConductor(database.trips, driverId);
 }
 
 function emitDriverPresence(driver, { includeActivePassenger = true } = {}) {
@@ -2100,15 +2110,18 @@ app.get('/api/trips/me/history', requireAuth, (req, res) => {
 });
 
 app.get('/api/trips/active/me', requireAuth, (req, res) => {
-  const activeStatuses = ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'];
-  const now = Date.now();
-  const trip = database.trips.findLast(item =>
-    activeStatuses.includes(item.status) &&
-    now - new Date(item.createdAt || 0).getTime() < (item.status === 'SEARCHING' ? 3 * 60 * 1000 : 12 * 60 * 60 * 1000) &&
-    (item.passengerId === req.user.id || item.driverId === req.user.id)
-  );
+  // MISMO CRITERIO QUE EL DESPACHO, y no es un detalle de estilo.
+  //
+  // Antes esto caducaba a las doce horas y `activeTripForDriver` no caducaba
+  // nunca. El resultado era un conductor ocupado por un viaje que su propia
+  // aplicacion habia dejado de enseniarle: no recibia carreras y no tenia como
+  // cerrarlo. Ahora los dos preguntan a `domain/viajeActivo`.
+  const trip = viajeVivoDe(database.trips, req.user.id);
   if (!trip) return res.status(204).end();
-  res.json(tripParticipantsView(trip, req.user));
+  // `obsoleto` marca el que lleva demasiado abierto. No lo cierra nadie por su
+  // cuenta --eso seria mover dinero sin que lo pidan-- pero deja de ser
+  // invisible, que era el problema.
+  res.json({ ...tripParticipantsView(trip, req.user), obsoleto: esViajeObsoleto(trip) });
 });
 
 app.get('/api/trips/pending-review/me', requireAuth, requireRole('passenger'), (req, res) => {
