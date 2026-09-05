@@ -10,29 +10,33 @@
  * El movimiento tiene tres piezas y un compás, y ese compás es lo que lo hace
  * fluido en vez de correcto:
  *
- * 1. RETIRADA (50 ms). Al tocar, el disco se hunde y se apaga. Es lo
- *    que despeja el camino: si la muesca arrancara con el disco todavía puesto,
- *    lo que se vería es una pastilla resbalando, no algo que va y viene.
+ * 1. RETIRADA (50 ms). Al tocar, el icono activo se hunde y se apaga. Es lo
+ *    que despeja el camino: si la muesca arrancara con el icono todavía puesto,
+ *    lo que se vería es algo resbalando, no algo que va y viene.
  * 2. VIAJE. La muesca —el mordisco cóncavo de la superficie— se desliza con
  *    muelle hasta la pestaña nueva. Sale medio compás después de la retirada.
- * 3. ASCENSO. El disco vuelve a subir desde debajo de la barra, con un muelle
+ * 3. ASCENSO. El icono vuelve a subir desde debajo de la barra, con un muelle
  *    poco amortiguado que se pasa un poco de largo y se asienta. Es el rebote.
  *
  * Y mientras la muesca pasa, cada icono que queda debajo SE DESVANECE y vuelve.
  * No es decoración: es lo que hace creer que la muesca es un hueco de verdad en
  * la superficie y que los iconos están detrás de ella, no dibujados encima.
  *
- * El icono del destino activo viaja DENTRO del disco, no en su pestaña. Es la
- * diferencia entre «el icono se ilumina» y «el disco trae el icono»: lo segundo
+ * El icono del destino activo viaja DENTRO del hueco, no en su pestaña. Es la
+ * diferencia entre «el icono se ilumina» y «el hueco trae el icono»: lo segundo
  * es lo que se ve en la referencia, y es lo que se siente como una sola pieza.
  *
- * EL AMARILLO ES DEL BOTÓN CENTRAL, Y DE NADIE MÁS
+ * DENTRO DEL HUECO NO VA NADA. SÓLO EL ICONO
  *
- * El disco viajero es NEUTRO: la superficie elevada del tema, con el icono en
- * tinta primaria. Con los dos círculos en amarillo, la barra tenía dos
- * protagonistas y por tanto ninguno — el que se pulsa para pedir un viaje y el
- * que sólo dice dónde estás pesaban igual. El color se reserva para la acción;
- * la posición se indica con la forma, que ya la trae el mordisco.
+ * Aquí hubo un disco, primero amarillo y luego blanco, y los dos sobraban. El
+ * amarillo dejaba la barra con dos círculos amarillos —éste y el central de
+ * pedir— y por tanto sin protagonista: el ojo no distinguía la acción del sitio
+ * donde estás. El blanco quitaba el empate pero tapaba el hueco justo donde
+ * tenía que verse, y se leían dos formas, el mordisco y la ficha.
+ *
+ * Ahora es una sola: un icono suspendido en el vacío. El amarillo queda entero
+ * para el botón central, que es el que se pulsa; el sitio donde estás lo dicen
+ * la forma del hueco, la altura, la tinta primaria y dos puntos más de tamaño.
  *
  * Todo va por `transform` y `opacity` sobre el hilo de interfaz. Ni una sola
  * medida de caja se anima: en un teléfono modesto con el mapa moviéndose
@@ -473,21 +477,29 @@ const ALTO_DE_LA_FILA = 58;
  */
 export const ALTO_DE_LA_BARRA = INICIO_DE_LA_SUPERFICIE + ALTO_DE_LA_FILA;
 
-const DIAMETRO_CIRCULO_ACTIVO = 48;
+/**
+ * La caja que centra el icono flotante. No se ve.
+ *
+ * Se llamaba `DIAMETRO_CIRCULO_ACTIVO` cuando aquí había un disco. Ya no lo
+ * hay: lo único que queda de aquella pieza es esta caja, que no pinta nada y
+ * sólo sirve para poner el icono en el centro del hueco y prestarle el
+ * movimiento.
+ */
+const CAJA_DEL_ICONO_ACTIVO = 48;
 
 /**
  * Lo que la muesca abre, y lo hondo que muerde.
  *
- * Ceñida al disco: cuatro puntos de aire a cada lado. Antes abría dieciocho
- * puntos más que el disco y el hueco se leía como una bahía con el disco dentro
- * en vez de como el sitio del disco. El aire tiene que ser el justo para que se
- * vea que son dos piezas y no una sola.
+ * Es EL VACÍO, y ahora es lo único que hay: dentro no va ninguna superficie,
+ * sólo el icono suspendido. Cincuenta y seis por veintiséis deja unos catorce
+ * puntos de aire alrededor del icono, que es lo que hace que se lea como un
+ * hueco de verdad y no como un icono un poco más arriba que los otros.
  *
  * Sale de una constante y no de tres números escritos a mano porque el ancho lo
  * usan la muesca y sus dos hombros: con números sueltos, mover uno deja los
  * otros donde estaban y aparece un escalón.
  */
-const ANCHO_DE_LA_MUESCA = DIAMETRO_CIRCULO_ACTIVO + 8;
+const ANCHO_DE_LA_MUESCA = 56;
 const HONDURA_DE_LA_MUESCA = 26;
 
 /**
@@ -687,10 +699,10 @@ function BarraCurvaDePasajera({
     transform: [{ translateX: desplazamiento.get() }]
   }));
 
-  // El disco emerge de dentro de la barra. Sube y se enciende a la vez, y la
+  // El icono emerge de dentro de la barra. Sube y se enciende a la vez, y la
   // opacidad va por delante del recorrido para que lo que asoma por debajo del
-  // filo ya sea invisible: sin eso se vería un trozo de amarillo cruzando la
-  // franja del sistema.
+  // filo ya sea invisible: sin eso se vería el icono cruzando la franja del
+  // sistema por debajo de la barra.
   const estiloDelDisco = useAnimatedStyle(() => ({
     opacity: interpolate(ascenso.get(), [0, 0.5, 1], [0, 0.5, 1], Extrapolation.CLAMP),
     transform: [{ translateY: interpolate(ascenso.get(), [0, 1], [ASCENSO, 0], Extrapolation.CLAMP) }]
@@ -724,8 +736,9 @@ function BarraCurvaDePasajera({
         borderTopColor: tema.color.borde
       }} />
 
-      {/* Notch orgánico con hendidura cóncava y círculo flotante amarillo que viaja
-          suavemente entre los destinos seleccionados con física spring */}
+      {/* El hueco: una hendidura cóncava por la que se ve el fondo de la
+          pantalla, con el icono del destino activo flotando dentro. Viaja entre
+          las pestañas con muelle. */}
       <Reanimated.View pointerEvents="none" style={[
         {
           position: 'absolute',
@@ -738,7 +751,8 @@ function BarraCurvaDePasajera({
         },
         estiloDeLaCurva
       ]}>
-        {/* Notch / Hendidura cóncava que abraza el círculo flotante */}
+        {/* La hendidura cóncava. Se pinta del color del FONDO de la pantalla, no
+            de la barra: por eso se lee como un hueco y no como una pastilla. */}
         <View style={{
           position: 'absolute',
           top: INICIO_DE_LA_SUPERFICIE - 1,
@@ -780,52 +794,45 @@ function BarraCurvaDePasajera({
           borderColor: tema.color.borde
         }} />
 
-        {/* El disco de la pestaña activa, con el icono del destino DENTRO.
-            Emerge de la barra y se asienta en la muesca; los dos son la misma
-            pieza.
+        {/* EL ICONO SOLO, FLOTANDO EN EL HUECO. NO HAY DISCO.
 
-            NEUTRO, NO AMARILLO. Con el disco en amarillo había dos círculos
-            amarillos a la vez en la misma barra —éste y el central de pedir— y
-            ninguno de los dos mandaba: el ojo no sabía cuál era la acción y
-            cuál el sitio donde estás. El amarillo se queda entero para el
-            central, que es el que se pulsa para pedir un viaje. Éste dice
-            dónde estás, y para eso le basta con la superficie más alta del
-            tema: blanco en día, grafito elevado en noche. El relieve lo siguen
-            haciendo la sombra, el filo y el hecho de sobresalir. */}
+            Aquí hubo un círculo: primero amarillo, luego blanco. Los dos
+            sobraban. Lo que la muesca abre es un VACÍO —un mordisco por el que
+            se ve el fondo de la pantalla— y meterle dentro una pastilla lo
+            tapaba justo donde tenía que verse. Con el círculo puesto se leían
+            dos formas, el hueco y la ficha; sin él se lee una sola cosa: un
+            icono suspendido en el aire que se hunde, se apaga, y vuelve a subir
+            donde el hueco acaba de llegar.
+
+            De ahí que esta caja no pinte NADA. No tiene fondo, ni filo, ni
+            sombra: sólo centra el icono y le presta el movimiento. Una sombra
+            aquí sería mentira —no hay superficie que la proyecte— y en Android
+            la elevación sobre una caja transparente dibuja un rectángulo.
+
+            Lo que hace que resalte es lo que le queda: está en el hueco, está
+            más alto que sus compañeros, va en tinta primaria mientras ellos van
+            en secundaria, y es dos puntos más grande. */}
         {iconoDelDisco === null ? null : (
           <Reanimated.View style={[
             {
               position: 'absolute',
               top: INICIO_DE_LA_SUPERFICIE - 14,
-              width: DIAMETRO_CIRCULO_ACTIVO,
-              height: DIAMETRO_CIRCULO_ACTIVO,
-              borderRadius: DIAMETRO_CIRCULO_ACTIVO / 2,
+              width: CAJA_DEL_ICONO_ACTIVO,
+              height: CAJA_DEL_ICONO_ACTIVO,
               alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: tema.color.superficieElevada,
-              borderWidth: 2.5,
-              // El filo era del color de la superficie elevada, que ahora es el
-              // del propio disco: se habría fundido con él. Pasa al borde del
-              // tema, que es lo que separa una superficie de lo que tiene
-              // detrás.
-              borderColor: tema.color.borde,
-              shadowColor: '#000000',
-              shadowOpacity: 0.32,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 4 },
-              elevation: 8
+              justifyContent: 'center'
             },
             estiloDelDisco
           ]}>
             {/* De TRAZO, no relleno. La variante rellena de `Icono` pinta los
-                detalles interiores en `#0b0a09`: sobre un disco claro, las
-                agujas del reloj quedaban a un paso de su propia esfera y se
+                detalles interiores en `#0b0a09`: sobre el fondo claro del hueco
+                las agujas del reloj quedaban a un paso de su propia esfera y se
                 leía como un borrón. El trazo se lee igual de bien con los
                 cuatro destinos. */}
             <Icono
               nombre={iconoDelDisco}
               color={tema.color.textoPrimario}
-              tamano={25}
+              tamano={27}
             />
           </Reanimated.View>
         )}

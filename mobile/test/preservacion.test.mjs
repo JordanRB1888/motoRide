@@ -704,13 +704,13 @@ test('Passenger sólo enseña iconos y la curva viaja de forma continua', () => 
   assert.match(curva, /scale: pulsacion\.get\(\)/, 'la pestaña perdió el feedback al pulsar');
   assert.match(curva, /withTiming\(0\.93/, 'el feedback al pulsar dejó de encoger el icono');
 
-  // El micropulso del icono se cambió por el compás de la referencia: el disco
-  // se retira, la muesca viaja medio compás después, y el disco vuelve a subir
-  // desde dentro de la barra. Un pulso del icono además de eso serían dos
+  // El micropulso del icono se cambió por el compás de la referencia: el icono
+  // activo se retira, la muesca viaja medio compás después, y el icono vuelve a
+  // subir desde dentro de la barra. Un pulso del icono además de eso serían dos
   // motivos compitiendo sobre el mismo elemento.
-  assert.match(curva, /withSequence\(\s*withTiming\(0, \{ duration: RETIRADA_MS \}\)/, 'el disco ya no se retira antes de viajar');
-  assert.match(curva, /withDelay\(RETIRADA_MS, withSpring\(destino/, 'la muesca sale sin esperar a que el disco se retire');
-  assert.match(curva, /\[ASCENSO, 0\]/, 'el disco ya no emerge desde dentro de la barra');
+  assert.match(curva, /withSequence\(\s*withTiming\(0, \{ duration: RETIRADA_MS \}\)/, 'el icono activo ya no se retira antes de viajar');
+  assert.match(curva, /withDelay\(RETIRADA_MS, withSpring\(destino/, 'la muesca sale sin esperar a que el icono se retire');
+  assert.match(curva, /\[ASCENSO, 0\]/, 'el icono activo ya no emerge desde dentro de la barra');
 
   assert.doesNotMatch(curva, /react-native-svg|MotionBar/, 'se añadió una dependencia para copiar la referencia');
 });
