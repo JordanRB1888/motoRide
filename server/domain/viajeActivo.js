@@ -1,4 +1,5 @@
 import { ESTADOS_ACTIVOS } from './tripFilters.js';
+import { normalizeTripStatus } from './tripStateMachine.js';
 
 /**
  * Que cuenta como «viaje activo». UNA sola respuesta, para todos.
@@ -64,7 +65,11 @@ function edad(trip, ahora) {
  * el fallo de arriba.
  */
 export function esViajeActivo(trip, ahora = Date.now()) {
-  const estado = trip?.status;
+  // Se normaliza el estado antes de decidir: la persistencia todavia puede
+  // traer nombres historicos (PENDING, ACCEPTED, EN_ROUTE, IN_TRIP...), y un
+  // alias no reconocido dejaria de contar como activo. Con `normalizeTripStatus`
+  // todos caen en su estado canonico y la lista de activos vale para todos.
+  const estado = normalizeTripStatus(trip?.status);
   if (!ESTADOS_ACTIVOS.includes(estado)) return false;
   if (estado === SIN_CONDUCTOR) return edad(trip, ahora) < VENTANA_BUSCANDO_MS;
   return true;
@@ -73,7 +78,7 @@ export function esViajeActivo(trip, ahora = Date.now()) {
 /** `true` si lleva demasiado abierto. Es una seniial, no una sentencia. */
 export function esViajeObsoleto(trip, ahora = Date.now()) {
   if (!esViajeActivo(trip, ahora)) return false;
-  if (trip.status === SIN_CONDUCTOR) return false;
+  if (normalizeTripStatus(trip.status) === SIN_CONDUCTOR) return false;
   return edad(trip, ahora) >= EDAD_SOSPECHOSA_MS;
 }
 
@@ -89,7 +94,7 @@ export function viajeActivoDe(trips, userId, ahora = Date.now()) {
 export function viajeQueOcupaAlConductor(trips, driverId, ahora = Date.now()) {
   return trips.findLast(trip =>
     trip.driverId === driverId &&
-    trip.status !== SIN_CONDUCTOR &&
+    normalizeTripStatus(trip.status) !== SIN_CONDUCTOR &&
     esViajeActivo(trip, ahora)
   ) ?? null;
 }

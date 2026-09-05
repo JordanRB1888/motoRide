@@ -39,13 +39,15 @@ import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
 import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch.js';
 import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_TRIP_USER_IDS } from './domain/tripFilters.js';
-// Con alias porque aqui abajo ya hay un `viajeActivoDe(passengerId)` que
-// resuelve otra pregunta: la invariante de «una pasajera, un viaje». Esta
-// responde «que viaje esta vivo para esta persona», que es la que tenian
-// contestada de dos maneras distintas el despacho y `/api/trips/active/me`.
+// UNA sola autoridad de «viaje activo», para todos los que preguntan: el
+// despacho, `/api/trips/active/me`, el guard de creacion y el restauro. Antes
+// convivia con un `viajeActivoDe(passengerId)` local que resolvia lo mismo con
+// otro criterio --sin la ventana del SEARCHING--, y por eso una pasajera podia
+// quedar bloqueada para crear por un viaje que `/active/me` ya no le enseniaba.
+// Ese criterio local se elimino; aqui esta el unico.
 import {
   esViajeObsoleto,
-  viajeActivoDe as viajeVivoDe,
+  viajeActivoDe,
   viajeQueOcupaAlConductor
 } from './domain/viajeActivo.js';
 import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
@@ -340,14 +342,6 @@ function medirRecorrido(pickup, destination) {
     cache: cacheDeRecorridos,
     logger: console
   });
-}
-
-/** El viaje activo de una pasajera, si lo tiene. */
-function viajeActivoDe(passengerId) {
-  return database.trips.find(item =>
-    item.passengerId === passengerId
-    && ESTADOS_DE_VIAJE_ACTIVO.includes(normalizeTripStatus(item.status))
-  ) ?? null;
 }
 
 let pricingConfig = {
@@ -2116,7 +2110,7 @@ app.get('/api/trips/active/me', requireAuth, (req, res) => {
   // nunca. El resultado era un conductor ocupado por un viaje que su propia
   // aplicacion habia dejado de enseniarle: no recibia carreras y no tenia como
   // cerrarlo. Ahora los dos preguntan a `domain/viajeActivo`.
-  const trip = viajeVivoDe(database.trips, req.user.id);
+  const trip = viajeActivoDe(database.trips, req.user.id);
   if (!trip) return res.status(204).end();
   // `obsoleto` marca el que lleva demasiado abierto. No lo cierra nadie por su
   // cuenta --eso seria mover dinero sin que lo pidan-- pero deja de ser
@@ -2265,7 +2259,11 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
   //
   // Comprobar y despues insertar en dos pasos deja una ventana por la que dos
   // toques del mismo dedo crean dos viajes.
-  const yaTieneUno = viajeActivoDe(req.user.id);
+  // La MISMA autoridad que `/api/trips/active/me`. Asi lo que bloquea crear es
+  // exactamente lo que la aplicacion le ensenia a la pasajera: un SEARCHING ya
+  // caducado no cuenta aqui como no cuenta alli, y nunca hay un bloqueo por un
+  // viaje invisible.
+  const yaTieneUno = viajeActivoDe(database.trips, req.user.id);
   if (yaTieneUno) {
     // Se devuelve el viaje para que la aplicacion pueda llevar a la persona a
     // el sin una segunda peticion.
@@ -2278,7 +2276,7 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
   // un hilo-- y responde que si.
   if (!await persistence.reserveActiveTripSlot(trip, ESTADOS_DE_VIAJE_ACTIVO)) {
     database.trips.splice(database.trips.indexOf(trip), 1);
-    return res.status(409).json({ error: 'ACTIVE_TRIP_EXISTS', trip: viajeActivoDe(req.user.id) });
+    return res.status(409).json({ error: 'ACTIVE_TRIP_EXISTS', trip: viajeActivoDe(database.trips, req.user.id) });
   }
   // La reserva ya dejo la fila puesta en PostgreSQL; esto es lo que la guarda
   // en SQLite, donde la reserva no escribe.

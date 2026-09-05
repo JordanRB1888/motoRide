@@ -300,9 +300,15 @@ test('hay UNA autoridad del viaje activo, para los dos roles', () => {
   // Y el endpoint usa ESA autoridad, no una lista suya.
   const servidor = fs.readFileSync(path.join(raizProyecto, 'server/index.js'), 'utf8');
   const ruta = servidor.slice(servidor.indexOf("app.get('/api/trips/active/me'"));
-  assert.match(ruta.slice(0, 900), /viajeVivoDe\(database\.trips, req\.user\.id\)/);
+  assert.match(ruta.slice(0, 900), /viajeActivoDe\(database\.trips, req\.user\.id\)/);
   // Lo que bloquea al conductor sale del mismo sitio.
   assert.match(servidor, /function activeTripForDriver[\s\S]{0,220}viajeQueOcupaAlConductor/);
+  // Y el guard de creación de la pasajera, también: se eliminó el criterio
+  // local `viajeActivoDe(passengerId)` --sin ventana-- que bloqueaba por un
+  // viaje que /active/me ya no mostraba. Ahora es la misma autoridad de dominio.
+  assert.match(servidor, /const yaTieneUno = viajeActivoDe\(database\.trips, req\.user\.id\)/);
+  assert.equal(/function viajeActivoDe\(passengerId\)/.test(servidor), false,
+    'sigue habiendo un criterio local de viaje activo aparte del dominio');
 });
 
 // ---------------------------------------------------------------------------

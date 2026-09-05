@@ -424,3 +424,34 @@ test('un pasajero no puede inyectar identidad ni estado junto a la tarifa', asyn
   assert.notEqual(trip.fareUSD, 0.01);
   assert.equal(trip.fareSource, 'SERVER_CALCULATED');
 });
+
+test('el guard de creación y /active/me nunca se contradicen', async (t) => {
+  // LA INVARIANTE, comprobada como bicondicional: una pasajera está bloqueada
+  // para crear SI Y SÓLO SI `/active/me` le enseña un viaje. Antes el guard y
+  // `/active/me` usaban criterios distintos y podía quedar bloqueada por un
+  // viaje que la aplicación ya no le mostraba. Ahora los dos preguntan a la
+  // misma autoridad, así que las dos respuestas tienen que concordar SIEMPRE,
+  // termine el primer viaje activo o cancelado (aquí no hay conductores, así que
+  // el despacho lo cancela; con conductor seguiría vivo y bloqueando).
+  const { url } = await startServer(t);
+  const passenger = await registerPassenger(url, { email: 'autoridad@58express.com', phone: '+584120002020' });
+
+  await crear(url, passenger.token, { ...BASE, id: 'trip_autoridad_1' });
+
+  const activo = await asJson(`${url}/api/trips/active/me`, passenger.token);
+  const leVeUnViaje = activo.status === 200;
+  const visto = leVeUnViaje ? (await activo.json()).trip : null;
+
+  // Crear OTRO --id distinto, para no caer en el reintento idempotente--.
+  const segundo = await crear(url, passenger.token, { ...BASE, id: 'trip_autoridad_2' });
+  const bloqueado = segundo.status === 409;
+  const cuerpo = await segundo.json();
+
+  assert.equal(bloqueado, leVeUnViaje,
+    `bloqueado=${bloqueado} pero /active/me le enseña un viaje=${leVeUnViaje}: se contradicen`);
+  if (bloqueado) {
+    // Y si bloquea, el viaje que bloquea es EXACTAMENTE el que enseña /active/me.
+    assert.equal(cuerpo.error, 'ACTIVE_TRIP_EXISTS');
+    assert.equal(cuerpo.trip.id, visto.id, 'el guard bloquea con el mismo viaje que /active/me muestra');
+  }
+});

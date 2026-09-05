@@ -443,6 +443,19 @@ test('la marca sigue siendo +58Express', () => {
   assert.ok(fs.existsSync(path.join(raizMovil, 'assets/splash-icon.png')));
 });
 
+test('las paradas del viaje activo se indexan por su papel, no por su dirección', () => {
+  // Dos paradas marcadas en el mapa llegan sin dirección: `key={parada.texto}`
+  // les daba a las dos la misma clave vacía y React avisaba de «two children
+  // with the same key, ``». La clave es el papel (origen/destino), único y que
+  // nunca falta. Es un fallo que no rompe nada visible pero corrompe el
+  // reciclado de la lista, así que sólo una prueba lo mantiene cerrado.
+  const fuente = sinComentarios('preview/pantallasC2.tsx');
+  assert.doesNotMatch(fuente, /key=\{parada\.texto\}/,
+    'las paradas se indexan por su texto, que puede venir vacío y colisionar');
+  assert.match(fuente, /key=\{parada\.clave\}/,
+    'las paradas deben indexarse por una clave estable (origen/destino)');
+});
+
 test('no se introdujo ninguna fuente nueva', () => {
   // La elección tipográfica todavía no está tomada; se usa la del sistema, que
   // además es la que mejor rinde en teléfonos económicos.

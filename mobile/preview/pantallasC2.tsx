@@ -1376,10 +1376,14 @@ export function C2Viaje({ datos, mapa, onCentrar, onMensaje }: {
 
             <View style={{ gap: 7 }}>
               {[
-                { punto: tema.color.textoPrimario, texto: viaje.origen },
-                { punto: tema.color.acento, texto: viaje.destino }
+                // La clave es el papel de la parada, no su texto: dos viajes
+                // marcados en el mapa llegan sin direccion y compartirian
+                // `texto === ''`, dando dos claves vacias iguales. El papel
+                // (origen/destino) es unico y estable, y no se pinta.
+                { clave: 'origen', punto: tema.color.textoPrimario, texto: viaje.origen },
+                { clave: 'destino', punto: tema.color.acento, texto: viaje.destino }
               ].map(parada => (
-                <View key={parada.texto} style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+                <View key={parada.clave} style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: parada.punto }} />
                   <Txt nivel="pie" tono="secundario" numberOfLines={1}>{parada.texto}</Txt>
                 </View>

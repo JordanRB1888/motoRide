@@ -122,3 +122,36 @@ test('el viaje de otra persona no es el mío', () => {
   assert.equal(viajeActivoDe(trips, 'alguien_mas', AHORA), null);
   assert.equal(viajeQueOcupaAlConductor(trips, 'otro_conductor', AHORA), null);
 });
+
+test('la pasajera: activa sólo cuando un viaje de verdad la ocupa', () => {
+  // Esta es la autoridad que ahora comparten el guard de creacion y
+  // `/api/trips/active/me`: lo que bloquea crear es exactamente lo que la
+  // aplicacion le ensenia. Se comprueba el booleano esperado estado por estado.
+  const casos = [
+    { estado: 'SEARCHING', horas: 0, driver: null, activo: true },   // buscando, recien pedido
+    { estado: 'SEARCHING', horas: 1, driver: null, activo: false },  // buscando caducado (>3 min): no bloquea ni se ve
+    { estado: 'DRIVER_ASSIGNED', horas: 0, driver: 'conductor_1', activo: true },
+    { estado: 'DRIVER_ASSIGNED', horas: 48, driver: 'conductor_1', activo: true }, // con conductor no caduca
+    { estado: 'ARRIVED', horas: 2, driver: 'conductor_1', activo: true },
+    { estado: 'IN_PROGRESS', horas: 2, driver: 'conductor_1', activo: true },
+    { estado: 'COMPLETED', horas: 0, driver: 'conductor_1', activo: false },
+    { estado: 'CANCELLED', horas: 0, driver: 'conductor_1', activo: false }
+  ];
+  for (const c of casos) {
+    const trips = [viaje(c.estado, c.horas, { driverId: c.driver })];
+    const enLaApp = viajeActivoDe(trips, 'pasajera_1', AHORA) !== null;
+    assert.equal(enLaApp, c.activo, `${c.estado} a las ${c.horas} h: se esperaba activo=${c.activo}`);
+  }
+});
+
+test('todos los alias históricos cuentan como activo para la pasajera', () => {
+  // `EN_ROUTE`/`IN_TRIP` ya estaban en la lista cruda; `PENDING`/`ACCEPTED`/
+  // `DRIVER_ARRIVING`/`DRIVER_ARRIVED` sólo cuentan si la autoridad normaliza.
+  // Si dejaran de contar, una pasajera con un viaje guardado con nombre
+  // historico podria crear un segundo, o quedar bloqueada sin verlo.
+  for (const estado of ['PENDING', 'ACCEPTED', 'EN_ROUTE', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED', 'IN_TRIP']) {
+    const sinConductor = estado === 'PENDING';   // PENDING normaliza a SEARCHING
+    const trips = [viaje(estado, 0, { driverId: sinConductor ? null : 'conductor_1' })];
+    assert.equal(viajeActivoDe(trips, 'pasajera_1', AHORA) !== null, true, `${estado} no contó como activo`);
+  }
+});
