@@ -29,6 +29,8 @@ export const PERSISTED_TABLES = Object.freeze([
   'driverDocuments',
   'adminActions',
   'pushSubscriptions',
+  // PUSH-1: que un aviso salga UNA vez. Se poda a las 24 h.
+  'pushDeliveries',
   'transportSubscriptions',
   'scheduledRides',
   // AUTH-FINAL-1: la identidad canonica. USER != AUTH IDENTITY != VERIFIED

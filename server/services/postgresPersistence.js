@@ -16,6 +16,8 @@ export const POSTGRES_TABLES = Object.freeze({
   driverDocuments: 'driver_documents',
   adminActions: 'admin_actions',
   pushSubscriptions: 'push_subscriptions',
+  // PUSH-1. La crea `supabase/migrations/20260905220000_push_deliveries.sql`.
+  pushDeliveries: 'push_deliveries',
   transportSubscriptions: 'transport_subscriptions',
   scheduledRides: 'scheduled_rides',
   // AUTH-FINAL-1. Las crea `supabase/migrations/20260904120000_auth_identity_foundation.sql`.

@@ -72,7 +72,7 @@ import {
   DEFAULT_SAFE_TRANSPORT_PRICING,
   sanitizeSafeTransportPricing
 } from './services/safeTransport.js';
-import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
+import { PUSH_TYPE, createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
 import {
@@ -429,6 +429,7 @@ const initialDatabase = {
   driverDocuments: [],
   adminActions: [],
   pushSubscriptions: [],
+  pushDeliveries: [],
   transportSubscriptions: [],
   scheduledRides: []
 };
@@ -779,6 +780,38 @@ function anunciarTransicionDelConductor(trip, settlement) {
     canonicalStatus: trip.status,
     updatedAt: trip.updatedAt
   });
+  avisarDelCambioDeViaje(trip);
+}
+
+/**
+ * El push del cambio de estado, para quien espera (PUSH-1).
+ *
+ * ACOMPANA al socket, no lo sustituye. El socket ya llevo el cambio a quien
+ * tenia la aplicacion abierta; esto es para el telefono guardado en el bolsillo.
+ *
+ * SIN AWAIT, Y SIN PODER ROMPER NADA
+ *
+ * Igual que la oferta de carrera desde PUSH-3A: la transicion ya esta
+ * persistida y anunciada, y un proveedor lento no puede robarle segundos a
+ * nadie. El servicio nunca rechaza, y aun asi se captura por si acaso.
+ *
+ * Solo a la PASAJERA: el conductor es quien provoca estos cambios pulsando los
+ * botones, asi que avisarle de lo que acaba de hacer seria ruido.
+ */
+const TIPO_DE_PUSH_POR_ESTADO = Object.freeze({
+  [TRIP_STATUS.DRIVER_ASSIGNED]: PUSH_TYPE.TRIP_ACCEPTED,
+  [TRIP_STATUS.ARRIVED]: PUSH_TYPE.TRIP_ARRIVED,
+  [TRIP_STATUS.IN_PROGRESS]: PUSH_TYPE.TRIP_STARTED,
+  [TRIP_STATUS.COMPLETED]: PUSH_TYPE.TRIP_COMPLETED,
+  [TRIP_STATUS.CANCELLED]: PUSH_TYPE.TRIP_CANCELLED
+});
+
+function avisarDelCambioDeViaje(trip) {
+  const tipo = TIPO_DE_PUSH_POR_ESTADO[normalizeTripStatus(trip?.status)];
+  if (!tipo || !trip?.passengerId) return;
+  pushService.notifyTripLifecycle(trip, tipo, trip.passengerId).catch(error => {
+    console.error(`[+58express Push] rechazo inesperado de notifyTripLifecycle: ${error?.name || 'UNKNOWN'}`);
+  });
 }
 
 function requireAuth(req, res, next) {
@@ -900,7 +933,23 @@ const pushService = createPushNotificationService({
   persistRecord,
   sender: pushSender,
   enabled: pushEnabled,
-  logger: console
+  logger: console,
+  /**
+   * Cuantos sockets vivos tiene esa persona AHORA.
+   *
+   * Sale de SU sala, que es estado del servidor: ningun cliente puede
+   * declararse presente para silenciarse los avisos. Solo se usa para suprimir
+   * el aviso de un mensaje de chat, que es el unico que se puede permitir
+   * perder; las ofertas y los cambios de estado del viaje no se suprimen nunca.
+   */
+  contarConexiones: async userId => {
+    try {
+      const sockets = await io.in(`user:${userId}`).fetchSockets();
+      return sockets.length;
+    } catch {
+      return 0;
+    }
+  }
 });
 
 app.use('/api', createPushRouter({
@@ -3014,6 +3063,22 @@ io.on('connection', (socket) => {
     }
 
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', publicChatMessage(message));
+
+    // El push del mensaje, para la CONTRAPARTE (PUSH-1).
+    //
+    // Quien escribio no necesita que le avisen de su propio mensaje. Y si la
+    // contraparte tiene la aplicacion conectada tampoco: ya lo esta viendo
+    // aparecer en la conversacion, y el servicio lo suprime solo.
+    //
+    // El payload lleva el tipo y el viaje. Ni el texto, ni el nombre de quien
+    // escribio, ni la imagen: eso se lee al abrir, con sesion.
+    const destinatario = userId === trip.passengerId ? trip.driverId : trip.passengerId;
+    if (destinatario) {
+      pushService.notifyChatMessage({ tripId: trip.id, messageId: message.id, userId: destinatario })
+        .catch(error => {
+          console.error(`[+58express Push] rechazo inesperado de notifyChatMessage: ${error?.name || 'UNKNOWN'}`);
+        });
+    }
   });
 
   on('tripRated', async (data = {}) => {
