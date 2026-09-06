@@ -56,6 +56,16 @@ export interface ValorDelViajeActivo {
   readonly superficie: string | null;
   /** Vuelve a preguntar al servidor. */
   readonly refrescar: () => void;
+  /**
+   * El despacho se quedó sin conductores a quien ofrecer este viaje.
+   *
+   * Se recuerda AQUÍ y no en la pantalla del viaje porque el aviso puede
+   * llegar antes de que esa pantalla exista: sin ningún conductor elegible, el
+   * servidor cancela en el mismo instante de crear. Quien lo enseñe lo lee de
+   * aquí y lo olvida cuando ya lo ha contado.
+   */
+  readonly sinConductores: boolean;
+  readonly olvidarSinConductores: () => void;
 }
 
 const Contexto = createContext<ValorDelViajeActivo | null>(null);
@@ -122,6 +132,15 @@ export function ProveedorDeViajeActivo({ children }: { readonly children: ReactN
   useEvento('rideCancelled', alCambiarElViaje);
   useEvento('dispatch:no_drivers', alCambiarElViaje);
 
+  // Y ESE ADEMÁS SE RECUERDA
+  //
+  // Es la única explicación que tendrá quien vea desaparecer su viaje recién
+  // pedido. Va en su propia escucha para no tocar la de arriba: los eventos
+  // siguen sin aplicarse ni leerse: sólo dicen QUE algo cambió.
+  const [sinConductores, setSinConductores] = useState(false);
+  useEvento('dispatch:no_drivers', useCallback(() => setSinConductores(true), []));
+  const olvidarSinConductores = useCallback(() => setSinConductores(false), []);
+
   // Al volver del segundo plano. No se usa temporizador: el sistema los
   // suspende con la aplicación, así que un intervalo «cada minuto» puede haber
   // estado dormido tres horas y despertar creyendo que pasó un minuto.
@@ -136,7 +155,14 @@ export function ProveedorDeViajeActivo({ children }: { readonly children: ReactN
 
   return (
     <Contexto.Provider
-      value={{ estado, viaje, superficie: superficieDe(viaje), refrescar: () => { void refrescar(); } }}
+      value={{
+        estado,
+        viaje,
+        superficie: superficieDe(viaje),
+        refrescar: () => { void refrescar(); },
+        sinConductores,
+        olvidarSinConductores
+      }}
     >
       {children}
     </Contexto.Provider>
@@ -154,7 +180,9 @@ export function useViajeActivo(): ValorDelViajeActivo {
     estado: ESTADO_INICIAL,
     viaje: null,
     superficie: null,
-    refrescar: () => undefined
+    refrescar: () => undefined,
+    sinConductores: false,
+    olvidarSinConductores: () => undefined
   };
 }
 

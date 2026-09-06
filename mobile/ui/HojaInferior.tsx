@@ -43,6 +43,7 @@ export function HojaInferior({
   alturaAutomatica = false,
   desplazable = false,
   espacioInferior = 0,
+  onAlto,
   children
 }: {
   readonly estado?: EstadoDeHoja;
@@ -67,6 +68,14 @@ export function HojaInferior({
   readonly desplazable?: boolean;
   /** Hueco que hay que dejar abajo para la barra de navegación. */
   readonly espacioInferior?: number;
+  /**
+   * Cuánto ocupa la hoja, cuando cambia.
+   *
+   * Lo necesita quien tenga que apartar algo de debajo de ella --el mapa, para
+   * que su punto de mira no acabe escondido-- y sólo ella lo sabe: crece con
+   * su contenido.
+   */
+  readonly onAlto?: (alto: number) => void;
   readonly children?: ReactNode;
 }) {
   const tema = useTema();
@@ -77,6 +86,7 @@ export function HojaInferior({
 
   return (
     <View
+      onLayout={onAlto === undefined ? undefined : evento => onAlto(evento.nativeEvent.layout.height)}
       style={{
         position: 'absolute',
         left: 0, right: 0, bottom: 0,

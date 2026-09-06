@@ -238,10 +238,12 @@ test('resincronizar NO enseña «no tienes viaje»', () => {
   // La pantalla se apoya en el viaje CONOCIDO, no en la fase: durante el ida y
   // vuelta se sigue enseñando lo último que se supo.
   const ruta = sinComentarios('app/viaje-activo.tsx');
-  assert.match(ruta, /const \{ estado, viaje \} = useViajeActivo\(\)/);
+  assert.match(ruta, /const \{ estado, viaje, sinConductores, olvidarSinConductores \} = useViajeActivo\(\)/);
   assert.match(ruta, /if \(viaje === null\)/, 'la pantalla decide por la fase y no por el viaje');
-  // Sólo el SIN_VIAJE del servidor saca de aquí.
-  assert.match(ruta, /if \(estado\.fase === 'SIN_VIAJE'\) router\.replace/);
+  // Sólo el SIN_VIAJE del servidor saca de aquí, y ahora con una condición
+  // más: si sabemos POR QUÉ se acabó --que el despacho no encontró a nadie--
+  // eso se cuenta antes de salir, en vez de devolver al inicio en silencio.
+  assert.match(ruta, /if \(estado\.fase === 'SIN_VIAJE' && !sinConductores\) router\.replace/);
 });
 
 test('un fallo de red conserva la superficie', () => {

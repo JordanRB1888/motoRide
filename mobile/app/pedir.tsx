@@ -66,6 +66,16 @@ import {
 } from '../domain/pedirViaje';
 
 /**
+ * Cómo se llama en el campo el destino elegido.
+ *
+ * Con dirección, la dirección. Sin ella --un punto del mapa no tiene nombre--
+ * se dice lo que es, y no se le inventa uno.
+ */
+function nombreDelDestino(punto: PuntoDelViaje): string {
+  return punto.direccion ?? 'El punto que elegiste';
+}
+
+/**
  * Menos de esto no es moverse: es el reticulo sin tocar sobre donde ya estas.
  * Cincuenta metros son media cuadra de Maracaibo.
  */
@@ -75,7 +85,7 @@ const DISTANCIA_MINIMA_KM = 0.05;
 const AVISO: Readonly<Record<QueFalta, string>> = Object.freeze({
   NADA: '',
   ORIGEN: 'Buscando dónde estás…',
-  DESTINO: 'Mueve el mapa para elegir a dónde vas',
+  DESTINO: 'Elige a dónde vas',
   // Fuera de zona NO es un fallo: es que ahí todavía no llegamos.
   ORIGEN_FUERA_DEL_AREA: 'Todavía no operamos donde estás. Sólo Maracaibo, por ahora.',
   DESTINO_FUERA_DEL_AREA: 'Ese destino queda fuera de Maracaibo'
@@ -96,6 +106,22 @@ export default function PantallaDePedir() {
 
   const [tipo, setTipo] = useState<TipoEnLaPantalla>('MOTO');
   const [destino, setDestino] = useState<PuntoDelViaje | null>(null);
+  /**
+   * ELEGIR EN EL MAPA ES UN MODO, NO UN EFECTO SECUNDARIO
+   *
+   * Antes el retículo estaba siempre puesto y el destino se fijaba solo en
+   * cuanto el mapa se movía medio centímetro: nadie confirmaba nada, y la
+   * pantalla decía «el punto que elegiste» de un punto que nadie eligió.
+   *
+   * Ahora se entra a elegir a propósito --desde «¿A dónde vas?» o desde
+   * «Escoger en el mapa»--, el centro del mapa es sólo un CANDIDATO mientras
+   * se mueve, y hace falta confirmarlo para que sea el destino.
+   */
+  const [eligiendoEnMapa, setEligiendoEnMapa] = useState(false);
+  const [candidato, setCandidato] = useState<PuntoDelViaje | null>(null);
+  /** Lo que ocupa la hoja, medido. El mapa lo necesita para no esconder su
+   *  punto de mira debajo de ella. */
+  const [altoDeLaHoja, setAltoDeLaHoja] = useState(0);
   const [fase, setFase] = useState<FaseDelPedido>('ELIGIENDO');
   /** La clave de ESTE intento de pedir. Vive mientras la huella no cambie. */
   const claveDelIntento = useRef<string | null>(null);
@@ -237,18 +263,62 @@ export default function PantallaDePedir() {
   //
   // Solo depende del origen: la camara arranca sobre ti y el reticulo esta
   // siempre puesto, elijas lo que elijas.
-  const modelo = useMemo(() => ({
-    camara: origen === null
+  //
+  // LA CAMARA SE MEMORIZA APARTE, y hace falta: el modelo cambia tambien
+  // cuando se mide la hoja, y si la camara viajara dentro con identidad nueva
+  // el mapa se movería cada vez que la hoja crece. Sólo depende del origen.
+  const camara = useMemo(
+    () => (origen === null
       ? CAMARA_DE_MARACAIBO
-      : { ...CAMARA_DE_MARACAIBO, centro: { lat: origen.lat, lng: origen.lng } },
+      : { ...CAMARA_DE_MARACAIBO, centro: { lat: origen.lat, lng: origen.lng } }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [origen?.lat, origen?.lng]
+  );
+
+  const modelo = useMemo(() => ({
+    camara,
     marcadores: [],
     ruta: [],
-    // El reticulo de «mueve el mapa, no el pin»: el centro es lo que se
-    // esta eligiendo.
-    eligiendoPunto: true,
-    aireInferior: 0
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [origen?.lat, origen?.lng]);
+    // El reticulo de «mueve el mapa, no el pin». Solo mientras se elige: un
+    // punto de mira permanente sobre un mapa que no esta eligiendo nada
+    // promete una interaccion que no existe.
+    eligiendoPunto: eligiendoEnMapa,
+    // Sólo mientras se elige: el hueco de la hoja sube el centro del mapa --y
+    // con él el punto de mira-- hasta la parte que se ve. Fuera de ese modo no
+    // hay nada que apartar.
+    aireInferior: eligiendoEnMapa ? altoDeLaHoja : 0
+  }), [camara, eligiendoEnMapa, altoDeLaHoja]);
+
+  // ---------------------------------------------------------------------
+  // Elegir el destino en el mapa
+  // ---------------------------------------------------------------------
+  const abrirElMapa = useCallback(() => {
+    setEligiendoEnMapa(true);
+    // Se arranca desde donde ya estaba el destino, si lo habia: corregir un
+    // punto es mas facil que volver a buscarlo desde cero.
+    setCandidato(destino);
+  }, [destino]);
+
+  const confirmarElPunto = useCallback(() => {
+    if (candidato === null) return;
+    setDestino(candidato);
+    setEligiendoEnMapa(false);
+    setCandidato(null);
+  }, [candidato]);
+
+  const dejarDeElegir = useCallback(() => {
+    setEligiendoEnMapa(false);
+    setCandidato(null);
+  }, []);
+
+  /**
+   * Volver a preguntarle al telefono donde esta.
+   *
+   * `pedirUbicacion` pide el permiso si hace falta y una lectura nueva. Es lo
+   * que corresponde a tocar «Tu ubicacion ahora»: confirmar que el punto de
+   * recogida es el de verdad, no uno de hace un rato.
+   */
+  const actualizarMiUbicacion = useCallback(() => { void pedirUbicacion(); }, [pedirUbicacion]);
 
   // ---------------------------------------------------------------------
   // Guardias
@@ -301,22 +371,24 @@ export default function PantallaDePedir() {
           conControles={false}
           modelo={modelo}
           onCentro={centro => {
-            // El reticulo arranca centrado en donde estas. Hasta que el mapa se
-            // mueva de ahi, no hay destino: un viaje a donde ya estas no es un
-            // viaje, y «el punto que elegiste» seria mentira antes de elegir.
-            if (origen !== null && distanciaKm(origen, centro) < DISTANCIA_MINIMA_KM) return;
-            // Y el mismo punto dos veces tampoco: el mapa avisa al asentarse
-            // aunque nadie lo haya tocado, y apuntarlo otra vez seria repintar
-            // para nada.
-            if (destino !== null && distanciaKm(destino, centro) < 0.001) return;
-            setDestino({
-            lat: centro.lat,
-            lng: centro.lng,
-            // Sin dirección: se eligió un punto en el mapa, no un sitio con
-            // nombre. Inventarle uno sería peor que no tenerlo.
-            direccion: null,
-            precision: null,
-            fuente: 'mapa'
+            // EL CENTRO ES UN CANDIDATO, NO EL DESTINO
+            //
+            // Aquí se hacía `setDestino` en cuanto el mapa se movía: bastaba
+            // con arrastrarlo sin querer para que la pantalla diera por
+            // elegido un sitio que nadie eligió. Ahora sólo se apunta lo que
+            // hay bajo el retículo; el destino se fija al CONFIRMAR.
+            if (!eligiendoEnMapa) return;
+            // El mismo punto dos veces no: el mapa avisa al asentarse aunque
+            // nadie lo haya tocado, y repintarlo no cambia nada.
+            if (candidato !== null && distanciaKm(candidato, centro) < 0.001) return;
+            setCandidato({
+              lat: centro.lat,
+              lng: centro.lng,
+              // Sin dirección: se eligió un punto en el mapa, no un sitio con
+              // nombre. Inventarle uno sería peor que no tenerlo.
+              direccion: null,
+              precision: null,
+              fuente: 'mapa'
             });
           }}
         >
@@ -341,12 +413,49 @@ export default function PantallaDePedir() {
             alturaAutomatica
             desplazable
             espacioInferior={ALTO_DE_LA_BARRA + Math.max(margenSeguroInferior, 8)}
+            onAlto={setAltoDeLaHoja}
           >
             <Trayecto
               origen={origen === null ? 'Buscando tu ubicación…' : 'Tu ubicación ahora'}
-              destino={destino === null ? undefined : 'El punto que elegiste'}
+              destino={destino === null ? undefined : nombreDelDestino(destino)}
+              // LOS TRES LLEVABAN A NINGUNA PARTE
+              //
+              // El componente aceptaba estos manejadores desde el principio y
+              // esta pantalla no le pasaba ninguno: se veían tres controles y
+              // no respondía ninguno.
+              onTocarOrigen={actualizarMiUbicacion}
+              onTocarDestino={abrirElMapa}
+              onElegirEnMapa={abrirElMapa}
             />
 
+            {/* ELIGIENDO EN EL MAPA: la hoja se aparta
+              *
+              * Mientras se elige, lo único que importa es el mapa y el botón
+              * que confirma. Enseñar debajo los vehículos y el precio de un
+              * recorrido que todavía no existe ocupa la pantalla que hace
+              * falta para mover el mapa. */}
+            {eligiendoEnMapa ? (
+              <>
+                <View style={{ height: tema.ritmo.entreElementos }} />
+                <Txt nivel="etiqueta" tono="tenue">
+                  Mueve el mapa hasta el sitio al que vas. El punto de mira marca el destino.
+                </Txt>
+                <View style={{ height: tema.ritmo.entreBloques }} />
+                <Boton
+                  titulo="Confirmar este destino"
+                  onPress={confirmarElPunto}
+                  // Sin candidato --el mapa aún no se ha asentado-- y sobre el
+                  // sitio donde ya estás no hay destino que confirmar.
+                  deshabilitado={
+                    candidato === null
+                    || (origen !== null && distanciaKm(origen, candidato) < DISTANCIA_MINIMA_KM)
+                  }
+                />
+                <View style={{ height: tema.ritmo.entreElementos }} />
+                <Boton titulo="Cancelar" variante="secundario" onPress={dejarDeElegir} />
+              </>
+            ) : (
+            <>
             <View style={{ height: tema.ritmo.entreBloques }} />
             <Txt nivel="etiqueta" tono="secundario">CÓMO QUIERES IR</Txt>
             <View style={{ flexDirection: 'row', gap: 10, paddingTop: 6 }}>
@@ -383,8 +492,13 @@ export default function PantallaDePedir() {
                     <Txt nivel="etiqueta" tono="tenue">Bs. {estimacion.bolivares.toFixed(2)}</Txt>
                   )}
                 </View>
+                {/* Distancia y tiempo salen de la MISMA respuesta que el
+                    precio --el servidor los mide con Google Routes-- y estaban
+                    llegando sin que nadie los enseñara: sólo se pintaban los
+                    kilómetros. Quien decide si le sirve una carrera necesita
+                    saber cuánto dura, no sólo cuánto cuesta. */}
                 <Txt nivel="etiqueta" tono="tenue">
-                  {estimacion.distanciaKm.toFixed(1)} km
+                  {estimacion.distanciaKm.toFixed(1)} km · {Math.max(1, Math.round(estimacion.minutos))} min
                   {estimacion.esDeNoche ? ' · tarifa nocturna' : ''}
                   {estimacion.esHoraPico ? ' · hora pico' : ''}
                 </Txt>
@@ -425,6 +539,8 @@ export default function PantallaDePedir() {
                 // nada de nada.
                 deshabilitado={trabajando || !puedePedir(fase, estimacion, false, falta)}
               />
+            )}
+            </>
             )}
 
           </HojaInferior>

@@ -641,6 +641,89 @@ test('la pantalla ata la clave a la huella, no sólo al destino', () => {
 // El backend, alcanzable desde el emulador
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Que los controles lleven a alguna parte
+// ---------------------------------------------------------------------------
+
+test('los tres controles del trayecto tienen manejador', () => {
+  // El componente aceptaba `onTocarOrigen`, `onTocarDestino` y `onElegirEnMapa`
+  // desde el principio y la pantalla no le pasaba ninguno: se veian tres
+  // controles y no respondia ninguno.
+  const pantalla = leer('app/pedir.tsx');
+  assert.match(pantalla, /onTocarOrigen=\{actualizarMiUbicacion\}/);
+  assert.match(pantalla, /onTocarDestino=\{abrirElMapa\}/);
+  assert.match(pantalla, /onElegirEnMapa=\{abrirElMapa\}/);
+  // Y tocar el origen vuelve a preguntarle al telefono donde esta.
+  assert.match(pantalla, /const actualizarMiUbicacion = useCallback\(\(\) => \{ void pedirUbicacion\(\); \}/);
+});
+
+test('el destino NO se elige solo: hace falta confirmarlo', () => {
+  // Antes bastaba con que el mapa se moviera para que la pantalla diera por
+  // elegido un sitio que nadie eligio, y dijera «el punto que elegiste».
+  const pantalla = leer('app/pedir.tsx');
+  // El centro sólo se apunta como candidato, y sólo mientras se elige.
+  assert.match(pantalla, /if \(!eligiendoEnMapa\) return;/);
+  assert.match(pantalla, /setCandidato\(\{/);
+  // El destino se fija al confirmar, y en ningún otro sitio.
+  assert.match(pantalla, /const confirmarElPunto = useCallback\(\(\) => \{[\s\S]{0,200}?setDestino\(candidato\)/);
+  // Una sola llamada en toda la pantalla, y es la de confirmar.
+  assert.equal(
+    (pantalla.match(/setDestino\(/g) ?? []).length,
+    1,
+    'el destino se fija en más de un sitio: alguno no será una confirmación'
+  );
+  assert.match(pantalla, /titulo="Confirmar este destino"/);
+});
+
+test('el punto de mira sólo aparece cuando se está eligiendo, y donde apunta', () => {
+  // Un punto de mira permanente promete una interacción que no existe; y con
+  // la hoja encima, el centro que el mapa reporta no es el centro de la vista.
+  const pantalla = leer('app/pedir.tsx');
+  assert.match(pantalla, /eligiendoPunto: eligiendoEnMapa/);
+  assert.match(pantalla, /aireInferior: eligiendoEnMapa \? altoDeLaHoja : 0/);
+  const reticula = leer('mapa/Marcadores.tsx');
+  assert.match(reticula, /marginBottom: aireInferior/, 'la retícula no respeta el hueco de la hoja');
+});
+
+test('«Ver precio» NO crea el viaje', () => {
+  // Son dos botones y dos acciones distintas: uno pregunta el precio y el otro
+  // pide la carrera. Estimar nunca puede acabar en un viaje creado.
+  const pantalla = leer('app/pedir.tsx');
+  const estimar = pantalla.slice(
+    pantalla.indexOf('const estimar = useCallback'),
+    pantalla.indexOf('const pedir = useCallback')
+  );
+  assert.ok(estimar.length > 0, 'no se encontró la función de estimar');
+  assert.equal(/crearViaje\(/.test(estimar), false, '«Ver precio» llama a crearViaje');
+  assert.match(estimar, /pedirEstimacion\(/);
+  // Y quien crea es sólo `pedir`.
+  assert.equal((pantalla.match(/await crearViaje\(/g) ?? []).length, 1);
+  assert.match(pantalla, /titulo=\{fase === 'PIDIENDO' \? 'Pidiendo…' : 'Pedir viaje'\}/);
+});
+
+test('el precio viene con su distancia y su tiempo', () => {
+  // Los tres salen de la MISMA respuesta del servidor --que los mide con
+  // Google Routes-- y los minutos llegaban sin que nadie los enseñara.
+  const pantalla = leer('app/pedir.tsx');
+  assert.match(pantalla, /estimacion\.distanciaKm\.toFixed\(1\)\} km · \{Math\.max\(1, Math\.round\(estimacion\.minutos\)\)\} min/);
+});
+
+test('cuando no hay conductores se dice, y se puede volver a pedir', () => {
+  // El despacho cancela con `NO_DRIVERS_AVAILABLE` y avisa por
+  // `dispatch:no_drivers`. Sin ningún conductor elegible eso ocurre en el
+  // mismo instante de crear, antes de que la pantalla del viaje exista: por
+  // eso lo recuerda el proveedor y no ella.
+  const proveedor = leer('realtime/ViajeActivo.tsx');
+  assert.match(proveedor, /useEvento\('dispatch:no_drivers', useCallback\(\(\) => setSinConductores\(true\)/);
+  assert.match(proveedor, /readonly sinConductores: boolean;/);
+
+  const pantalla = leer('app/viaje-activo.tsx');
+  assert.match(pantalla, /No encontramos conductores disponibles/);
+  assert.match(pantalla, /titulo="Pedir otra vez"/);
+  // Y no se sale al inicio en silencio mientras haya algo que contar.
+  assert.match(pantalla, /if \(estado\.fase === 'SIN_VIAJE' && !sinConductores\) router\.replace\('\/pasajero'\)/);
+});
+
 test('el emulador de Android traduce localhost al anfitrión, y sólo ahí', async () => {
   const { urlParaEstaPlataforma, ANFITRION_DEL_EMULADOR_ANDROID } =
     await import('../domain/backendDelEntorno');

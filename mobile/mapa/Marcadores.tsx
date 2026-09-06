@@ -102,7 +102,16 @@ export function PiezaDelMarcador({ marcador }: { readonly marcador: Marcador }) 
  * Va fijo en el centro de la pantalla, no sobre una coordenada: es el gesto que
  * usan las aplicaciones de movilidad y el que ya tenía el diseño aprobado.
  */
-export function ReticulaCentral() {
+/**
+ * El punto de mira de «elige moviendo el mapa».
+ *
+ * `aireInferior` es el mismo que el mapa recibe como `mapPadding`: el hueco
+ * que se le reserva abajo a la hoja. El mapa reporta como centro el de su
+ * rectángulo ÚTIL --el que queda por encima de ese hueco-- así que el punto de
+ * mira tiene que subir lo mismo. Sin esto señalaba un sitio y se confirmaba
+ * otro, o se quedaba escondido detrás de la hoja.
+ */
+export function ReticulaCentral({ aireInferior = 0 }: { readonly aireInferior?: number }) {
   const tema = useTema();
 
   return (
@@ -119,6 +128,9 @@ export function ReticulaCentral() {
       }}
     >
       <View style={{
+        // Centrado en el área útil: un margen abajo de `aire` sube el punto la
+        // mitad de ese aire, que es justo lo que hace `mapPadding`.
+        marginBottom: aireInferior,
         width: 20,
         height: 20,
         borderRadius: 10,

@@ -227,7 +227,7 @@ export function MapaDeMovilidad({ modelo, onCentro }: {
         ))}
       </MapView>
 
-      {modelo.eligiendoPunto ? <ReticulaCentral /> : null}
+      {modelo.eligiendoPunto ? <ReticulaCentral aireInferior={modelo.aireInferior} /> : null}
     </View>
   );
 }

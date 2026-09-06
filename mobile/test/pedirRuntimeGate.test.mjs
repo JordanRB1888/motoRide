@@ -258,12 +258,13 @@ test('el «$0,00» del laboratorio no puede llegar a la pantalla real', () => {
 });
 
 test('el destino no existe hasta que el mapa se mueve de donde estás', () => {
-  // El retículo arranca centrado en el origen. Sin esto, «El punto que
-  // elegiste» aparecía antes de elegir, y la estimación era de un viaje de
-  // cero kilómetros a donde ya estás.
+  // Sigue sin poder elegirse el sitio donde ya estás --un viaje de cero
+  // kilómetros no es un viaje-- pero la guarda se mudó: ahora el mapa no fija
+  // el destino al moverse, así que lo que hay que impedir es CONFIRMAR ese
+  // punto. El botón es el que lo comprueba.
   const pedir = sinComentarios('app/pedir.tsx');
   assert.match(pedir, /const DISTANCIA_MINIMA_KM = 0\.05;/);
-  assert.match(pedir, /distanciaKm\(origen, centro\) < DISTANCIA_MINIMA_KM\) return;/);
+  assert.match(pedir, /distanciaKm\(origen, candidato\) < DISTANCIA_MINIMA_KM/);
 });
 
 test('el modelo del mapa está memorizado: sin bucle mapa↔estado', () => {
@@ -275,6 +276,8 @@ test('el modelo del mapa está memorizado: sin bucle mapa↔estado', () => {
   assert.match(pedir, /const modelo = useMemo\(\(\) => \(\{/);
   assert.match(pedir, /modelo=\{modelo\}/);
   assert.equal(/modelo=\{\{/.test(pedir), false, 'el modelo vuelve a construirse inline');
-  // Y un centro que ya es el destino no se apunta otra vez.
-  assert.match(pedir, /distanciaKm\(destino, centro\) < 0\.001\) return;/);
+  // Y un centro ya apuntado no se apunta otra vez: el mapa avisa al asentarse
+  // aunque nadie lo haya tocado. Ahora sobre el candidato, que es lo que el
+  // movimiento del mapa actualiza.
+  assert.match(pedir, /distanciaKm\(candidato, centro\) < 0\.001\) return;/);
 });

@@ -23,6 +23,8 @@ import { ActivityIndicator, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 
 import { C2BuscandoVehiculo, C2Viaje } from '../preview/pantallasC2';
+import { Boton } from '../components/Boton';
+import { Txt } from '../ui/componentes';
 import { ProveedorDeNavegacion } from '../ui/navegar';
 import { useTema } from '../theme/ThemeContext';
 import { useSesion } from '../context/AuthContext';
@@ -41,7 +43,7 @@ import {
 export default function PantallaDelViajeActivo() {
   const tema = useTema();
   const { sesion } = useSesion();
-  const { estado, viaje } = useViajeActivo();
+  const { estado, viaje, sinConductores, olvidarSinConductores } = useViajeActivo();
   const { estado: ubicacion, pedirUbicacion, refrescar } = useUbicacion();
   const { conductor } = useUbicacionEnVivo();
 
@@ -122,19 +124,60 @@ export default function PantallaDelViajeActivo() {
     };
   }, [cancelando]);
 
+  // ---------------------------------------------------------------------
+  // Que no haya conductores NO es un fallo, pero hay que decirlo
+  // ---------------------------------------------------------------------
+  //
+  // El despacho ofrece la carrera a cada candidato durante quince segundos. Si
+  // ninguno acepta --o no habia ninguno cerca-- cancela el viaje y avisa por
+  // `dispatch:no_drivers`. Ese evento estaba declarado en el cliente y no lo
+  // escuchaba nadie: el viaje desaparecia, esta pantalla veia `SIN_VIAJE` y
+  // devolvia al inicio sin una palabra. Quien acababa de pedir una carrera se
+  // encontraba en la portada y pensaba que la aplicacion se habia roto.
+  // Lo recuerda el proveedor: cuando no hay ningun conductor elegible el aviso
+  // llega antes de que esta pantalla exista.
   // Cuando el servidor deja de dar el viaje —completado, cancelado, o fuera de
   // su ventana— esta pantalla ya no tiene nada que enseñar. Se vuelve al
   // inicio en vez de quedarse en blanco.
   //
   // `replace` y no `push`: el viaje que terminó no debe quedar en la pila.
+  //
+  // Salvo que sepamos POR QUE se acabo: si fue porque nadie podia venir, eso
+  // se cuenta aqui y se ofrece volver a intentarlo. Sacar a alguien al inicio
+  // en silencio no es una transicion, es dejarle sin explicacion.
   useEffect(() => {
-    if (estado.fase === 'SIN_VIAJE') router.replace('/pasajero');
-  }, [estado.fase]);
+    if (estado.fase === 'SIN_VIAJE' && !sinConductores) router.replace('/pasajero');
+  }, [estado.fase, sinConductores]);
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return <Centro><ActivityIndicator color={tema.color.acento} size="large" /></Centro>;
   }
   if (sesion.estado !== 'AUTENTICADO') return <Redirect href="/" />;
+
+  // NADIE PODIA VENIR, Y SE DICE
+  //
+  // No es un error de la aplicacion ni algo que se pueda reintentar solo: a esa
+  // hora y en esa zona no habia conductores disponibles. Lo unico util es
+  // contarlo y dejar pedir otra vez.
+  if (sinConductores && estado.fase !== 'CON_VIAJE') {
+    return (
+      <Centro>
+        <Txt nivel="titulo" centrado>No encontramos conductores disponibles</Txt>
+        <Txt nivel="cuerpo" tono="secundario" centrado>
+          Ninguno pudo tomar tu viaje ahora mismo. Puedes intentarlo de nuevo.
+        </Txt>
+        <Boton
+          titulo="Pedir otra vez"
+          onPress={() => { olvidarSinConductores(); router.replace('/pedir'); }}
+        />
+        <Boton
+          titulo="Volver al inicio"
+          variante="secundario"
+          onPress={() => { olvidarSinConductores(); router.replace('/pasajero'); }}
+        />
+      </Centro>
+    );
+  }
 
   // Todavía no se sabe. Sólo al arrancar: al resincronizar hay viaje conocido.
   if (viaje === null) {
@@ -204,7 +247,9 @@ function Centro({ children }: { readonly children: React.ReactNode }) {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: tema.color.fondo
+      backgroundColor: tema.color.fondo,
+      gap: tema.ritmo.entreElementos,
+      padding: tema.ritmo.margenPantalla
     }}>
       {children}
     </View>
