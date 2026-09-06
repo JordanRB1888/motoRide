@@ -160,7 +160,8 @@ export function C2DetalleDeViaje({
   datos,
   cargandoConversacion = false,
   barra = 'pasajera',
-  control
+  control,
+  perspectiva = 'pasajera'
 }: {
   readonly clave?: string;
   /** Sin esto se pinta el ejemplo. Con esto, el viaje de verdad. */
@@ -184,6 +185,16 @@ export function C2DetalleDeViaje({
    * ofrecerle algo que no es suyo.
    */
   readonly control?: React.ReactNode;
+  /**
+   * Desde dónde se mira este viaje.
+   *
+   * El dato de la contraparte ya venía bien --a la pasajera se le pone su
+   * conductor; al conductor, su pasajera-- pero los rótulos estaban escritos
+   * desde el lado de la pasajera, así que al conductor se le decía que su
+   * pasajera le había llevado a él. Sólo cambia cómo se llaman las cosas: ni
+   * los datos, ni el orden, ni lo que se enseña.
+   */
+  readonly perspectiva?: 'pasajera' | 'conductor';
 }) {
   const tema = useTema();
   const ir = useIr();
@@ -210,9 +221,20 @@ export function C2DetalleDeViaje({
         {/* Un viaje cancelado antes de que nadie lo aceptara no tiene
             conductor. La banda desaparece en vez de enseñar tres huecos. */}
         {dato.conductor !== null ? (
-          <Banda titulo="Quién te llevó" icono="moto">
-            <Dato rotulo="Conductor" valor={dato.conductor.nombre} />
-            <Dato rotulo="Vehículo" valor={dato.conductor.vehiculo} />
+          <Banda
+            titulo={perspectiva === 'conductor' ? 'A quién llevaste' : 'Quién te llevó'}
+            icono="moto"
+          >
+            <Dato
+              rotulo={perspectiva === 'conductor' ? 'Pasajera' : 'Conductor'}
+              valor={dato.conductor.nombre}
+            />
+            {/* Una pasajera no tiene vehículo ni placa: al conductor le llegan
+                vacíos. La misma guarda que ya tenía la placa, por lo mismo que
+                dice la nota de arriba --no se enseñan huecos--. */}
+            {dato.conductor.vehiculo !== '' ? (
+              <Dato rotulo="Vehículo" valor={dato.conductor.vehiculo} />
+            ) : null}
             {dato.conductor.placa !== '' ? (
               <Dato rotulo="Placa" valor={dato.conductor.placa} />
             ) : null}

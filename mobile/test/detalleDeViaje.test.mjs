@@ -124,6 +124,35 @@ test('el registro guarda quién conducía y con qué', () => {
   assert.match(dato.conductor.placa, /^AA000AA$/, 'la placa parece real');
 });
 
+test('la contraparte se llama por su nombre, según quién mire el viaje', () => {
+  // El dato ya era correcto --al conductor se le pone su pasajera-- pero los
+  // rótulos seguían siendo los de la pasajera, así que al conductor se le
+  // informaba de que su pasajera le había llevado a él.
+  const superficie = leer(DETALLE);
+  assert.match(superficie, /perspectiva === 'conductor' \? 'A quién llevaste' : 'Quién te llevó'/);
+  assert.match(superficie, /perspectiva === 'conductor' \? 'Pasajera' : 'Conductor'/);
+
+  // Y la perspectiva sale del rol de la SESIÓN, el mismo que decide el dato:
+  // ni de la ruta, ni de un parámetro, ni de un valor por omisión escondido.
+  const pantalla = leer('app/viaje/[id].tsx');
+  assert.match(pantalla, /perspectiva=\{soyPasajera \? 'pasajera' : 'conductor'\}/);
+  assert.match(pantalla, /const soyPasajera = sesion\.usuario\.role !== 'driver';/);
+});
+
+test('a quien no tiene vehículo no se le pinta una fila de vehículo vacía', () => {
+  // La contraparte del conductor es una persona, no una moto: `vehiculo` y
+  // `placa` llegan vacíos. La placa ya tenía su guarda; el vehículo no, y se
+  // veía el rótulo suelto sin valor debajo.
+  const superficie = leer(DETALLE);
+  for (const campo of ['vehiculo', 'placa']) {
+    assert.match(
+      superficie,
+      new RegExp(`dato\\.conductor\\.${campo} !== '' \\?`),
+      `la fila de ${campo} se pinta aunque no haya nada que poner`
+    );
+  }
+});
+
 test('el registro guarda el cobro, y sigue sin inventar importes', () => {
   // La tarifa la calcula el servidor con su configuración y la tasa del BCV.
   // Una cifra creíble en una maqueta es la forma más fácil de que alguien la

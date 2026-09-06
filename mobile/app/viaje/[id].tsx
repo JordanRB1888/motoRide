@@ -134,6 +134,9 @@ export default function PantallaDeViaje() {
         cargandoConversacion={cargandoChat}
         barra={barraDelRol}
         control={<ControlCentralDelRol barra={barraDelRol} />}
+        // Desde dónde se mira: el mismo `soyPasajera` que decide QUIÉN es la
+        // contraparte decide también cómo se la llama.
+        perspectiva={soyPasajera ? 'pasajera' : 'conductor'}
       />
     </ShellCompartido>
   );
