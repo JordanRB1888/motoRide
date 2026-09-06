@@ -471,7 +471,10 @@ test('Historial → Detalle → volver', () => {
   assert.match(sinComentarios('app/viaje/[id].tsx'), /router\.back\(\)/, 'no se puede volver');
   // La pestana la resuelve el shell, que hace `replace` y no apila: asi
   // «atras» sale de la aplicacion en vez de recorrer la historia de pestanas.
-  assert.match(sinComentarios('navegacion/shellDePasajero.tsx'), /case 'historial':\n *router\.replace\('\/historial'\)/);
+  // `\s*` y no `\n *`: este fichero se registra con CRLF en unos worktrees y
+  // con LF en otros, y lo que se comprueba es la estructura, no el final de
+  // linea de quien hizo el checkout.
+  assert.match(sinComentarios('navegacion/shellDePasajero.tsx'), /case 'historial':\s*router\.replace\('\/historial'\)/);
 });
 
 test('la aplicación real NUNCA navega a /diseno', () => {

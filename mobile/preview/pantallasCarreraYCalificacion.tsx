@@ -6,7 +6,7 @@ import { View } from 'react-native';
 
 import { LienzoDeMapa, type VehiculoEnMapa } from '../ui/Mapa';
 import { HojaInferior } from '../ui/HojaInferior';
-import { HITOS_DE_VIAJE } from './fixtures';
+import { HITOS_DE_VIAJE } from './pantallasC2';
 import { SuperficieDeCarrera } from '../conductor/SuperficieDeCarrera';
 import { PantallaDeCalificacion } from '../ui/PantallaDeCalificacion';
 import { C2Viaje } from './pantallasC2';

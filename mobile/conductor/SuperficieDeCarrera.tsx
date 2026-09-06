@@ -12,7 +12,6 @@
 
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Boton, Txt } from '../ui/componentes';
 import { Icono } from '../ui/Icono';
 import { useTema, useEsquema } from '../theme/ThemeContext';
 import type { AccionDelConductor, FaseDeLaAccion } from '../domain/accionesDelConductor';
@@ -49,7 +48,6 @@ export function SuperficieDeCarrera({
   origen,
   destino,
   tarifa = '.50',
-  tarifaBs = 'Bs. 210,00',
   metodoPago = 'Efectivo',
   accion,
   fase,
@@ -78,7 +76,6 @@ export function SuperficieDeCarrera({
   // Determinación de estado y etiquetas
   const esRecogida = accion.estadoQuePide === 'ARRIVED';
   const esEsperando = accion.estadoQuePide === 'IN_PROGRESS';
-  const esEnCurso = accion.estadoQuePide === 'COMPLETED';
 
   const badgeEstadoTexto = esRecogida
     ? 'EN CAMINO A RECOGER'

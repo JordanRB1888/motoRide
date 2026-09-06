@@ -328,7 +328,12 @@ export function MapaDeMovilidad({ modelo, onCentro }: {
               }}
               // Oculto hasta que la proyección diga dónde va: en la esquina
               // superior izquierda se leería como un marcador en el mar.
-              style={{ position: 'absolute', top: 0, left: 0, visibility: 'hidden' }}
+              //
+              // Con `opacity`, no con `visibility`: esa segunda es CSS del
+              // navegador y en el teléfono no hace nada, así que el marcador se
+              // estaba viendo igual mientras se medía.
+              pointerEvents="none"
+              style={{ position: 'absolute', top: 0, left: 0, opacity: 0 }}
             >
               <PiezaDelMarcador marcador={marcador} />
             </View>

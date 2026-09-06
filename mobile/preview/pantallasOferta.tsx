@@ -11,7 +11,9 @@ import { SuperficieDeOferta } from '../conductor/SuperficieDeOferta';
 import type { OfertaDeViaje } from '../domain/ofertaDeViaje';
 
 const OFERTA_MOTO_DEMO: OfertaDeViaje = {
-  id: 'oferta-moto-maracaibo',
+  venceEn: Date.now() + 15_000,
+  nombreDePasajera: 'Carolina P.',
+  viajeId: 'oferta-moto-maracaibo',
   tipo: 'MOTO',
   dolares: 3.87,
   bolivares: 142.50,
@@ -32,7 +34,9 @@ const OFERTA_MOTO_DEMO: OfertaDeViaje = {
 };
 
 const OFERTA_AUTO_DEMO: OfertaDeViaje = {
-  id: 'oferta-auto-maracaibo',
+  venceEn: Date.now() + 15_000,
+  nombreDePasajera: 'Daniela R.',
+  viajeId: 'oferta-auto-maracaibo',
   tipo: 'AUTO',
   dolares: 6.20,
   bolivares: 228.30,

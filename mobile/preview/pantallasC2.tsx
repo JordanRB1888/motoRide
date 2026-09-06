@@ -36,7 +36,7 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Boton, Insignia, Txt } from '../ui/componentes';
-import { Icono } from '../ui/Icono';
+import { Icono, type NombreDeIcono } from '../ui/Icono';
 import { IconoAnimado } from '../ui/IconoAnimado';
 import { Arranque } from '../ui/Arranque';
 import { LienzoDeMapa, type HitoEnMapa, type VehiculoEnMapa } from '../ui/Mapa';
@@ -98,7 +98,10 @@ const MOTOS_CERCA: readonly VehiculoEnMapa[] = [
   { clave: 'a1', tipo: 'AUTO', en: { x: 38, y: 38 }, rumbo: 96 }
 ];
 
-const HITOS_DE_VIAJE: readonly HitoEnMapa[] = [
+// Exportado para las maquetas de carrera y calificacion, que pintan el mismo
+// recorrido: duplicar las marcas seria tener dos que se separan al primer
+// retoque.
+export const HITOS_DE_VIAJE: readonly HitoEnMapa[] = [
   { clave: 'origen', en: { x: 28, y: 43 }, tipo: 'origen' },
   { clave: 'destino', en: { x: 73, y: 13 }, tipo: 'destino' }
 ];
@@ -808,7 +811,7 @@ export function C2BuscandoAuto() {
 export interface IncidenteDeTurno {
   readonly titulo: string;
   readonly detalle: string;
-  readonly icono?: 'reloj' | 'escudo' | 'destino' | 'viajes' | 'alerta';
+  readonly icono?: NombreDeIcono;
   readonly badge?: string;
   readonly textoBoton?: string;
   readonly onAccion?: () => void;

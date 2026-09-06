@@ -19,6 +19,7 @@
 
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,7 +31,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Boton, Txt } from './componentes';
 import { Icono } from './Icono';
 import { useTema, useEsquema } from '../theme/ThemeContext';
 

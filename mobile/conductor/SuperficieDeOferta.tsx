@@ -140,7 +140,7 @@ export function SuperficieDeOferta({
         paddingBottom: 20,
         paddingHorizontal: 16,
         gap: 14,
-        shadowColor: tema.color.fondoHundido,
+        shadowColor: tema.color.superficieHundida,
         shadowOpacity: 0.28,
         shadowRadius: 16,
         shadowOffset: { width: 0, height: -4 },
@@ -286,7 +286,7 @@ export function SuperficieDeOferta({
                   width: 4,
                   height: 4,
                   borderRadius: 2,
-                  backgroundColor: tema.color.fondoHundido
+                  backgroundColor: tema.color.superficieHundida
                 }}
               />
             </View>
@@ -331,7 +331,7 @@ export function SuperficieDeOferta({
                     width: 3,
                     height: 3,
                     borderRadius: 1,
-                    backgroundColor: tema.color.fondoHundido
+                    backgroundColor: tema.color.superficieHundida
                   }}
                 />
               </View>
@@ -441,7 +441,7 @@ export function CierreDeOferta({
         paddingBottom: 20,
         paddingHorizontal: 16,
         gap: 14,
-        shadowColor: tema.color.fondoHundido,
+        shadowColor: tema.color.superficieHundida,
         shadowOpacity: 0.25,
         shadowRadius: 14,
         shadowOffset: { width: 0, height: -3 },

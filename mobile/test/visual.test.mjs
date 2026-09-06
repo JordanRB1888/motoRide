@@ -443,17 +443,21 @@ test('la marca sigue siendo +58Express', () => {
   assert.ok(fs.existsSync(path.join(raizMovil, 'assets/splash-icon.png')));
 });
 
-test('las paradas del viaje activo se indexan por su papel, no por su dirección', () => {
-  // Dos paradas marcadas en el mapa llegan sin dirección: `key={parada.texto}`
-  // les daba a las dos la misma clave vacía y React avisaba de «two children
-  // with the same key, ``». La clave es el papel (origen/destino), único y que
-  // nunca falta. Es un fallo que no rompe nada visible pero corrompe el
-  // reciclado de la lista, así que sólo una prueba lo mantiene cerrado.
+test('las paradas del viaje activo no se pueden indexar por su dirección', () => {
+  // Esto cerraba un fallo real: dos paradas marcadas en el mapa llegan SIN
+  // dirección, `key={parada.texto}` les daba a las dos la misma clave vacía y
+  // React avisaba de «two children with the same key, ``». No rompía nada
+  // visible, pero corrompía el reciclado de la lista.
+  //
+  // La hoja de ruta de Antigravity ya no las recorre: escribe RECOGIDA y
+  // DESTINO una a una, cada una con su rótulo. Sin lista no hay claves que
+  // puedan chocar, así que el fallo está cerrado POR CONSTRUCCIÓN. Lo que se
+  // vigila ahora es que nadie vuelva a montar la lista con la clave mala.
   const fuente = sinComentarios('preview/pantallasC2.tsx');
   assert.doesNotMatch(fuente, /key=\{parada\.texto\}/,
     'las paradas se indexan por su texto, que puede venir vacío y colisionar');
-  assert.match(fuente, /key=\{parada\.clave\}/,
-    'las paradas deben indexarse por una clave estable (origen/destino)');
+  assert.match(fuente, /RECOGIDA/, 'la hoja de ruta perdió el rótulo de la recogida');
+  assert.match(fuente, /DESTINO/, 'la hoja de ruta perdió el rótulo del destino');
 });
 
 test('no se introdujo ninguna fuente nueva', () => {
