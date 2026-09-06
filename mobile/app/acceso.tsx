@@ -391,7 +391,7 @@ export default function Acceso() {
               }
             />
 
-            <ContrasenaOlvidada />
+            <ContrasenaOlvidada identificador={identificador} />
           </View>
 
           <Boton
@@ -447,19 +447,32 @@ export default function Acceso() {
 /**
  * «¿Olvidaste tu contraseña?».
  *
- * El backend NO tiene recuperación —ni ruta, ni correo, ni testigo—, así que
- * esto no abre ningún flujo: dice la verdad y ofrece el camino que sí existe,
- * escribir a soporte. Un enlace a un formulario que no restablece nada sería
- * peor que no tenerlo.
+ * Lleva al flujo de verificación con `PASSWORD_RESET`: se manda un código al
+ * contacto, y con el código se fija la contraseña nueva. El servidor la valida
+ * ANTES de gastar el código —una contraseña corta no quema el código— y al
+ * cambiarla marca `credentialsChangedAt`, con lo que toda sesión abierta antes
+ * deja de valer. Que es exactamente lo que espera quien la cambia porque cree
+ * que alguien más la sabe.
+ *
+ * SE LLEVA LO QUE YA ESTABA ESCRITO
+ *
+ * Si en el campo de arriba hay un correo, viaja con la navegación. Volver a
+ * escribirlo sería pedirle dos veces lo mismo a alguien que ya está teniendo un
+ * mal momento. Si lo que hay es un teléfono, o no hay nada, la pantalla de
+ * verificación pregunta por dónde mandar el código.
  */
-function ContrasenaOlvidada() {
+function ContrasenaOlvidada({ identificador }: { readonly identificador: string }) {
+  const escrito = identificador.trim();
+  // El correo se distingue del teléfono por la arroba, que es lo único que los
+  // separa sin ambigüedad. Sin ella no se adivina: se deja que lo pregunte la
+  // pantalla siguiente.
+  const parametros = escrito.includes('@')
+    ? { proposito: 'PASSWORD_RESET', correo: escrito }
+    : { proposito: 'PASSWORD_RESET' };
+
   return (
     <Pressable
-      onPress={() => Alert.alert(
-        '¿Olvidaste tu contraseña?',
-        'Todavía no se puede cambiar desde la aplicación. Escríbenos y te ayudamos a recuperarla.',
-        [{ text: 'Entendido' }]
-      )}
+      onPress={() => router.push({ pathname: '/verificacion', params: parametros } as never)}
       accessibilityRole="button"
       accessibilityLabel="¿Olvidaste tu contraseña?"
       hitSlop={8}

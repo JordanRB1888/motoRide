@@ -219,6 +219,9 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 - Nueve errores de tipos y tres pruebas rotas del trabajo en curso, arreglados
 - Móvil 1141/1141 · Frontend 644/644 · Servidor 1228 · typechecks limpios
 - Variante Beta, perfil de EAS y plantilla de entorno
+- **Recuperar contraseña conectada en el móvil**, de extremo a extremo salvo el
+  correo: el enlace lleva al flujo, se pide el código y la contraseña nueva se
+  manda junto a él, que es como lo quiere el servidor
 - Migración de Maps a OAuth de servidor (falta certificarla)
 
 ### Falta, y lo tienes que hacer tú
@@ -238,7 +241,6 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 | Qué | Qué espera |
 |---|---|
 | Panel de administracion en `admin-staging` | desplegar el frontend |
-| **Recuperar contraseña** | nada — hoy **no existe** ese flujo |
 | Confirmación de correo obligatoria | el proveedor de correo |
 | Turnstile en registro y recuperación | las claves |
 | Sentry con `environment=staging` | el proyecto de Sentry |
@@ -257,7 +259,18 @@ hace el servidor, no RLS. Todo lo que hable de «Site URL», «Redirect URLs» o
 `service_role` no aplica: los enlaces de confirmación y de recuperación los
 tiene que emitir y validar nuestro backend.
 
-**Recuperar contraseña no existe.** No es que esté a medias: no hay endpoint, ni
-pantalla, ni correo. Hay que construirlo entero antes de que nadie de fuera
-pruebe, porque es lo primero que hace falta cuando alguien olvida su clave y no
-hay a quién preguntarle.
+**Recuperar contraseña sí existe.** Aquí me equivoqué en una versión anterior de
+este documento: dije que no había nada, buscando rutas del tipo
+`/api/auth/password/reset`. No las hay porque el flujo va por los endpoints
+genéricos de verificación, con `purpose: PASSWORD_RESET`.
+
+Y está bien hecho: el servidor valida la contraseña nueva **antes** de gastar el
+código —una contraseña corta no quema el código ni obliga a pedir otro— y al
+cambiarla marca `credentialsChangedAt`, con lo que toda sesión abierta antes
+deja de valer. Que es lo que espera quien la cambia porque cree que alguien más
+la sabe.
+
+Lo que faltaba era el camino desde la aplicación: «¿Olvidaste tu contraseña?»
+abría un aviso diciendo que no se podía. Ya lleva al flujo, arrastrando el
+correo que se hubiera escrito. Falta el proveedor de correo para que el código
+llegue de verdad.

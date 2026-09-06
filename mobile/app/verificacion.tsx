@@ -39,6 +39,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text, View } from 'react-native';
 
+import { Campo } from '../ui/Campo';
+
 import { Pantalla } from '../components/Pantalla';
 import { Boton } from '../ui/componentes';
 import { useTema } from '../theme/ThemeContext';
@@ -112,6 +114,19 @@ export default function Verificacion() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [intentosRestantes, setIntentosRestantes] = useState<number | undefined>(undefined);
   const [segundosParaReenviar, setSegundosParaReenviar] = useState(0);
+
+  // RECUPERAR LA CONTRASENA ES EL UNICO PROPOSITO CON DOS PASOS.
+  //
+  // El servidor pide el codigo y la contrasena nueva en la MISMA peticion, y lo
+  // hace a proposito: valida la contrasena ANTES de gastar el codigo, de forma
+  // que escribir una demasiado corta no queme el codigo ni obligue a pedir
+  // otro. Por eso aqui, al completar las seis cifras, no se verifica todavia:
+  // se pasa a pedir la contrasena y se manda todo junto.
+  const recuperandoContrasena = proposito === 'PASSWORD_RESET';
+  const [pidiendoContrasena, setPidiendoContrasena] = useState(false);
+  const [contrasenaNueva, setContrasenaNueva] = useState('');
+  const [contrasenaRepetida, setContrasenaRepetida] = useState('');
+  const [errorDeContrasena, setErrorDeContrasena] = useState<string | null>(null);
 
   // Protege del doble toque incluso antes de que el estado se repinte: dos
   // pulsaciones seguidas ocurren en el mismo fotograma.
@@ -187,7 +202,7 @@ export default function Verificacion() {
   );
 
   const verificar = useCallback(
-    async (escrito: string) => {
+    async (escrito: string, contrasena?: string) => {
       if (verificando.current || !desafio || !codigoCompleto(escrito)) return;
       verificando.current = true;
       setEstado('VERIFICANDO');
@@ -197,6 +212,7 @@ export default function Verificacion() {
           challengeId: desafio.challengeId,
           codigo: escrito,
           proposito,
+          contrasenaNueva: contrasena,
           conSesion
         });
         setEstado(resultado.estado);
@@ -204,7 +220,14 @@ export default function Verificacion() {
         if (resultado.intentosRestantes !== undefined) setIntentosRestantes(resultado.intentosRestantes);
         // Un código quemado se borra de la pantalla; uno que sigue vivo
         // --sin conexión-- se conserva para poder reintentarlo tal cual.
-        if (resultado.necesitaOtroCodigo) setCodigo('');
+        if (resultado.necesitaOtroCodigo) {
+          setCodigo('');
+          // Un codigo quemado deja la contrasena sin sitio donde aplicarse: se
+          // vuelve a la casilla, y no se conserva lo escrito.
+          setPidiendoContrasena(false);
+          setContrasenaNueva('');
+          setContrasenaRepetida('');
+        }
       } finally {
         verificando.current = false;
       }
@@ -217,11 +240,30 @@ export default function Verificacion() {
       const limpio = limpiarCodigo(texto);
       setCodigo(limpio);
       // Al completar las seis cifras se comprueba solo: es lo que la gente
-      // espera y evita un botón de más.
-      if (codigoCompleto(limpio)) void verificar(limpio);
+      // espera y evita un botón de más. Salvo al recuperar la contraseña, donde
+      // todavía falta la mitad de lo que hay que mandar.
+      if (!codigoCompleto(limpio)) return;
+      if (recuperandoContrasena) setPidiendoContrasena(true);
+      else void verificar(limpio);
     },
-    [verificar]
+    [recuperandoContrasena, verificar]
   );
+
+  /** Manda el código y la contraseña juntos, que es como los quiere el servidor. */
+  const confirmarContrasena = useCallback(() => {
+    // Las mismas dos reglas que el servidor, comprobadas aquí para no gastar
+    // una ida y vuelta --ni un código-- en algo que ya se sabe que va a fallar.
+    if (contrasenaNueva.length < 8) {
+      setErrorDeContrasena('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    if (contrasenaNueva !== contrasenaRepetida) {
+      setErrorDeContrasena('Las dos contraseñas no coinciden.');
+      return;
+    }
+    setErrorDeContrasena(null);
+    void verificar(codigo, contrasenaNueva);
+  }, [codigo, contrasenaNueva, contrasenaRepetida, verificar]);
 
   const continuar = useCallback(() => {
     const destino = typeof parametros.volverA === 'string' ? parametros.volverA : null;
@@ -315,6 +357,81 @@ export default function Verificacion() {
     );
   }
 
+  // EL SEGUNDO PASO DE RECUPERAR LA CONTRASENA.
+  //
+  // Se llega aqui con el codigo ya escrito y sin gastar. Si se sale --el boton
+  // de volver-- se conserva el codigo: sigue siendo valido y pedir otro solo
+  // por retroceder seria maltratar a quien ya esta teniendo un mal dia.
+  if (pidiendoContrasena) {
+    const enviando = estado === 'VERIFICANDO';
+    return (
+      <Pantalla>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 16 }} testID="pantalla-contrasena-nueva">
+          <Text style={{ fontSize: 22, fontWeight: '800', color: tema.color.textoPrimario }}>
+            Tu nueva contraseña
+          </Text>
+          <Text style={{ fontSize: 15, lineHeight: 21, color: tema.color.textoSecundario }}>
+            El código es correcto. Elige la contraseña con la que entrarás a partir de ahora.
+          </Text>
+
+          <Campo
+            etiqueta="Nueva contraseña"
+            value={contrasenaNueva}
+            onChangeText={texto => { setContrasenaNueva(texto); setErrorDeContrasena(null); }}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            editable={!enviando}
+            ayuda="Al menos 8 caracteres."
+            testID="campo-contrasena-nueva"
+          />
+          <Campo
+            etiqueta="Repite la contraseña"
+            value={contrasenaRepetida}
+            onChangeText={texto => { setContrasenaRepetida(texto); setErrorDeContrasena(null); }}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            editable={!enviando}
+            error={errorDeContrasena}
+            onSubmitEditing={confirmarContrasena}
+            testID="campo-contrasena-repetida"
+          />
+
+          {/* Lo que no es un fallo de la contrasena --sin conexion, el codigo
+              que vencio mientras se escribia-- se dice aparte, porque no se
+              arregla cambiando lo escrito. */}
+          {aviso && !errorDeContrasena ? (
+            <Text
+              accessibilityRole="alert"
+              testID="aviso-contrasena"
+              style={{ fontSize: 14, lineHeight: 20, color: tema.color.textoSecundario }}
+            >
+              {aviso}
+            </Text>
+          ) : null}
+
+          <View style={{ gap: 10, marginTop: 8 }}>
+            <Boton
+              titulo="Cambiar mi contraseña"
+              onPress={confirmarContrasena}
+              cargando={enviando}
+              testID="confirmar-contrasena-nueva"
+            />
+            <Boton
+              titulo="Volver"
+              variante="secundario"
+              onPress={() => { setPidiendoContrasena(false); setErrorDeContrasena(null); }}
+              testID="volver-al-codigo"
+            />
+          </View>
+        </View>
+      </Pantalla>
+    );
+  }
+
   return (
     <C2VerificacionOTP
       canal={A_LA_SUPERFICIE[desafio.channel]}
@@ -330,7 +447,10 @@ export default function Verificacion() {
       // tiene su propio aviso, con su propia frase.
       avisoGeneral={aparienciaDeLaCasilla(estado) === 'normal' ? aviso : null}
       verificando={estado === 'VERIFICANDO'}
-      onVerificar={() => void verificar(codigo)}
+      onVerificar={() => {
+        if (recuperandoContrasena) setPidiendoContrasena(true);
+        else void verificar(codigo);
+      }}
       onReenviar={() => canal && void enviar(canal)}
       onCambiarCanal={() => {
         // Volver al selector. El desafío anterior lo invalida el servidor en
