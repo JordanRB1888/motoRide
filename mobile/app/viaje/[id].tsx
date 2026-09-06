@@ -21,7 +21,9 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 
 import { C2DetalleDeViaje, type DatosDelViaje } from '../../preview/pantallaDetalleDeViaje';
 import { Boton, Txt } from '../../ui/componentes';
-import { ProveedorDeNavegacion } from '../../ui/navegar';
+import { ShellCompartido } from '../../navegacion/shellCompartido';
+import { ControlCentralDelRol } from '../../navegacion/controlCentral';
+import { shellDelRol } from '../../domain/shellDeRol';
 import { useTema } from '../../theme/ThemeContext';
 import { useSesion } from '../../context/AuthContext';
 import { fuenteDeAdjunto, pedirMensajes, pedirViaje } from '../../services/viajes';
@@ -118,14 +120,22 @@ export default function PantallaDeViaje() {
   }
 
   const soyPasajera = sesion.usuario.role !== 'driver';
+  // De quién es la barra de abajo: la decide el ROL que devuelve el servidor,
+  // igual que en el historial del que se llega. Nunca la ruta ni una caché.
+  const barraDelRol = shellDelRol(sesion.usuario.role) === 'conductor' ? 'conductor' : 'pasajera';
 
+  // `ShellCompartido` trae la navegación del rol REAL. Antes había aquí una
+  // tabla propia que sólo entendía las claves de la pasajera y mandaba
+  // «inicio» a `/pasajero`: un conductor salía del detalle al shell ajeno.
   return (
-    <ProveedorDeNavegacion ir={irA}>
+    <ShellCompartido cargando={<Centro><ActivityIndicator color={tema.color.acento} size="large" /></Centro>}>
       <C2DetalleDeViaje
         datos={enPantalla(viaje, mensajes, adjuntos, sesion.usuario.id, soyPasajera)}
         cargandoConversacion={cargandoChat}
+        barra={barraDelRol}
+        control={<ControlCentralDelRol barra={barraDelRol} />}
       />
-    </ProveedorDeNavegacion>
+    </ShellCompartido>
   );
 }
 
@@ -239,11 +249,6 @@ function metodoLegible(metodo: string): string {
   return metodo;
 }
 
-function irA(clave: string) {
-  if (clave === 'inicio') router.replace('/pasajero');
-  if (clave === 'historial') router.replace('/historial');
-  if (clave === 'perfil') router.replace('/perfil');
-}
 
 function Centro({ children }: { readonly children: React.ReactNode }) {
   const tema = useTema();

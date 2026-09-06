@@ -315,6 +315,37 @@ test('Historial y Perfil pintan la barra del ROL, no siempre la de pasajera', ()
   assert.match(secciones, /control=\{control/, 'la barra usa el control que le dan desde fuera');
 });
 
+test('el DETALLE de un viaje también pinta la barra del rol de quien lo abre', () => {
+  // Historial y Perfil se corrigieron en su día; el detalle se quedó fuera.
+  // Tenía `DESTINOS_DE_PASAJERA` y el botón de pedir cosidos, así que un
+  // conductor que abría un viaje de su historial veía el shell de la clienta.
+  const detalle = despojarComentarios(leer('app/viaje/[id].tsx'));
+  assert.match(detalle, /<ShellCompartido/, 'el detalle debe usar el shell del rol real');
+  assert.match(detalle, /shellDelRol\(sesion\.usuario\.role\)/, 'el rol sale de la sesión, no de la ruta');
+  assert.match(detalle, /barra=\{barraDelRol\}/);
+  assert.match(detalle, /control=\{<ControlCentralDelRol barra=\{barraDelRol\} \/>\}/);
+
+  // Y la superficie sabe pintar las dos barras.
+  const superficie = leer('preview/pantallaDetalleDeViaje.tsx');
+  assert.match(superficie, /barra === 'conductor' \? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA/);
+  assert.match(superficie, /control=\{control \?\? <ControlDePedido/, 'el control viene de fuera; el de pasajera es sólo el de por omisión');
+});
+
+test('el detalle no lleva una tabla de navegación propia que dé por hecho la pasajera', () => {
+  // Aquí vivía un `irA` que mandaba «inicio» a `/pasajero` y no entendía ni
+  // `mapa` ni `saldo`: las pestañas del conductor no hacían nada, y la de
+  // Inicio le sacaba al shell ajeno. La tabla buena la trae `ShellCompartido`.
+  const detalle = despojarComentarios(leer('app/viaje/[id].tsx'));
+  assert.equal(/function irA\(/.test(detalle), false, 'el detalle volvió a tener su propia tabla');
+  assert.equal(
+    /router\.replace\('\/pasajero'\)/.test(detalle),
+    false,
+    'el detalle no puede mandar a nadie al shell de pasajero por su cuenta'
+  );
+  // Volver del detalle es volver: a su historial, sea el que sea.
+  assert.match(detalle, /router\.back\(\)/);
+});
+
 test('el shell compartido elige la navegación por el rol real', () => {
   const compartido = despojarComentarios(leer('navegacion/shellCompartido.tsx'));
   assert.match(compartido, /shell === 'conductor' \? crearNavegacionDeConductor\(\) : crearNavegacionDePasajero\(\)/);

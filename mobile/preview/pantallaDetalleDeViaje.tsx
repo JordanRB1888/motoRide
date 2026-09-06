@@ -38,6 +38,7 @@ import { AdjuntoDetalleViaje } from '../ui/AdjuntoDetalleViaje';
 import {
   BarraDeNavegacion,
   ControlDePedido,
+  DESTINOS_DE_CONDUCTOR,
   DESTINOS_DE_PASAJERA
 } from '../ui/Navegacion';
 import { useTema } from '../theme/ThemeContext';
@@ -154,11 +155,35 @@ const VIAJE_VACIO: DatosDelViaje = {
   pendiente: ''
 };
 
-export function C2DetalleDeViaje({ clave = 'h1', datos, cargandoConversacion = false }: {
+export function C2DetalleDeViaje({
+  clave = 'h1',
+  datos,
+  cargandoConversacion = false,
+  barra = 'pasajera',
+  control
+}: {
   readonly clave?: string;
   /** Sin esto se pinta el ejemplo. Con esto, el viaje de verdad. */
   readonly datos?: DatosDelViaje;
   readonly cargandoConversacion?: boolean;
+  /**
+   * De quién es la barra de abajo.
+   *
+   * El detalle lo abren los dos roles desde su historial, y no con la misma
+   * barra. Esta pantalla tenía la de la pasajera cosida: un conductor que
+   * abría un viaje suyo veía las pestañas de la clienta y el botón de pedir
+   * carreras. Por omisión, pasajera: el laboratorio de diseño y cualquier uso
+   * anterior no cambian.
+   */
+  readonly barra?: 'pasajera' | 'conductor';
+  /**
+   * El control del centro de la barra.
+   *
+   * Sin esto se usa el de la pasajera. El conductor pasa el SUYO --su disco de
+   * disponibilidad--, porque el hueco del centro no puede quedarse vacío ni
+   * ofrecerle algo que no es suyo.
+   */
+  readonly control?: React.ReactNode;
 }) {
   const tema = useTema();
   const ir = useIr();
@@ -242,10 +267,12 @@ export function C2DetalleDeViaje({ clave = 'h1', datos, cargandoConversacion = f
         </Banda>
       </ScrollView>
 
+      {/* `historial` es pestaña en las DOS barras, así que la de origen queda
+          marcada sea quien sea quien abrió el viaje. */}
       <BarraDeNavegacion
-        destinos={DESTINOS_DE_PASAJERA}
+        destinos={barra === 'conductor' ? DESTINOS_DE_CONDUCTOR : DESTINOS_DE_PASAJERA}
         activo="historial"
-        control={<ControlDePedido abierto={false} />}
+        control={control ?? <ControlDePedido abierto={false} />}
       />
     </View>
   );
