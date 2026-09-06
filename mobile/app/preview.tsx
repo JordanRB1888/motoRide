@@ -18,9 +18,9 @@
  * botones no llevan a ningún sitio a propósito.
  */
 
-import { useState, type ComponentType } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -62,6 +62,7 @@ import {
   C2Ayuda,
   C2Historial,
   C2Perfil,
+  C2PerfilConductor,
   C2Saldo,
   C2ViajeSeguro
 } from '../preview/pantallasC2Secciones';
@@ -88,6 +89,20 @@ import {
   PreviewViajeActivoConductor,
   PreviewChatEstados
 } from '../preview/pantallasChatTrip';
+import {
+  PreviewDriverTurnoExpirado,
+  PreviewDriverSolicitudMoto,
+  PreviewDriverSolicitudAuto
+} from '../preview/pantallasOferta';
+import {
+  PreviewDriverCarreraRecoger,
+  PreviewDriverCarreraEsperando,
+  PreviewDriverCarreraEnCurso,
+  PreviewPasajeraCarreraCamino,
+  PreviewPasajeraCarreraEnCurso,
+  PreviewCalificacionPasajera,
+  PreviewCalificacionConductor
+} from '../preview/pantallasCarreraYCalificacion';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -118,7 +133,14 @@ const PANTALLAS_ORIGINALES: CatalogoDePantallas = [
   { clave: 'destino', nombre: 'Destino', Componente: PreviewDestino },
   { clave: 'conductor', nombre: 'Conductor', Componente: PreviewInicioConductor },
   { clave: 'viaje', nombre: 'Viaje', Componente: PreviewViaje },
-  { clave: 'perfil', nombre: 'Perfil', Componente: PreviewPerfil }
+  { clave: 'perfil', nombre: 'Perfil', Componente: PreviewPerfil },
+  { clave: 'driver-carrera-recoger', nombre: 'Driver Carrera: Vas a recoger', Componente: PreviewDriverCarreraRecoger },
+  { clave: 'driver-carrera-esperando', nombre: 'Driver Carrera: Esperando pasajera', Componente: PreviewDriverCarreraEsperando },
+  { clave: 'driver-carrera-en-curso', nombre: 'Driver Carrera: Viaje en curso', Componente: PreviewDriverCarreraEnCurso },
+  { clave: 'pasajera-carrera-camino', nombre: 'Pasajera Carrera: En camino', Componente: PreviewPasajeraCarreraCamino },
+  { clave: 'pasajera-carrera-en-curso', nombre: 'Pasajera Carrera: En curso', Componente: PreviewPasajeraCarreraEnCurso },
+  { clave: 'calificacion-pasajera', nombre: 'Calificación: Pasajera a Conductor', Componente: PreviewCalificacionPasajera },
+  { clave: 'calificacion-conductor', nombre: 'Calificación: Conductor a Pasajera', Componente: PreviewCalificacionConductor }
 ];
 
 /**
@@ -156,6 +178,7 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   { clave: 'historial', nombre: 'Historial', Componente: C2Historial },
   { clave: 'viaje-seguro', nombre: 'Viaje seguro', Componente: C2ViajeSeguro },
   { clave: 'perfil', nombre: 'Perfil', Componente: C2Perfil },
+  { clave: 'perfil-conductor', nombre: 'Perfil conductor', Componente: C2PerfilConductor },
   { clave: 'saldo', nombre: 'Saldo', Componente: C2Saldo },
   { clave: 'avisos', nombre: 'Avisos', Componente: C2Avisos },
   { clave: 'ayuda', nombre: 'Ayuda', Componente: C2Ayuda },
@@ -182,7 +205,20 @@ const PANTALLAS_C2: CatalogoDePantallas = [
   // Switchers interactivos combinados
   { clave: 'viaje-pasajera-activo', nombre: 'Viaje activo (Pasajera · Switcher)', Componente: PreviewViajeActivoPasajera },
   { clave: 'viaje-conductor-activo', nombre: 'Viaje activo (Conductor · Switcher)', Componente: PreviewViajeActivoConductor },
-  { clave: 'chat-estados', nombre: 'Chat estados (Switcher interactivo)', Componente: PreviewChatEstados }
+  { clave: 'chat-estados', nombre: 'Chat estados (Switcher interactivo)', Componente: PreviewChatEstados },
+  // Driver: Turno activo & Solicitudes rediseñadas
+  { clave: 'driver-turno-expirado', nombre: 'Driver: Turno (Tiempo Agotado)', Componente: PreviewDriverTurnoExpirado },
+  { clave: 'driver-solicitud-moto', nombre: 'Driver: Solicitud Moto (Amarilla)', Componente: PreviewDriverSolicitudMoto },
+  { clave: 'driver-solicitud-auto', nombre: 'Driver: Solicitud Auto', Componente: PreviewDriverSolicitudAuto },
+  // Carrera Activa Premium Rediseñada
+  { clave: 'driver-carrera-recoger', nombre: 'Driver Carrera: Vas a recoger', Componente: PreviewDriverCarreraRecoger },
+  { clave: 'driver-carrera-esperando', nombre: 'Driver Carrera: Esperando pasajera', Componente: PreviewDriverCarreraEsperando },
+  { clave: 'driver-carrera-en-curso', nombre: 'Driver Carrera: Viaje en curso', Componente: PreviewDriverCarreraEnCurso },
+  { clave: 'pasajera-carrera-camino', nombre: 'Pasajera Carrera: En camino', Componente: PreviewPasajeraCarreraCamino },
+  { clave: 'pasajera-carrera-en-curso', nombre: 'Pasajera Carrera: En curso', Componente: PreviewPasajeraCarreraEnCurso },
+  // Calificación Bidireccional & Propinas
+  { clave: 'calificacion-pasajera', nombre: 'Calificación: Pasajera a Conductor', Componente: PreviewCalificacionPasajera },
+  { clave: 'calificacion-conductor', nombre: 'Calificación: Conductor a Pasajera', Componente: PreviewCalificacionConductor }
 ];
 
 export function catalogoDePantallas(clave: ClaveDeDireccion): CatalogoDePantallas {
@@ -201,7 +237,16 @@ export function catalogoDePantallas(clave: ClaveDeDireccion): CatalogoDePantalla
 type EsquemaDeLaboratorio = 'auto' | Esquema;
 
 export default function LaboratorioVisual() {
-  const [esquemaDePrueba, setEsquemaDePrueba] = useState<EsquemaDeLaboratorio>('auto');
+  const params = useLocalSearchParams<{ pantalla?: string; esquema?: string }>();
+  const [esquemaDePrueba, setEsquemaDePrueba] = useState<EsquemaDeLaboratorio>(
+    params.esquema === 'claro' || params.esquema === 'oscuro' ? params.esquema : 'auto'
+  );
+
+  useEffect(() => {
+    if (params.esquema === 'claro' || params.esquema === 'oscuro' || params.esquema === 'auto') {
+      setEsquemaDePrueba(params.esquema);
+    }
+  }, [params.esquema]);
 
   if (!EN_DESARROLLO) return <FueraDeDesarrollo />;
 
@@ -210,6 +255,7 @@ export default function LaboratorioVisual() {
       <Laboratorio
         esquemaDePrueba={esquemaDePrueba}
         onCambiarEsquema={setEsquemaDePrueba}
+        pantallaInicial={params.pantalla}
       />
     </ProveedorDeTema>
   );
@@ -225,12 +271,19 @@ function FueraDeDesarrollo() {
   );
 }
 
-function Laboratorio({ esquemaDePrueba, onCambiarEsquema }: {
+function Laboratorio({ esquemaDePrueba, onCambiarEsquema, pantallaInicial }: {
   readonly esquemaDePrueba: EsquemaDeLaboratorio;
   readonly onCambiarEsquema: (esquema: EsquemaDeLaboratorio) => void;
+  readonly pantallaInicial?: string;
 }) {
   const { clave, cambiarDireccion } = useControlDeTema();
-  const [pantalla, setPantalla] = useState<string>('rol');
+  const [pantalla, setPantalla] = useState<string>(pantallaInicial || 'rol');
+
+  useEffect(() => {
+    if (pantallaInicial) {
+      setPantalla(pantallaInicial);
+    }
+  }, [pantallaInicial]);
 
   const pantallas = catalogoDePantallas(clave);
   // Al cambiar de direccion puede desaparecer la pantalla que se estaba viendo

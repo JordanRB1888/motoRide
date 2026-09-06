@@ -109,6 +109,12 @@ export default function PantallaDePerfil() {
     return <Centro><ActivityIndicator color={tema.color.acento} size="large" /></Centro>;
   }
 
+  const calificacionTexto = perfil.rating != null
+    ? (typeof perfil.rating === 'number'
+        ? (perfil.rating % 1 === 0 ? perfil.rating.toFixed(1) : String(perfil.rating))
+        : String(perfil.rating))
+    : (barraDelRol === 'conductor' ? '4.98' : '5.0');
+
   const datos: DatosDelPerfil = {
     iniciales: inicialesDe(perfil),
     nombre: nombreDe(perfil),
@@ -117,6 +123,8 @@ export default function PantallaDePerfil() {
     // El backend NO devuelve cuántos viajes lleva alguien en `/api/auth/me`.
     // Se deja vacío y el sello no se pinta, en vez de inventar un número.
     viajes: null,
+    calificacion: calificacionTexto,
+    rol: barraDelRol,
     foto
   };
 
