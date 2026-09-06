@@ -216,10 +216,15 @@ test('no se pide permiso al arrancar la pantalla', () => {
 
   // Lo unico que corre solo al montar la pantalla es la reconciliacion, que
   // por contrato no muestra ningun dialogo.
-  const arranqueSuelto = driverApp.slice(
-    driverApp.indexOf('getPushSubscriptionService()\n        .then'),
-    driverApp.indexOf('realtimeLifecycle.addListener(window, PUSH_NAVIGATE_EVENT')
-  );
+  // El recorte se busca con una expresion y no con un `indexOf` que lleve el
+  // salto de linea escrito: el fichero se registra con CRLF en unos worktrees
+  // y con LF en otros, y con el salto a mano el recorte salia VACIO --y una
+  // prueba sobre texto vacio pasa o falla por el motivo equivocado.
+  const inicioDelArranque = driverApp.search(/getPushSubscriptionService\(\)\s*\.then/);
+  const finDelArranque = driverApp.indexOf('realtimeLifecycle.addListener(window, PUSH_NAVIGATE_EVENT');
+  assert.ok(inicioDelArranque !== -1, 'no se encontro el arranque de la pantalla');
+  assert.ok(finDelArranque > inicioDelArranque, 'no se encontro donde acaba el arranque');
+  const arranqueSuelto = driverApp.slice(inicioDelArranque, finDelArranque);
   assert.match(arranqueSuelto, /servicio\.reconcile\(\)/);
   assert.ok(!/requestPermission/.test(arranqueSuelto), 'el arranque no puede pedir permiso');
   assert.ok(!/mostrarTarjetaPermisoPush/.test(arranqueSuelto), 'el arranque no puede mostrar la tarjeta');
