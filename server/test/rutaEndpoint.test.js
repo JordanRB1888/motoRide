@@ -34,7 +34,7 @@ const procesos = [];
 after(() => { for (const child of procesos) { try { child.kill(); } catch { /* ya terminado */ } } });
 
 function arrancar(dataFile) {
-  const port = 24100 + Math.floor(Math.random() * 600);
+  const port = 28900 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
     env: {

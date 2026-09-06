@@ -43,6 +43,25 @@ export const DELIVERY_RESULT = Object.freeze({
  */
 export const MAX_CONSECUTIVE_FAILURES = 5;
 
+/**
+ * Los dos transportes de una suscripción (PUSH-1 · Firebase).
+ *
+ * `webpush` es el navegador: endpoint https y claves de cifrado. `fcm` es el
+ * teléfono: el `endpoint` guarda el TOKEN del dispositivo y no hay claves. Una
+ * fila sin `transport` es anterior a este campo y, por tanto, de navegador.
+ *
+ * Es UNA colección y no dos porque lo que importa de una suscripción --de
+ * quién es, si está viva, cuántas veces falló, cuándo darla de baja-- es lo
+ * mismo en los dos casos. Lo único que cambia es quién la envía, y eso lo
+ * decide el emisor compuesto, no el dominio.
+ */
+export const TRANSPORTE = Object.freeze({ WEB_PUSH: 'webpush', FCM: 'fcm' });
+export const PLATAFORMAS_FCM = Object.freeze(['android', 'ios']);
+
+const TOKEN_FCM_MAX = 4096;
+// Lo que emite Firebase: base64url con dos puntos como separador de proyecto.
+const TOKEN_FCM = /^[A-Za-z0-9_:-]+$/;
+
 const ENDPOINT_MAX = 2048;
 const KEY_MAX = 255;
 // base64url: lo que emiten los navegadores para p256dh y auth.
@@ -62,6 +81,17 @@ const BASE64URL = /^[A-Za-z0-9_-]+=*$/;
  */
 export function validateSubscriptionInput(input) {
   if (!input || typeof input !== 'object') return { ok: false };
+
+  // Un teléfono: el token es el endpoint y no hay claves. Se acota el alfabeto
+  // y el tamaño, que es lo que impide guardar basura arbitraria; el resto lo
+  // dirá el proveedor al primer envío, y la baja es automática.
+  if (input.transport === TRANSPORTE.FCM) {
+    const token = typeof input.token === 'string' ? input.token.trim() : '';
+    if (!token || token.length > TOKEN_FCM_MAX || !TOKEN_FCM.test(token)) return { ok: false };
+    const platform = typeof input.platform === 'string' ? input.platform.trim().toLowerCase() : '';
+    if (!PLATAFORMAS_FCM.includes(platform)) return { ok: false };
+    return { ok: true, value: { transport: TRANSPORTE.FCM, endpoint: token, keys: null, platform } };
+  }
 
   const endpoint = typeof input.endpoint === 'string' ? input.endpoint.trim() : '';
   if (!endpoint || endpoint.length > ENDPOINT_MAX) return { ok: false };
@@ -85,11 +115,13 @@ export function validateSubscriptionInput(input) {
     if (!key || key.length > KEY_MAX || !BASE64URL.test(key)) return { ok: false };
   }
 
-  return { ok: true, value: { endpoint, keys: { p256dh, auth } } };
+  return { ok: true, value: { transport: TRANSPORTE.WEB_PUSH, endpoint, keys: { p256dh, auth }, platform: 'web' } };
 }
 
 /** Host del endpoint: identifica al proveedor, nunca a la persona. */
-export function endpointHost(endpoint) {
+export function endpointHost(endpoint, transport = TRANSPORTE.WEB_PUSH) {
+  // Un token de FCM no es una URL, y su «host» --el proveedor-- es Firebase.
+  if (transport === TRANSPORTE.FCM) return 'fcm';
   try {
     return new URL(endpoint).host;
   } catch {
@@ -124,13 +156,18 @@ export function activeSubscriptionsFor(collection, userId) {
  *
  * @returns {{record: object, created: boolean, ownerChanged: boolean}}
  */
-export function registerSubscription(collection, { userId, endpoint, keys, id, now }) {
+export function registerSubscription(collection, {
+  userId, endpoint, keys, id, now, transport = TRANSPORTE.WEB_PUSH, platform = 'web'
+}) {
   const existing = collection.find(item => item.endpoint === endpoint);
+  const clavesDe = () => (transport === TRANSPORTE.FCM ? null : { p256dh: keys.p256dh, auth: keys.auth });
 
   if (existing) {
     const ownerChanged = existing.userId !== userId;
     existing.userId = userId;
-    existing.keys = { p256dh: keys.p256dh, auth: keys.auth };
+    existing.keys = clavesDe();
+    existing.transport = transport;
+    existing.platform = platform;
     existing.updatedAt = now;
     existing.lastSeenAt = now;
     // Volver a registrarse resucita una suscripción revocada o caducada: el
@@ -144,8 +181,10 @@ export function registerSubscription(collection, { userId, endpoint, keys, id, n
   const record = {
     id,
     userId,
+    transport,
+    platform,
     endpoint,
-    keys: { p256dh: keys.p256dh, auth: keys.auth },
+    keys: clavesDe(),
     createdAt: now,
     updatedAt: now,
     lastSeenAt: now,

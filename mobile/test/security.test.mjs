@@ -196,9 +196,12 @@ test('no hay GPS en segundo plano ni registro de notificaciones', () => {
   const paquete = JSON.parse(fs.readFileSync(path.join(raizMovil, 'package.json'), 'utf8'));
   const dependencias = Object.keys(paquete.dependencies ?? {});
   // `expo-task-manager` entra en DRIVER-LOCATION-RESILIENCE-1 con el
-  // seguimiento del conductor en servicio. Sigue vedado el registro de
-  // notificaciones, que es otra cosa y necesita su propio consentimiento.
-  for (const nombre of ['expo-notifications', 'expo-background-fetch']) {
+  // seguimiento del conductor en servicio. `expo-notifications` entra en
+  // PUSH-NOTIFICATIONS-1 con su propio consentimiento: se pide con sesion
+  // confirmada, una sola vez, y si se deniega no se insiste --eso lo vigila
+  // `notificaciones.test.mjs`--. Lo que sigue vedado es medir en segundo
+  // plano por fuera del seguimiento del conductor.
+  for (const nombre of ['expo-background-fetch']) {
     assert.equal(dependencias.includes(nombre), false,
       `${nombre} no corresponde a esta fase`);
   }

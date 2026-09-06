@@ -35,6 +35,7 @@ import {
 } from '../services/auth';
 import type { DatosDeRegistro } from '../domain/registro';
 import { borrarToken, guardarToken, leerToken } from '../services/session';
+import { despedirse } from '../services/antesDeSalir';
 
 export interface ValorDelContexto {
   readonly sesion: Sesion;
@@ -190,6 +191,9 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
    */
   const salir = useCallback(async (motivo: MotivoDeCierre = 'PETICION_DE_LA_PERSONA') => {
     const numero = ++operacion.current;
+    // Primero las despedidas (la baja del dispositivo de los avisos, por
+    // ejemplo): necesitan el token, y en cuanto se borre ya no hay con qué.
+    await despedirse();
     await borrarToken().catch(() => {});
     aplicar(numero, { estado: 'SIN_SESION', motivo });
   }, [aplicar]);

@@ -32,8 +32,8 @@
  * pedir una carrera.
  */
 
-import { useEffect, useMemo } from 'react';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo } from 'react';
+import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 import { C2InicioPasajera, type DatosDelInicio } from '../preview/pantallaInicioPasajera';
@@ -102,9 +102,15 @@ export default function InicioDePasajera() {
    * que se sabe puede estar viejo y un salto de pantalla es lo más brusco que
    * puede hacer una aplicación sola.
    */
-  useEffect(() => {
+  //
+  // Y sólo cuando ESTA pantalla está delante. Un aviso puede abrir el chat o
+  // el propio viaje encima de aquí, y un `replace` lanzado desde una pantalla
+  // que no se ve se llevaba por delante lo que el aviso acababa de abrir. Con
+  // `useFocusEffect` el salto ocurre al volver a esta pantalla, o si el viaje
+  // aparece mientras se está mirando.
+  useFocusEffect(useCallback(() => {
     if (viajeActivo.fase === 'CON_VIAJE') router.replace('/viaje-activo');
-  }, [viajeActivo.fase]);
+  }, [viajeActivo.fase]));
 
   const usuario = sesion.estado === 'AUTENTICADO' ? sesion.usuario : null;
   // Sólo se pregunta con sesión confirmada: el expediente es de alguien.

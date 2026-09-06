@@ -78,6 +78,33 @@ export const PUSH_TYPE = Object.freeze({
 
 const PAYLOAD_VERSION = 1;
 
+/**
+ * Lo que se lee en la pantalla de bloqueo, por TIPO.
+ *
+ * CONSTANTES, y sólo constantes. Aquí no entra ninguna función ni ninguna
+ * plantilla: el emisor que use esta tabla no tiene acceso al viaje, al mensaje
+ * ni a la persona, así que no existe el camino por el que una dirección de
+ * recogida o el texto de un chat acaben aquí. Hay una prueba que lo vigila.
+ *
+ * Es la MISMA tabla que traduce el teléfono. Vive en el servidor porque FCM,
+ * con la aplicación cerrada, presenta lo que le llega; y en el teléfono porque
+ * en primer plano lo presenta la aplicación. Si se cambia una, se cambia la
+ * otra --la prueba del móvil compara las dos.
+ */
+export const TEXTO_DE_AVISO = Object.freeze({
+  ride_request: { title: 'Nueva carrera', body: 'Tienes una solicitud cerca de ti. Responde antes de 15 segundos.' },
+  scheduled_offer: { title: 'Transporte Seguro', body: 'Te proponen un traslado programado.' },
+  scheduled_pickup_due: { title: 'Transporte Seguro', body: 'Es hora de ir a buscar tu traslado programado.' },
+  scheduled_cancelled: { title: 'Transporte Seguro', body: 'Un traslado programado se canceló.' },
+  trip_accepted: { title: 'Tu moto viene', body: 'Un conductor aceptó tu viaje.' },
+  trip_arrived: { title: 'Tu conductor llegó', body: 'Te está esperando en el punto de recogida.' },
+  trip_started: { title: 'Viaje en marcha', body: 'Ya vas en camino a tu destino.' },
+  trip_completed: { title: 'Viaje terminado', body: 'Llegaste. Gracias por viajar con +58Express.' },
+  trip_cancelled: { title: 'Viaje cancelado', body: 'Tu viaje se canceló. Puedes pedir otro cuando quieras.' },
+  chat_message: { title: 'Nuevo mensaje', body: 'Tienes un mensaje en el chat de tu viaje.' },
+  por_omision: { title: '+58Express', body: 'Tienes una novedad en tu viaje.' }
+});
+
 /** Solo el identificador de enrutado. Nada más cabe aquí. */
 export function buildRideOfferPayload(tripId) {
   return { v: PAYLOAD_VERSION, t: PUSH_TYPE.RIDE_REQUEST, tripId };
@@ -158,17 +185,25 @@ export function createPushNotificationService({
    * cualquier otro, no una excepción que deba subir.
    */
   async function enviarA(subscription, payload, contexto) {
-    const host = endpointHost(subscription.endpoint);
+    const host = endpointHost(subscription.endpoint, subscription.transport);
     registrar('push_attempt', { subscriptionId: subscription.id, userId: subscription.userId, host, ...contexto });
 
     let statusCode;
     let error;
     try {
       const respuesta = await sender({
+        transport: subscription.transport,
+        platform: subscription.platform,
         endpoint: subscription.endpoint,
         keys: subscription.keys,
         payload
       });
+      // Un transporte sin emisor configurado no es un fallo del dispositivo:
+      // no se toca su contador, y se dice por qué. Ver `pushSender.js`.
+      if (respuesta?.omitido) {
+        registrar('push_omitido_sin_emisor', { subscriptionId: subscription.id, transporte: respuesta.transporte });
+        return { subscriptionId: subscription.id, result: 'SKIPPED', disabled: false };
+      }
       statusCode = respuesta?.statusCode;
     } catch (fallo) {
       // Solo se conserva la clase del fallo. El mensaje de un error de red

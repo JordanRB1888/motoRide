@@ -45,6 +45,10 @@ async function arrancarServidor(t, { pushEncendido }) {
     cwd: serverDir,
     env: {
       ...process.env,
+      // Sin FCM a proposito: aqui se mide Web Push a solas. En la maquina del
+      // dueno la cuenta de servicio SI esta en disco, y sin esto push se
+      // encenderia por el otro transporte aunque WEB_PUSH_ENABLED sea false.
+      FCM_SERVICE_ACCOUNT_FILE: './no-existe/fcm-service-account.json',
       PORT: String(port),
       DATA_FILE: path.join(tempDir, 'database.json'),
       JWT_SECRET: 'push3a-test-secret',

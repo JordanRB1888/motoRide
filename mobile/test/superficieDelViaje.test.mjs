@@ -312,9 +312,12 @@ test('no entra un segundo proveedor de mapas', () => {
   // autorizo la captura de documentos para la postulacion de conductor. Lo
   // que se vigila ahora es que solo lo importe `media/captura.ts` —eso lo
   // hace `fotoDeDocumento.test.mjs`—.
+  // `expo-notifications` sale de la lista en PUSH-NOTIFICATIONS-1: el dueno
+  // autorizo los avisos push nativos con Firebase. Lo que se vigila ahora es
+  // que solo lo importe `realtime/Notificaciones.tsx` y que el aviso nunca
+  // se aplique como estado --eso lo hace `notificaciones.test.mjs`--.
   for (const prohibida of [
-    'expo-maps', '@react-native-community/netinfo',
-    'expo-notifications', 'expo-background-fetch'
+    'expo-maps', '@react-native-community/netinfo', 'expo-background-fetch'
   ]) {
     assert.equal(dependencias.includes(prohibida), false, `se instaló ${prohibida}`);
   }

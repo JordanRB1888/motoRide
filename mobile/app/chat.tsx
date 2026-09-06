@@ -40,6 +40,7 @@ import { useSesion } from '../context/AuthContext';
 import { LARGO_MAXIMO, type MensajeEnPantalla } from '../domain/chatDelViaje';
 import { horaDe } from '../domain/viajes';
 import { useChatDelViaje } from '../realtime/ChatDelViaje';
+import { useViajeActivo } from '../realtime/ViajeActivo';
 import { fuenteDeAdjunto } from '../services/viajes';
 import {
   elegirImagenDeChat, motivoDelPickerEnPantalla, recuperarImagenDeChatPendiente,
@@ -68,6 +69,8 @@ export default function PantallaDeChat() {
   const miId = sesion.estado === 'AUTENTICADO' ? sesion.usuario.id : '';
   const miNombre = sesion.estado === 'AUTENTICADO' ? sesion.usuario.firstName : '';
   const chat = useChatDelViaje({ miId, miNombre });
+  // La fase del viaje activo: para distinguir «todavía no se sabe» de «no hay».
+  const { estado: estadoDelViaje } = useViajeActivo();
   const [borrador, setBorrador] = useState('');
   const [avisoImagen, setAvisoImagen] = useState<string | null>(null);
   const [ampliada, setAmpliada] = useState<Fuente | null>(null);
@@ -153,8 +156,21 @@ export default function PantallaDeChat() {
   }
   if (sesion.estado !== 'AUTENTICADO') return <Redirect href="/" />;
 
-  // Sin viaje no hay conversación. Se vuelve a donde se estaba.
+  // Sin viaje no hay conversación. Pero «todavía no se sabe» no es «no hay»:
+  // en el arranque en frío desde un aviso esta pantalla se monta mientras el
+  // viaje activo aún se resincroniza, y volver al inicio en ese instante
+  // deshacía lo que el aviso acababa de abrir. Se espera hasta que la fase
+  // sea definitiva; sólo entonces, si no hay viaje, se vuelve a donde se estaba.
   if (chat.viaje === null) {
+    if (estadoDelViaje.fase !== 'SIN_VIAJE' && estadoDelViaje.fase !== 'ERROR') {
+      return (
+        <Pantalla>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator color={tema.color.acento} size="large" />
+          </View>
+        </Pantalla>
+      );
+    }
     return <Redirect href={sesion.usuario.role === 'driver' ? '/conductor' : '/pasajero'} />;
   }
 

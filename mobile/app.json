@@ -28,7 +28,8 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#0e0d0b"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -60,7 +61,15 @@
       "./plugins/rutaCortaDeCmake",
       "./plugins/httpLanSoloEnDevelopment",
       "@react-native-google-signin/google-signin",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffd21f",
+          "defaultChannel": "carreras"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

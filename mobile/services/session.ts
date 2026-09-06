@@ -90,6 +90,82 @@ export async function leerToken(): Promise<string | null> {
   return SecureStore.getItemAsync(CLAVE_TOKEN);
 }
 
+/**
+ * La suscripción push de ESTE teléfono, y de quién es.
+ *
+ * Se guarda junto al token de sesión y con las mismas garantías: no viaja en
+ * copias de seguridad. Lleva el `userId` a propósito: al abrir la aplicación
+ * con otra cuenta hay que saber que la suscripción guardada es de la anterior
+ * para volver a registrar el dispositivo a nombre de la nueva, y no fiarse de
+ * un identificador que ya no es de quien está delante.
+ */
+const CLAVE_SUSCRIPCION_PUSH = 'plus58express.push.suscripcion';
+
+export interface SuscripcionPushGuardada {
+  readonly userId: string;
+  readonly id: string;
+}
+
+export async function guardarSuscripcionPush(valor: SuscripcionPushGuardada): Promise<void> {
+  const texto = JSON.stringify(valor);
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.setItem(CLAVE_SUSCRIPCION_PUSH, texto);
+    return;
+  }
+  await SecureStore.setItemAsync(CLAVE_SUSCRIPCION_PUSH, texto, {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
+  });
+}
+
+export async function leerSuscripcionPush(): Promise<SuscripcionPushGuardada | null> {
+  const web = almacenamientoDelLaboratorioWeb();
+  const texto = web !== null ? web.getItem(CLAVE_SUSCRIPCION_PUSH) : await SecureStore.getItemAsync(CLAVE_SUSCRIPCION_PUSH);
+  if (typeof texto !== 'string' || texto === '') return null;
+  try {
+    const dato = JSON.parse(texto) as Partial<SuscripcionPushGuardada>;
+    if (typeof dato.userId === 'string' && typeof dato.id === 'string' && dato.userId !== '' && dato.id !== '') {
+      return { userId: dato.userId, id: dato.id };
+    }
+  } catch {
+    // Un valor ilegible se trata como inexistente: se volverá a registrar.
+  }
+  return null;
+}
+
+export async function borrarSuscripcionPush(): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.removeItem(CLAVE_SUSCRIPCION_PUSH);
+    return;
+  }
+  await SecureStore.deleteItemAsync(CLAVE_SUSCRIPCION_PUSH);
+}
+
+/**
+ * Si ya se pidió el permiso de notificaciones EN ESTE TELÉFONO. Es del
+ * aparato, no de la cuenta: no se borra al cerrar sesión. Ver la nota en
+ * `estadoDePermiso` sobre por qué Android obliga a recordarlo.
+ */
+const CLAVE_PERMISO_PUSH_PEDIDO = 'plus58express.push.permisoPedido';
+
+export async function marcarPermisoPushPedido(): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.setItem(CLAVE_PERMISO_PUSH_PEDIDO, '1');
+    return;
+  }
+  await SecureStore.setItemAsync(CLAVE_PERMISO_PUSH_PEDIDO, '1', {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
+  });
+}
+
+export async function sePidioPermisoPush(): Promise<boolean> {
+  const web = almacenamientoDelLaboratorioWeb();
+  const valor = web !== null ? web.getItem(CLAVE_PERMISO_PUSH_PEDIDO) : await SecureStore.getItemAsync(CLAVE_PERMISO_PUSH_PEDIDO);
+  return valor === '1';
+}
+
 /** Cierra la sesión. Borra el token; la preferencia de rol se conserva. */
 export async function borrarToken(): Promise<void> {
   const web = almacenamientoDelLaboratorioWeb();

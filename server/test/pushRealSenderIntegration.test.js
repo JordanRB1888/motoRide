@@ -294,7 +294,18 @@ async function arrancar(t, env = {}) {
   const port = puerto++;
   const hijo = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
-    env: { ...process.env, PORT: String(port), DATA_FILE: path.join(dir, 'db.sqlite'), JWT_SECRET: 'push4a', ...env },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      DATA_FILE: path.join(dir, 'db.sqlite'),
+      JWT_SECRET: 'push4a',
+      // Sin FCM a proposito: estas pruebas miden Web Push a solas. En la maquina
+      // del dueno la cuenta de servicio SI esta en disco, y sin esto push se
+      // encenderia por el otro transporte y `enabled` dejaria de ser lo que se
+      // esta comprobando.
+      FCM_SERVICE_ACCOUNT_FILE: './no-existe/fcm-service-account.json',
+      ...env
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   const salida = new Promise(resolve => hijo.once('exit', resolve));

@@ -41,3 +41,12 @@ playwright/.cache/
 
 # Compilacion del backend NestJS. Es un artefacto de ejecucion, no fuente.
 server/dist-nest/
+
+# PUSH-1: credenciales de Firebase/FCM. NUNCA al repositorio.
+# google-services.json va dentro del APK y no es un secreto grave, pero no tiene
+# por que estar aqui. La cuenta de servicio SI es un secreto: permite enviar
+# notificaciones a todos los usuarios.
+google-services.json
+GoogleService-Info.plist
+fcm-service-account.json
+fcm-service-account.json.json

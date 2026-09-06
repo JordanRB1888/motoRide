@@ -73,6 +73,8 @@ import {
   sanitizeSafeTransportPricing
 } from './services/safeTransport.js';
 import { PUSH_TYPE, createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
+import { createFcmSender } from './services/fcmSender.js';
+import { crearSenderCompuesto } from './services/pushSender.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
 import {
@@ -891,7 +893,44 @@ function requireApprovedDriver(req, res, next) {
 // no se lee ninguna variable VAPID, no se configura nada y no existe forma de
 // contactar con un proveedor.
 function construirPushSender() {
-  if (!isWebPushEnabled()) return { sender: null, enabled: false };
+  // Dos transportes, cada uno con su credencial, compuestos en UN sender.
+  // Push queda encendido si al menos uno esta configurado; el otro se omite
+  // sin penalizar a nadie. Ver `services/pushSender.js`.
+  const webpush = construirWebPushSender();
+  const fcm = construirFcmSender();
+  const compuesto = crearSenderCompuesto({ webpush, fcm });
+  if (compuesto.enabled) console.log(`[+58express Push] transportes activos: ${compuesto.transportes.join(', ')}`);
+  return { sender: compuesto.sender, enabled: compuesto.enabled };
+}
+
+/**
+ * El emisor de FCM V1 para los telefonos (PUSH-1 · Firebase).
+ *
+ * La cuenta de servicio se lee de un fichero local que git ignora --por
+ * omision `server/fcm-service-account.json`-- o de la ruta que diga
+ * FCM_SERVICE_ACCOUNT_FILE. Nunca de una variable con el JSON dentro: un JSON
+ * de varias lineas en el entorno de Railway acaba mal escapado y, peor, acaba
+ * en un registro. Sin fichero, FCM queda apagado y se dice; nada se cae.
+ */
+function construirFcmSender() {
+  const ruta = process.env.FCM_SERVICE_ACCOUNT_FILE || path.join(serverDir, 'fcm-service-account.json');
+  if (!fs.existsSync(ruta)) {
+    console.log('[+58express Push] FCM apagado: sin cuenta de servicio');
+    return null;
+  }
+  try {
+    const sender = createFcmSender({ rutaDeLaCuenta: ruta, logger: console });
+    console.log('[+58express Push] FCM configurado');
+    return sender;
+  } catch (error) {
+    // El codigo es escueto y nunca lleva material de la cuenta dentro.
+    console.error(`[+58express Push] cuenta de servicio de FCM invalida: ${error.message}. FCM queda DESACTIVADO.`);
+    return null;
+  }
+}
+
+function construirWebPushSender() {
+  if (!isWebPushEnabled()) return null;
   try {
     const sender = createWebPushSender({
       publicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY,
@@ -899,8 +938,8 @@ function construirPushSender() {
       subject: process.env.WEB_PUSH_VAPID_SUBJECT,
       logger: console
     });
-    console.log('[+58express Push] adaptador real configurado');
-    return { sender, enabled: true };
+    console.log('[+58express Push] Web Push configurado');
+    return sender;
   } catch (error) {
     // Falla cerrado, pero SIN tumbar el servidor.
     //
@@ -916,8 +955,8 @@ function construirPushSender() {
     // sensible a cambio de nada.
     //
     // El codigo es escueto y nunca lleva material de clave dentro.
-    console.error(`[+58express Push] configuracion VAPID invalida: ${error.message}. Push queda DESACTIVADO.`);
-    return { sender: null, enabled: false };
+    console.error(`[+58express Push] configuracion VAPID invalida: ${error.message}. Web Push queda DESACTIVADO.`);
+    return null;
   }
 }
 
@@ -1120,6 +1159,7 @@ const safeTransportTripBridge = {
       updatedAt: trip.updatedAt,
       driver: trip.driver ?? null
     });
+    avisarDelCambioDeViaje(trip);
   },
   dispatchTrip: trip => dispatchTripToDrivers(trip)
 };
@@ -2088,6 +2128,7 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores
     tripId: trip.id,
     status: trip.status
   });
+  avisarDelCambioDeViaje(trip);
   res.json(trip);
 });
 
@@ -2545,6 +2586,7 @@ function dispatchTripToDrivers(trip) {
         status: TRIP_STATUS.CANCELLED,
         reason: 'NO_DRIVERS_AVAILABLE'
       });
+      avisarDelCambioDeViaje(trip);
       return;
     }
     session.currentDriverId = candidate.driver.id;
@@ -2868,6 +2910,8 @@ io.on('connection', (socket) => {
       updatedAt: trip.updatedAt,
       driver
     });
+    // Y al telefono guardado: «Tu moto viene». Sin await, como todos.
+    avisarDelCambioDeViaje(trip);
   });
 
   on('rideRejected', ({ tripId } = {}) => {

@@ -82,6 +82,8 @@ export function createPushRouter({
       userId: req.user.id,
       endpoint: validacion.value.endpoint,
       keys: validacion.value.keys,
+      transport: validacion.value.transport,
+      platform: validacion.value.platform,
       id: pushService.newSubscriptionId(),
       now: new Date().toISOString()
     });

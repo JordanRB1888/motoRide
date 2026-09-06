@@ -45,6 +45,7 @@ export const CANONICAL_DELETE_ORDER = Object.freeze([
   'supportMessages',    // -> users
   'notifications',      // -> users
   'pushSubscriptions',  // -> users
+  'pushDeliveries',     // sin dependencias: memoria de idempotencia (PUSH-1)
   'scheduledRides',     // -> transportSubscriptions, users
   'transactions',       // -> users, trips
   'trips',              // -> users

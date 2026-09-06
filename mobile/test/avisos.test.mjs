@@ -356,12 +356,15 @@ test('los fixtures no llegan a la aplicación real', () => {
   }
 });
 
-test('esta fase NO trae push remoto', () => {
-  // IN_APP_NOTIFICATIONS sí; REMOTE_PUSH no. Son cosas distintas y confundirlas
-  // haría creer que el teléfono ya avisa con la aplicación cerrada.
+test('el push remoto entra por expo-notifications y por ninguna otra puerta nativa', () => {
+  // Los avisos DENTRO de la aplicación (esta fase) y el push remoto
+  // (PUSH-NOTIFICATIONS-1) son cosas distintas. El segundo ya existe, y se
+  // decidió hacerlo con `expo-notifications` sobre FCM: no entra un segundo
+  // módulo nativo de mensajería que duplique el token y el consentimiento.
   const paquete = JSON.parse(leer('package.json'));
   const dependencias = Object.keys(paquete.dependencies ?? {});
-  for (const nativa of ['expo-notifications', 'expo-device', '@react-native-firebase/messaging']) {
+  assert.ok(dependencias.includes('expo-notifications'), 'falta la puerta elegida');
+  for (const nativa of ['@react-native-firebase/messaging', '@react-native-firebase/app', 'react-native-push-notification']) {
     assert.equal(dependencias.includes(nativa), false, `se instaló ${nativa}`);
   }
 });

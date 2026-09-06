@@ -282,6 +282,16 @@ test('el servidor avisa del cambio de estado sólo a la pasajera, y sin await', 
 
   assert.match(fuente, /pushService\.notifyTripLifecycle\(trip, tipo, trip\.passengerId\)\.catch\(/);
   assert.match(fuente, /avisarDelCambioDeViaje\(trip\);/);
+  // TODOS los anuncios de cambio del viaje avisan al teléfono guardado. En el
+  // laboratorio la aceptación no le llegó a la pasajera: `rideAccepted`
+  // anunciaba por su cuenta y no pasaba por `anunciarTransicionDelConductor`.
+  const lineas = fuente.split('\n');
+  const anuncios = lineas.map((l, i) => (l.includes("emit('tripStatusUpdated'") ? i : -1)).filter(i => i >= 0);
+  assert.ok(anuncios.length >= 5, 'se esperaban varios anuncios de tripStatusUpdated');
+  for (const i of anuncios) {
+    const despues = lineas.slice(i, i + 14).join('\n');
+    assert.match(despues, /avisarDelCambioDeViaje\(trip\);/, `el anuncio de la línea ${i + 1} no avisa por push`);
+  }
   // La señal de presencia sale del servidor, nunca del cliente.
   assert.match(fuente, /io\.in\(`user:\$\{userId\}`\)\.fetchSockets\(\)/);
 });

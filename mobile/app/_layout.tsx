@@ -42,6 +42,7 @@ import { ProveedorDeSeguimiento } from '../ubicacion/SeguimientoDelConductor';
 import { ProveedorDePermisoDeSegundoPlano } from '../ubicacion/PermisoDeSegundoPlano';
 import { ProveedorDeDisponibilidad } from '../realtime/Disponibilidad';
 import { ProveedorDeUbicacionEnVivo } from '../realtime/UbicacionEnVivo';
+import { ProveedorDeNotificaciones } from '../realtime/Notificaciones';
 import { ProveedorDeTema } from '../theme/ThemeContext';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
@@ -190,6 +191,14 @@ export default function DisposicionRaiz() {
               proveedor de ubicacion y del viaje activo porque necesita a los
               dos: de uno saca que mandar, del otro a que conductor escuchar. */}
           <ProveedorDeUbicacionEnVivo>
+          {/* Los avisos push. Van DENTRO de la sesion porque el dispositivo se
+              registra a nombre de quien entro y se da de baja al salir, y
+              DENTRO del tiempo real porque el push lo COMPLEMENTA: cuando el
+              socket esta vivo el servidor ya no manda el aviso del chat. No
+              pide permiso al arrancar ni en la bienvenida: lo pide cuando hay
+              sesion confirmada, que es el primer momento en que un aviso puede
+              tener sentido. Y si se deniega, no vuelve a preguntar. */}
+          <ProveedorDeNotificaciones>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -231,6 +240,7 @@ export default function DisposicionRaiz() {
                 del Stack. `conductor-saldo` sí sigue arriba porque para el
                 conductor su cartera SÍ es una pestaña. */}
           </Stack>
+          </ProveedorDeNotificaciones>
           </ProveedorDeUbicacionEnVivo>
           </ProveedorDeUbicacion>
           </ProveedorDeSeguimiento>
