@@ -40,6 +40,34 @@ const CLAVE_DE_ANDROID = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY;
 const CLAVE_DE_IOS = process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY;
 
 /**
+ * LA VARIANTE QUE SE LES MANDA A LOS AMIGOS.
+ *
+ * Se enciende con `APP_VARIANT=beta` al construir. Cambia lo que hay que poder
+ * distinguir de un vistazo --el nombre bajo el icono-- y NADA MAS.
+ *
+ * POR QUE NO CAMBIA EL PAQUETE
+ *
+ * Seria lo natural: un `applicationId` propio deja convivir la beta con la
+ * aplicacion de verdad en el mismo telefono. Pero en Android el paquete es la
+ * identidad con la que se firman TRES credenciales distintas:
+ *
+ *   - `google-services.json`, que ata FCM a `com.plus58express.app`. Con otro
+ *     paquete, las notificaciones dejan de llegar.
+ *   - La clave de Maps de Android, restringida por paquete y huella SHA-1. Con
+ *     otro paquete, el mapa sale gris.
+ *   - Los clientes OAuth de Google Sign-In, atados igual. Con otro paquete, no
+ *     se puede entrar con Google.
+ *
+ * Cambiarlo obliga a dar de alta las tres otra vez, en tres consolas, antes de
+ * que la beta pueda siquiera arrancar. Mientras no exista una version en
+ * produccion instalada en ningun telefono, no hay con que convivir y ese precio
+ * no compra nada. El dia que la haya, se cambia el paquete Y se dan de alta las
+ * tres credenciales a la vez: por separado no funciona.
+ */
+const ES_BETA = process.env.APP_VARIANT === 'beta';
+const NOMBRE_DE_LA_BETA = '+58Express Beta';
+
+/**
  * De qué worktree sale este bundle, para poder decirlo al arrancar.
  *
  * Este fichero se evalúa EN EL PROYECTO QUE SIRVE EL BUNDLE, así que
@@ -99,5 +127,10 @@ module.exports = ({ config }) => {
     ? config.extra
     : { ...config.extra, worktreeDeDesarrollo: worktree };
 
-  return { ...config, plugins, extra };
+  // El nombre bajo el icono. Que quien la tenga instalada sepa SIEMPRE que
+  // esta mirando la beta: si no se distingue, un fallo de staging se reporta
+  // como un fallo de la aplicacion de verdad.
+  const name = ES_BETA ? NOMBRE_DE_LA_BETA : config.name;
+
+  return { ...config, name, plugins, extra };
 };

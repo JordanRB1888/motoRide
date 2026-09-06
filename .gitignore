@@ -21,6 +21,9 @@ server/data/private-uploads/
 # Credenciales y material sensible: jamas al repositorio
 .env.*
 !.env.example
+# Las plantillas SI entran: no llevan ningun valor dentro, y sin ellas nadie
+# sabe que variables hacen falta para levantar su entorno.
+!.env.*.example
 *.pem
 *.key
 # Excepcion NOMINAL, no por carpeta: este .pem es el certificado PUBLICO de una
