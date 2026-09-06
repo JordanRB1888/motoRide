@@ -2538,6 +2538,26 @@ app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, limitador
   res.json(publicUser(driver));
 });
 
+/**
+ * Lo que dura una oferta delante de un conductor.
+ *
+ * UNA SOLA FUENTE, Y VIAJA DE DOS MANERAS
+ *
+ * Este numero manda el temporizador que pasa al siguiente candidato y el
+ * vencimiento que se le anuncia al telefono. Estaba escrito dos veces, y dos
+ * copias de un numero que tiene que ser el mismo acaban divergiendo.
+ *
+ * Al cliente se le manda `offerExpiresInMs` --lo que queda, contado desde
+ * ahora-- ademas de `offerExpiresAt` --la marca absoluta, para administracion
+ * y registros--. La marca absoluta esta en el reloj de ESTE proceso, y el
+ * telefono no tiene por que compartirlo: restarla contra el reloj del aparato
+ * convierte cualquier desajuste del telefono en segundos inventados. La
+ * duracion relativa no tiene ese problema: el cliente la ancla a su propio
+ * reloj en cuanto la recibe, y lo unico que se pierde es la latencia de la
+ * red, que son milisegundos.
+ */
+const VENTANA_DE_OFERTA_MS = 15_000;
+
 function dispatchTripToDrivers(trip) {
   const pickup = normalizeLocation(trip.pickup);
   if (!pickup) {
@@ -2596,7 +2616,10 @@ function dispatchTripToDrivers(trip) {
       offeredDriverId: candidate.driver.id,
       distanceToPickupKm: Math.round(candidate.dist * 100) / 100,
       candidatesCount: session.candidates.length,
-      offerExpiresAt: Date.now() + 15000
+      // La marca absoluta se conserva para administracion y registros; el
+      // telefono cuenta con la relativa, que no depende de su reloj.
+      offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS,
+      offerExpiresInMs: VENTANA_DE_OFERTA_MS
     };
     if (socketId) {
       io.to(socketId).emit('rideRequested', offer);
@@ -2614,7 +2637,7 @@ function dispatchTripToDrivers(trip) {
     io.to('admins').emit('rideRequested', offer);
     const timer = setTimeout(() => offerNext().catch(error => {
       console.error('[+58express Dispatcher] No se pudo continuar el despacho:', error.message);
-    }), 15000);
+    }), VENTANA_DE_OFERTA_MS);
     dispatchTimers.set(trip.id, timer);
   };
 

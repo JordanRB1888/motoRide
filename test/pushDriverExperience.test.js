@@ -330,7 +330,8 @@ test('PUSH-3A conecta exactamente una llamada semantica sin tocar la ventana ni 
   assert.equal(llamadas.length, 1, 'debe existir exactamente UNA invocacion semantica');
   assert.ok(!index.includes('pushService.notifyUser('), 'el despacho no usa el transporte generico');
   assert.ok(!/await\s+pushService\./.test(index), 'el despacho no puede esperar a push');
-  assert.ok(index.includes('offerExpiresAt: Date.now() + 15000'), 'la ventana de oferta cambio');
+  assert.ok(index.includes('const VENTANA_DE_OFERTA_MS = 15_000;'), 'la ventana de oferta cambio');
+  assert.ok(index.includes('offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS'), 'la ventana de oferta cambio');
   const eligibility = leer('server/domain/dispatchEligibility.js');
   assert.match(eligibility, /if \(!hasSocket\) return \{ eligible: false, reason: DISPATCH_REJECTION\.NO_SOCKET \};/);
 });

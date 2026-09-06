@@ -55,7 +55,12 @@ export interface OfertaDeViaje {
   readonly dolares: number | null;
   readonly bolivares: number | null;
   readonly formaDePago: string;
-  /** Marca de tiempo en la que la oferta deja de valer. */
+  /**
+   * Cuándo deja de valer la oferta, EN EL RELOJ DE ESTE APARATO.
+   *
+   * No es la marca que mandó el servidor: es esa duración anclada al reloj
+   * local al recibirla. Ver `leerOferta`.
+   */
   readonly venceEn: number;
   readonly nombreDePasajera: string | null;
 }
@@ -92,6 +97,36 @@ function punto(valor: unknown): { lat: number; lng: number; direccion: string | 
 }
 
 /**
+ * Cuándo vence esta oferta, en el reloj de ESTE aparato.
+ *
+ * EL RELOJ DEL TELÉFONO NO ES EL DEL SERVIDOR, Y AQUÍ ESO DECIDÍA LA CARRERA
+ *
+ * El servidor manda dos cosas: `offerExpiresInMs`, lo que le queda a la oferta
+ * contado desde que la emite, y `offerExpiresAt`, la marca absoluta en SU
+ * reloj. La segunda no sirve para contar aquí: restarla contra `Date.now()`
+ * del aparato mete en el resultado todo lo que los dos relojes se lleven. En
+ * el laboratorio el emulador iba veintidós segundos atrasado y la tarjeta
+ * anunciaba treinta y siete segundos de una ventana de quince. Con el reloj
+ * adelantado el error va al otro lado y es mucho peor: la oferta nace vencida,
+ * el botón no deja pulsar, y quien conduce no puede aceptar NINGUNA carrera
+ * sin entender por qué.
+ *
+ * Así que se ancla la duración al reloj propio en el momento de recibirla. Lo
+ * único que se pierde es el viaje del mensaje por la red, que son
+ * milisegundos, y siempre en la dirección segura: el contador local va un
+ * pelín por detrás del servidor, nunca por delante.
+ *
+ * `offerExpiresAt` se sigue aceptando para no depender de que el servidor esté
+ * al día, pero es el camino de peor: sólo acierta si los dos relojes coinciden.
+ */
+function vencimientoAnclado(crudo: Record<string, unknown>, recibidaEn: number): number | null {
+  const restante = Number(crudo.offerExpiresInMs);
+  if (Number.isFinite(restante) && Number.isFinite(recibidaEn)) return recibidaEn + restante;
+  const absoluto = Number(crudo.offerExpiresAt);
+  return Number.isFinite(absoluto) ? absoluto : null;
+}
+
+/**
  * Lee la oferta que llega por `rideRequested`.
  *
  * Devuelve `null` si le falta algo sin lo cual no se puede pintar: el viaje, el
@@ -102,14 +137,14 @@ function punto(valor: unknown): { lat: number; lng: number; direccion: string | 
  * destino: se pintan como «—» y quien mira sabe que no se sabe, en vez de leer
  * un cero que parece un precio.
  */
-export function leerOferta(cuerpo: unknown): OfertaDeViaje | null {
+export function leerOferta(cuerpo: unknown, recibidaEn: number = Date.now()): OfertaDeViaje | null {
   if (cuerpo === null || typeof cuerpo !== 'object') return null;
   const crudo = cuerpo as Record<string, unknown>;
 
   const viajeId = typeof crudo.id === 'string' && crudo.id !== '' ? crudo.id : null;
   const recogida = punto(crudo.pickup);
-  const venceEn = Number(crudo.offerExpiresAt);
-  if (viajeId === null || recogida === null || !Number.isFinite(venceEn)) return null;
+  const venceEn = vencimientoAnclado(crudo, recibidaEn);
+  if (viajeId === null || recogida === null || venceEn === null) return null;
 
   const nombre = typeof crudo.passengerName === 'string' && crudo.passengerName.trim() !== ''
     ? crudo.passengerName.trim()
@@ -136,10 +171,15 @@ export function leerOferta(cuerpo: unknown): OfertaDeViaje | null {
 /**
  * Los segundos que le quedan a una oferta.
  *
- * Se calcula contra el vencimiento QUE MANDÓ EL SERVIDOR, no contando hacia
- * atrás desde quince: si la oferta tardó dos segundos en llegar, aquí quedan
- * trece y no quince. Un reloj que promete más tiempo del que hay es peor que no
- * tener reloj.
+ * Se calcula contra el vencimiento anclado --ver `leerOferta`--, no contando
+ * hacia atrás desde quince: si la oferta tardó dos segundos en llegar, aquí
+ * quedan trece y no quince. Un reloj que promete más tiempo del que hay es peor
+ * que no tener reloj.
+ *
+ * Los dos extremos son marcas absolutas del MISMO reloj, así que esto sigue
+ * siendo cierto aunque la aplicación haya estado dormida entre medias: al
+ * volver se resta con la hora de ahora y sale el tiempo real, no un contador
+ * congelado que reanuda donde lo dejó.
  */
 export function segundosRestantes(venceEn: number, ahora: number): number {
   if (!Number.isFinite(venceEn) || !Number.isFinite(ahora)) return 0;
@@ -237,8 +277,9 @@ export function estadoTrasRechazoDeAceptacion(motivo: unknown): 'EXPIRADA' | 'ER
  *
  * No es un tiempo de espera de red: la respuesta viaja por el mismo socket y
  * tarda milisegundos. Es el margen para no cortar una aceptación que iba a
- * llegar bien, cuando el reloj del teléfono y el del servidor no coinciden al
- * milímetro.
+ * llegar bien: el vencimiento local se ancla al recibir la oferta, así que va
+ * unos milisegundos por detrás del servidor, y una aceptación pulsada en el
+ * último instante necesita su ida y vuelta.
  */
 export const MARGEN_DE_RESPUESTA_MS = 3_000;
 

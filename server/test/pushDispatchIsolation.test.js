@@ -125,13 +125,29 @@ test('el adaptador real solo se construye con la funcionalidad encendida', () =>
 // La ventana de oferta
 // --------------------------------------------------------------------------
 
+test('la oferta le dice al telefono CUANTO le queda, no solo cuando vence', () => {
+  // La marca absoluta esta en el reloj de este proceso. Un telefono con la
+  // hora desajustada --que los hay-- la restaba contra la suya y anunciaba
+  // una ventana que no existia: en el laboratorio, 37 s de una de 15. La
+  // duracion relativa se ancla al reloj del propio aparato al recibirla.
+  assert.ok(
+    indexCodigo.includes('offerExpiresInMs: VENTANA_DE_OFERTA_MS'),
+    'la oferta debe llevar la duracion restante, no solo el vencimiento absoluto'
+  );
+});
+
 test('la ventana de oferta sigue siendo de quince segundos', () => {
   assert.ok(
-    indexCodigo.includes('offerExpiresAt: Date.now() + 15000'),
+    indexCodigo.includes('const VENTANA_DE_OFERTA_MS = 15_000;')
+      && indexCodigo.includes('offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS'),
     'la caducidad anunciada al conductor cambio'
   );
+  // El temporizador bebe de la MISMA constante que el vencimiento que se le
+  // anuncia al conductor: dos copias de un numero que tiene que ser igual
+  // acaban divergiendo, y entonces la tarjeta promete un tiempo que el
+  // despacho ya no respeta.
   assert.ok(
-    /setTimeout\(\(\) => offerNext\(\)[\s\S]{0,220}?\}\), 15000\)/.test(indexCodigo),
+    /setTimeout\(\(\) => offerNext\(\)[\s\S]{0,220}?\}\), VENTANA_DE_OFERTA_MS\)/.test(indexCodigo),
     'el temporizador que pasa al siguiente candidato cambio'
   );
 });

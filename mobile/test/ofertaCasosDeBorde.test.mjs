@@ -168,3 +168,33 @@ test('E · un cuerpo sin viaje sigue siendo ilegible, y se dice', () => {
   assert.equal(leerDetalle({ status: 'created', trip: {} }), null, 'un viaje sin id no vale');
   assert.equal(leerDetalle(null), null);
 });
+
+// ---------------------------------------------------------------------------
+// F · El reloj del contador es el del aparato
+// ---------------------------------------------------------------------------
+
+test('F · el proveedor ancla el vencimiento al instante en que recibe la oferta', () => {
+  // El servidor manda cuánto queda; eso vale contra el reloj de este aparato.
+  // Restar su marca absoluta contra `Date.now()` local metía en el contador
+  // todo el desfase entre los dos relojes.
+  const proveedor = fs.readFileSync(path.join(aqui, '..', 'realtime/OfertaEnVivo.tsx'), 'utf8');
+  assert.match(proveedor, /const recibidaEn = Date\.now\(\);/);
+  assert.match(proveedor, /leerOferta\(cuerpo, recibidaEn\)/);
+});
+
+test('F · una oferta que llega ya vencida NO se pinta', () => {
+  // Ofrecería una carrera que el despacho ya le pasó a otro: el botón no haría
+  // nada y quien conduce pensaría que la perdió por lento.
+  const proveedor = fs.readFileSync(path.join(aqui, '..', 'realtime/OfertaEnVivo.tsx'), 'utf8');
+  assert.match(proveedor, /if \(estaVencida\(leida, recibidaEn\)\) \{[\s\S]{0,200}?return;/);
+});
+
+test('F · al volver de segundo plano se recalcula el tiempo, no se reanuda', () => {
+  // Android congela los temporizadores de lo que no está delante. Sin esto, al
+  // volver se seguía descontando desde donde se quedó el contador y se
+  // enseñaban segundos ya gastados con la pantalla apagada.
+  const proveedor = fs.readFileSync(path.join(aqui, '..', 'realtime/OfertaEnVivo.tsx'), 'utf8');
+  assert.match(proveedor, /AppState\.addEventListener\('change'/);
+  assert.match(proveedor, /siguiente === 'active'\) setAhora\(Date\.now\(\)\)/);
+  assert.match(proveedor, /suscripcion\.remove\(\)/, 'la suscripción se retira al dejar de contar');
+});

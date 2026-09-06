@@ -308,7 +308,8 @@ test('sin credencial el cliente lanza su codigo escueto y jamas toca la red', as
 
 test('la ventana de 15000 ms, PUSH-3A y la tarifa ni se enteran del ranking', () => {
   const indice = sinComentarios(leer('index.js'));
-  assert.ok(indice.includes('offerExpiresAt: Date.now() + 15000'), 'la ventana no se toca');
+  assert.ok(indice.includes('const VENTANA_DE_OFERTA_MS = 15_000;'), 'la ventana no se toca');
+  assert.ok(indice.includes('offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS'), 'la ventana no se toca');
   assert.ok(indice.includes('pushService.notifyRideOffer(trip, candidate.driver.id)'),
     'PUSH-3A identico');
   const fare = fs.readFileSync(path.join(serverDir, '..', 'src', 'services', 'fareCalculator.js'), 'utf8');

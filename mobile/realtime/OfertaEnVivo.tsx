@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { useEvento, useTiempoReal } from './ProveedorDeTiempoReal';
 import { aceptarCarrera, rechazarCarrera } from './socket';
@@ -30,6 +31,14 @@ import {
   type EstadoDeOferta,
   type OfertaDeViaje
 } from '../domain/ofertaDeViaje';
+
+// Traza sólo en desarrollo, como las del tiempo real. Sin datos de nadie: qué
+// ventana se anunció y cuánta se ancló, que es lo que permite comprobar desde
+// fuera que el conductor y el despacho cuentan lo mismo.
+const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+function trazar(mensaje: string): void {
+  if (EN_DESARROLLO) console.log(`[+58express oferta] ${mensaje}`);
+}
 
 export interface OfertaEnVivo {
   readonly estado: EstadoDeOferta;
@@ -68,12 +77,28 @@ export function useOfertaEnVivo(): OfertaEnVivo {
   // Sólo tictaquea si hay algo que contar. Un intervalo corriendo para siempre
   // en la pantalla de un conductor que lleva horas en servicio gasta batería
   // por nada.
+  //
+  // Y AL VOLVER DE SEGUNDO PLANO SE RECALCULA, NO SE REANUDA
+  //
+  // Android puede congelar los temporizadores de una aplicación que no está
+  // delante. El vencimiento es una marca absoluta del reloj de este aparato
+  // --ver `leerOferta`--, así que basta con volver a preguntar la hora para
+  // saber el tiempo REAL que queda; lo que no puede hacerse es seguir
+  // descontando desde donde se quedó el contador, que enseñaría segundos que
+  // ya se gastaron con la pantalla apagada. El intervalo lo haría solo en su
+  // siguiente tic; esto lo adelanta al instante en que se vuelve a mirar.
   const contando = estado === 'OFERTA' || estado === 'ACEPTANDO';
   useEffect(() => {
     if (!contando) return undefined;
     setAhora(Date.now());
     const reloj = setInterval(() => setAhora(Date.now()), 250);
-    return () => clearInterval(reloj);
+    const suscripcion = AppState.addEventListener('change', (siguiente: AppStateStatus) => {
+      if (siguiente === 'active') setAhora(Date.now());
+    });
+    return () => {
+      clearInterval(reloj);
+      suscripcion.remove();
+    };
   }, [contando]);
 
   // Se acabó el tiempo. El servidor ya habrá pasado al siguiente candidato.
@@ -124,13 +149,26 @@ export function useOfertaEnVivo(): OfertaEnVivo {
   // `activo` sigue entrando en el hook para lo único que le corresponde: montar
   // o no la superficie.
   useEvento('rideRequested', useCallback((cuerpo: unknown) => {
-    const leida = leerOferta(cuerpo);
+    // El instante de recepción es el ancla del vencimiento: el servidor manda
+    // cuánto queda, y eso vale contra el reloj de este aparato, no contra el
+    // suyo.
+    const recibidaEn = Date.now();
+    const leida = leerOferta(cuerpo, recibidaEn);
     // Media oferta no se enseña: quien decide en quince segundos no puede
     // permitirse un dato a medias.
     if (leida === null) return;
+    // Y una oferta que llega SIN tiempo tampoco. Puede pasar si el mensaje se
+    // demoró más que la ventana. Pintarla sería ofrecer una carrera que el
+    // despacho ya le pasó a otro: el botón no haría nada y quien conduce
+    // pensaría que la perdió por lento.
+    if (estaVencida(leida, recibidaEn)) {
+      trazar('llegó una oferta ya vencida: no se enseña');
+      return;
+    }
     if (!debeSustituirLaOferta(estadoActual.current)) return;
+    trazar(`oferta anclada con ${segundosRestantes(leida.venceEn, recibidaEn)} s`);
     setOferta(leida);
-    setAhora(Date.now());
+    setAhora(recibidaEn);
     setEstado('OFERTA');
   }, []));
 
