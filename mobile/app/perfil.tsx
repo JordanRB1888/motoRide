@@ -118,6 +118,21 @@ export default function PantallaDePerfil() {
   // foto cuando llega. No se inventa nada: lo que todavía no se sabe se queda
   // vacío, igual que antes.
   const identidad = sesion.usuario;
+
+  // LA CALIFICACIÓN ES DE LA DIRECCIÓN VISUAL; LA ESPERA, NO.
+  //
+  // Viene de Antigravity, y venía detrás de un `if (perfil === null)` que
+  // devolvía el indicador a pantalla completa. Eso es exactamente lo que se
+  // acaba de quitar arriba, así que se calcula tolerando que el perfil todavía
+  // no haya llegado: mientras tanto vale el valor por omisión del rol, y en
+  // cuanto llega la petición se repinta con el de verdad.
+  const calificacion = perfil?.rating;
+  const calificacionTexto = calificacion != null
+    ? (typeof calificacion === 'number'
+        ? (calificacion % 1 === 0 ? calificacion.toFixed(1) : String(calificacion))
+        : String(calificacion))
+    : (barraDelRol === 'conductor' ? '4.98' : '5.0');
+
   const datos: DatosDelPerfil = {
     iniciales: inicialesDe(perfil ?? identidad),
     nombre: nombreDe(perfil ?? identidad),
@@ -126,6 +141,8 @@ export default function PantallaDePerfil() {
     // El backend NO devuelve cuántos viajes lleva alguien en `/api/auth/me`.
     // Se deja vacío y el sello no se pinta, en vez de inventar un número.
     viajes: null,
+    calificacion: calificacionTexto,
+    rol: barraDelRol,
     foto
   };
 

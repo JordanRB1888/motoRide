@@ -1,13 +1,22 @@
 /* Control Center. Scoped to the admin root; shared product tokens remain intact. */
 .cc-app {
-  --cc-bg: #101112;
-  --cc-surface: #181a1c;
-  --cc-raised: #202326;
-  --cc-sidebar: #131516;
-  --cc-line: #2b2e31;
-  --cc-text: #f0f1ef;
-  --cc-muted: #999fa3;
-  --cc-subtle: #70777c;
+  --cc-bg: #060606;
+  --cc-surface: #111111;
+  --cc-raised: #1a1a1a;
+  --cc-sidebar: #090909;
+  --cc-line: #282828;
+  --cc-text: #f1f1ef;
+  --cc-muted: #a0a0a0;
+  --cc-subtle: #747474;
+  --cc-shell-background:
+    radial-gradient(1100px 560px at 72% -14%,rgba(122,122,122,.10),transparent 62%),
+    radial-gradient(900px 620px at 26% 112%,rgba(52,52,52,.10),transparent 68%),
+    linear-gradient(180deg,#080808 0%,#050505 52%,#030303 100%);
+  --cc-sidebar-background:
+    radial-gradient(520px 260px at 25% -8%,rgba(255,255,255,.045),transparent 62%),
+    linear-gradient(180deg,#0b0b0b 0%,#080808 52%,#050505 100%);
+  --cc-header-background: rgba(6,6,6,.91);
+  --cc-header-shadow: 0 18px 54px rgba(0,0,0,.24),inset 0 -1px rgba(255,255,255,.018);
   --cc-accent: var(--x58-yellow);
   --cc-good: #72c7a0;
   --cc-bad: #ee858a;
@@ -36,7 +45,7 @@
   display: flex;
   min-height: 100dvh;
   height: auto;
-  background: var(--cc-bg);
+  background: #030303;
   color: var(--cc-text);
   font-family: var(--x58-font-ui),sans-serif;
   font-size: 13px;
@@ -51,26 +60,30 @@
 }
 html:has(.cc-app) {
   scrollbar-width: thin;
-  scrollbar-color: #2b2e31 #101112;
+  scrollbar-color: #292929 #060606;
 }
 html:has(.cc-app)::-webkit-scrollbar {
   width: 10px;
 }
 html:has(.cc-app)::-webkit-scrollbar-track {
-  background: #101112;
+  background: #060606;
 }
 html:has(.cc-app)::-webkit-scrollbar-thumb {
-  background: #2b2e31;
+  background: #292929;
   border-radius: 5px;
-  border: 2px solid #101112;
+  border: 2px solid #060606;
 }
 html:has(.cc-app)::-webkit-scrollbar-thumb:hover {
-  background: #3f4448;
+  background: #414141;
 }
 html.theme-light .cc-app {
   --cc-bg: #f4f5f5; --cc-surface: #fff; --cc-raised: #eceeef;
   --cc-sidebar: #edeff0; --cc-line: #dcdfe1; --cc-text: #202326;
   --cc-muted: #596167; --cc-subtle: #70777c; --cc-good: #238158; --cc-bad: #b83d48;
+  --cc-shell-background: #f4f5f5;
+  --cc-sidebar-background: linear-gradient(180deg,#f6f7f7,#edeff0);
+  --cc-header-background: rgba(244,245,245,.92);
+  --cc-header-shadow: 0 10px 30px rgba(24,28,30,.06),inset 0 -1px rgba(255,255,255,.7);
 }
 .cc-app *, .cc-app *::before, .cc-app *::after { box-sizing: border-box; }
 .cc-app h1, .cc-app h2, .cc-app h3, .cc-app p { margin-top: 0; }
@@ -83,8 +96,8 @@ html.theme-light .cc-app {
 .cc-app .cc-skip:focus { top: 12px; }
 .cc-app .admin-sidebar {
   position: sticky; top: 0; height: 100dvh; width: 228px; flex: 0 0 228px;
-  padding: 0 12px; background: var(--cc-sidebar); border-right: 1px solid var(--cc-line);
-  box-shadow: none; display: flex; flex-direction: column; overflow: visible;
+  padding: 0 12px; background: var(--cc-sidebar-background); border-right: 1px solid var(--cc-line);
+  box-shadow: 16px 0 46px rgba(0,0,0,.18); display: flex; flex-direction: column; overflow: visible;
 }
 .cc-app .admin-sidebar::before, .cc-app .admin-sidebar::after { display: none; }
 .cc-app .admin-logo { flex: 0 0 86px; height: 86px; padding: 20px 12px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; border: 0; }
@@ -122,8 +135,8 @@ html.theme-light .cc-app {
 .cc-app .collapsed .cc-nav-group { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--cc-line); }
 .cc-app .collapsed .nav-item { justify-content: center; height: 39px; }
 .cc-app .collapsed .nav-text { display: none; }
-.cc-app .admin-main { min-width: 0; flex: 1; margin: 0; width: auto; min-height: 100dvh; height: auto; background: var(--cc-bg); display: flex; flex-direction: column; }
-.cc-app .admin-header { position: sticky; top: 0; z-index: 30; height: 66px; min-height: 66px; padding: 0 30px; border-bottom: 1px solid var(--cc-line); background: var(--cc-bg); box-shadow: none; backdrop-filter: none; gap: 16px; }
+.cc-app .admin-main { min-width: 0; flex: 1; margin: 0; width: auto; min-height: 100dvh; height: auto; background: var(--cc-shell-background); display: flex; flex-direction: column; }
+.cc-app .admin-header { position: sticky; top: 0; z-index: 30; height: 66px; min-height: 66px; padding: 0 30px; border-bottom: 1px solid var(--cc-line); background: var(--cc-header-background); box-shadow: var(--cc-header-shadow); backdrop-filter: blur(18px) saturate(.85); gap: 16px; }
 .cc-app .header-left { gap: 14px; min-width: 0; display: flex; align-items: center; }
 .cc-breadcrumb { color: var(--cc-subtle); font-size: 11px; white-space: nowrap; }
 .cc-breadcrumb > span { margin-left: 12px; }
@@ -137,7 +150,7 @@ html.theme-light .cc-app {
 .cc-app .admin-profile strong { font-size: 11px; }
 .cc-app .admin-profile small { font-size: 9px; }
 .cc-app .logout-btn { width: 30px; min-height: 30px; padding: 0; border: 0; background: none; color: var(--cc-muted); }
-.cc-app .admin-content { padding: 30px; width: 100%; max-width: none; min-width: 0; box-sizing: border-box; margin: 0; flex: 1; overflow: visible; }
+.cc-app .admin-content { padding: 30px; width: 100%; max-width: none; min-width: 0; box-sizing: border-box; margin: 0; flex: 1; overflow: visible; background: transparent; }
 .cc-app .admin-content > * { animation: cc-arrive 220ms var(--cc-ease); }
 .cc-app :is(.dashboard-view,.users-command-view,.finance-command-view,.wallet-topups-admin,.support-command-view,.driver-admin-page,.tariffs-command-view) { max-width: none; width: 100%; animation: none; }
 .cc-app .cc-eyebrow { display: block; color: var(--cc-muted); font-size: 10px; font-weight: 550; letter-spacing: .9px; text-transform: uppercase; margin-bottom: 8px; }

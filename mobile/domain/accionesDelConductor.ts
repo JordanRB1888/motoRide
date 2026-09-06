@@ -48,7 +48,7 @@ export interface AccionDelConductor {
 const ACCIONES: Readonly<Record<string, AccionDelConductor>> = Object.freeze({
   DRIVER_ASSIGNED: {
     estadoQuePide: 'ARRIVED',
-    texto: 'Llegué',
+    texto: 'Llegué al punto',
     textoEnviando: 'Avisando…',
     testID: 'boton-llegue'
   },
@@ -81,9 +81,9 @@ export function accionParaElEstado(estado: string | null | undefined): AccionDel
  * dos personas leyendo algo escrito para la otra.
  */
 const TITULAR: Readonly<Record<string, string>> = Object.freeze({
-  DRIVER_ASSIGNED: 'Vas a recoger',
+  DRIVER_ASSIGNED: 'Vas a recoger a la pasajera',
   ARRIVED: 'Esperando a la pasajera',
-  IN_PROGRESS: 'Viaje en curso'
+  IN_PROGRESS: 'Viaje en curso a destino'
 });
 
 /** El titular de este estado, o `null` si este estado no es cosa suya. */

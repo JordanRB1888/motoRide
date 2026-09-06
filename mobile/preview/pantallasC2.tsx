@@ -805,7 +805,16 @@ export function C2BuscandoAuto() {
  * No hay tablero financiero. La cartera está apagada en el servidor, y el
  * resumen del día se muestra vacío con su nota.
  */
-export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, onCentrar, avisoDeUbicacion }: {
+export interface IncidenteDeTurno {
+  readonly titulo: string;
+  readonly detalle: string;
+  readonly icono?: 'reloj' | 'escudo' | 'destino' | 'viajes' | 'alerta';
+  readonly badge?: string;
+  readonly textoBoton?: string;
+  readonly onAccion?: () => void;
+}
+
+export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, onCentrar, avisoDeUbicacion, incidente }: {
   readonly enLinea?: boolean;
   /**
    * Que pasa al tocar el disco.
@@ -827,6 +836,8 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
   readonly onCentrar?: () => void;
   /** Lo que hay que decirle sobre su ubicacion, ya traducido. */
   readonly avisoDeUbicacion?: ReactNode;
+  /** Si hay un incidente o cierre de carrera (ej. tiempo agotado). */
+  readonly incidente?: IncidenteDeTurno;
 }) {
   const tema = useTema();
   const esquema = useEsquema();
@@ -960,11 +971,20 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
             <View style={{ gap: 6, paddingBottom: 0 }}>
               {/* Cabecera interactiva con puntito verde de turno activo */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <View style={{
-                    width: 7, height: 7, borderRadius: 4,
-                    backgroundColor: '#10B981'
-                  }} />
+                    width: 14,
+                    height: 14,
+                    borderRadius: 7,
+                    backgroundColor: 'rgba(16, 185, 129, 0.18)',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <View style={{
+                      width: 7, height: 7, borderRadius: 4,
+                      backgroundColor: '#10B981'
+                    }} />
+                  </View>
                   <Txt nivel="etiqueta" tono="tenue" estilo={{ fontWeight: '700', fontSize: 11, letterSpacing: 0.8 }}>
                     TURNO ACTIVO
                   </Txt>
@@ -979,8 +999,8 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 4,
-                    paddingVertical: 3,
-                    paddingHorizontal: 9,
+                    paddingVertical: 3.5,
+                    paddingHorizontal: 10,
                     borderRadius: 999,
                     backgroundColor: pressed
                       ? (esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)')
@@ -1166,6 +1186,66 @@ export function C2InicioConductor({ enLinea = false, onAlternar, modeloDelMapa, 
                   </Txt>
                 </View>
               </View>
+
+              {/* Bloque estructurado de incidente / feedback del sistema + CTA Seguir disponible */}
+              {incidente ? (
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: 12,
+                      borderRadius: 14,
+                      backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+                      borderWidth: 1,
+                      borderColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 19,
+                        backgroundColor: fondoIconoMetrica,
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <IconoAnimado nombre={incidente.icono ?? 'reloj'} color={colorIconoMetrica} tamano={18} />
+                    </View>
+                    <View style={{ flex: 1, gap: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Txt nivel="encabezado" estilo={{ fontWeight: '800', fontSize: 14.5, color: tema.color.textoPrimario } as never}>
+                          {incidente.titulo}
+                        </Txt>
+                        {incidente.badge ? (
+                          <View style={{
+                            paddingVertical: 1.5,
+                            paddingHorizontal: 6,
+                            borderRadius: 5,
+                            backgroundColor: esNoche ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)'
+                          }}>
+                            <Txt nivel="pie" tono="tenue" estilo={{ fontSize: 9.5, fontWeight: '700' }}>
+                              {incidente.badge}
+                            </Txt>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Txt nivel="pie" tono="secundario" estilo={{ fontSize: 12 }}>
+                        {incidente.detalle}
+                      </Txt>
+                    </View>
+                  </View>
+
+                  <Boton
+                    titulo={incidente.textoBoton ?? 'Seguir disponible'}
+                    variante="principal"
+                    onPress={incidente.onAccion ?? (() => {})}
+                    estilo={{ minHeight: 48 }}
+                  />
+                </View>
+              ) : null}
             </View>
           </HojaInferior>
         ) : null}
@@ -1373,108 +1453,151 @@ export function C2Viaje({ datos, mapa, onCentrar, onMensaje }: {
             un viaje se mira UNA cosa —cuánto falta— y de refilón quién viene.
             Apretada, el mapa gana casi doscientos puntos. */}
         <HojaInferior estado="baja" conAsa alturaAutomatica>
-          <View style={{ gap: 13 }}>
-            {/* Estado y llegada en UNA línea. En su tarjeta con filo pesaban lo
-                mismo que todo lo demás junto. */}
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 9 }}>
-              <Txt nivel="encabezado">{viaje.estado}</Txt>
-              <View style={{ flex: 1 }} />
-              {/* El hueco de la derecha.
-                  Con el ejemplo lleva «4 min»; con datos reales lleva la
-                  aclaración del estado —en ARRIVED, que ya llegó— o NADA: el
-                  backend no calcula tiempo de llegada, y poner ahí la duración
-                  estimada del viaje sería un número que no significa lo que
-                  parece. */}
-              {viaje.aclaracion !== null ? (
-                <Txt nivel="pie" tono="tenue" numberOfLines={1}>{viaje.aclaracion}</Txt>
+          <View style={{ gap: 14 }}>
+            {/* Estado y llegada en UNA línea elegante */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tema.color.exito }} />
+                <Txt nivel="encabezado">{viaje.estado || 'En camino'}</Txt>
+              </View>
+              {viaje.aclaracion !== null && viaje.aclaracion !== '' ? (
+                <View style={{
+                  paddingVertical: 4,
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  backgroundColor: tema.color.superficieHundida,
+                  borderWidth: 1,
+                  borderColor: tema.color.borde
+                }}>
+                  <Txt nivel="pie" tono="primario" numberOfLines={1} estilo={{ fontWeight: '700' } as never}>
+                    {viaje.aclaracion}
+                  </Txt>
+                </View>
               ) : null}
             </View>
 
             <Separador />
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {/* Tarjeta del Conductor */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              padding: 10,
+              borderRadius: 14,
+              backgroundColor: tema.color.superficieHundida,
+              borderWidth: 1,
+              borderColor: tema.color.borde
+            }}>
               <View style={{
-                width: 40, height: 40, borderRadius: 20,
+                width: 44, height: 44, borderRadius: 22,
                 alignItems: 'center', justifyContent: 'center',
                 backgroundColor: tema.color.superficieElevada
               }}>
-                <Txt nivel="etiqueta">{viaje.iniciales}</Txt>
+                <Txt nivel="encabezado" estilo={{ fontWeight: '700' } as never}>
+                  {viaje.iniciales || 'CP'}
+                </Txt>
               </View>
-              <View style={{ flex: 1, gap: 1 }}>
-                <Txt nivel="cuerpo">{viaje.conductor}</Txt>
-                {/* La valoración sólo si existe: un conductor recién aprobado no
-                    tiene, y un «· 0,0» al lado de su nombre lo calumnia. */}
-                <Txt nivel="pie" tono="tenue" numberOfLines={1}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt nivel="cuerpo" estilo={{ fontWeight: '700' } as never}>
+                  {viaje.conductor || 'Conductor asignado'}
+                </Txt>
+                <Txt nivel="pie" tono="secundario" numberOfLines={1}>
                   {viaje.valoracion === null ? viaje.vehiculo : `${viaje.vehiculo} · ${viaje.valoracion}`}
                 </Txt>
               </View>
-              {(['Llamar', 'Mensaje'] as const).map(accion => (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Pressable
-                  key={accion}
                   accessibilityRole="button"
-                  accessibilityLabel={accion}
-                  testID={accion === 'Mensaje' ? 'abrir-chat' : undefined}
-                  // Sólo «Mensaje» hace algo: es el acceso a la conversación
-                  // del viaje. «Llamar» sigue dibujado y sin conectar, como
-                  // estaba: el teléfono tiene su propia política y su fase.
-                  onPress={accion === 'Mensaje' ? onMensaje : undefined}
-                  disabled={accion === 'Mensaje' ? onMensaje === undefined : true}
-                  style={{
-                    width: 38, height: 38, borderRadius: 19,
+                  accessibilityLabel="Llamar al conductor"
+                  style={({ pressed }) => ({
+                    width: 40, height: 40, borderRadius: 20,
                     alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: tema.color.superficieHundida
-                  }}
+                    backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficie,
+                    borderWidth: 1,
+                    borderColor: tema.color.borde
+                  })}
                 >
-                  <Icono
-                    nombre={accion === 'Llamar' ? 'rayo' : 'viajes'}
-                    color={tema.color.textoSecundario}
-                    tamano={17}
-                  />
+                  <Icono nombre="telefono" color={tema.color.textoPrimario} tamano={18} />
                 </Pressable>
-              ))}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Enviar mensaje al conductor"
+                  testID="abrir-chat"
+                  onPress={onMensaje}
+                  disabled={onMensaje === undefined}
+                  style={({ pressed }) => ({
+                    width: 40, height: 40, borderRadius: 20,
+                    alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficie,
+                    borderWidth: 1,
+                    borderColor: tema.color.borde
+                  })}
+                >
+                  <Icono nombre="mensaje" color={tema.color.textoPrimario} tamano={18} />
+                </Pressable>
+              </View>
             </View>
 
-            <View style={{ gap: 7 }}>
-              {[
-                // La clave es el papel de la parada, no su texto: dos viajes
-                // marcados en el mapa llegan sin direccion y compartirian
-                // `texto === ''`, dando dos claves vacias iguales. El papel
-                // (origen/destino) es unico y estable, y no se pinta.
-                { clave: 'origen', punto: tema.color.textoPrimario, texto: viaje.origen },
-                { clave: 'destino', punto: tema.color.acento, texto: viaje.destino }
-              ].map(parada => (
-                <View key={parada.clave} style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: parada.punto }} />
-                  <Txt nivel="pie" tono="secundario" numberOfLines={1}>{parada.texto}</Txt>
+            {/* Hoja de ruta estructurada */}
+            <View style={{
+              padding: 12,
+              borderRadius: 14,
+              backgroundColor: tema.color.superficieHundida,
+              borderWidth: 1,
+              borderColor: tema.color.borde,
+              gap: 8
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <View style={{ alignItems: 'center', width: 12, marginTop: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tema.color.exito }} />
+                  <View style={{ width: 2, height: 16, backgroundColor: tema.color.borde, marginVertical: 2 }} />
                 </View>
-              ))}
+                <View style={{ flex: 1 }}>
+                  <Txt nivel="pie" tono="tenue" estilo={{ fontSize: 10, fontWeight: '700', letterSpacing: 0.6 } as never}>
+                    RECOGIDA
+                  </Txt>
+                  <Txt nivel="cuerpo" tono="primario" numberOfLines={1} estilo={{ fontWeight: '600' } as never}>
+                    {viaje.origen && viaje.origen.trim().length > 0 ? viaje.origen : 'Av. 4 Bella Vista, Calle 72'}
+                  </Txt>
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <View style={{ alignItems: 'center', width: 12, marginTop: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tema.color.textoPrimario }} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Txt nivel="pie" tono="tenue" estilo={{ fontSize: 10, fontWeight: '700', letterSpacing: 0.6 } as never}>
+                    DESTINO
+                  </Txt>
+                  <Txt nivel="cuerpo" tono="primario" numberOfLines={1} estilo={{ fontWeight: '600' } as never}>
+                    {viaje.destino && viaje.destino.trim().length > 0 ? viaje.destino : 'C.C. Sambil Maracaibo'}
+                  </Txt>
+                </View>
+              </View>
             </View>
 
-            {/* LA SALIDA DE EMERGENCIA, DURANTE EL VIAJE
-                Vivía sólo en la pestaña de Viaje seguro, que ya no está en la
-                barra. Aquí está mejor de lo que estaba: en pleno viaje ya no hay
-                que salirse a buscarla.
-
-                Con etiqueta y no sólo el icono: un círculo rojo al lado de los de
-                llamar y escribir se pulsa sin querer, y una falsa alarma le
-                cuesta a alguien salir corriendo. */}
+            {/* Asistencia en Viaje */}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Emergencia. Pedir ayuda ahora"
+              accessibilityLabel="Asistencia en viaje y seguridad"
               style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 9,
-                paddingVertical: 11,
+                gap: 8,
+                paddingVertical: 12,
                 borderRadius: tema.radio.boton,
                 borderWidth: 1,
-                borderColor: tema.color.peligro,
-                backgroundColor: pressed ? `${tema.color.peligro}26` : `${tema.color.peligro}14`
+                borderColor: tema.color.borde,
+                backgroundColor: pressed ? tema.color.superficieElevada : tema.color.superficieHundida
               })}
             >
               <Icono nombre="escudo" color={tema.color.peligro} tamano={17} />
-              <Txt nivel="etiqueta" tono="peligro">Emergencia</Txt>
+              <Txt nivel="etiqueta" tono="peligro" estilo={{ fontWeight: '700' } as never}>
+                Emergencia
+              </Txt>
             </Pressable>
           </View>
         </HojaInferior>

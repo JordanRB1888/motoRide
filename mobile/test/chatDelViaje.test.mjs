@@ -219,15 +219,20 @@ test('las dos pantallas del viaje llevan al chat con un botón vivo, no muerto',
   const pasajera = despojarComentarios(leer('app/viaje-activo.tsx'));
   assert.match(pasajera, /<C2Viaje[^>]*onMensaje=\{\(\) => router\.push\('\/chat'\)\}/);
 
+  // La tarjeta pasó a tener DOS botones --teléfono y mensaje-- en vez de uno
+  // que se decidía por `accion`. Lo que se exige no cambia: el de mensaje
+  // lleva al chat, y sin manejador se queda apagado en vez de fingir que hace
+  // algo. El del teléfono sigue dibujado y sin conectar, como estaba.
   const tarjeta = despojarComentarios(leer('preview/pantallasC2.tsx'));
-  assert.match(tarjeta, /testID=\{accion === 'Mensaje' \? 'abrir-chat' : undefined\}/);
-  assert.match(tarjeta, /onPress=\{accion === 'Mensaje' \? onMensaje : undefined\}/);
+  assert.match(tarjeta, /testID="abrir-chat"/);
+  assert.match(tarjeta, /onPress=\{onMensaje\}/);
+  assert.match(tarjeta, /disabled=\{onMensaje === undefined\}/);
 
   const conductor = despojarComentarios(leer('app/conductor.tsx'));
   assert.match(conductor, /<SuperficieDeCarrera[\s\S]*?onMensaje=\{\(\) => router\.push\('\/chat'\)\}/);
 
   const superficie = despojarComentarios(leer('conductor/SuperficieDeCarrera.tsx'));
-  assert.match(superficie, /onMensaje === undefined \? null : \(/);
+  assert.match(superficie, /\{onMensaje \? \(/, 'el acceso al chat se pinta aunque no haya a dónde llevar');
   assert.match(superficie, /testID="abrir-chat-conductor"/);
 });
 

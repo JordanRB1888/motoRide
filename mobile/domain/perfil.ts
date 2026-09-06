@@ -79,6 +79,7 @@ export interface PerfilDeUsuario {
   readonly vehicleModel: string;
   readonly vehiclePlate: string;
   readonly vehicleColor: string;
+  readonly rating?: number | null;
 }
 
 const texto = (valor: unknown): string => (typeof valor === 'string' ? valor : '');
@@ -98,7 +99,13 @@ export function leerPerfil(cuerpo: unknown): PerfilDeUsuario | null {
   const role = texto(dato.role);
   if (id === '' || (role !== 'passenger' && role !== 'driver' && role !== 'admin')) return null;
 
-  return {
+  const rawRating = dato.rating;
+  const tieneRating = typeof rawRating === 'number'
+    ? Number.isFinite(rawRating)
+    : typeof rawRating === 'string' && rawRating.trim() !== '' && !Number.isNaN(Number(rawRating));
+  const rating = tieneRating ? Number(rawRating) : null;
+
+  const perfil: PerfilDeUsuario = {
     id,
     role,
     firstName: texto(dato.firstName),
@@ -117,6 +124,8 @@ export function leerPerfil(cuerpo: unknown): PerfilDeUsuario | null {
     vehiclePlate: texto(dato.vehiclePlate),
     vehicleColor: texto(dato.vehicleColor)
   };
+
+  return rating !== null ? { ...perfil, rating } : perfil;
 }
 
 /**

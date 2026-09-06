@@ -385,6 +385,8 @@ export interface DatosDelPerfil {
   readonly desde: string | null;
   readonly verificada: boolean;
   readonly viajes: string | null;
+  readonly calificacion?: string | number | null;
+  readonly rol?: 'pasajera' | 'conductor';
   readonly foto: { readonly uri: string; readonly headers?: Record<string, string> } | null;
 }
 
@@ -409,6 +411,7 @@ const PERFIL_VACIO: DatosDelPerfil = {
   desde: null,
   verificada: false,
   viajes: null,
+  calificacion: null,
   foto: null
 };
 
@@ -419,8 +422,25 @@ const PERFIL_DE_EJEMPLO: DatosDelPerfil = {
   desde: PERFIL_DEMO.desde,
   verificada: true,
   viajes: PERFIL_DEMO.viajes,
+  calificacion: '5.0',
+  rol: 'pasajera',
   foto: null
 };
+
+export const PERFIL_CONDUCTOR_DE_EJEMPLO: DatosDelPerfil = {
+  iniciales: 'CP',
+  nombre: 'Conductor Prueba',
+  desde: 'Miembro desde marzo de 2026',
+  verificada: true,
+  viajes: '48',
+  calificacion: '4.98',
+  rol: 'conductor',
+  foto: null
+};
+
+export function C2PerfilConductor() {
+  return <C2Perfil barra="conductor" datos={PERFIL_CONDUCTOR_DE_EJEMPLO} />;
+}
 
 export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, cerrando = false, barra = 'pasajera', control }: {
   /** Sin esto se pinta el ejemplo. Con esto, la persona de verdad. */
@@ -499,7 +519,10 @@ export function C2Perfil({ datos, sinLeer: sinLeerReal, onFila, onCerrarSesion, 
                   {perfil.desde}
                 </Txt>
               ) : null}
-              <View style={{ flexDirection: 'row', gap: 7, marginTop: 3 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginTop: 3 }}>
+                {perfil.calificacion !== null && perfil.calificacion !== undefined ? (
+                  <SelloCalificacionSobreAmarillo calificacion={perfil.calificacion} />
+                ) : null}
                 {/* Cada sello aparece SOLO si el dato existe. Con la persona de
                     verdad, «N viajes» no se pinta: `GET /api/auth/me` no lo
                     devuelve, y un número inventado en un perfil real es peor
@@ -606,6 +629,37 @@ function SelloSobreAmarillo({ texto }: { readonly texto: string }) {
       paddingVertical: 3
     }}>
       <Txt nivel="etiqueta" tono="sobreAcento">{texto}</Txt>
+    </View>
+  );
+}
+
+/** Una insignia con estrella para la calificación sobre la banda amarilla. */
+function SelloCalificacionSobreAmarillo({ calificacion }: { readonly calificacion: string | number }) {
+  const tema = useTema();
+  const valor = typeof calificacion === 'number'
+    ? (calificacion % 1 === 0 ? calificacion.toFixed(1) : String(calificacion))
+    : String(calificacion);
+
+  return (
+    <View
+      accessibilityRole="text"
+      accessibilityLabel={`Calificación: ${valor} de 5 estrellas`}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        borderWidth: 1,
+        borderColor: tema.color.sobreAcento,
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        backgroundColor: 'rgba(0, 0, 0, 0.05)'
+      }}
+    >
+      <Icono nombre="estrella" color={tema.color.sobreAcento} tamano={12} activo />
+      <Txt nivel="etiqueta" tono="sobreAcento" estilo={{ fontWeight: '700' }}>
+        {valor}
+      </Txt>
     </View>
   );
 }
