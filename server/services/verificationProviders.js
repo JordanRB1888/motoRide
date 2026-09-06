@@ -37,7 +37,10 @@ export function textoDelCodigo(codigo) {
   return `Tu codigo de verificacion de +58Express es ${codigo}. Vence en 5 minutos. No lo compartas con nadie.`;
 }
 
-export const ASUNTO_DEL_CORREO = 'Tu codigo de verificacion de +58Express';
+// El asunto es lo PRIMERO que se lee, y muchas veces lo unico que se ve en la
+// lista del correo. Va acentuado como cualquier texto que lee una persona: sin
+// tildes, junto a un cuerpo que si las lleva, parece descuidado.
+export const ASUNTO_DEL_CORREO = 'Tu código de verificación de +58express';
 
 /**
  * El correo en texto plano. Sin imagenes, sin pixel de seguimiento, sin

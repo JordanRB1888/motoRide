@@ -3,9 +3,10 @@
 Cómo se lleva +58Express a manos de gente que no está en esta casa: qué hay
 montado, qué falta, y cómo se genera un APK Beta.
 
-> **Estado: staging en pie.** El backend de pruebas ya responde por internet y
-> exige sesión. Falta el correo, la recuperación de contraseña y el APK. Al
-> final está la lista exacta de lo que queda y de quién depende cada cosa.
+> **Estado: staging en pie y con correo.** El backend responde por internet con
+> su propio certificado, exige sesión, y los códigos de verificación llegan a
+> una bandeja de verdad. Falta el APK y la credencial de Maps. Al final está la
+> lista exacta de lo que queda y de quién depende cada cosa.
 
 ---
 
@@ -35,12 +36,19 @@ Registrado en Vercel el 6 de septiembre de 2026, con sus nameservers.
 
 | Nombre | Apunta a | Estado |
 |---|---|---|
-| `api-staging.mas58express.com` | `j3zhwhkt.up.railway.app` (CNAME) | **creado**, certificado emitiéndose |
+| `api-staging.mas58express.com` | `j3zhwhkt.up.railway.app` (CNAME) | **en pie**, con certificado de Let's Encrypt |
+| `_railway-verify.api-staging` | TXT de Railway | verificación de propiedad |
+| `resend._domainkey`, `send` | Resend (DKIM, SPF, MX) | dominio verificado |
 | `admin-staging.mas58express.com` | panel de administración | pendiente |
 | `mas58express.com` | landing / la aplicación | pendiente |
 
-Mientras el certificado del subdominio termina de emitirse, la dirección que
-funciona es la de Railway: `https://motoride-staging.up.railway.app`.
+**El TXT de Railway hay que crearlo a mano.** Al añadir un dominio, Railway
+devuelve sólo el CNAME; el TXT `_railway-verify.<subdominio>` aparece únicamente
+en `railway domain status`. Sin él, el certificado se queda horas en
+«validando propiedad» sin dar ningún error, que es exactamente lo que pasó aquí.
+
+La dirección de Railway (`https://motoride-staging.up.railway.app`) sigue
+funcionando y sirve de respaldo.
 
 ---
 
@@ -219,9 +227,11 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 - Nueve errores de tipos y tres pruebas rotas del trabajo en curso, arreglados
 - Móvil 1141/1141 · Frontend 644/644 · Servidor 1228 · typechecks limpios
 - Variante Beta, perfil de EAS y plantilla de entorno
-- **Recuperar contraseña conectada en el móvil**, de extremo a extremo salvo el
-  correo: el enlace lleva al flujo, se pide el código y la contraseña nueva se
-  manda junto a él, que es como lo quiere el servidor
+- **Recuperar contraseña conectada en el móvil**: el enlace lleva al flujo, se
+  pide el código y la contraseña nueva se manda junto a él, que es como lo
+  quiere el servidor
+- **El correo funciona de verdad**: código enviado por Resend y recibido en la
+  bandeja de entrada, no en spam, con la maqueta de +58express
 - Migración de Maps a OAuth de servidor (falta certificarla)
 
 ### Falta, y lo tienes que hacer tú
@@ -230,7 +240,6 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 |---|---|
 | Comprar `mas58express.com` | es un pago |
 | Cuenta de servicio de Maps en Google Cloud | hay que entrar en tu consola |
-| Cuenta de correo (Resend o SendGrid) | crear cuentas es cosa tuya |
 | Cuenta de Cloudflare Turnstile | igual |
 | Cuenta de Sentry | igual |
 | Base de datos de staging | decisión de gasto |
@@ -241,7 +250,6 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 | Qué | Qué espera |
 |---|---|
 | Panel de administracion en `admin-staging` | desplegar el frontend |
-| Confirmación de correo obligatoria | el proveedor de correo |
 | Turnstile en registro y recuperación | las claves |
 | Sentry con `environment=staging` | el proyecto de Sentry |
 | Certificar Maps y la prueba de cambio de IP | la cuenta de servicio |
