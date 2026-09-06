@@ -124,6 +124,35 @@ test('el registro guarda quién conducía y con qué', () => {
   assert.match(dato.conductor.placa, /^AA000AA$/, 'la placa parece real');
 });
 
+test('la cronología cuenta quién pidió el viaje sin atribuírselo a quien lo condujo', () => {
+  // «Pediste el viaje» es cierto para quien lo pidió. Al conductor le decía
+  // que lo había pedido él, cuando lo único que hizo fue aceptarlo.
+  const pantalla = leer('app/viaje/[id].tsx');
+  assert.match(pantalla, /titulo: 'Pediste el viaje', tituloParaElConductor: 'La pasajera solicitó el viaje'/);
+  // Elige el MISMO `soyPasajera` que decide la contraparte: una sola fuente de
+  // rol, sin una segunda detección que pueda discrepar.
+  assert.match(
+    pantalla,
+    /titulo: !soyPasajera && 'tituloParaElConductor' in paso \? paso\.tituloParaElConductor : paso\.titulo/
+  );
+});
+
+test('los demás hitos siguen siendo hechos, iguales para los dos', () => {
+  // El conductor asignado es el mismo para ambos, y llegó / empezó / llegó al
+  // destino son hechos, no perspectivas: no llevan alternativa, y que no la
+  // lleven es la afirmación.
+  const pantalla = leer('app/viaje/[id].tsx');
+  const tabla = pantalla.slice(pantalla.indexOf('const PASOS = ['), pantalla.indexOf('] as const;'));
+  for (const titulo of ['Conductor asignado', 'Llegó al punto de recogida', 'Empezó el viaje', 'Llegó al destino']) {
+    assert.ok(tabla.includes(`titulo: '${titulo}' }`), `${titulo} cambió de forma`);
+  }
+  assert.equal(
+    (tabla.match(/tituloParaElConductor/g) ?? []).length,
+    1,
+    'sólo el primer hito se cuenta distinto según quién mire'
+  );
+});
+
 test('la contraparte se llama por su nombre, según quién mire el viaje', () => {
   // El dato ya era correcto --al conductor se le pone su pasajera-- pero los
   // rótulos seguían siendo los de la pasajera, así que al conductor se le

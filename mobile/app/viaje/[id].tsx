@@ -37,9 +37,18 @@ import {
   type MensajeReal
 } from '../../domain/viajes';
 
-/** Cómo se llama cada paso en pantalla. El orden es el de la máquina real. */
+/**
+ * Cómo se llama cada paso en pantalla. El orden es el de la máquina real.
+ *
+ * `tituloParaElConductor` sólo existe donde el hecho se cuenta distinto según
+ * quién mire. Es un paso: quien lo pidió fue la pasajera, y al conductor
+ * decirle «pediste el viaje» le atribuye algo que no hizo. Los otros cuatro
+ * son hechos y no perspectivas --el conductor asignado es el mismo para los
+ * dos, y llegó, empezó y llegó al destino igual--, así que se leen bien desde
+ * ambos lados y no llevan alternativa.
+ */
 const PASOS = [
-  { estado: 'SEARCHING', titulo: 'Pediste el viaje' },
+  { estado: 'SEARCHING', titulo: 'Pediste el viaje', tituloParaElConductor: 'La pasajera solicitó el viaje' },
   { estado: 'DRIVER_ASSIGNED', titulo: 'Conductor asignado' },
   { estado: 'ARRIVED', titulo: 'Llegó al punto de recogida' },
   { estado: 'IN_PROGRESS', titulo: 'Empezó el viaje' },
@@ -165,7 +174,9 @@ function enPantalla(
     const ocurrido = hito(paso.estado);
     return {
       clave: paso.estado.toLowerCase(),
-      titulo: paso.titulo,
+      // El mismo `soyPasajera` que decide la contraparte: un solo rol, una
+      // sola fuente. Sin alternativa, el título es el de siempre.
+      titulo: !soyPasajera && 'tituloParaElConductor' in paso ? paso.tituloParaElConductor : paso.titulo,
       hora: ocurrido === undefined ? '' : horaDe(ocurrido.cuando),
       detalle: paso.estado === 'DRIVER_ASSIGNED' ? viaje.conductor?.nombre : undefined,
       ocurrido: ocurrido !== undefined
