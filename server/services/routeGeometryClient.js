@@ -33,6 +33,7 @@
  */
 
 import { decodificarPolilinea, adelgazarRuta } from '../domain/polilinea.js';
+import { crearAuthDeMaps } from './googleMapsAuth.js';
 
 export const ROUTE_GEOMETRY_ERROR = Object.freeze({
   NOT_CONFIGURED: 'ROUTE_GEOMETRY_NOT_CONFIGURED',
@@ -76,13 +77,22 @@ export function createRouteGeometryClient({
   apiKey = process.env.DISPATCH_ROUTES_API_KEY,
   fetchImpl = fetch,
   timeoutMs = 2_500,
-  logger = console
+  logger = console,
+  // La autoridad de auth. Por omision se construye una con lo que haya en el
+  // entorno: cuenta de servicio si existe, clave si no. Quien monta el
+  // servidor le pasa la COMPARTIDA, para que el token se cachee una sola vez.
+  // Declarada DESPUES de `logger` a proposito: los parametros por defecto se
+  // evaluan en orden y aqui se lee `logger`.
+  auth = crearAuthDeMaps({ apiKey, logger })
 } = {}) {
-  const clave = typeof apiKey === 'string' ? apiKey.trim() : '';
-
   return {
     isConfigured() {
-      return clave.length > 0;
+      return auth.estaConfigurado();
+    },
+
+    /** Con que se esta autenticando: 'oauth' | 'api-key' | 'sin-configurar'. */
+    get authMode() {
+      return auth.modo;
     },
 
     /**
@@ -98,6 +108,17 @@ export function createRouteGeometryClient({
       if (!this.isConfigured()) throw new Error(ROUTE_GEOMETRY_ERROR.NOT_CONFIGURED);
       if (!origen || !destino) throw new Error(ROUTE_GEOMETRY_ERROR.MALFORMED);
 
+      // Las cabeceras ANTES de abrir el reloj: pedir un token es una llamada
+      // suya y no debe gastar el tiempo que le toca a la ruta.
+      let cabecerasDeAuth;
+      try {
+        cabecerasDeAuth = await auth.cabeceras();
+      } catch {
+        // El codigo del fallo de auth no sale de aqui: quien llama degrada
+        // igual que con cualquier otro fallo del proveedor.
+        throw new Error(ROUTE_GEOMETRY_ERROR.PROVIDER_ERROR);
+      }
+
       const abort = new AbortController();
       const reloj = setTimeout(() => abort.abort(), timeoutMs);
 
@@ -108,7 +129,7 @@ export function createRouteGeometryClient({
           signal: abort.signal,
           headers: {
             'Content-Type': 'application/json',
-            'X-Goog-Api-Key': clave,
+            ...cabecerasDeAuth,
             'X-Goog-FieldMask': FIELD_MASK
           },
           body: JSON.stringify({

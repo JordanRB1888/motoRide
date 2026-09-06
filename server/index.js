@@ -15,6 +15,8 @@ import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS, TR
 import { calculateDistance, estadosActivos, metricasDelRecorrido } from './domain/tripMetrics.js';
 import { createRouteMatrixClient } from './services/routeMatrixClient.js';
 import { createRouteGeometryClient } from './services/routeGeometryClient.js';
+import { crearAuthDeMaps, MODO_DE_AUTH } from './services/googleMapsAuth.js';
+import { createPlacesClient, PLACES_ERROR } from './services/placesClient.js';
 import { crearCacheDeRecorridos } from './services/routeMetricsCache.js';
 import { SIN_RUTA, tramoDeLaRuta } from './domain/rutaDelViaje.js';
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
@@ -115,6 +117,10 @@ const limitadores = {
   // pone esto: sesenta por minuto es un pulso cada segundo, cuatro veces mas de
   // lo que el movil pide, y aun asi acotado si alguien decide insistir.
   rutas: createIdentityLimiter({ name: 'rutas', limit: 60, windowMs: MINUTO }),
+  // Buscar el destino es escribir: cada pulsacion podria ser una llamada de
+  // PAGO a Places. El cliente agrupa las teclas antes de preguntar, pero el
+  // techo lo pone esto.
+  lugares: createIdentityLimiter({ name: 'lugares', limit: 60, windowMs: MINUTO }),
   // Subidas: caras y raras.
   subidas: createIdentityLimiter({ name: 'subidas', limit: 30, windowMs: CUARTO_DE_HORA }),
 
@@ -338,7 +344,26 @@ const chatMediaPipeline = createChatMediaPipeline({
  *
  * Lo que NUNCA hace es preguntarle la distancia al cliente.
  */
-const routeMatrix = createRouteMatrixClient({ logger: console });
+/**
+ * LA AUTENTICACION DE GOOGLE MAPS, UNA SOLA PARA TODO EL SERVIDOR
+ *
+ * Con cuenta de servicio se usa un token OAuth, que NO depende de la IP: en
+ * este entorno la pone una VPN y cambiaba cada vez que se cambiaba de
+ * servidor, dejando el calculo de distancia y tiempo fuera de juego hasta que
+ * alguien anadia la IP nueva en Google Cloud a mano.
+ *
+ * Compartida a proposito: un solo token cacheado para el medidor y para el
+ * ranking, en vez de que cada cliente se autentique por su cuenta.
+ */
+const authDeMaps = crearAuthDeMaps({
+  // Misma convencion que FCM: si nadie dice otra cosa, el fichero vive junto al
+  // servidor y git lo ignora. En produccion no hay fichero y la cuenta llega
+  // por GOOGLE_MAPS_SERVICE_ACCOUNT_B64, que `crearAuthDeMaps` ya mira sola.
+  rutaDeLaCuenta: process.env.GOOGLE_MAPS_SERVICE_ACCOUNT_FILE || path.join(serverDir, 'maps-service-account.json'),
+  logger: console
+});
+
+const routeMatrix = createRouteMatrixClient({ auth: authDeMaps, logger: console });
 const cacheDeRecorridos = crearCacheDeRecorridos();
 
 /**
@@ -356,7 +381,8 @@ const cacheDeRecorridos = crearCacheDeRecorridos();
  * cambia en dos minutos, y una carrera entera son decenas de posiciones del
  * conductor que caen todas en la misma clave redondeada.
  */
-const clienteDeGeometria = createRouteGeometryClient({ logger: console });
+const clienteDeGeometria = createRouteGeometryClient({ auth: authDeMaps, logger: console });
+const clienteDeLugares = createPlacesClient({ auth: authDeMaps, logger: console });
 const cacheDeGeometria = crearCacheDeRecorridos({ ttlMs: 120_000 });
 
 /** Los estados que ocupan a una pasajera. Derivados, no escritos a mano. */
@@ -900,6 +926,19 @@ function construirPushSender() {
   const fcm = construirFcmSender();
   const compuesto = crearSenderCompuesto({ webpush, fcm });
   if (compuesto.enabled) console.log(`[+58express Push] transportes activos: ${compuesto.transportes.join(', ')}`);
+
+  // COMO SE AUTENTICA MAPS, DICHO EN VOZ ALTA
+  //
+  // No es informacion decorativa: en `api-key` las llamadas dependen de que
+  // la IP publica este en la lista de Google, y esta IP la mueve la VPN.
+  // Quien vea rutas cayendo sin motivo mira esta linea primero.
+  if (authDeMaps.modo === MODO_DE_AUTH.OAUTH) {
+    console.log('[+58express Maps] autenticacion: OAuth con cuenta de servicio (no depende de la IP)');
+  } else if (authDeMaps.modo === MODO_DE_AUTH.API_KEY) {
+    console.log('[+58express Maps] autenticacion: clave de API (RESPALDO: depende de la IP permitida en Google Cloud)');
+  } else {
+    console.log('[+58express Maps] sin autenticacion: las rutas caen a la medida geodesica');
+  }
   return { sender: compuesto.sender, enabled: compuesto.enabled };
 }
 
@@ -2317,6 +2356,39 @@ app.get('/api/trips/:id/route', requireAuth, limitadores.rutas, async (req, res)
     // Caido, lento o ilegible: no hay geometria. No se sustituye por una recta.
     console.warn(`[+58express Ruta] sin geometria para el viaje (${error?.message || 'sin detalle'})`);
     return res.json({ available: false, reason: 'ROUTE_PROVIDER_UNAVAILABLE', leg: tramo.tramo });
+  }
+});
+
+/**
+ * La busqueda escrita del destino.
+ *
+ * Vive en el servidor a proposito: si la hiciera el telefono llevaria dentro
+ * una credencial de Places, y una credencial dentro de un APK es publica. Aqui
+ * la peticion la firma la cuenta de servicio y el movil solo ve resultados.
+ *
+ * Solo devuelve lo que hace falta para pintar la lista y fijar un destino.
+ */
+app.get('/api/places/search', requireAuth, limitadores.lugares, async (req, res) => {
+  if (!clienteDeLugares.isConfigured()) {
+    return res.status(503).json({ error: PLACES_ERROR.NOT_CONFIGURED });
+  }
+
+  // El sesgo es una ayuda, no un requisito: sin coordenada valida se busca sin el.
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  const cerca = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+
+  try {
+    const resultados = await clienteDeLugares.buscar(req.query.q, cerca);
+    return res.json({ results: resultados });
+  } catch (error) {
+    const codigo = error?.message;
+    if (codigo === PLACES_ERROR.INVALID_QUERY) {
+      return res.status(400).json({ error: PLACES_ERROR.INVALID_QUERY });
+    }
+    // Caido, lento o ilegible: no hay sugerencias. No se inventa ninguna.
+    console.warn(`[+58express Lugares] busqueda sin resultado del proveedor (${codigo || 'sin detalle'})`);
+    return res.status(503).json({ error: PLACES_ERROR.PROVIDER_ERROR });
   }
 });
 

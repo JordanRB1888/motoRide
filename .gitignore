@@ -50,3 +50,7 @@ google-services.json
 GoogleService-Info.plist
 fcm-service-account.json
 fcm-service-account.json.json
+# La cuenta de servicio de Google Maps en el servidor: misma regla que la de
+# FCM. Es una llave privada; en Git seria publica para siempre.
+maps-service-account.json
+maps-service-account.json.json
