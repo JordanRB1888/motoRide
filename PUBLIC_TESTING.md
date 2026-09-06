@@ -3,9 +3,9 @@
 Cómo se lleva +58Express a manos de gente que no está en esta casa: qué hay
 montado, qué falta, y cómo se genera un APK Beta.
 
-> **Estado: en construcción.** La integración está hecha y verificada; la
-> infraestructura pública todavía no. Al final está la lista exacta de lo que
-> falta y de quién depende cada cosa.
+> **Estado: staging en pie.** El backend de pruebas ya responde por internet y
+> exige sesión. Falta el correo, la recuperación de contraseña y el APK. Al
+> final está la lista exacta de lo que queda y de quién depende cada cosa.
 
 ---
 
@@ -14,7 +14,7 @@ montado, qué falta, y cómo se genera un APK Beta.
 | | Dónde corre | Datos | Quién lo usa |
 |---|---|---|---|
 | **Local** | `localhost:4000` + Metro | SQLite del portátil | quien programa |
-| **Staging** | Railway, público por HTTPS | base separada de la real | los amigos que prueban |
+| **Staging** | Railway, `motoride-staging.up.railway.app` | SQLite en su propio volumen | los amigos que prueban |
 | **Producción** | Railway (`motoride-production-4ce4.up.railway.app`) | la de verdad | nadie todavía |
 
 La regla que ordena todo esto: **la beta jamás toca producción**. No es
@@ -31,11 +31,16 @@ la configuración, **no arranca** en vez de caer a producción.
 
 Dominio: **`mas58express.com`** (sin acento, a propósito — ver §7).
 
-| Nombre | Apunta a | Para qué |
+Registrado en Vercel el 6 de septiembre de 2026, con sus nameservers.
+
+| Nombre | Apunta a | Estado |
 |---|---|---|
-| `api-staging.mas58express.com` | servicio de Railway (staging) | API y WebSocket de la beta |
-| `admin-staging.mas58express.com` | panel de administración | supervisar las pruebas |
-| `mas58express.com` | landing / la aplicación | cuando toque |
+| `api-staging.mas58express.com` | `j3zhwhkt.up.railway.app` (CNAME) | **creado**, certificado emitiéndose |
+| `admin-staging.mas58express.com` | panel de administración | pendiente |
+| `mas58express.com` | landing / la aplicación | pendiente |
+
+Mientras el certificado del subdominio termina de emitirse, la dirección que
+funciona es la de Railway: `https://motoride-staging.up.railway.app`.
 
 ---
 
@@ -52,7 +57,7 @@ Plantilla completa y comentada en [`server/.env.example`](server/.env.example).
 |---|---|
 | `NODE_ENV` | `production` — es un despliegue real, aunque sea de pruebas |
 | `PORT` | lo pone Railway |
-| `DATABASE_URL` | **base distinta de la de producción** |
+| `DATABASE_URL` | **sin poner a proposito** — ver la nota de abajo |
 | `JWT_SECRET` | **propio de staging**, nunca el de producción |
 | `CLIENT_ORIGIN` | los orígenes admitidos por CORS |
 | `TRUST_PROXY` | Railway va detrás de proxy |
@@ -60,6 +65,17 @@ Plantilla completa y comentada en [`server/.env.example`](server/.env.example).
 | `GOOGLE_MAPS_SERVICE_ACCOUNT_B64` | la cuenta de Maps en base64, una sola línea |
 | `WEB_PUSH_VAPID_*` | avisos en la web |
 | `EMAIL_PROVIDER`, `EMAIL_FROM` | el correo de confirmación y de recuperación |
+
+Sobre la base de datos: staging arranca con **SQLite en su propio volumen**,
+no con Postgres. El servidor admite las dos --`DATABASE_URL` presente elige
+Postgres, ausente elige SQLite en `DATA_FILE`-- y esto pone staging en pie hoy,
+gratis y con los datos completamente separados de los de produccion, que es lo
+que de verdad importaba.
+
+Tiene un precio y conviene decirlo: produccion usa Postgres, asi que un fallo
+que solo aparezca en Postgres no se veria aqui. Cuando exista un segundo
+proyecto de Supabase, se pone su `DATABASE_URL` en este entorno y staging pasa
+a Postgres sin tocar ni una linea de codigo.
 
 Sobre Maps: **no** se sube el JSON como fichero. Va en `..._B64` porque la
 imagen del servidor no copia ninguna credencial dentro, y porque un JSON de
@@ -194,6 +210,11 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 
 ### Hecho
 
+- **Backend de staging en pie y publico**, con sesion exigida (401 sin token) y
+  su cuenta de administracion propia, separada de la de produccion
+- Dominio `mas58express.com` registrado, con el CNAME de `api-staging` creado
+- Todo el trabajo subido a GitHub, incluido el WIP de Antigravity que solo
+  existia en un arbol local (`checkpoint/agent-design-wip`)
 - Ramas de Claude y de Antigravity/Codex integradas en `feat/public-testing`
 - Nueve errores de tipos y tres pruebas rotas del trabajo en curso, arreglados
 - Móvil 1141/1141 · Frontend 644/644 · Servidor 1228 · typechecks limpios
@@ -216,8 +237,7 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 
 | Qué | Qué espera |
 |---|---|
-| Desplegar el backend de staging | tu visto bueno para empujar la rama (el repo es **público**) |
-| DNS, HTTPS y subdominios | que el dominio esté registrado |
+| Panel de administracion en `admin-staging` | desplegar el frontend |
 | **Recuperar contraseña** | nada — hoy **no existe** ese flujo |
 | Confirmación de correo obligatoria | el proveedor de correo |
 | Turnstile en registro y recuperación | las claves |
