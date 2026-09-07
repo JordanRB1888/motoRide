@@ -648,16 +648,16 @@ test('la pantalla ata la clave a la huella, no sólo al destino', () => {
 // Que los controles lleven a alguna parte
 // ---------------------------------------------------------------------------
 
-test('los tres controles del trayecto tienen manejador', () => {
-  // El componente aceptaba `onTocarOrigen`, `onTocarDestino` y `onElegirEnMapa`
-  // desde el principio y la pantalla no le pasaba ninguno: se veian tres
-  // controles y no respondia ninguno.
+test('los tres controles del trayecto llevan a sitios DISTINTOS', () => {
+  // Primero no respondia ninguno. Despues los tres abrian el mapa, que era
+  // igual de inutil en los dos campos de texto: se toca un campo para
+  // ESCRIBIR, y que se abra un mapa es lo contrario de lo que se espera.
   const pantalla = leer('app/pedir.tsx');
-  assert.match(pantalla, /onTocarOrigen=\{actualizarMiUbicacion\}/);
-  assert.match(pantalla, /onTocarDestino=\{abrirElMapa\}/);
-  assert.match(pantalla, /onElegirEnMapa=\{abrirElMapa\}/);
-  // Y tocar el origen vuelve a preguntarle al telefono donde esta.
-  assert.match(pantalla, /const actualizarMiUbicacion = useCallback\(\(\) => \{ void pedirUbicacion\(\); \}/);
+  assert.match(pantalla, /onTocarOrigen=\{\(\) => buscarEscribiendo\('origen'\)\}/);
+  assert.match(pantalla, /onTocarDestino=\{\(\) => buscarEscribiendo\('destino'\)\}/);
+  assert.match(pantalla, /onElegirEnMapa=\{\(\) => \{ setCampoQueSeElige\('destino'\); abrirElMapa\(\); \}\}/);
+  // Y la busqueda escrita abre la pantalla que tiene teclado.
+  assert.match(pantalla, /pathname: '\/destino'/);
 });
 
 test('el destino NO se elige solo: hace falta confirmarlo', () => {
@@ -667,15 +667,18 @@ test('el destino NO se elige solo: hace falta confirmarlo', () => {
   // El centro sólo se apunta como candidato, y sólo mientras se elige.
   assert.match(pantalla, /if \(!eligiendoEnMapa\) return;/);
   assert.match(pantalla, /setCandidato\(\{/);
-  // El destino se fija al confirmar, y en ningún otro sitio.
-  assert.match(pantalla, /const confirmarElPunto = useCallback\(\(\) => \{[\s\S]{0,200}?setDestino\(candidato\)/);
-  // Una sola llamada en toda la pantalla, y es la de confirmar.
+  // El punto se fija al confirmar, y en ningún otro sitio del mapa.
+  assert.match(pantalla, /const confirmarElPunto = useCallback\(\(\) => \{[\s\S]{0,260}?setDestino\(candidato\)/);
+  // Las DOS veces que se fija un destino son deliberadas: confirmar el punto
+  // del mapa, y volver de la búsqueda con un sitio elegido de la lista. Ni una
+  // más: cualquier otra sería un destino que nadie eligió.
   assert.equal(
     (pantalla.match(/setDestino\(/g) ?? []).length,
-    1,
-    'el destino se fija en más de un sitio: alguno no será una confirmación'
+    2,
+    'el destino se fija en más sitios de la cuenta: alguno no será una elección'
   );
-  assert.match(pantalla, /titulo="Confirmar este destino"/);
+  // El botón dice QUÉ se confirma: la recogida y el destino no son lo mismo.
+  assert.match(pantalla, /'Confirmar la recogida' : 'Confirmar este destino'/);
 });
 
 test('el punto de mira sólo aparece cuando se está eligiendo, y donde apunta', () => {

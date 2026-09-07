@@ -47,7 +47,9 @@ const MOTIVOS: Readonly<Record<FalloDeBusqueda, string>> = {
 
 export default function Destino() {
   const tema = useTema();
-  const parametros = useLocalSearchParams<{ lat?: string; lng?: string }>();
+  const parametros = useLocalSearchParams<{ campo?: string; lat?: string; lng?: string }>();
+  /** Se busca la recogida o el destino. Cambia los textos, no el mecanismo. */
+  const esOrigen = parametros.campo === 'origen';
 
   // Desde dónde se busca, para que salga primero lo que está cerca. Puede no
   // haberla: quien negó el permiso de ubicación tiene que poder buscar igual.
@@ -106,18 +108,23 @@ export default function Destino() {
     router.replace({
       pathname: '/pedir',
       params: {
-        destinoLat: String(lugar.lat),
-        destinoLng: String(lugar.lng),
-        destinoNombre: lugar.nombre,
-        destinoDireccion: lugar.direccion ?? ''
+        campo: esOrigen ? 'origen' : 'destino',
+        puntoLat: String(lugar.lat),
+        puntoLng: String(lugar.lng),
+        puntoNombre: lugar.nombre
       }
     } as never);
+  }, [esOrigen]);
+
+  /** Deshacer una recogida elegida a mano y volver a la del telefono. */
+  const volverAMiUbicacion = useCallback(() => {
+    router.replace({ pathname: '/pedir', params: { volverAlGps: '1' } } as never);
   }, []);
 
   return (
     <Pantalla>
       <View style={{ flex: 1, padding: 20, gap: 14 }} testID="pantalla-destino">
-        <Txt nivel="encabezado">¿A dónde vas?</Txt>
+        <Txt nivel="encabezado">{esOrigen ? '¿Dónde te recogemos?' : '¿A dónde vas?'}</Txt>
 
         <View style={{
           flexDirection: 'row',
@@ -134,12 +141,12 @@ export default function Destino() {
           <TextInput
             value={texto}
             onChangeText={setTexto}
-            placeholder="Escribe una dirección o un sitio"
+            placeholder={esOrigen ? 'Escribe dónde te recogemos' : 'Escribe una dirección o un sitio'}
             placeholderTextColor={tema.color.textoTenue}
             autoFocus
             autoCorrect={false}
             returnKeyType="search"
-            accessibilityLabel="Buscar el destino"
+            accessibilityLabel={esOrigen ? 'Buscar el punto de recogida' : 'Buscar el destino'}
             testID="campo-buscar-destino"
             style={{ flex: 1, fontSize: 16, color: tema.color.textoPrimario, paddingVertical: 0 }}
           />
@@ -184,7 +191,7 @@ export default function Destino() {
               key={lugar.id}
               onPress={() => elegir(lugar)}
               accessibilityRole="button"
-              accessibilityLabel={`Ir a ${lugar.nombre}`}
+              accessibilityLabel={esOrigen ? `Recogerme en ${lugar.nombre}` : `Ir a ${lugar.nombre}`}
               testID={`lugar-${lugar.id}`}
               style={({ pressed }) => ({
                 flexDirection: 'row',
@@ -208,13 +215,27 @@ export default function Destino() {
           ))}
         </ScrollView>
 
+        {/* Volver a donde dice el teléfono. Sólo tiene sentido para la
+            recogida: el destino nunca es donde ya estás. */}
+        {esOrigen ? (
+          <Boton
+            titulo="Usar mi ubicación actual"
+            variante="secundario"
+            onPress={volverAMiUbicacion}
+            testID="usar-mi-ubicacion"
+          />
+        ) : null}
+
         {/* Siempre a mano: hay sitios que no tienen nombre y sólo se pueden
             señalar. Que la salida esté abajo y no escondida en el texto de un
             error es parte de que la pantalla no sea un callejón. */}
         <Boton
           titulo="Mejor lo elijo en el mapa"
           variante="secundario"
-          onPress={() => router.replace({ pathname: '/pedir', params: { elegirEnMapa: '1' } } as never)}
+          onPress={() => router.replace({
+            pathname: '/pedir',
+            params: { elegirEnMapa: esOrigen ? 'origen' : 'destino' }
+          } as never)}
           testID="ir-al-mapa"
         />
         <Boton titulo="Cancelar" variante="silencioso" onPress={() => router.back()} testID="cancelar-destino" />

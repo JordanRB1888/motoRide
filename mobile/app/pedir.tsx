@@ -28,7 +28,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 
 import { Boton } from '../components/Boton';
 import { Txt } from '../ui/componentes';
@@ -91,6 +91,18 @@ const AVISO: Readonly<Record<QueFalta, string>> = Object.freeze({
   DESTINO_FUERA_DEL_AREA: 'Ese destino queda fuera de Maracaibo'
 });
 
+/**
+ * Como se llama el punto de recogida en la hoja.
+ *
+ * «Tu ubicacion ahora» solo es verdad cuando viene del GPS. Si se eligio otro
+ * sitio, seguir diciendolo seria mentir sobre donde va a llegar la moto, que es
+ * justo el dato que no se puede equivocar.
+ */
+function nombreDelOrigen(punto: PuntoDelViaje): string {
+  if (punto.fuente === 'gps') return 'Tu ubicación ahora';
+  return punto.direccion ?? 'Punto elegido en el mapa';
+}
+
 export default function PantallaDePedir() {
   const tema = useTema();
   // Lo que la barra deja ocupado abajo. La hoja necesita saberlo para no
@@ -106,6 +118,77 @@ export default function PantallaDePedir() {
 
   const [tipo, setTipo] = useState<TipoEnLaPantalla>('MOTO');
   const [destino, setDestino] = useState<PuntoDelViaje | null>(null);
+
+  /**
+   * EL ORIGEN PUEDE NO SER DONDE ESTAS
+   *
+   * Por omision es el GPS, que es lo que acierta casi siempre. Pero se pide un
+   * viaje desde un portal cuando todavia se esta dentro, o para alguien que
+   * espera en otra esquina, y sin poder cambiarlo la moto llega al sitio
+   * equivocado. Cuando alguien elige un punto de recogida, manda sobre el GPS.
+   */
+  const [origenElegido, setOrigenElegido] = useState<PuntoDelViaje | null>(null);
+
+  /**
+   * LO QUE DEVUELVE LA BUSQUEDA.
+   *
+   * Viaja por los parametros de la ruta y no por un estado global: es un dato
+   * que va de una pantalla a la siguiente y nada mas. `volverAlGps` es la
+   * forma de deshacer una recogida elegida a mano sin tener que salir y
+   * volver a entrar.
+   */
+  const elegido = useLocalSearchParams<{
+    campo?: string;
+    puntoLat?: string;
+    puntoLng?: string;
+    puntoNombre?: string;
+    volverAlGps?: string;
+    elegirEnMapa?: string;
+  }>();
+
+  // Quien pulso «mejor lo elijo en el mapa» dentro del buscador llega aqui con
+  // el mapa ya abierto, y sobre el campo que estaba buscando.
+  useEffect(() => {
+    const cual = elegido.elegirEnMapa;
+    if (cual !== 'origen' && cual !== 'destino') return;
+    setCampoQueSeElige(cual);
+    setEligiendoEnMapa(true);
+    router.setParams({ elegirEnMapa: undefined } as never);
+  }, [elegido.elegirEnMapa]);
+
+  useEffect(() => {
+    if (elegido.volverAlGps === '1') {
+      setOrigenElegido(null);
+      // Se vuelve a preguntar al telefono: la posicion guardada puede tener ya
+      // varios minutos, y quien acaba de pedir «mi ubicacion» espera la de ahora.
+      void actualizarMiUbicacion();
+      router.setParams({ volverAlGps: undefined } as never);
+      return;
+    }
+    const lat = Number(elegido.puntoLat);
+    const lng = Number(elegido.puntoLng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    const punto: PuntoDelViaje = {
+      lat,
+      lng,
+      // El nombre del sitio SI se conserva: se eligio de una lista, asi que no
+      // se esta inventando nada. Un punto del mapa, en cambio, no tiene nombre.
+      direccion: typeof elegido.puntoNombre === 'string' && elegido.puntoNombre !== ''
+        ? elegido.puntoNombre
+        : null,
+      precision: null,
+      fuente: 'mapa'
+    };
+    if (elegido.campo === 'origen') setOrigenElegido(punto);
+    else setDestino(punto);
+
+    // Se limpian: si se quedaran puestos, volver a esta pantalla por cualquier
+    // otro camino los aplicaria otra vez.
+    router.setParams({
+      puntoLat: undefined, puntoLng: undefined, puntoNombre: undefined, campo: undefined
+    } as never);
+  }, [elegido.campo, elegido.puntoLat, elegido.puntoLng, elegido.puntoNombre, elegido.volverAlGps]);
   /**
    * ELEGIR EN EL MAPA ES UN MODO, NO UN EFECTO SECUNDARIO
    *
@@ -118,6 +201,8 @@ export default function PantallaDePedir() {
    * se mueve, y hace falta confirmarlo para que sea el destino.
    */
   const [eligiendoEnMapa, setEligiendoEnMapa] = useState(false);
+  /** Cual de los dos puntos se esta señalando en el mapa. */
+  const [campoQueSeElige, setCampoQueSeElige] = useState<'origen' | 'destino'>('destino');
   const [candidato, setCandidato] = useState<PuntoDelViaje | null>(null);
   /** Lo que ocupa la hoja, medido. El mapa lo necesita para no esconder su
    *  punto de mira debajo de ella. */
@@ -136,6 +221,9 @@ export default function PantallaDePedir() {
    * fuera un sitio al que puede ir.
    */
   const origen: PuntoDelViaje | null = useMemo(() => {
+    // Lo elegido a mano manda sobre el GPS: quien lo cambio sabe algo que el
+    // telefono no.
+    if (origenElegido !== null) return origenElegido;
     const posicion = ubicacion.posicion;
     if (posicion === null) return null;
     return {
@@ -145,7 +233,7 @@ export default function PantallaDePedir() {
       precision: posicion.precision,
       fuente: 'gps'
     };
-  }, [ubicacion.posicion]);
+  }, [ubicacion.posicion, origenElegido]);
 
   const falta = queFaltaParaPedir(origen, destino);
 
@@ -292,6 +380,28 @@ export default function PantallaDePedir() {
   // ---------------------------------------------------------------------
   // Elegir el destino en el mapa
   // ---------------------------------------------------------------------
+  /**
+   * Buscar un sitio ESCRIBIENDOLO.
+   *
+   * Tocar un campo que parece de texto y que se abra un mapa es lo contrario
+   * de lo que espera cualquiera: se toca para escribir. Antes los dos campos y
+   * el enlace del mapa hacian lo mismo --abrir el mapa-- y no habia forma de
+   * teclear una direccion.
+   *
+   * `campo` decide si lo que vuelve es la recogida o el destino. La busqueda
+   * se sesga hacia donde esta el telefono, para que salga primero lo cercano.
+   */
+  const buscarEscribiendo = useCallback((campo: 'origen' | 'destino') => {
+    const cerca = origen ?? destino;
+    router.push({
+      pathname: '/destino',
+      params: {
+        campo,
+        ...(cerca ? { lat: String(cerca.lat), lng: String(cerca.lng) } : {})
+      }
+    } as never);
+  }, [origen, destino]);
+
   const abrirElMapa = useCallback(() => {
     setEligiendoEnMapa(true);
     // Se arranca desde donde ya estaba el destino, si lo habia: corregir un
@@ -301,10 +411,11 @@ export default function PantallaDePedir() {
 
   const confirmarElPunto = useCallback(() => {
     if (candidato === null) return;
-    setDestino(candidato);
+    if (campoQueSeElige === 'origen') setOrigenElegido(candidato);
+    else setDestino(candidato);
     setEligiendoEnMapa(false);
     setCandidato(null);
-  }, [candidato]);
+  }, [candidato, campoQueSeElige]);
 
   const dejarDeElegir = useCallback(() => {
     setEligiendoEnMapa(false);
@@ -415,18 +526,21 @@ export default function PantallaDePedir() {
             espacioInferior={ALTO_DE_LA_BARRA + Math.max(margenSeguroInferior, 8)}
             onAlto={setAltoDeLaHoja}
           >
+            {eligiendoEnMapa ? null : (
             <Trayecto
-              origen={origen === null ? 'Buscando tu ubicación…' : 'Tu ubicación ahora'}
+              origen={origen === null ? 'Buscando tu ubicación…' : nombreDelOrigen(origen)}
               destino={destino === null ? undefined : nombreDelDestino(destino)}
               // LOS TRES LLEVABAN A NINGUNA PARTE
               //
               // El componente aceptaba estos manejadores desde el principio y
               // esta pantalla no le pasaba ninguno: se veían tres controles y
               // no respondía ninguno.
-              onTocarOrigen={actualizarMiUbicacion}
-              onTocarDestino={abrirElMapa}
-              onElegirEnMapa={abrirElMapa}
+              // CADA UNO A LO SUYO. Antes los tres abrian el mapa.
+              onTocarOrigen={() => buscarEscribiendo('origen')}
+              onTocarDestino={() => buscarEscribiendo('destino')}
+              onElegirEnMapa={() => { setCampoQueSeElige('destino'); abrirElMapa(); }}
             />
+            )}
 
             {/* ELIGIENDO EN EL MAPA: la hoja se aparta
               *
@@ -436,13 +550,18 @@ export default function PantallaDePedir() {
               * falta para mover el mapa. */}
             {eligiendoEnMapa ? (
               <>
+                <Txt nivel="encabezado">
+                  {campoQueSeElige === 'origen' ? '¿Dónde te recogemos?' : '¿A dónde vas?'}
+                </Txt>
                 <View style={{ height: tema.ritmo.entreElementos }} />
                 <Txt nivel="etiqueta" tono="tenue">
-                  Mueve el mapa hasta el sitio al que vas. El punto de mira marca el destino.
+                  {campoQueSeElige === 'origen'
+                    ? 'Mueve el mapa hasta el portal. El alfiler marca dónde te espera la moto.'
+                    : 'Mueve el mapa hasta el sitio al que vas. El alfiler marca el destino.'}
                 </Txt>
                 <View style={{ height: tema.ritmo.entreBloques }} />
                 <Boton
-                  titulo="Confirmar este destino"
+                  titulo={campoQueSeElige === 'origen' ? 'Confirmar la recogida' : 'Confirmar este destino'}
                   onPress={confirmarElPunto}
                   // Sin candidato --el mapa aún no se ha asentado-- y sobre el
                   // sitio donde ya estás no hay destino que confirmar.
