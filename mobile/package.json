@@ -4,10 +4,12 @@
   "main": "expo-router/entry",
   "private": true,
   "dependencies": {
+    "@googlemaps/react-native-navigation-sdk": "^0.16.3",
     "@react-native-google-signin/google-signin": "^16.1.5",
     "@sentry/react-native": "~7.11.0",
     "expo": "~57.0.18",
     "expo-apple-authentication": "~57.0.1",
+    "expo-build-properties": "~57.0.17",
     "expo-constants": "~57.0.16",
     "expo-image-picker": "~57.0.15",
     "expo-linking": "~57.0.8",
