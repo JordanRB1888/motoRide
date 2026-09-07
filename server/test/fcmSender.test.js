@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import jwt from 'jsonwebtoken';
 
 import {
@@ -9,7 +10,8 @@ import {
   construirMensajeFcm,
   createFcmSender,
   normalizarRespuestaFcm,
-  validarCuentaDeServicio
+  validarCuentaDeServicio,
+  cuentaDesdeElEntorno
 } from '../services/fcmSender.js';
 import { PUSH_TYPE, TEXTO_DE_AVISO } from '../services/pushNotificationService.js';
 
@@ -224,4 +226,56 @@ test('un fallo de red lanza con un código escueto, como Web Push', async () => 
     () => enviar({ endpoint: 'tok', payload: { v: 1, t: PUSH_TYPE.TRIP_ARRIVED, tripId: 'trip_1' } }),
     /^Error: FCM_NETWORK$/
   );
+});
+
+// ---------------------------------------------------------------------------
+// La cuenta venida del entorno (Railway)
+// ---------------------------------------------------------------------------
+
+test('la cuenta se puede aportar en base64, sin fichero y sin tocar el disco', () => {
+  // En Railway no hay donde montar un fichero, y meter la credencial en la
+  // imagen dejaria una clave privada en cada capa y en el registro de
+  // contenedores. Es la misma via que ya usa Maps con
+  // GOOGLE_MAPS_SERVICE_ACCOUNT_B64.
+  const base64 = Buffer.from(JSON.stringify(CUENTA), 'utf8').toString('base64');
+  const cargada = cuentaDesdeElEntorno(base64);
+
+  assert.equal(cargada.projectId, CUENTA.project_id);
+  assert.equal(cargada.clientEmail, CUENTA.client_email);
+  assert.equal(cargada.tokenUri, CUENTA.token_uri);
+  assert.ok(cargada.privateKey.includes('PRIVATE KEY'));
+});
+
+test('una cadena que no es base64 valido falla con un codigo, no con la clave dentro', () => {
+  // El codigo de error viaja a los registros: nunca puede llevar material de
+  // la credencial.
+  assert.throws(
+    () => cuentaDesdeElEntorno('esto-no-es-base64-de-un-json'),
+    error => error.message === FCM_CONFIG_ERROR.ENV_UNREADABLE
+  );
+  assert.throws(
+    () => cuentaDesdeElEntorno(''),
+    error => error.message === FCM_CONFIG_ERROR.FILE_MISSING
+  );
+});
+
+test('una cuenta incompleta en base64 se rechaza igual que en fichero', () => {
+  const aMedias = Buffer.from(
+    JSON.stringify({ type: 'service_account', project_id: 'x' }), 'utf8'
+  ).toString('base64');
+  assert.throws(
+    () => cuentaDesdeElEntorno(aMedias),
+    error => error.message === FCM_CONFIG_ERROR.INVALID
+  );
+});
+
+test('el arranque admite las dos vias y prefiere el fichero', () => {
+  // El fichero primero porque es explicito: quien programa lo ve en su disco.
+  // El entorno es para el despliegue, donde no hay disco donde mirar.
+  const arranque = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+  assert.match(arranque, /const hayFichero = fs\.existsSync\(ruta\)/);
+  assert.match(arranque, /FCM_SERVICE_ACCOUNT_B64/);
+  assert.match(arranque, /cuenta: cuentaDeFcmDesdeElEntorno\(enBase64\)/);
+  // Y si no hay ninguna, se dice y no se cae.
+  assert.match(arranque, /FCM apagado: sin cuenta de servicio/);
 });

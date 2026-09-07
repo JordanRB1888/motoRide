@@ -81,7 +81,7 @@ import {
   sanitizeSafeTransportPricing
 } from './services/safeTransport.js';
 import { PUSH_TYPE, createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
-import { createFcmSender } from './services/fcmSender.js';
+import { createFcmSender, cuentaDesdeElEntorno as cuentaDeFcmDesdeElEntorno } from './services/fcmSender.js';
 import { crearSenderCompuesto } from './services/pushSender.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
@@ -1031,21 +1031,39 @@ function construirPushSender() {
 /**
  * El emisor de FCM V1 para los telefonos (PUSH-1 · Firebase).
  *
- * La cuenta de servicio se lee de un fichero local que git ignora --por
- * omision `server/fcm-service-account.json`-- o de la ruta que diga
- * FCM_SERVICE_ACCOUNT_FILE. Nunca de una variable con el JSON dentro: un JSON
- * de varias lineas en el entorno de Railway acaba mal escapado y, peor, acaba
- * en un registro. Sin fichero, FCM queda apagado y se dice; nada se cae.
+ * DOS CAMINOS, Y EL FICHERO VA PRIMERO
+ *
+ * En local, un fichero que git ignora --por omision
+ * `server/fcm-service-account.json`, o la ruta de FCM_SERVICE_ACCOUNT_FILE--.
+ * Es explicito y se ve en el disco de quien programa.
+ *
+ * En Railway no hay donde montar un fichero: la imagen no copia ninguna
+ * credencial a proposito --meterla dejaria una clave privada en cada capa y en
+ * el registro de contenedores-- asi que la cuenta llega por
+ * FCM_SERVICE_ACCOUNT_B64, en base64 y decodificada EN MEMORIA.
+ *
+ * Base64 y no JSON crudo por lo mismo que en Maps: un JSON de varias lineas en
+ * el entorno acaba mal escapado y, peor, acaba impreso el dia que alguien
+ * vuelca el entorno para depurar. Es la misma convencion que
+ * GOOGLE_MAPS_SERVICE_ACCOUNT_B64, y eso es deliberado: una sola forma de dar
+ * una cuenta de servicio es una sola forma de equivocarse.
+ *
+ * Sin ninguna de las dos, FCM queda apagado y se dice. Nada se cae.
  */
 function construirFcmSender() {
   const ruta = process.env.FCM_SERVICE_ACCOUNT_FILE || path.join(serverDir, 'fcm-service-account.json');
-  if (!fs.existsSync(ruta)) {
+  const enBase64 = process.env.FCM_SERVICE_ACCOUNT_B64;
+  const hayFichero = fs.existsSync(ruta);
+
+  if (!hayFichero && !enBase64) {
     console.log('[+58express Push] FCM apagado: sin cuenta de servicio');
     return null;
   }
   try {
-    const sender = createFcmSender({ rutaDeLaCuenta: ruta, logger: console });
-    console.log('[+58express Push] FCM configurado');
+    const sender = hayFichero
+      ? createFcmSender({ rutaDeLaCuenta: ruta, logger: console })
+      : createFcmSender({ cuenta: cuentaDeFcmDesdeElEntorno(enBase64), logger: console });
+    console.log(`[+58express Push] FCM configurado (${hayFichero ? 'fichero' : 'entorno'})`);
     return sender;
   } catch (error) {
     // El codigo es escueto y nunca lleva material de la cuenta dentro.

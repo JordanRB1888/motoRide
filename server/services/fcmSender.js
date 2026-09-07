@@ -46,6 +46,7 @@ const MARGEN_DE_RENOVACION_MS = 60_000;
 export const FCM_CONFIG_ERROR = Object.freeze({
   FILE_MISSING: 'FCM_SERVICE_ACCOUNT_FILE_MISSING',
   FILE_UNREADABLE: 'FCM_SERVICE_ACCOUNT_FILE_UNREADABLE',
+  ENV_UNREADABLE: 'FCM_SERVICE_ACCOUNT_ENV_UNREADABLE',
   INVALID: 'FCM_SERVICE_ACCOUNT_INVALID'
 });
 
@@ -67,6 +68,34 @@ export function cargarCuentaDeServicio(ruta) {
     cuenta = JSON.parse(texto);
   } catch {
     throw new Error(FCM_CONFIG_ERROR.FILE_UNREADABLE);
+  }
+  return validarCuentaDeServicio(cuenta);
+}
+
+/**
+ * La misma cuenta, pero venida del entorno en base64.
+ *
+ * PARA RAILWAY. Allí no hay dónde montar un fichero: la imagen del servidor no
+ * copia ninguna credencial a propósito, y meterla dentro dejaría una clave
+ * privada en cada capa de la imagen y en el registro de contenedores.
+ *
+ * En base64 y no como JSON crudo, por lo mismo que en Maps: un JSON de varias
+ * líneas en una variable de entorno acaba mal escapado y, peor, acaba impreso
+ * en un registro el día que alguien vuelca el entorno para depurar. Base64 es
+ * una sola línea, sin comillas ni saltos, y aquí se decodifica EN MEMORIA:
+ * nunca toca el disco.
+ *
+ * Es el gemelo de `cuentaDesdeElEntorno` en `googleMapsAuth.js`. Las dos
+ * credenciales del proyecto se aportan igual, y eso es deliberado: una sola
+ * forma de dar una cuenta de servicio es una sola forma de equivocarse.
+ */
+export function cuentaDesdeElEntorno(base64) {
+  if (!base64) throw new Error(FCM_CONFIG_ERROR.FILE_MISSING);
+  let cuenta;
+  try {
+    cuenta = JSON.parse(Buffer.from(String(base64).trim(), 'base64').toString('utf8'));
+  } catch {
+    throw new Error(FCM_CONFIG_ERROR.ENV_UNREADABLE);
   }
   return validarCuentaDeServicio(cuenta);
 }
