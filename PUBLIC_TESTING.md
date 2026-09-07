@@ -239,7 +239,6 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 | Qué | Por qué no puedo yo |
 |---|---|
 | Comprar `mas58express.com` | es un pago |
-| Cuenta de servicio de Maps en Google Cloud | hay que entrar en tu consola |
 | Cuenta de Cloudflare Turnstile | igual |
 | Cuenta de Sentry | igual |
 | Base de datos de staging | decisión de gasto |
@@ -252,7 +251,6 @@ convivir y ese precio no compra nada. El día que la haya, se cambia el paquete
 | Panel de administracion en `admin-staging` | desplegar el frontend |
 | Turnstile en registro y recuperación | las claves |
 | Sentry con `environment=staging` | el proyecto de Sentry |
-| Certificar Maps y la prueba de cambio de IP | la cuenta de servicio |
 | Construir y probar el APK | que staging esté en pie |
 
 ---
