@@ -701,30 +701,73 @@ test('el disco de la pasajera se cierra desde donde se abrió', () => {
   assert.match(fuente, /expanded: abierto/, 'el estado no se anuncia por accesibilidad');
 });
 
-test('Passenger sólo enseña iconos y la curva viaja de forma continua', () => {
+test('Passenger sólo enseña iconos y el trazo viaja con sus dos extremos', () => {
   const fuente = leer('ui/Navegacion.tsx');
   const curva = fuente.slice(
     fuente.indexOf('function PestanaCurva'),
     fuente.indexOf('function BarraDeNavegacion')
   );
 
-  assert.doesNotMatch(curva, /<Txt/, 'la barra curva volvió a pintar rótulos');
+  assert.doesNotMatch(curva, /<Txt/, 'la barra volvió a pintar rótulos');
   assert.match(curva, /accessibilityLabel=\{etiqueta\}/, 'los iconos perdieron su nombre accesible');
   assert.match(curva, /ultimoIndiceDePasajera/, 'la posición se reinicia entre rutas');
-  assert.match(curva, /withSpring\(destino/, 'la curva salta en vez de viajar');
-  assert.match(curva, /translateX: desplazamiento\.get\(\)/, 'la curva no se mueve en el hilo de UI');
   assert.match(curva, /scale: pulsacion\.get\(\)/, 'la pestaña perdió el feedback al pulsar');
   assert.match(curva, /withTiming\(0\.93/, 'el feedback al pulsar dejó de encoger el icono');
 
-  // El micropulso del icono se cambió por el compás de la referencia: el icono
-  // activo se retira, la muesca viaja medio compás después, y el icono vuelve a
-  // subir desde dentro de la barra. Un pulso del icono además de eso serían dos
-  // motivos compitiendo sobre el mismo elemento.
-  assert.match(curva, /withSequence\(\s*withTiming\(0, \{ duration: RETIRADA_MS \}\)/, 'el icono activo ya no se retira antes de viajar');
-  assert.match(curva, /withDelay\(RETIRADA_MS, withSpring\(destino/, 'la muesca sale sin esperar a que el icono se retire');
-  assert.match(curva, /\[ASCENSO, 0\]/, 'el icono activo ya no emerge desde dentro de la barra');
+  // EL EFECTO ES LA BRECHA, NO EL RECORRIDO.
+  //
+  // La muesca que viajaba se sustituyó por el trazo de BATabBarController a
+  // petición del dueño. Lo que hace que se lea como un trazo que se desenrolla,
+  // y no como un palo deslizándose, es que sus DOS extremos se mueven a ritmos
+  // distintos: la cabeza sale con salida suave y la cola la persigue con
+  // entrada suave, más lenta. Si los dos usaran la misma curva y la misma
+  // duración, la brecha no existiría y el efecto se perdería entero.
+  assert.match(
+    curva,
+    /cabeza\.set\(withTiming\(1, \{ duration: CABEZA_EN_EL_RIEL_MS, easing: SALIDA_SUAVE \}\)\)/,
+    'la cabeza del trazo dejó de salir con salida suave'
+  );
+  assert.match(
+    curva,
+    /cola\.set\(withTiming\(1, \{ duration: COLA_EN_EL_RIEL_MS, easing: ENTRADA_SUAVE \}\)\)/,
+    'la cola del trazo dejó de perseguir a la cabeza'
+  );
+  const cabezaMs = Number(fuente.match(/const CABEZA_EN_EL_RIEL_MS = (\d+)/)?.[1]);
+  const colaMs = Number(fuente.match(/const COLA_EN_EL_RIEL_MS = (\d+)/)?.[1]);
+  assert.ok(colaMs > cabezaMs, `la cola (${colaMs} ms) tiene que ir DETRÁS de la cabeza (${cabezaMs} ms)`);
 
-  assert.doesNotMatch(curva, /react-native-svg|MotionBar/, 'se añadió una dependencia para copiar la referencia');
+  // Y el aro se cierra cuando la cabeza ya llegó, no a la vez: el trazo
+  // atraviesa y LUEGO se enrolla.
+  assert.match(
+    curva,
+    /withDelay\(CABEZA_EN_EL_RIEL_MS, withTiming\(1, \{ duration: CIERRE_DEL_ARO_MS/,
+    'el aro se dibuja antes de que el trazo haya llegado'
+  );
+
+  // Todo por transform: ni el ancho ni el margen del riel se animan.
+  assert.match(curva, /translateX: \(xCola \+ xCabeza\) \/ 2 - ancho \/ 2/, 'el riel no se mueve en el hilo de UI');
+  assert.match(curva, /scaleX: Math\.max\(largo, 1\) \/ ancho/, 'el riel volvió a animar su ancho de caja');
+  assert.doesNotMatch(curva, /width: interpolate|height: interpolate/, 'se animó una medida de caja');
+});
+
+test('copiar la referencia no metió una dependencia nativa', () => {
+  // `react-native-svg` daría la curva perfecta, pero es un módulo NATIVO: entra
+  // en el binario y obliga a reconstruir Android e iOS enteros por un adorno de
+  // dos puntos de grosor. El aro se dibuja con bordes y rotaciones.
+  const codigo = sinComentarios('ui/Navegacion.tsx');
+  assert.doesNotMatch(codigo, /react-native-svg|MotionBar/, 'se añadió una dependencia para copiar la referencia');
+
+  const paquete = JSON.parse(leer('package.json'));
+  const dependencias = { ...paquete.dependencies, ...paquete.devDependencies };
+  assert.equal(dependencias['react-native-svg'], undefined, 'react-native-svg entró en el proyecto');
+
+  // Y el aro tiene que seguir dibujándose de verdad, mitad a mitad: si alguien
+  // lo cambia por un círculo que sólo aparece, el gesto deja de leerse como un
+  // trazo que se enrolla.
+  const fuente = leer('ui/Navegacion.tsx');
+  assert.match(fuente, /function MitadDelAro/, 'el aro dejó de dibujarse por mitades');
+  assert.match(fuente, /overflow: 'hidden'/, 'sin recorte la mitad del aro no se puede revelar');
+  assert.match(fuente, /rotate: `\$\{grados\}deg`/, 'la mitad del aro dejó de revelarse girando');
 });
 
 test('Pedir es acción primaria, no un quinto tab ni el dueño de la curva', () => {
@@ -742,9 +785,19 @@ test('Pedir es acción primaria, no un quinto tab ni el dueño de la curva', () 
   assert.match(pedir, /withDelay\(2300/, 'el heartbeat dejó de ser espaciado');
   assert.match(pedir, /withTiming\(0\.94/, 'falta la respuesta inmediata al dedo');
   assert.match(pedir, /accessibilityRole="button"/, 'Pedir volvió a anunciarse como tab');
-  assert.doesNotMatch(barra, /controlEstaAbierto/, 'abrir la hoja vuelve a mover la curva a Pedir');
-  assert.match(fuente, /const ANCHO_DE_LA_CURVA = 58/);
-  assert.match(fuente, /const ALTO_DE_LA_CURVA = 26/);
+  assert.doesNotMatch(barra, /controlEstaAbierto/, 'abrir la hoja vuelve a mover el trazo a Pedir');
+
+  // EL AMARILLO ENTERO ES SUYO.
+  //
+  // El trazo de la barra usa el mismo tono, así que lo único que impide que
+  // compitan es que el trazo sea fino, esté rebajado, y que en el centro NO
+  // haya aro: rodear el botón sería decir dos veces lo mismo y dejaría la barra
+  // con dos amarillos discutiendo.
+  assert.match(fuente, /function llevaAro/, 'ya no se decide qué pestañas llevan aro');
+  assert.match(fuente, /return indice !== 2;/, 'el botón central volvió a llevar aro');
+  assert.match(fuente, /const GROSOR_DEL_TRAZO = 2/, 'el trazo engordó y empezó a competir con el botón');
+  const opacidad = Number(fuente.match(/const OPACIDAD_DEL_TRAZO = ([\d.]+)/)?.[1]);
+  assert.ok(opacidad < 1, `el trazo va a plena opacidad (${opacidad}): deja de ser sutil`);
 });
 
 test('la iconografía reactiva vive en una sola abstracción y respeta reduced motion', () => {
