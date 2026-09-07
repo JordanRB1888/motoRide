@@ -232,7 +232,24 @@ export default function Acceso() {
     // La preferencia se recuerda para la próxima vez, igual que al entrar. No
     // es un permiso: sólo decide por qué puerta se abre la aplicación.
     void guardarUltimoRol(intencion?.intencion ?? 'passenger');
-    router.replace(destinoTrasRegistrarse(intencion?.intencion ?? null));
+
+    // A VERIFICAR EL CORREO, NO A LA APLICACIÓN.
+    //
+    // El registro devuelve sesión —hace falta para poder pedir el código— pero
+    // la cuenta todavía no ha demostrado que ese correo sea suyo. El servidor
+    // ya no deja pedir una carrera sin eso, así que entrar directo llevaría a
+    // una aplicación que dice «no autorizado» sin explicar por qué.
+    //
+    // Se pasa `volverA` para que, al verificar, siga hacia donde iba: quien se
+    // registró como conductora no debe acabar en la pantalla de la pasajera.
+    router.replace({
+      pathname: '/verificacion',
+      params: {
+        proposito: 'SIGNUP',
+        correo: datos.correo,
+        volverA: destinoTrasRegistrarse(intencion?.intencion ?? null)
+      }
+    } as never);
   };
 
   const enviar = async () => {

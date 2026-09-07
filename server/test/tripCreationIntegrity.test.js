@@ -40,7 +40,7 @@ async function startServer(t) {
   const port = 14100 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
-    env: { ...process.env, PORT: String(port), DATA_FILE: dataFile, JWT_SECRET: 'integrity-test-secret' },
+    env: { ...process.env, PORT: String(port), DATA_FILE: dataFile, JWT_SECRET: 'integrity-test-secret', GOOGLE_MAPS_SERVICE_ACCOUNT_FILE: './no-existe/maps-service-account.json' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   t.after(() => child.kill());

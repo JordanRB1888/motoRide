@@ -66,7 +66,10 @@ const punto = (extra = {}) => ({
 test('los dos endpoints existen y son los que se usan', () => {
   const codigo = servidor();
   assert.match(codigo, /app\.post\('\/api\/pricing\/estimate', requireAuth/);
-  assert.match(codigo, /app\.post\('\/api\/trips\/create', requireAuth, requireRole\('passenger'\)/);
+  // Con `requireContactoVerificado` en medio: una cuenta registrada con un
+  // correo inventado no puede pedir una carrera de verdad, que mueve a un
+  // conductor de verdad.
+  assert.match(codigo, /app\.post\('\/api\/trips\/create', requireAuth, requireContactoVerificado, requireRole\('passenger'\)/);
 
   const cliente = sinComentarios('services/pedido.ts');
   assert.match(cliente, /'\/api\/pricing\/estimate'/);

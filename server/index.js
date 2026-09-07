@@ -867,6 +867,75 @@ function requireAuth(req, res, next) {
 }
 
 /**
+ * Exige que la cuenta haya demostrado que un contacto suyo es suyo.
+ *
+ * EL AGUJERO QUE CIERRA
+ *
+ * `POST /api/auth/register` crea la cuenta y devuelve el token en el acto. Eso
+ * esta bien --la aplicacion necesita sesion para poder pedir el codigo-- pero
+ * nadie comprobaba despues si el contacto se habia verificado, asi que con un
+ * correo inventado se podia pedir una carrera de verdad, a un conductor de
+ * verdad, que se desplaza de verdad. Y sin forma de avisar a nadie despues.
+ *
+ * POR QUE NO SE MIRA SOLO `emailVerified === true`
+ *
+ * Porque dejaria fuera a quien no paso por el registro publico. El
+ * administrador que se siembra al arrancar y los conductores que crea el
+ * panel NO tienen ese campo --ni verdadero ni falso: no existe--, y su
+ * identidad esta respaldada por otra via. Solo las cuentas auto-registradas
+ * llevan el `false` explicito, y son exactamente las que hay que retener.
+ *
+ * Un campo ausente es «esta cuenta es anterior a esta comprobacion»; un `false`
+ * es «lo sabemos y no lo ha hecho». No es lo mismo y no se tratan igual.
+ *
+ * QUE NO SE BLOQUEA
+ *
+ * Ni `/auth/me`, ni pedir o comprobar el codigo, ni salir, ni borrar la cuenta.
+ * Bloquear eso dejaria a alguien encerrado: con sesion, sin poder verificarse y
+ * sin poder irse.
+ */
+function contactoSinVerificar(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return false;
+  const declarado = user.emailVerified !== undefined || user.phoneVerified !== undefined;
+  if (!declarado) return false;
+  return user.emailVerified !== true && user.phoneVerified !== true;
+}
+
+/**
+ * Si el servidor PUEDE mandar un codigo por algun canal.
+ *
+ * UNA PUERTA QUE NADIE PUEDE CRUZAR NO SE CIERRA
+ *
+ * Exigir la verificacion cuando no hay ni un canal configurado dejaria a TODO
+ * el mundo fuera y sin salida: nadie podria verificarse, porque no hay como
+ * mandarle el codigo. La aplicacion entera quedaria inservible, y por una
+ * medida de seguridad que en ese estado no protege de nada --si no se puede
+ * mandar un codigo, tampoco se pueden crear cuentas verificadas--.
+ *
+ * Asi que la guarda se exige cuando se puede satisfacer, y no antes. En
+ * staging y en produccion, con el correo configurado, se exige. En una maquina
+ * de desarrollo sin proveedor, no.
+ *
+ * Y NO EN SILENCIO
+ *
+ * Se dice al arrancar, igual que el modo de Maps. Que una comprobacion de
+ * seguridad este apagada tiene que poder leerse en el registro, no deducirse.
+ */
+function sePuedeVerificar() {
+  return verificacion.canalesDisponibles().some(canal => canal.available === true);
+}
+
+function requireContactoVerificado(req, res, next) {
+  if (sePuedeVerificar() && contactoSinVerificar(req.user)) {
+    // El codigo es explicito para que la aplicacion sepa a donde llevar a la
+    // persona, en vez de ensenar un «no autorizado» que no dice que hacer.
+    return res.status(403).json({ error: 'CONTACT_NOT_VERIFIED' });
+  }
+  next();
+}
+
+/**
  * Resuelve la sesion si la hay, sin exigirla.
  *
  * Postularse a conductor es una ruta PUBLICA a proposito: alguien que todavia
@@ -926,6 +995,17 @@ function construirPushSender() {
   const fcm = construirFcmSender();
   const compuesto = crearSenderCompuesto({ webpush, fcm });
   if (compuesto.enabled) console.log(`[+58express Push] transportes activos: ${compuesto.transportes.join(', ')}`);
+
+  // SI SE EXIGE VERIFICAR EL CONTACTO, DICHO EN VOZ ALTA.
+  //
+  // Apagada, cualquiera se registra con un correo inventado y pide una carrera
+  // de verdad. Que este apagada es legitimo --sin canal no hay forma de
+  // verificarse-- pero no puede ser una sorpresa.
+  if (sePuedeVerificar()) {
+    console.log('[+58express Auth] verificacion de contacto EXIGIDA para pedir viajes y gastar');
+  } else {
+    console.log('[+58express Auth] verificacion de contacto NO exigida: no hay ningun canal para mandar codigos');
+  }
 
   // COMO SE AUTENTICA MAPS, DICHO EN VOZ ALTA
   //
@@ -1361,7 +1441,10 @@ app.get('/api/pricing/config', requireAuth, (req, res) => res.json(pricingConfig
  * `requestedAt` tambien lo pone el servidor: si lo pusiera el cliente, bastaria
  * declarar las tres de la tarde para esquivar el recargo nocturno.
  */
-app.post('/api/pricing/estimate', requireAuth, limitadores.telemetria, async (req, res) => {
+// Va con la guarda porque cada estimacion puede ser una llamada DE PAGO a
+// Google: sin ella, una cuenta inventada gasta la factura de mapas sin pedir
+// jamas una carrera.
+app.post('/api/pricing/estimate', requireAuth, requireContactoVerificado, limitadores.telemetria, async (req, res) => {
   const pickup = normalizeLocation(req.body.pickup ?? req.body.origin);
   const destination = normalizeLocation(req.body.destination);
   if (!pickup || !destination) {
@@ -2000,7 +2083,7 @@ app.get('/api/wallet/me', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/wallet/topups', requireAuth, limitadores.cartera, async (req, res) => {
+app.post('/api/wallet/topups', requireAuth, requireContactoVerificado, limitadores.cartera, async (req, res) => {
   const amount = Math.round(Number(req.body.amount) * 100) / 100;
   const reference = String(req.body.reference || '').replace(/\D/g, '').slice(0, 20);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1000 || reference.length < 6) return res.status(400).json({ error: 'INVALID_TOPUP' });
@@ -2368,7 +2451,7 @@ app.get('/api/trips/:id/route', requireAuth, limitadores.rutas, async (req, res)
  *
  * Solo devuelve lo que hace falta para pintar la lista y fijar un destino.
  */
-app.get('/api/places/search', requireAuth, limitadores.lugares, async (req, res) => {
+app.get('/api/places/search', requireAuth, requireContactoVerificado, limitadores.lugares, async (req, res) => {
   if (!clienteDeLugares.isConfigured()) {
     return res.status(503).json({ error: PLACES_ERROR.NOT_CONFIGURED });
   }
@@ -2408,7 +2491,7 @@ app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   res.json(publicChatMessages(conversacion));
 });
 
-app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores.viajes, async (req, res) => {
+app.post('/api/trips/create', requireAuth, requireContactoVerificado, requireRole('passenger'), limitadores.viajes, async (req, res) => {
   // Identificador: lo aporta el cliente por compatibilidad, pero con forma
   // acotada. `Idempotency-Key` sirve cuando el cuerpo no trae `id`, que es lo
   // que ocurre al reenviar desde la cola sin conexión.

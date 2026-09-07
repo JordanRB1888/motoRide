@@ -42,6 +42,10 @@ function arrancar(dataFile) {
       PORT: String(port),
       DATA_FILE: dataFile,
       JWT_SECRET: 'ruta-test-secret',
+      // Las pruebas no dependen de si la credencial REAL de Maps esta en el
+      // disco de quien las corre: se apunta a una ruta que no existe, igual
+      // que con la de FCM.
+      GOOGLE_MAPS_SERVICE_ACCOUNT_FILE: './no-existe/maps-service-account.json',
       // Explícito: esta suite comprueba justo la degradación honesta.
       DISPATCH_ROUTES_API_KEY: ''
     },

@@ -47,7 +47,11 @@ async function startServer(t) {
       ...process.env,
       PORT: String(port),
       DATA_FILE: path.join(tempDir, 'database.json'),
-      JWT_SECRET: 'hardening-test-secret-0123456789'
+      JWT_SECRET: 'hardening-test-secret-0123456789',
+      // Las pruebas no dependen de si la credencial REAL de Maps esta en el
+      // disco de quien las corre: se apunta a una ruta que no existe, igual
+      // que con la de FCM.
+      GOOGLE_MAPS_SERVICE_ACCOUNT_FILE: './no-existe/maps-service-account.json',
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
