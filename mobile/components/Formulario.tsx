@@ -44,7 +44,16 @@ export function Formulario({ cabecera, pie, children, refDelCuerpo, testID }: Pr
       <SafeAreaView style={estilos.segura} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           style={estilos.teclado}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          // EN ANDROID NO SE AJUSTA NADA DESDE AQUI.
+          //
+          // `height` encoge la vista por su cuenta, y Android ya la encoge solo
+          // --Expo deja `adjustResize` puesto--. Los dos ajustes se pisan y la
+          // pantalla oscila: parpadea, se mueve de lado y los botones se
+          // escapan bajo el dedo. Con edge-to-edge es peor, porque los margenes
+          // del sistema cambian sobre la marcha y realimentan el bucle.
+          //
+          // iOS no reajusta la ventana solo, asi que ahi si hace falta.
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           {cabecera}
           <ScrollView
