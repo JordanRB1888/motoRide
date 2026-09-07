@@ -13,7 +13,6 @@ import {
   SERVICIOS_DE_INICIO
 } from '../preview/fixtures.ts';
 import { DESTINO_DE_SERVICIO } from '../navegacion/rutas.ts';
-import { NOMBRES_DE_ICONO } from '../ui/Icono.tsx';
 
 /**
  * El inicio de la pasajera según la referencia visual del dueño.
@@ -92,8 +91,13 @@ test('los accesos rápidos son los cuatro de la referencia', () => {
 // ---------------------------------------------------------------------------
 
 test('la familia de iconos tiene lo que el inicio nuevo necesita', () => {
+  // Se lee el fuente y no se importa: `Icono.tsx` lleva JSX y el resolver de
+  // pruebas no lo carga. Es lo mismo que hacen el resto de custodias.
+  const fuente = leer('ui/Icono.tsx');
+  const lista = fuente.slice(fuente.indexOf('export const NOMBRES_DE_ICONO'), fuente.indexOf('] as const;'));
   for (const nombre of ['chevron-derecha', 'ubicacion', 'corona', 'billetera', 'estrella', 'reloj']) {
-    assert.ok(NOMBRES_DE_ICONO.includes(nombre), `falta el icono «${nombre}»`);
+    assert.ok(lista.includes(`'${nombre}'`), `falta el icono «${nombre}»`);
+    assert.ok(fuente.includes(`case '${nombre}'`), `«${nombre}» está en la lista pero no se dibuja`);
   }
 });
 
