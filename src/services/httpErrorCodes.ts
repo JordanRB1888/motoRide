@@ -10,17 +10,26 @@
  *
  * El cuerpo del servidor manda cuando existe. Cuando no, el estado se traduce
  * a un código conocido en lugar de descartarse.
+ *
+ * TYPESCRIPT-1: migrado sin cambiar el comportamiento. La forma que devuelve
+ * es la que declara `ApiError` en los contratos compartidos, así que el tipo y
+ * el código no pueden separarse sin que el compilador lo diga.
  */
 
-const POR_ESTADO = {
+import type { ApiError, ApiErrorCode } from '../../shared/contracts/api.ts';
+
+const POR_ESTADO: Readonly<Record<number, ApiErrorCode>> = {
   401: 'UNAUTHORIZED',
   403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   429: 'RATE_LIMITED'
 };
 
-export function errorCodeForStatus(status) {
-  if (POR_ESTADO[status]) return POR_ESTADO[status];
+export function errorCodeForStatus(status: unknown): ApiErrorCode {
+  // Se indexa con el número tal cual, igual que antes: un estado que no esté
+  // en el mapa cae en los dos casos de reserva de abajo.
+  const conocido = POR_ESTADO[Number(status)];
+  if (conocido) return conocido;
   if (Number(status) >= 500) return 'SERVER_ERROR';
   return 'REQUEST_FAILED';
 }
@@ -28,10 +37,10 @@ export function errorCodeForStatus(status) {
 /**
  * Compone el error que se guarda tras una respuesta no correcta.
  *
- * @param {number} status estado HTTP de la respuesta.
- * @param {object|null} payload cuerpo ya interpretado, o null si no era JSON.
+ * @param status estado HTTP de la respuesta.
+ * @param payload cuerpo ya interpretado, o null si no era JSON.
  */
-export function buildRequestError(status, payload) {
+export function buildRequestError(status: number, payload: unknown): ApiError {
   const cuerpo = payload && typeof payload === 'object' ? payload : null;
   // El estado va siempre, y nunca lo sobrescribe el cuerpo: es lo único que se
   // conoce con certeza.

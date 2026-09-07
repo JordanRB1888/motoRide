@@ -1,0 +1,31 @@
+{
+  // Lo que Node ejecuta DIRECTAMENTE, sin compilar: la configuración de Vite,
+  // la de Playwright, las pruebas E2E y el código de servidor escrito en
+  // TypeScript que Node arranca por borrado de tipos.
+  //
+  // `server/nest/` NO está aquí: es el único proyecto que se compila, y tiene
+  // su propio `tsconfig.server.json`. Un fichero en dos proyectos a la vez es
+  // una fuente de errores confusos, así que se excluye explícitamente.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+
+    // Los imports nombran el fichero `.ts` REAL, porque es el que Node ejecuta.
+    // Sin esto TypeScript exigiría escribir `.js`, que aquí no existe.
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "vite.config.js",
+    "playwright.config.js",
+    "e2e/**/*.js",
+    "e2e/**/*.ts",
+    "shared/**/*.ts",
+    "server/domain/**/*.ts",
+    "server/services/**/*.ts",
+    "server/test/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "server/nest", "server/dist-nest"]
+}

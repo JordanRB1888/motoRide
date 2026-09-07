@@ -1,0 +1,47 @@
+{
+  // Opciones comunes a todo el repositorio. No se usa directamente: la heredan
+  // `tsconfig.app.json` (lo que compila Vite) y `tsconfig.node.json` (lo que
+  // ejecuta Node: configuraciones y pruebas E2E).
+  //
+  // ESTRATEGIA: TypeScript entra de forma INCREMENTAL. El JavaScript existente
+  // sigue funcionando exactamente igual y no se comprueba todavía; lo que se
+  // escriba nuevo en TypeScript sí se exige estricto desde el primer día.
+  "compilerOptions": {
+    // Node 24 y Vite 6 soportan de sobra ES2022.
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "useDefineForClassFields": true,
+
+    // El repositorio es ESM de punta a punta (`"type": "module"` en los dos
+    // package.json). Nada de CommonJS.
+    "verbatimModuleSyntax": true,
+
+    // Rigor para lo NUEVO.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": false,
+
+    // El JavaScript de siempre convive sin ser comprobado.
+    //
+    // `checkJs: false` es deliberado y no es pereza: encender la comprobación
+    // sobre los ~180 ficheros JS del producto de golpe produciría cientos de
+    // errores que habría que silenciar con `any` o `@ts-ignore`, y eso es
+    // TypeScript cosmético — justo lo que no queremos. Se irá encendiendo por
+    // ficheros a medida que se migren de verdad.
+    "allowJs": true,
+    "checkJs": false,
+
+    // TYPESCRIPT-1 no compila nada: solo valida. El runtime lo siguen
+    // produciendo Vite (frontend) y Node directamente (backend).
+    "noEmit": true,
+    "isolatedModules": true,
+
+    // Las definiciones de las dependencias no son responsabilidad nuestra.
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  }
+}

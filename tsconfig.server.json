@@ -1,0 +1,51 @@
+{
+  // El backend: por ahora solo la fundación NestJS de `server/nest/`.
+  //
+  // Es el ÚNICO proyecto del repositorio que emite JavaScript, y hay una razón
+  // concreta: NestJS se apoya en decoradores, y el borrado de tipos de Node
+  // —que es lo que permite ejecutar `.ts` sin compilador en el resto del
+  // proyecto— NO los soporta. Se comprobó: un `@Decorador()` da
+  // `SyntaxError: Invalid or unexpected token`. Un decorador necesita
+  // transformación, no solo quitar anotaciones.
+  //
+  // El backend legacy sigue siendo JavaScript ejecutado directamente por Node.
+  // Esta compilación NO le afecta y NO es el arranque de producción.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+
+    // Lo que NestJS necesita y el resto del repositorio no usa.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    // Aquí sí se emite. `npm run typecheck` lo invoca con `--noEmit` para
+    // validar sin generar nada.
+    "noEmit": false,
+    // La raiz es el repositorio y no `server/nest` porque el backend TIENE que
+    // poder consumir `shared/contracts/`: con una raiz mas estrecha, TypeScript
+    // rechaza cualquier fichero de fuera. La salida es un espejo de la
+    // estructura, asi que los imports relativos entre ellos siguen siendo
+    // validos.
+    //
+    // Y vive DENTRO de `server/` por una razon concreta: las dependencias de
+    // Nest estan en `server/node_modules`, y Node las resuelve subiendo
+    // directorios. Compilado en la raiz del repositorio, `reflect-metadata` no
+    // se encuentra.
+    "outDir": "server/dist-nest",
+    "rootDir": ".",
+    "sourceMap": true,
+
+    // `isolatedModules` no es compatible con `emitDecoratorMetadata`: la
+    // metadata necesita ver los tipos, que es justo lo que ese modo prohíbe.
+    "isolatedModules": false,
+
+    // Las clases de NestJS se declaran sin inicializador y se rellenan por
+    // inyección; el compilador no puede verlo.
+    "strictPropertyInitialization": false
+  },
+  "include": ["server/nest/**/*.ts", "shared/**/*.ts"],
+  "exclude": ["node_modules", "server/dist-nest"]
+}

@@ -9,14 +9,30 @@
     "start:server": "npm --prefix server start",
     "build": "vite build",
     "preview": "node --max-http-header-size=65536 ./node_modules/vite/bin/vite.js preview",
-    "test:frontend": "node --test test/*.test.js"
+    "test:frontend": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report playwright-report",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json && tsc -p tsconfig.server.json --noEmit",
+    "build:nest": "tsc -p tsconfig.server.json",
+    "test:nest": "npm run build:nest && node --test server/nest/test/*.test.js",
+    "dev:nest": "npm run build:nest && node server/dist-nest/server/nest/main.js",
+    "mobile:start": "npm --prefix mobile run start",
+    "mobile:android": "npm --prefix mobile run android",
+    "mobile:ios": "npm --prefix mobile run ios",
+    "mobile:typecheck": "npm --prefix mobile run typecheck",
+    "mobile:test": "npm --prefix mobile run test",
+    "mobile:bundle:check": "npm --prefix mobile run bundle:check"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "26.4.0",
     "esbuild": "^0.25.12",
+    "typescript": "7.0.2",
     "vite": "^6.3.5"
   }
 }

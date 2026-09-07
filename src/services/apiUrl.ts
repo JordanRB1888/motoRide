@@ -9,12 +9,17 @@
  *
  * Esta función es el único lugar donde se decide cómo se unen las dos partes,
  * para que ninguna pantalla tenga que saberlo.
+ *
+ * TYPESCRIPT-1: migrado a TypeScript sin cambiar una sola línea de
+ * comportamiento. Los tipos describen lo que la función YA aceptaba —de ahí
+ * `unknown` en los parámetros: se le pasa lo que venga de una respuesta o de
+ * una variable de entorno, y por eso ya se normalizaba con `String(...)`.
  */
 
 const API_SEGMENT = '/api';
 
 /** Quita la barra final: `https://host/api/` y `https://host/api` son lo mismo. */
-export function normalizeBaseUrl(value) {
+export function normalizeBaseUrl(value: unknown): string {
   return String(value || '').replace(/\/+$/, '');
 }
 
@@ -27,7 +32,7 @@ export function normalizeBaseUrl(value) {
  * - base sin `/api` + `/api/users/...`  -> se conserva el único prefijo
  * - una URL absoluta se devuelve intacta
  */
-export function composeApiUrl(baseUrl, endpoint) {
+export function composeApiUrl(baseUrl: unknown, endpoint: unknown): string {
   const path = String(endpoint ?? '');
   if (/^https?:\/\//i.test(path)) return path;
 

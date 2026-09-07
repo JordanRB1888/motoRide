@@ -18,7 +18,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // ------------------------------------------------- el cliente HTTP, ejecutado
 
-import { buildRequestError, errorCodeForStatus } from '../src/services/httpErrorCodes.js';
+import { buildRequestError, errorCodeForStatus } from '../src/services/httpErrorCodes.ts';
 
 test('un 429 con cuerpo JSON conserva su codigo y su alcance', () => {
   const error = buildRequestError(429, { error: 'RATE_LIMITED', scope: 'login', retryAfterMs: 900000 });

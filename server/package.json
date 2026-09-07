@@ -16,9 +16,13 @@
     "db:import": "node scripts/sqlitePostgresMigration.js",
     "db:verify": "node scripts/verifyPostgresMigration.js",
     "db:cutover:preflight": "node scripts/productionCutoverPreflight.js",
-    "db:cutover:snapshot": "node scripts/productionSqliteSnapshot.js"
+    "db:cutover:snapshot": "node scripts/productionSqliteSnapshot.js",
+    "db:migrate:wallet-test": "node scripts/migrateWalletTest.mjs"
   },
   "dependencies": {
+    "@nestjs/common": "12.0.1",
+    "@nestjs/core": "12.0.1",
+    "@nestjs/platform-express": "12.0.1",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
@@ -27,10 +31,13 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.2.0",
     "pg": "8.23.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
     "socket.io": "^4.8.3",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@nestjs/testing": "12.0.1",
     "socket.io-client": "^4.8.3"
   }
 }
