@@ -96,3 +96,50 @@ test('la familia de iconos tiene lo que el inicio nuevo necesita', () => {
     assert.ok(NOMBRES_DE_ICONO.includes(nombre), `falta el icono «${nombre}»`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Las piezas nuevas del inicio
+// ---------------------------------------------------------------------------
+
+const PIEZAS_NUEVAS = [
+  'ui/TarjetaDeSaldo.tsx',
+  'ui/AccesosRapidos.tsx',
+  'ui/CabeceraDeSeccion.tsx',
+  'ui/PromocionesDelInicio.tsx',
+  'ui/RejillaDeServicios.tsx'
+];
+
+test('las piezas nuevas del inicio tampoco fijan ninguna tinta a mano', () => {
+  // La misma guarda que `inicioPasajera.test.mjs` pone a las tres piezas
+  // comerciales de antes: una tinta escrita a mano no sabe si es de día.
+  for (const pieza of PIEZAS_NUEVAS) {
+    if (!fs.existsSync(path.join(raizMovil, pieza))) continue;
+    const codigo = despojarComentarios(leer(pieza));
+    assert.deepEqual(codigo.match(/color:\s*'#[0-9a-fA-F]{3,8}'/g) ?? [], [], `${pieza} escribe la tinta a mano`);
+    assert.ok(!/rgba\(\s*255\s*,\s*255\s*,\s*255/.test(codigo), `${pieza} usa blanco con alfa`);
+    assert.ok(!/color:\s*tema\.color\.acento\b/.test(codigo), `${pieza} escribe con tema.color.acento`);
+  }
+});
+
+test('las secciones del inicio comparten una sola cabecera', () => {
+  const fuente = despojarComentarios(leer('ui/CabeceraDeSeccion.tsx'));
+  assert.match(fuente, /export function CabeceraDeSeccion/);
+  assert.match(fuente, /nivel="encabezado"/, 'el título va en el nivel de encabezado');
+  assert.match(fuente, /nombre="chevron-derecha"/, 'la acción lleva su chevron');
+  assert.match(fuente, /accessibilityRole="header"/);
+});
+
+test('el saldo no inventa una cifra cuando no la hay', () => {
+  const fuente = despojarComentarios(leer('ui/TarjetaDeSaldo.tsx'));
+  assert.match(fuente, /saldo === null/, 'sin saldo real la píldora tiene que decir otra cosa, no un cero');
+  assert.match(fuente, /nombre="billetera"/);
+  assert.match(fuente, /export function BotonDeUbicacion/);
+  assert.match(fuente, /nombre="ubicacion"/);
+});
+
+test('los accesos rápidos son chips, todos con nombre accesible', () => {
+  const fuente = despojarComentarios(leer('ui/AccesosRapidos.tsx'));
+  assert.match(fuente, /borderRadius: tema\.radio\.insignia/);
+  assert.match(fuente, /accessibilityRole="button"/);
+  assert.match(fuente, /accessibilityLabel=\{acceso\.nombre\}/);
+});
