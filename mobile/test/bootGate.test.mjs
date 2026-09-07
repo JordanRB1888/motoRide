@@ -167,7 +167,10 @@ test('restaurar sesión no enseña la bienvenida de paso', () => {
   const acceso = raiz.indexOf('href="/bienvenida"');
   assert.ok(arrancando !== -1 && acceso !== -1);
   assert.ok(arrancando < acceso, 'el acceso se decide antes de saber si hay sesión');
-  assert.match(raiz.slice(arrancando, acceso), /ActivityIndicator/);
+  // La espera se pinta con la pantalla de marca --anillos y logo-- en vez de
+  // la rueda gris del sistema. Lo que se vigila no cambia: que mientras se
+  // restaura la sesion se enseñe una espera y no la bienvenida.
+  assert.match(raiz.slice(arrancando, acceso), /CargandoDeMarca/);
 });
 
 test('un fallo de red NO es cerrar sesión', () => {

@@ -112,7 +112,18 @@ export function PiezaDelMarcador({ marcador }: { readonly marcador: Marcador }) 
  * otro, o se quedaba escondido detrás de la hoja.
  */
 export function ReticulaCentral({ aireInferior = 0 }: { readonly aireInferior?: number }) {
-  const tema = useTema();
+  // ROJO, NO AMARILLO.
+  //
+  // El amarillo de marca es el color de casi todo lo tocable de la aplicacion:
+  // sobre el mapa, un punto amarillo de veinte pixeles se confundia con la
+  // interfaz y costaba ver DONDE se estaba apuntando. El rojo no se usa en
+  // ningun otro sitio de esta pantalla, asi que ahi solo puede significar una
+  // cosa: aqui es donde va a quedar el destino.
+  //
+  // Y con forma de alfiler, no de bolita: la punta señala un punto exacto: una
+  // bolita señala un area y deja la duda de si el sitio es su centro o su borde.
+  const rojo = '#E5342A';
+  const sombra = 'rgba(0, 0, 0, 0.28)';
 
   return (
     <View
@@ -127,17 +138,36 @@ export function ReticulaCentral({ aireInferior = 0 }: { readonly aireInferior?: 
         justifyContent: 'center'
       }}
     >
-      <View style={{
-        // Centrado en el área útil: un margen abajo de `aire` sube el punto la
-        // mitad de ese aire, que es justo lo que hace `mapPadding`.
-        marginBottom: aireInferior,
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        backgroundColor: tema.color.acento,
-        borderWidth: 3,
-        borderColor: tema.color.fondo
-      }} />
+      {/* Centrado en el área útil: un margen abajo de `aire` sube el punto la
+          mitad de ese aire, que es justo lo que hace `mapPadding`. */}
+      <View style={{ marginBottom: aireInferior, alignItems: 'center' }}>
+        {/* La cabeza del alfiler. */}
+        <View style={{
+          width: 30,
+          height: 30,
+          borderRadius: 15,
+          backgroundColor: rojo,
+          borderWidth: 3.5,
+          borderColor: '#FFFFFF',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF' }} />
+        </View>
+
+        {/* El tallo, que baja hasta el punto exacto. */}
+        <View style={{ width: 3, height: 13, backgroundColor: rojo, marginTop: -1 }} />
+
+        {/* La sombra en el suelo: sin ella el alfiler parece flotar y no se
+            sabe sobre que punto del mapa cae. */}
+        <View style={{
+          width: 13,
+          height: 4,
+          borderRadius: 7,
+          backgroundColor: sombra,
+          marginTop: 1
+        }} />
+      </View>
     </View>
   );
 }
