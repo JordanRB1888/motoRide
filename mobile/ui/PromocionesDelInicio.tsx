@@ -150,7 +150,13 @@ export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, 
                     style={{ position: 'absolute', top: 34, left: 6, width: ANCHO - 12, height: ALTO * 0.48 }}
                   />
                 ) : (
-                  <Image source={promo.imagen} resizeMode="cover" style={StyleSheet.absoluteFill} />
+                  // Ancho y alto explícitos por lo mismo que en el hero: sin
+                  // ellos la foto se pinta a su tamaño y sale recortada.
+                  <Image
+                    source={promo.imagen}
+                    resizeMode="cover"
+                    style={{ position: 'absolute', top: 0, left: 0, width: ANCHO, height: ALTO }}
+                  />
                 )
               ) : null}
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: LIENZO.veloAlto }]} />

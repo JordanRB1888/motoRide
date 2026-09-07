@@ -181,7 +181,14 @@ export function PromoCarousel({
             ]}
           >
             {banner.imagen !== undefined ? (
-              <Image source={banner.imagen} resizeMode="cover" style={StyleSheet.absoluteFill} />
+              // Ancho y alto EXPLÍCITOS. Con sólo `absoluteFill`, Android da a
+              // la imagen su tamaño intrínseco y luego la recorta: el arte se
+              // veía ampliado al doble y cortado por la derecha.
+              <Image
+                source={banner.imagen}
+                resizeMode="cover"
+                style={{ position: 'absolute', top: 0, left: 0, width: anchoTarjeta, height: ALTO_DEL_HERO }}
+              />
             ) : (
               // La composición de marca: la moto real, grande, a la derecha.
               <Image
