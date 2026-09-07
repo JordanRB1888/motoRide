@@ -33,7 +33,7 @@ const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // Arnes: servidor real como proceso hijo, con push encendido o apagado
 // --------------------------------------------------------------------------
 
-async function arrancarServidor(t, { pushEncendido }) {
+async function arrancarServidor(t, { pushEncendido, ventanaMs }) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-push3a-'));
   const port = 18900 + Math.floor(Math.random() * 399);
 
@@ -52,6 +52,9 @@ async function arrancarServidor(t, { pushEncendido }) {
       PORT: String(port),
       DATA_FILE: path.join(tempDir, 'database.json'),
       JWT_SECRET: 'push3a-test-secret',
+      // Sin esto la ventana es la de produccion --30 s por omision-- y una
+      // prueba que necesita verla vencer entera tardaria eso en cada oferta.
+      ...(ventanaMs ? { DRIVER_OFFER_TIMEOUT_MS: String(ventanaMs) } : {}),
       ...(pushEncendido
         ? {
             WEB_PUSH_ENABLED: 'true',
@@ -242,14 +245,21 @@ test('con WEB_PUSH_ENABLED=false el despacho por socket queda identico', async (
 });
 
 // --------------------------------------------------------------------------
-// La critica: un proveedor colgado no roba tiempo de la ventana de quince
-// segundos, y el avance de candidato sigue siendo secuencial
+// La critica: un proveedor colgado no roba tiempo de la ventana de oferta,
+// y el avance de candidato sigue siendo secuencial
 // --------------------------------------------------------------------------
 
-test('un proveedor que nunca responde no retrasa la ventana de 15 s ni el paso al siguiente conductor', { timeout: 60_000 }, async (t) => {
+// La ventana real por omision es de 30 s. Lo que esta prueba mide no es su
+// duracion --de eso se ocupa `ventanaDeOferta.test.js`-- sino que el proveedor
+// colgado no le robe tiempo, y eso se demuestra igual de bien con una ventana
+// corta fijada por entorno. Con la de produccion, el archivo tardaria medio
+// minuto por oferta.
+const VENTANA_DE_LA_PRUEBA_MS = 8_000;
+
+test('un proveedor que nunca responde no retrasa la ventana de oferta ni el paso al siguiente conductor', { timeout: 60_000 }, async (t) => {
   // "Proveedor" que acepta la conexion TCP y no completa jamas el saludo TLS:
-  // la promesa del envio queda pendiente mucho mas alla de los quince
-  // segundos, que es exactamente el escenario que no puede bloquear nada.
+  // la promesa del envio queda pendiente mucho mas alla de la ventana, que es
+  // exactamente el escenario que no puede bloquear nada.
   const conexionesColgadas = [];
   const proveedorColgado = net.createServer(socket => { conexionesColgadas.push(socket); });
   await new Promise(resolve => proveedorColgado.listen(0, '127.0.0.1', resolve));
@@ -259,7 +269,10 @@ test('un proveedor que nunca responde no retrasa la ventana de 15 s ni el paso a
     proveedorColgado.close();
   });
 
-  const { url, salida } = await arrancarServidor(t, { pushEncendido: true });
+  const { url, salida } = await arrancarServidor(t, {
+    pushEncendido: true,
+    ventanaMs: VENTANA_DE_LA_PRUEBA_MS
+  });
   const { pasajeroToken, conductores } = await crearActores(url, { conductores: 2 });
   const [cercano, lejano] = conductores;
 
@@ -298,9 +311,12 @@ test('un proveedor que nunca responde no retrasa la ventana de 15 s ni el paso a
   assert.equal(conexionesColgadas.length, 1, 'el proveedor colgado debia tener la conexion abierta');
 
   // El cercano IGNORA la oferta. Si el despacho esperase al proveedor, la
-  // segunda oferta no llegaria nunca; si respeta su ventana, llega a los ~15 s.
+  // segunda oferta no llegaria nunca; si respeta su ventana, llega al vencerla.
   await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('la oferta no avanzo al siguiente conductor')), 25_000);
+    const timeout = setTimeout(
+      () => reject(new Error('la oferta no avanzo al siguiente conductor')),
+      VENTANA_DE_LA_PRUEBA_MS + 10_000
+    );
     conexionLejano.socket.on('rideRequested', () => { clearTimeout(timeout); resolve(); });
   });
 
@@ -309,8 +325,14 @@ test('un proveedor que nunca responde no retrasa la ventana de 15 s ni el paso a
   await esperar(600);
 
   const transcurrido = conexionLejano.ofertas[0].at - conexionCercano.ofertas[0].at;
-  assert.ok(transcurrido >= 14_000, `el avance llego demasiado pronto: ${transcurrido} ms`);
-  assert.ok(transcurrido < 22_000, `la ventana de quince segundos se estiro: ${transcurrido} ms`);
+  assert.ok(
+    transcurrido >= VENTANA_DE_LA_PRUEBA_MS - 1_000,
+    `el avance llego demasiado pronto: ${transcurrido} ms`
+  );
+  assert.ok(
+    transcurrido < VENTANA_DE_LA_PRUEBA_MS + 7_000,
+    `la ventana se estiro esperando al proveedor colgado: ${transcurrido} ms`
+  );
 
   // Una llamada semantica por oferta real, en orden: el intento colgado del
   // cercano y el desenlace benigno del lejano, que no tiene suscripcion.

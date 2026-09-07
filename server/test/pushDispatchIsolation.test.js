@@ -136,11 +136,27 @@ test('la oferta le dice al telefono CUANTO le queda, no solo cuando vence', () =
   );
 });
 
-test('la ventana de oferta sigue siendo de quince segundos', () => {
+test('la ventana de oferta sale de una sola fuente y por omision es de treinta segundos', () => {
+  // Antes eran quince segundos clavados en el codigo. Ahora son treinta por
+  // omision y se pueden ajustar con `DRIVER_OFFER_TIMEOUT_MS`; lo que esta
+  // prueba custodia no es el numero sino que siga habiendo UNA sola fuente.
   assert.ok(
-    indexCodigo.includes('const VENTANA_DE_OFERTA_MS = 15_000;')
-      && indexCodigo.includes('offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS'),
+    indexCodigo.includes('const VENTANA_DE_OFERTA_POR_OMISION_MS = 30_000;'),
+    'el valor por omision de la ventana cambio de sitio o de numero'
+  );
+  assert.ok(
+    indexCodigo.includes('const VENTANA_DE_OFERTA_MS = ventanaDeOferta.valor;'),
+    'la ventana efectiva tiene que salir de la configuracion, no de un literal'
+  );
+  assert.ok(
+    indexCodigo.includes('offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS'),
     'la caducidad anunciada al conductor cambio'
+  );
+  // Y el ajuste por entorno no puede ser libre: una ventana de 1 ms o de una
+  // hora romperia el despacho en silencio.
+  assert.ok(
+    /ms < 5_000 \|\| ms > 120_000/.test(indexCodigo),
+    'el valor de entorno tiene que quedar acotado entre 5 s y 120 s'
   );
   // El temporizador bebe de la MISMA constante que el vencimiento que se le
   // anuncia al conductor: dos copias de un numero que tiene que ser igual

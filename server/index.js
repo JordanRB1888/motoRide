@@ -2791,8 +2791,58 @@ app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, limitador
  * duracion relativa no tiene ese problema: el cliente la ancla a su propio
  * reloj en cuanto la recibe, y lo unico que se pierde es la latencia de la
  * red, que son milisegundos.
+ *
+ * POR QUE TREINTA Y NO QUINCE
+ *
+ * Quince segundos alcanzan si el conductor esta mirando la pantalla. No
+ * alcanzan para lo que pasa de verdad: el telefono en el bolsillo, bloqueado,
+ * llega el push, hay que sacarlo, desbloquear, abrir, leer donde recoge, leer
+ * a donde va, mirar la tarifa y decidir. Medido en el emulador, solo la
+ * secuencia de desbloquear y abrir ya se come varios segundos.
+ *
+ * Treinta, y no cuarenta, porque el despacho es SECUENCIAL --ver el aviso de
+ * abajo-- y cada segundo de esta ventana se lo cobra la persona que espera la
+ * moto. Se sube a cuarenta solo si las pruebas reales demuestran que treinta
+ * se queda corto.
+ *
+ * CUIDADO AL SUBIRLO: EL DESPACHO ES SECUENCIAL
+ *
+ * `offerNext` ofrece a UN conductor, espera esta ventana entera y solo
+ * entonces pasa al siguiente. Y `selectEligibleDrivers` no tiene tope: en un
+ * radio de quince kilometros pueden salir diez conductores. La espera maxima
+ * del pasajero es esta ventana MULTIPLICADA por el numero de candidatos, asi
+ * que con diez conductores que no contesten son cinco minutos mirando
+ * «Buscando tu moto».
+ *
+ * Subir este numero sin poner antes un tope a la espera total del pasajero
+ * convierte una mejora para el conductor en un castigo para quien pide. El
+ * analisis y la propuesta estan en
+ * `agent-reports/ventana-de-oferta-y-despacho-secuencial.md`.
  */
-const VENTANA_DE_OFERTA_MS = 15_000;
+const VENTANA_DE_OFERTA_POR_OMISION_MS = 30_000;
+
+/**
+ * Se puede ajustar sin tocar codigo, que es lo que hace falta mientras se
+ * afina con conductores de verdad. Un valor ilegible o fuera de rango NO se
+ * adivina: se usa el de omision y se dice al arrancar.
+ *
+ * El rango va de cinco segundos --por debajo no da tiempo ni a leer-- a dos
+ * minutos, que ya seria abusivo para quien espera.
+ */
+function ventanaDeOfertaConfigurada(entorno = process.env) {
+  const bruto = entorno.DRIVER_OFFER_TIMEOUT_MS;
+  if (bruto === undefined || bruto === null || String(bruto).trim() === '') {
+    return { valor: VENTANA_DE_OFERTA_POR_OMISION_MS, fuente: 'por omision' };
+  }
+  const ms = /^\d+$/.test(String(bruto).trim()) ? Number(String(bruto).trim()) : Number.NaN;
+  if (!Number.isInteger(ms) || ms < 5_000 || ms > 120_000) {
+    return { valor: VENTANA_DE_OFERTA_POR_OMISION_MS, fuente: 'valor invalido, se usa el de omision' };
+  }
+  return { valor: ms, fuente: 'entorno' };
+}
+
+const ventanaDeOferta = ventanaDeOfertaConfigurada();
+const VENTANA_DE_OFERTA_MS = ventanaDeOferta.valor;
 
 function dispatchTripToDrivers(trip) {
   const pickup = normalizeLocation(trip.pickup);
@@ -2862,7 +2912,7 @@ function dispatchTripToDrivers(trip) {
       console.log(`[+58express Dispatcher] ${JSON.stringify({ event: 'driver_offer_emitted', tripId: trip.id, emitted: true })}`);
       // PUSH-3A: aviso de atencion que acompana a ESTA misma oferta, para
       // ESTE mismo conductor. Es mejor esfuerzo puro: sin `await`, porque la
-      // ventana de quince segundos no puede depender de un proveedor de push.
+      // ventana de oferta no puede depender de un proveedor de push.
       // El servicio nunca rechaza por contrato --clasifica y absorbe todos
       // los desenlaces--; el `catch` es la red de ultima instancia por si ese
       // contrato se rompiera algun dia, y no registra mas que el nombre.
@@ -2884,7 +2934,7 @@ function dispatchTripToDrivers(trip) {
   if (dispatchRanker.enabled && session.candidates.length > 1) {
     // DISPATCH-2A: UNA llamada acotada de matriz por ciclo de despacho, con
     // su propio timeout duro, ANTES de la primera oferta. La ventana de
-    // 15000 ms por conductor no se toca: son relojes distintos. El ranking
+    // oferta por conductor no se toca: son relojes distintos. El ranking
     // devuelve SIEMPRE el mismo conjunto (jamas añade ni quita elegibles);
     // cualquier fallo → el orden geografico actual.
     dispatchRanker.rank({ pickup: { lat: pickupLat, lng: pickupLng }, candidates: session.candidates })
@@ -3493,4 +3543,7 @@ server.listen(PORT, () => {
       ? `[+58express Observabilidad] Sentry ENCENDIDO (entorno=${observabilidad.entorno}, version=${observabilidad.version ?? 'sin declarar'})`
       : `[+58express Observabilidad] Sentry apagado: ${observabilidad.motivo} (entorno=${observabilidad.entorno})`
   );
+  // Se anuncia porque es un numero que se va a afinar con conductores reales, y
+  // hay que poder leer en los registros cual estaba puesto en cada prueba.
+  console.log(`[+58express Dispatcher] ventana de oferta = ${VENTANA_DE_OFERTA_MS} ms (${ventanaDeOferta.fuente})`);
 });

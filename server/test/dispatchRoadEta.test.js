@@ -306,9 +306,24 @@ test('sin credencial el cliente lanza su codigo escueto y jamas toca la red', as
 // §29-§32 — lo intocable, en estatico (mas sus suites propias)
 // --------------------------------------------------------------------------
 
-test('la ventana de 15000 ms, PUSH-3A y la tarifa ni se enteran del ranking', () => {
+test('la ventana de oferta, PUSH-3A y la tarifa ni se enteran del ranking', () => {
   const indice = sinComentarios(leer('index.js'));
-  assert.ok(indice.includes('const VENTANA_DE_OFERTA_MS = 15_000;'), 'la ventana no se toca');
+  // La ventana paso de una constante fija a un valor configurable
+  // (`DRIVER_OFFER_TIMEOUT_MS`, por omision 30 s). Lo que esta prueba
+  // custodia no es el numero, sino que siga saliendo de UN solo sitio y que
+  // ese sitio no dependa del ranking por ETA de carretera.
+  assert.ok(indice.includes('const VENTANA_DE_OFERTA_POR_OMISION_MS = 30_000;'),
+    'el valor por omision de la ventana vive en una sola constante');
+  assert.ok(indice.includes('const VENTANA_DE_OFERTA_MS = ventanaDeOferta.valor;'),
+    'la ventana efectiva sale de la configuracion, no de un literal disperso');
+  const configuracion = indice.slice(
+    indice.indexOf('function ventanaDeOfertaConfigurada'),
+    indice.indexOf('const ventanaDeOferta =')
+  );
+  assert.ok(configuracion.includes('DRIVER_OFFER_TIMEOUT_MS'),
+    'la unica entrada de la ventana es su propia variable de entorno');
+  assert.ok(!/matri[xz]|ranking|eta/i.test(configuracion),
+    'el ranking por ETA no interviene en cuanto dura la ventana');
   assert.ok(indice.includes('offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS'), 'la ventana no se toca');
   assert.ok(indice.includes('pushService.notifyRideOffer(trip, candidate.driver.id)'),
     'PUSH-3A identico');
@@ -327,5 +342,8 @@ test('la ventana de 15000 ms, PUSH-3A y la tarifa ni se enteran del ranking', ()
 test('los valores por defecto documentados existen y son conservadores', () => {
   assert.equal(DEFAULT_MATRIX_MAX_CANDIDATES, 5);
   assert.equal(DEFAULT_MATRIX_TIMEOUT_MS, 1500);
-  assert.ok(DEFAULT_MATRIX_TIMEOUT_MS < 15000 / 2, 'muy por debajo de la ventana de oferta');
+  // 5000 ms es la ventana MAS CORTA que se puede configurar; el tope de la
+  // matriz tiene que caber holgadamente incluso en ese caso extremo.
+  assert.ok(DEFAULT_MATRIX_TIMEOUT_MS < 5000 / 2,
+    'muy por debajo de la ventana de oferta mas corta que se admite');
 });

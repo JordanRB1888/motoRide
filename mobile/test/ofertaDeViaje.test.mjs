@@ -271,8 +271,17 @@ test('sólo se escucha en servicio, y la superficie va ENCIMA del inicio aprobad
 // El contador: de quién es el reloj
 // ---------------------------------------------------------------------------
 
+/**
+ * La ventana que el servidor manda hoy. Vivia escrita a mano en cada caso; al
+ * pasar de quince a treinta segundos hubo que tocarlos todos, asi que ahora es
+ * una constante. La custodia de que el servidor siga en este numero esta en la
+ * ultima prueba del archivo.
+ */
+const VENTANA_DEL_SERVIDOR_MS = 30_000;
+const VENTANA_DEL_SERVIDOR_S = VENTANA_DEL_SERVIDOR_MS / 1_000;
+
 /** Una oferta como la que manda el servidor hoy: relativa y absoluta. */
-const ofertaDelServidor = (relojDelServidor, ventanaMs = 15_000) => ofertaCruda({
+const ofertaDelServidor = (relojDelServidor, ventanaMs = VENTANA_DEL_SERVIDOR_MS) => ofertaCruda({
   offerExpiresAt: relojDelServidor + ventanaMs,
   offerExpiresInMs: ventanaMs
 });
@@ -282,20 +291,21 @@ test('el contador NO depende de que el reloj del teléfono coincida con el del s
   // reloj y el teléfono la restaba contra el suyo: el contador mentía todo lo
   // que los dos relojes se llevaran. En el laboratorio el emulador iba
   // veintidós segundos atrasado y la tarjeta anunciaba treinta y siete
-  // segundos de una ventana de quince.
+  // segundos de una ventana de quince. El número de la ventana ha cambiado
+  // desde entonces; el desfase que la rompía, no.
   const RELOJ_DEL_SERVIDOR = 5_000_000;
   const DESFASE = 22_000;
   const cruda = ofertaDelServidor(RELOJ_DEL_SERVIDOR);
 
   const atrasado = RELOJ_DEL_SERVIDOR - DESFASE;
-  assert.equal(segundosRestantes(leerOferta(cruda, atrasado).venceEn, atrasado), 15);
+  assert.equal(segundosRestantes(leerOferta(cruda, atrasado).venceEn, atrasado), VENTANA_DEL_SERVIDOR_S);
 
   // Y con el reloj ADELANTADO, que es el caso peligroso: la oferta nacía
   // vencida, el botón no dejaba pulsar, y quien conduce no podía aceptar
   // ninguna carrera sin entender por qué.
   const adelantado = RELOJ_DEL_SERVIDOR + DESFASE;
   const conAdelanto = leerOferta(cruda, adelantado);
-  assert.equal(segundosRestantes(conAdelanto.venceEn, adelantado), 15);
+  assert.equal(segundosRestantes(conAdelanto.venceEn, adelantado), VENTANA_DEL_SERVIDOR_S);
   assert.equal(estaVencida(conAdelanto, adelantado), false);
   assert.equal(sePuedeAceptar('OFERTA', conAdelanto, adelantado), true, 'con el reloj adelantado no se podía aceptar nada');
 });
@@ -303,16 +313,16 @@ test('el contador NO depende de que el reloj del teléfono coincida con el del s
 test('A · una oferta recién llegada muestra la ventana entera', () => {
   const t = 9_000_000;
   const oferta = leerOferta(ofertaDelServidor(t), t);
-  assert.equal(segundosRestantes(oferta.venceEn, t), 15);
+  assert.equal(segundosRestantes(oferta.venceEn, t), VENTANA_DEL_SERVIDOR_S);
   assert.equal(sePuedeAceptar('OFERTA', oferta, t), true);
 });
 
-test('B · mirarla cinco segundos después muestra diez, no reinicia', () => {
+test('B · mirarla cinco segundos después descuenta cinco, no reinicia', () => {
   const t = 9_000_000;
   const oferta = leerOferta(ofertaDelServidor(t), t);
-  assert.equal(segundosRestantes(oferta.venceEn, t + 5_000), 10);
+  assert.equal(segundosRestantes(oferta.venceEn, t + 5_000), VENTANA_DEL_SERVIDOR_S - 5);
   // El vencimiento es un dato fijo: mirarlo más veces no lo mueve.
-  assert.equal(segundosRestantes(oferta.venceEn, t + 5_000), 10);
+  assert.equal(segundosRestantes(oferta.venceEn, t + 5_000), VENTANA_DEL_SERVIDOR_S - 5);
 });
 
 test('C · ocho segundos en segundo plano descuentan ocho segundos', () => {
@@ -320,8 +330,11 @@ test('C · ocho segundos en segundo plano descuentan ocho segundos', () => {
   // la pantalla apagada cuenta igual: no hay contador que congelar.
   const t = 9_000_000;
   const oferta = leerOferta(ofertaDelServidor(t), t);
-  assert.equal(segundosRestantes(oferta.venceEn, t + 8_000), 7);
-  assert.equal(segundosRestantes(oferta.venceEn, t + 14_000), 1);
+  assert.equal(segundosRestantes(oferta.venceEn, t + 8_000), VENTANA_DEL_SERVIDOR_S - 8);
+  assert.equal(
+    segundosRestantes(oferta.venceEn, VENTANA_DEL_SERVIDOR_MS + t - 1_000),
+    1
+  );
 });
 
 test('D · una oferta que llega tarde ya viene vencida, y nunca muestra tiempo negativo', () => {
@@ -339,22 +352,29 @@ test('D · una oferta que llega tarde ya viene vencida, y nunca muestra tiempo n
 test('E · aceptar en el último segundo se puede; pasado el vencimiento, no', () => {
   const t = 9_000_000;
   const oferta = leerOferta(ofertaDelServidor(t), t);
-  assert.equal(sePuedeAceptar('OFERTA', oferta, t + 14_900), true, 'el último segundo es suyo');
-  assert.equal(sePuedeAceptar('OFERTA', oferta, t + 15_001), false);
+  assert.equal(
+    sePuedeAceptar('OFERTA', oferta, t + VENTANA_DEL_SERVIDOR_MS - 100), true,
+    'el último segundo es suyo'
+  );
+  assert.equal(sePuedeAceptar('OFERTA', oferta, t + VENTANA_DEL_SERVIDOR_MS + 1), false);
   // Y quién se la queda lo dice el servidor: una aceptación en vuelo no se da
   // por buena sola --eso lo cubren `estadoTrasRechazoDeAceptacion` y
   // `seQuedoSinRespuesta`, más arriba--.
-  assert.equal(sePuedeAceptar('ACEPTANDO', oferta, t + 14_900), false);
+  assert.equal(sePuedeAceptar('ACEPTANDO', oferta, t + VENTANA_DEL_SERVIDOR_MS - 100), false);
 });
 
 test('F · tras vencer una, la siguiente entra con su propia ventana', () => {
   const t = 9_000_000;
+  const yaVencio = t + VENTANA_DEL_SERVIDOR_MS + 1_000;
   const primera = leerOferta(ofertaDelServidor(t), t);
-  assert.equal(estaVencida(primera, t + 16_000), true);
+  assert.equal(estaVencida(primera, yaVencio), true);
   assert.equal(debeSustituirLaOferta('EXPIRADA'), true);
 
-  const segunda = leerOferta(ofertaDelServidor(t + 16_000), t + 16_000);
-  assert.equal(segundosRestantes(segunda.venceEn, t + 16_000), 15, 'la nueva empieza entera');
+  const segunda = leerOferta(ofertaDelServidor(yaVencio), yaVencio);
+  assert.equal(
+    segundosRestantes(segunda.venceEn, yaVencio), VENTANA_DEL_SERVIDOR_S,
+    'la nueva empieza entera'
+  );
 });
 
 test('sin la duración relativa se sigue leyendo la marca absoluta', () => {
@@ -370,7 +390,15 @@ test('sin la duración relativa se sigue leyendo la marca absoluta', () => {
 test('el servidor manda la ventana como duración, desde una sola constante', () => {
   const raizProyecto = path.resolve(raizMovil, '..');
   const servidor = fs.readFileSync(path.join(raizProyecto, 'server/index.js'), 'utf8');
-  assert.match(servidor, /const VENTANA_DE_OFERTA_MS = 15_000;/);
+  // La ventana dejó de ser un literal fijo: por omisión son treinta segundos y
+  // se puede ajustar con `DRIVER_OFFER_TIMEOUT_MS`. Lo que este archivo
+  // necesita saber es que el número por omisión sigue siendo el que suponen
+  // las pruebas de arriba, y que sigue saliendo de un solo sitio.
+  assert.match(
+    servidor,
+    new RegExp(`const VENTANA_DE_OFERTA_POR_OMISION_MS = ${VENTANA_DEL_SERVIDOR_S}_000;`)
+  );
+  assert.match(servidor, /const VENTANA_DE_OFERTA_MS = ventanaDeOferta\.valor;/);
   assert.match(servidor, /offerExpiresInMs: VENTANA_DE_OFERTA_MS/);
   // El temporizador que pasa al siguiente candidato bebe de la MISMA
   // constante: dos copias de un número que tiene que ser el mismo divergen.
