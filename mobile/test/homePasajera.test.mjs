@@ -13,6 +13,7 @@ import {
   SERVICIOS_DE_INICIO
 } from '../preview/fixtures.ts';
 import { DESTINO_DE_SERVICIO } from '../navegacion/rutas.ts';
+import { NOMBRES_DE_ICONO } from '../ui/Icono.tsx';
 
 /**
  * El inicio de la pasajera según la referencia visual del dueño.
@@ -84,4 +85,14 @@ test('lo que la referencia promete y no existe lleva a «pronto»', () => {
 
 test('los accesos rápidos son los cuatro de la referencia', () => {
   assert.deepEqual(ACCESOS_RAPIDOS.map(a => a.nombre), ['Casa', 'Trabajo', 'Lugares favoritos', 'Recientes']);
+});
+
+// ---------------------------------------------------------------------------
+// La familia de iconos
+// ---------------------------------------------------------------------------
+
+test('la familia de iconos tiene lo que el inicio nuevo necesita', () => {
+  for (const nombre of ['chevron-derecha', 'ubicacion', 'corona', 'billetera', 'estrella', 'reloj']) {
+    assert.ok(NOMBRES_DE_ICONO.includes(nombre), `falta el icono «${nombre}»`);
+  }
 });

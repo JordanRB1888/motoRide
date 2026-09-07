@@ -60,7 +60,10 @@ export const NOMBRES_DE_ICONO = [
   'servicios',
   'telefono',
   'mas',
-  'estrella'
+  'estrella',
+  'chevron-derecha',
+  'ubicacion',
+  'corona'
 ] as const;
 export type NombreDeIcono = (typeof NOMBRES_DE_ICONO)[number];
 
@@ -944,6 +947,55 @@ function dibujar(nombre: NombreDeIcono, t: Trazado) {
             backgroundColor: t.color,
             borderRadius: 1
           }} />
+        </View>
+      );
+    }
+
+    // «Hay más aquí»: un cuadrado con dos lados pintados, girado. Es la misma
+    // punta que usa el carrusel; vive aquí para que las cabeceras de sección
+    // no la redibujen.
+    case 'chevron-derecha':
+      return (
+        <View style={{
+          width: t.tamano * 0.38,
+          height: t.tamano * 0.38,
+          marginLeft: -t.tamano * 0.1,
+          borderTopWidth: t.trazo,
+          borderRightWidth: t.trazo,
+          borderColor: t.color,
+          transform: [{ rotate: '45deg' }]
+        }} />
+      );
+
+    // Mi ubicación: un aro con punto y cuatro marcas, como el de los mapas.
+    case 'ubicacion': {
+      const aro = t.tamano * 0.56;
+      const marca = t.tamano * 0.16;
+      return (
+        <>
+          <View style={{ width: aro, height: aro, borderRadius: aro / 2, borderWidth: t.trazo, borderColor: t.color }} />
+          <View style={{ position: 'absolute', width: t.tamano * 0.18, height: t.tamano * 0.18, borderRadius: t.tamano * 0.09, backgroundColor: t.color }} />
+          <View style={{ position: 'absolute', top: t.tamano * 0.06, width: t.trazo, height: marca, borderRadius: t.trazo, backgroundColor: t.color }} />
+          <View style={{ position: 'absolute', bottom: t.tamano * 0.06, width: t.trazo, height: marca, borderRadius: t.trazo, backgroundColor: t.color }} />
+          <View style={{ position: 'absolute', left: t.tamano * 0.06, width: marca, height: t.trazo, borderRadius: t.trazo, backgroundColor: t.color }} />
+          <View style={{ position: 'absolute', right: t.tamano * 0.06, width: marca, height: t.trazo, borderRadius: t.trazo, backgroundColor: t.color }} />
+        </>
+      );
+    }
+
+    // Corona: tres picos sobre una base. Señala lo destacado.
+    case 'corona': {
+      const pico = t.tamano * 0.3;
+      return (
+        <View style={{ width: t.tamano, height: t.tamano, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: t.tamano * 0.18 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+            <Triangulo base={pico} alto={pico * 0.9} color={t.color} />
+            <View style={{ marginBottom: pico * 0.35 }}>
+              <Triangulo base={pico} alto={pico * 1.15} color={t.color} />
+            </View>
+            <Triangulo base={pico} alto={pico * 0.9} color={t.color} />
+          </View>
+          <View style={{ width: t.tamano * 0.78, height: t.trazo * 1.4, borderRadius: t.trazo, backgroundColor: t.color, marginTop: -1 }} />
         </View>
       );
     }
