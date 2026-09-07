@@ -72,5 +72,7 @@ export const DESTINO_DE_SERVICIO: Readonly<Record<string, DestinoDeDiseno>> = Ob
   envios: 'pronto',
   comida: 'pronto',
   mercado: 'pronto',
-  tienda: 'pronto'
+  tienda: 'pronto',
+  delivery: 'pronto',
+  motoplus: 'pronto'
 });

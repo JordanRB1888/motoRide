@@ -107,17 +107,30 @@ export const SERVICIOS_DEMO = [
 export const SERVICIOS_DE_INICIO = [
   {
     clave: 'viajes',
-    titulo: 'Viajes',
-    detalle: 'Tu moto, a un toque',
+    // «Moto» y no «Viajes»: es como lo nombra la referencia del dueño, y es
+    // lo que se pide. La clave no cambia: es la que entiende la navegación.
+    titulo: 'Moto',
+    detalle: 'Muévete por la ciudad',
     icono: 'moto' as const,
     arte: 'moto',
     listo: true,
     ancho: true
   },
   {
+    clave: 'delivery',
+    titulo: 'Delivery',
+    detalle: 'Tus pedidos a domicilio',
+    icono: 'moto' as const,
+    // Sin ilustración todavía: cae al icono. El nombre ya dice qué fichero le
+    // toca cuando llegue.
+    arte: 'servicio-delivery',
+    listo: false,
+    ancho: false
+  },
+  {
     clave: 'comercios',
     titulo: 'Comercios',
-    detalle: 'Aliados cerca de ti',
+    detalle: 'Tiendas y servicios',
     icono: 'maletin' as const,
     arte: 'servicio-comercios',
     listo: true,
@@ -135,7 +148,7 @@ export const SERVICIOS_DE_INICIO = [
   {
     clave: 'envios',
     titulo: 'Envíos',
-    detalle: 'Manda un paquete',
+    detalle: 'Paquetes y documentos',
     icono: 'maletin' as const,
     arte: 'servicio-envios',
     listo: false,
@@ -144,7 +157,7 @@ export const SERVICIOS_DE_INICIO = [
   {
     clave: 'comida',
     titulo: 'Comida',
-    detalle: 'Pide y te lo llevamos',
+    detalle: 'Restaurantes cerca de ti',
     icono: 'inicio' as const,
     arte: 'servicio-comida',
     listo: false,
@@ -153,7 +166,7 @@ export const SERVICIOS_DE_INICIO = [
   {
     clave: 'mercado',
     titulo: 'Mercado',
-    detalle: 'Sin salir de casa',
+    detalle: 'Tu súper sin filas',
     icono: 'viajes' as const,
     arte: 'servicio-mercado',
     listo: false,
@@ -161,13 +174,43 @@ export const SERVICIOS_DE_INICIO = [
   },
   {
     clave: 'tienda',
-    titulo: 'Compra y vende',
-    detalle: 'Entre vecinos',
+    titulo: 'Compra y venta',
+    detalle: 'Publica, encuentra, negocia',
     icono: 'dolar' as const,
     arte: 'servicio-compra-vende',
     listo: false,
     ancho: false
   }
+] as const;
+
+/**
+ * La rejilla del INICIO, en el orden de la referencia del dueño.
+ *
+ * Transporte Seguro no va: la referencia no lo lleva, tiene pestaña propia en
+ * la barra de abajo y sigue en la hoja «¿Qué necesitas hoy?». No se pierde
+ * nada; se saca de la rejilla.
+ */
+export const REJILLA_DEL_INICIO = ['viajes', 'delivery', 'comida', 'envios', 'mercado', 'comercios', 'tienda'] as const;
+
+/**
+ * La tarjeta destacada de la rejilla. Es lo que la referencia enseña; el
+ * producto no existe, así que lleva a «pronto» como cualquier otro servicio
+ * pendiente.
+ */
+export const SERVICIO_DESTACADO = {
+  clave: 'motoplus',
+  rotulo: 'Servicio destacado',
+  titulo: '+58Moto Plus',
+  detalle: 'Más comodidad, más beneficios',
+  listo: false
+} as const;
+
+/** Los cuatro atajos del bloque utilitario. Todos abren el buscador de destino. */
+export const ACCESOS_RAPIDOS = [
+  { clave: 'casa', icono: 'inicio' as const, nombre: 'Casa' },
+  { clave: 'trabajo', icono: 'maletin' as const, nombre: 'Trabajo' },
+  { clave: 'favoritos', icono: 'estrella' as const, nombre: 'Lugares favoritos' },
+  { clave: 'recientes', icono: 'reloj' as const, nombre: 'Recientes' }
 ] as const;
 
 /**

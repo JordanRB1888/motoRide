@@ -6,6 +6,13 @@ import { fileURLToPath } from 'node:url';
 
 import { despojarComentarios } from './ayudas.mjs';
 import { ESQUEMA_CLARO, ESQUEMA_OSCURO } from '../theme/esquemas.ts';
+import {
+  ACCESOS_RAPIDOS,
+  REJILLA_DEL_INICIO,
+  SERVICIO_DESTACADO,
+  SERVICIOS_DE_INICIO
+} from '../preview/fixtures.ts';
+import { DESTINO_DE_SERVICIO } from '../navegacion/rutas.ts';
 
 /**
  * El inicio de la pasajera según la referencia visual del dueño.
@@ -50,4 +57,31 @@ test('los dos esquemas declaran la tinta sobre imagen, y se lee sobre el velo', 
     const relacion = contraste(esquema.sobreImagen, VELO_SOBRE_FOTO);
     assert.ok(relacion >= 4.5, `${nombre}: sobreImagen da ${relacion.toFixed(2)}:1 sobre el velo`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Los datos de la referencia
+// ---------------------------------------------------------------------------
+
+test('la rejilla del inicio enseña los siete servicios de la referencia, en su orden', () => {
+  const titulos = REJILLA_DEL_INICIO.map(clave => SERVICIOS_DE_INICIO.find(s => s.clave === clave)?.titulo);
+  assert.deepEqual(titulos, ['Moto', 'Delivery', 'Comida', 'Envíos', 'Mercado', 'Comercios', 'Compra y venta']);
+});
+
+test('Transporte Seguro no está en la rejilla del inicio, pero sigue existiendo', () => {
+  // La referencia no lo lleva. Tiene pestaña propia en la barra y sigue en la
+  // hoja «¿Qué necesitas hoy?»: no se pierde, se saca de la rejilla.
+  assert.ok(!REJILLA_DEL_INICIO.includes('seguro'));
+  assert.ok(SERVICIOS_DE_INICIO.some(s => s.clave === 'seguro' && s.listo));
+});
+
+test('lo que la referencia promete y no existe lleva a «pronto»', () => {
+  assert.equal(DESTINO_DE_SERVICIO.delivery, 'pronto');
+  assert.equal(DESTINO_DE_SERVICIO[SERVICIO_DESTACADO.clave], 'pronto');
+  assert.equal(SERVICIO_DESTACADO.listo, false);
+  assert.equal(SERVICIO_DESTACADO.titulo, '+58Moto Plus');
+});
+
+test('los accesos rápidos son los cuatro de la referencia', () => {
+  assert.deepEqual(ACCESOS_RAPIDOS.map(a => a.nombre), ['Casa', 'Trabajo', 'Lugares favoritos', 'Recientes']);
 });
