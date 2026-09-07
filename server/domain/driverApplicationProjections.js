@@ -4,8 +4,15 @@
 // objeto persistido. Un campo nuevo en el modelo de solicitud o de documento
 // no aparece en ninguna respuesta hasta que se añade aquí a mano.
 //
-// El expediente completo —cédula, nacimiento, dirección— vive únicamente en
-// `driverApplicationAdminDetail` y en la vista del propio solicitante.
+// El expediente completo —cédula, RIF, nacimiento, dirección— vive únicamente
+// en `driverApplicationAdminDetail` y en la vista del propio solicitante.
+//
+// Todas parten de `normalizeStoredApplication`: un expediente guardado antes
+// de que existieran los servicios, la licencia estructurada o los controles
+// administrativos se proyecta con sus valores por omisión, y quien lo lee no
+// tiene que saber de qué versión es.
+
+import { missingRequiredDocuments, normalizeStoredApplication } from './driverApplicationModel.js';
 
 const text = value => (typeof value === 'string' ? value : '');
 const numeric = value => {
@@ -32,6 +39,9 @@ export function driverDocumentMetadata(document) {
     status: text(document.status) || 'pending',
     mimeType: text(document.mimeType),
     size: numeric(document.size),
+    // Sólo la tienen los vídeos, y sólo cuando se pudo leer del contenedor.
+    // Va aquí para que el revisor sepa cuánto dura antes de descargar 50 MB.
+    durationSeconds: typeof document.durationSeconds === 'number' && Number.isFinite(document.durationSeconds) ? document.durationSeconds : null,
     updatedAt: isoOrNull(document.updatedAt)
   };
 }
@@ -44,29 +54,37 @@ function applicantFullName(application, user) {
   return `${first} ${last}`.trim();
 }
 
+/** A qué se postula: siempre una lista, nunca vacía tras normalizar. */
+const servicesList = application => [...(application.servicesAppliedFor || [])];
+
 /**
  * Fila de la cola administrativa.
  *
  * Sin datos personales de contacto ni identificación: para decidir a quién
- * revisar primero bastan el nombre, el vehículo, la antigüedad y si el
- * expediente está completo. La búsqueda por cédula, correo o teléfono sigue
- * funcionando en el servidor sin devolver esos campos en cada fila.
+ * revisar primero bastan el nombre, el vehículo, los servicios, la antigüedad
+ * y si el expediente está completo. La búsqueda por cédula, RIF, correo o
+ * teléfono sigue funcionando en el servidor sin devolver esos campos en cada
+ * fila.
  */
 export function driverApplicationListItem(application, documents = [], user = null) {
-  if (!application) return null;
+  const app = application && typeof application === 'object' ? normalizeStoredApplication(application) : null;
+  if (!app) return null;
   const docs = Array.isArray(documents) ? documents : [];
   return {
-    id: application.id ?? null,
-    status: text(application.status),
-    submittedAt: isoOrNull(application.submittedAt),
-    createdAt: isoOrNull(application.createdAt),
-    updatedAt: isoOrNull(application.updatedAt),
-    applicantName: applicantFullName(application, user),
-    vehicleType: application.vehicle?.type === 'CAR' ? 'CAR' : 'MOTO',
-    vehiclePlate: text(application.vehicle?.plate),
+    id: app.id ?? null,
+    status: text(app.status),
+    submittedAt: isoOrNull(app.submittedAt),
+    createdAt: isoOrNull(app.createdAt),
+    updatedAt: isoOrNull(app.updatedAt),
+    applicantName: applicantFullName(app, user),
+    vehicleType: app.vehicle?.type === 'CAR' ? 'CAR' : 'MOTO',
+    vehiclePlate: text(app.vehicle?.plate),
+    servicesAppliedFor: servicesList(app),
+    requirementsVersion: app.requirementsVersion,
     documentCount: docs.length,
     documentsPendingCount: docs.filter(item => text(item?.status) !== 'approved').length,
-    decisionReason: textOrNull(application.decisionReason)
+    missingDocumentCount: missingRequiredDocuments(docs, app).length,
+    decisionReason: textOrNull(app.decisionReason)
   };
 }
 
@@ -76,6 +94,7 @@ function personalDetail(personal) {
     firstName: text(personal?.firstName),
     lastName: text(personal?.lastName),
     identityNumber: text(personal?.identityNumber),
+    rif: text(personal?.rif),
     birthDate: text(personal?.birthDate),
     phone: text(personal?.phone),
     email: text(personal?.email),
@@ -93,32 +112,71 @@ function vehicleDetail(vehicle) {
     year: numeric(vehicle?.year),
     color: text(vehicle?.color),
     plate: text(vehicle?.plate),
+    legalDocumentType: text(vehicle?.legalDocumentType) || 'CIRCULATION_CARD',
     additionalInfo: text(vehicle?.additionalInfo)
+  };
+}
+
+function licenseDetail(license) {
+  return {
+    grade: Number.isInteger(license?.grade) ? license.grade : null,
+    expiration: isoOrNull(license?.expiration)
+  };
+}
+
+function medicalCertificateDetail(medical) {
+  return { expiration: isoOrNull(medical?.expiration) };
+}
+
+function checkpointsDetail(checkpoints) {
+  return { ...checkpoints };
+}
+
+const requestedChangeDetails = app => (app.requestedChangeDetails || []).map(item => ({
+  type: text(item?.type),
+  reason: textOrNull(item?.reason)
+}));
+
+/** Lo que comparten la vista de administración y la del titular. */
+function commonDetail(app, documents) {
+  return {
+    id: app.id ?? null,
+    status: text(app.status),
+    requirementsVersion: app.requirementsVersion,
+    submittedAt: isoOrNull(app.submittedAt),
+    createdAt: isoOrNull(app.createdAt),
+    updatedAt: isoOrNull(app.updatedAt),
+    decisionReason: textOrNull(app.decisionReason),
+    requestedChanges: [...(app.requestedChanges || [])],
+    requestedChangeDetails: requestedChangeDetails(app),
+    textualCorrections: textOrNull(app.textualCorrections),
+    servicesAppliedFor: servicesList(app),
+    personal: personalDetail(app.personal),
+    vehicle: vehicleDetail(app.vehicle),
+    license: licenseDetail(app.license),
+    medicalCertificate: medicalCertificateDetail(app.medicalCertificate),
+    checkpoints: checkpointsDetail(app.checkpoints),
+    documents: documentList(documents),
+    // Qué obligatorios faltan según SU vehículo y SU versión. Es lo que la
+    // aplicación enseña como «te falta esto», sin calcularlo por su cuenta.
+    missingDocuments: [...missingRequiredDocuments(documents, app)]
   };
 }
 
 /** Expediente completo. Exclusivo de administradores autenticados. */
 export function driverApplicationAdminDetail(application, documents = [], user = null) {
-  if (!application) return null;
+  const app = application && typeof application === 'object' ? normalizeStoredApplication(application) : null;
+  if (!app) return null;
   return {
-    id: application.id ?? null,
-    status: text(application.status),
-    submittedAt: isoOrNull(application.submittedAt),
-    createdAt: isoOrNull(application.createdAt),
-    updatedAt: isoOrNull(application.updatedAt),
-    reviewedBy: application.reviewedBy ?? null,
-    reviewedAt: isoOrNull(application.reviewedAt),
-    decisionReason: textOrNull(application.decisionReason),
-    requestedChanges: Array.isArray(application.requestedChanges) ? [...application.requestedChanges] : [],
-    personal: personalDetail(application.personal),
-    vehicle: vehicleDetail(application.vehicle),
+    ...commonDetail(app, documents),
+    reviewedBy: app.reviewedBy ?? null,
+    reviewedAt: isoOrNull(app.reviewedAt),
     applicant: user ? {
       id: user.id ?? null,
       firstName: text(user.firstName),
       lastName: text(user.lastName),
       accountStatus: text(user.accountStatus) || 'ACTIVE'
-    } : null,
-    documents: documentList(documents)
+    } : null
   };
 }
 
@@ -128,19 +186,9 @@ export function driverApplicationAdminDetail(application, documents = [], user =
  * administrativa, no suya.
  */
 export function driverApplicationOwnerView(application, documents = []) {
-  if (!application) return null;
-  return {
-    id: application.id ?? null,
-    status: text(application.status),
-    submittedAt: isoOrNull(application.submittedAt),
-    createdAt: isoOrNull(application.createdAt),
-    updatedAt: isoOrNull(application.updatedAt),
-    decisionReason: textOrNull(application.decisionReason),
-    requestedChanges: Array.isArray(application.requestedChanges) ? [...application.requestedChanges] : [],
-    personal: personalDetail(application.personal),
-    vehicle: vehicleDetail(application.vehicle),
-    documents: documentList(documents)
-  };
+  const app = application && typeof application === 'object' ? normalizeStoredApplication(application) : null;
+  if (!app) return null;
+  return commonDetail(app, documents);
 }
 
 /**

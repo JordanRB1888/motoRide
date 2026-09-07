@@ -23,9 +23,12 @@ export async function renderFinances(container) {
   }
 
   const money = value => `$${Number(value || 0).toFixed(2)}`;
+  const signedMoney = (value, direction = 'credit') => `${direction === 'debit' ? '−' : '+'}${money(Math.abs(Number(value || 0)))}`;
   const statusLabel = status => status === 'APPROVED' ? 'Aprobado' : status === 'REJECTED' ? 'Rechazado' : 'Pendiente';
   const typeLabel = type => type === 'TOP_UP' ? 'Recarga' : type === 'PAYOUT' ? 'Liquidación' : 'Ganancia';
   const personName = person => person ? `${person.firstName || ''} ${person.lastName || ''}`.trim() : 'Usuario';
+  const paymentLabel = value => ({ CASH:'Efectivo', EFECTIVO:'Efectivo', WALLET:'Billetera +58Express', BILLETERA:'Billetera +58Express', MOBILE_PAYMENT:'Pago móvil', PAGO_MOVIL:'Pago móvil' }[String(value||'').toUpperCase()] || 'No registrado');
+  const friendlyTrip = value => `#VJ-${[...String(value||'')].reduce((sum,char)=>(sum*31+char.charCodeAt(0))%9000,0)+1000}`;
   const reload = async () => {
     const next = await apiService.get('/admin/finance');
     if (next) {
@@ -124,14 +127,14 @@ export async function renderFinances(container) {
         <section class="finance-card finance-wallet-card" id="finance-wallet-card">
           <header><div><h3>${walletMode === 'payouts' ? 'Liquidaciones de conductores' : 'Solicitudes de billetera'}</h3><p>Recargas y retiros sujetos a validación administrativa.</p></div><span>${pendingCount} pendientes</span></header>
           <div class="finance-table-scroll"><table class="finance-table"><thead><tr><th>Usuario</th><th>Tipo</th><th>Monto</th><th>Referencia</th><th>Fecha</th><th>Estado / acción</th></tr></thead><tbody>
-            ${visibleRequests.map(item => `<tr><td>${escapeHtml(personName(item.user) || item.userId?.slice(-8))}</td><td>${typeLabel(item.type)}</td><td><strong>${money(item.amount)}</strong></td><td><code>${escapeHtml(item.reference || '—')}</code></td><td>${new Date(item.createdAt).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${item.status === 'PENDING' ? (item.type === 'TOP_UP' ? `<button class="finance-review" data-open-topups>Revisar</button>` : `<div class="finance-actions"><button class="approve" data-transaction="${item.id}" data-status="APPROVED">Aprobar</button><button class="reject" data-transaction="${item.id}" data-status="REJECTED">Rechazar</button></div>`) : `<span class="finance-status ${item.status.toLowerCase()}">${statusLabel(item.status)}</span>`}</td></tr>`).join('') || '<tr><td colspan="6" class="finance-empty">No existen solicitudes en esta sección.</td></tr>'}
+            ${visibleRequests.map(item => { const debit=item.type==='PAYOUT'; const tone=item.status==='PENDING'?'pending':debit?'debit':'credit'; return `<tr><td>${escapeHtml(personName(item.user) || item.userId?.slice(-8))}</td><td>${typeLabel(item.type)}</td><td><strong class="finance-amount ${tone}">${signedMoney(item.amount,debit?'debit':'credit')}</strong></td><td><code>${escapeHtml(item.reference || '—')}</code></td><td>${new Date(item.createdAt).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${item.status === 'PENDING' ? (item.type === 'TOP_UP' ? `<button class="finance-review" data-open-topups>Revisar</button>` : `<div class="finance-actions"><button class="approve" data-transaction="${item.id}" data-status="APPROVED">Aprobar</button><button class="reject" data-transaction="${item.id}" data-status="REJECTED">Rechazar</button></div>`) : `<span class="finance-status ${item.status.toLowerCase()}">${statusLabel(item.status)}</span>`}</td></tr>`; }).join('') || '<tr><td colspan="6" class="finance-empty">No existen solicitudes en esta sección.</td></tr>'}
           </tbody></table></div>
           <button class="finance-see-all" data-open-topups>Ver todas las solicitudes ${icon('chevronRight', 16)}</button>
         </section>
       </div>
 
       <section class="finance-card finance-trips-card" id="finance-trips-card">
-        <header><div><h3>Viajes completados</h3><p>Wallet acredita el neto; pagos directos descuentan la comisión al conductor.</p></div>
+        <header><div><h3>Viajes completados</h3><p>La billetera acredita el neto; los pagos directos descuentan la comisión al conductor.</p></div>
           <form class="finance-trip-filters" id="finance-trip-filters">
             <label>${icon('search', 16)}<input name="query" value="${escapeHtml(tripQuery)}" placeholder="Buscar movimiento"></label>
             <label class="date">Desde<input type="date" name="from" value="${dateFrom}"></label>
@@ -140,7 +143,7 @@ export async function renderFinances(container) {
           </form>
         </header>
         <div class="finance-table-scroll trips"><table class="finance-table"><thead><tr><th>Viaje</th><th>Conductor</th><th>Pago</th><th>Bruto</th><th>Comisión</th><th>Neto</th><th>Liquidación</th></tr></thead><tbody>
-          ${trips.map(transaction => `<tr><td><code>#${escapeHtml(transaction.id.slice(-7))}</code></td><td>${escapeHtml(personName(transaction.driver) || 'Sin conductor')}</td><td>${escapeHtml(String(transaction.paymentMethod || 'efectivo').replace('_',' '))}</td><td>${money(transaction.gross)}</td><td>${money(transaction.commission)}</td><td><strong>${money(transaction.driverNet)}</strong></td><td><span class="finance-status ${transaction.settlementType==='COMMISSION_DEBIT'?'pending':'approved'}">${transaction.settlementType==='COMMISSION_DEBIT'?'Comisión descontada':'Neto acreditado'}</span></td></tr>`).join('') || '<tr><td colspan="7" class="finance-empty">No hay viajes que coincidan con los filtros.</td></tr>'}
+          ${trips.map(transaction => { const debit=transaction.settlementType==='COMMISSION_DEBIT'; return `<tr><td><code>${friendlyTrip(transaction.id)}</code></td><td>${escapeHtml(personName(transaction.driver) || 'Sin conductor')}</td><td>${escapeHtml(paymentLabel(transaction.paymentMethod))}</td><td><span class="finance-amount credit">${signedMoney(transaction.gross)}</span></td><td><span class="finance-amount ${debit?'debit':'credit'}">${signedMoney(transaction.commission,debit?'debit':'credit')}</span></td><td><strong class="finance-amount credit">${signedMoney(transaction.driverNet)}</strong></td><td><span class="finance-status ${debit?'rejected':'approved'}">${debit?'Comisión debitada':'Neto acreditado'}</span></td></tr>`; }).join('') || '<tr><td colspan="7" class="finance-empty">No hay viajes que coincidan con los filtros.</td></tr>'}
         </tbody></table></div>
         <div class="finance-table-footer"><span>${trips.length} viajes encontrados</span><button data-clear-finance-filters>Ver todos los viajes ${icon('chevronRight', 16)}</button></div>
       </section>

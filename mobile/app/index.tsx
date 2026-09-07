@@ -11,7 +11,7 @@
  * Esta pantalla sólo mira el resultado y decide a dónde ir:
  *
  *   ARRANCANDO      esperando la respuesta
- *   SIN_SESION      al selector de experiencia
+ *   SIN_SESION      a la bienvenida oficial
  *   AUTENTICADO     a la experiencia que dice la identidad REAL
  *   SIN_VERIFICAR   hay token y no se pudo preguntar: se ofrece reintentar
  *
@@ -19,10 +19,11 @@
  */
 
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
+import { CargandoDeMarca } from '../ui/CargandoDeMarca';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { useSesion } from '../context/AuthContext';
 import { experienciaDeLaIdentidad } from '../domain/authState';
@@ -31,11 +32,22 @@ export default function Arranque() {
   const { sesion, revalidar, salir } = useSesion();
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
+    // LA MISMA ESPERA QUE LA WEB, NO LA RUEDA DEL SISTEMA.
+    //
+    // Esto es lo PRIMERO que ve quien abre la aplicacion, y una rueda gris es
+    // lo que enseña cualquier aplicacion a medio hacer. La web ya tenia su
+    // pantalla de marca --los anillos girando y el logo volteando-- y no habia
+    // motivo para que la aplicacion, que es el producto de verdad, enseñara
+    // menos que ella.
+    //
+    // `AUTENTICANDO` dice otra cosa que `ARRANCANDO`: en el primero se esta
+    // comprobando una sesion guardada, y decir «entrando» es mas honesto que
+    // «preparando tu viaje», que sugiere que ya se entro.
     return (
       <Pantalla testID="arranque">
-        <View style={estilos.centro}>
-          <ActivityIndicator color={colores.acento} size="large" />
-        </View>
+        <CargandoDeMarca
+          mensaje={sesion.estado === 'AUTENTICANDO' ? 'Entrando' : 'Preparando tu viaje'}
+        />
       </Pantalla>
     );
   }
@@ -79,7 +91,14 @@ export default function Arranque() {
     );
   }
 
-  return <Redirect href="/rol" />;
+  // SIN SESIÓN, A LA BIENVENIDA OFICIAL
+  //
+  // «¿Cómo quieres continuar?», Pasajero o Conductor, y de ahí al acceso.
+  // Es la pantalla oficial de entrada, no el selector de desarrollo que
+  // hacía de raíz antes de REAL-APP-BOOT-GATE: sin atajos al laboratorio y
+  // sin que la elección sea autoridad de nada. El rol lo sigue diciendo el
+  // backend cuando la persona entra.
+  return <Redirect href="/bienvenida" />;
 }
 
 const estilos = StyleSheet.create({

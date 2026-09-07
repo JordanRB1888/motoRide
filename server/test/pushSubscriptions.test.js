@@ -51,6 +51,9 @@ async function startServer(t, { env = {}, dataFile } = {}) {
     cwd: serverDir,
     env: {
       ...process.env,
+      // Sin FCM a proposito: aqui se mide Web Push a solas. Ver la nota de
+      // la cabecera sobre el segundo transporte.
+      FCM_SERVICE_ACCOUNT_FILE: './no-existe/fcm-service-account.json',
       PORT: String(port),
       DATA_FILE: ruta,
       JWT_SECRET: 'push-test-secret',

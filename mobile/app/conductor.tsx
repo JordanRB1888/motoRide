@@ -16,10 +16,17 @@
  *
  * Quien tenga sesión pero no la aprobación ve su SITUACIÓN, no una interfaz de
  * conductor a medias.
+ *
+ * Y quien SÍ está aprobado ve la pantalla de conductor aprobada, con el disco
+ * de la barra conectado a su estado real. Ese estado lo decide el servidor:
+ * tocar el disco lo PIDE, y lo que se pinta es lo que el servidor confirma.
+ * Pintar el deseo del usuario dejaría a alguien viéndose «en línea» mientras
+ * el servidor lo tiene fuera, esperando viajes que no van a llegar.
  */
 
 import { Redirect, router } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
@@ -27,9 +34,191 @@ import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { useSesion } from '../context/AuthContext';
 import { puedeOperarComoConductor } from '../domain/authState';
 import { describirSituacion, SIN_SOLICITUD } from '../domain/driverApplication';
+import { C2InicioConductor } from '../preview/pantallasC2';
+import { ProveedorDeNavegacion } from '../ui/navegar';
+import { useDisponibilidad } from '../realtime/Disponibilidad';
+import { useUbicacion } from '../ubicacion/UbicacionDelDispositivo';
+import {
+  CAMARA_INICIAL_DEL_CONDUCTOR,
+  MENSAJES_DE_UBICACION,
+  avisoDeUbicacion,
+  camaraCentradaEn,
+  camaraDelConductor,
+  modeloDelMapaDelConductor,
+  sePuedeReintentar
+} from '../domain/mapaDelConductor';
+import { AvisoDeUbicacionEnMapa } from '../ui/AvisoDeUbicacion';
+import { useOfertaEnVivo } from '../realtime/OfertaEnVivo';
+import { CierreDeOferta, SuperficieDeOferta } from '../conductor/SuperficieDeOferta';
+import { useCarreraDelConductor } from '../realtime/CarreraDelConductor';
+import { useRutaDelViaje } from '../realtime/rutaDelViaje';
+import { SuperficieDeCarrera } from '../conductor/SuperficieDeCarrera';
+import { titularDelConductor } from '../domain/accionesDelConductor';
 
 export default function InicioDeConductor() {
   const { sesion, salir } = useSesion();
+  const {
+    enLinea,
+    alternar,
+    faltaElPermisoDeFondo,
+    sacadoDeServicioPorElPermiso,
+    abrirAjustesDeUbicacion
+  } = useDisponibilidad();
+
+  // LO QUE HAY QUE CONTAR CUANDO FALTA EL PERMISO
+  //
+  // Dos situaciones distintas, y ninguna puede pasar en silencio. No se dibuja
+  // nada nuevo en la pantalla: son avisos del sistema, que es lo mínimo que
+  // hace falta para que el conductor se entere de algo que le afecta ahora.
+  //
+  // Cada uno aparece UNA vez por situación. Un aviso que reaparece en cada
+  // repintado se cierra sin leerlo.
+  const avisado = useRef({ sacado: false, enViaje: false });
+
+  useEffect(() => {
+    if (!sacadoDeServicioPorElPermiso) {
+      avisado.current.sacado = false;
+      return;
+    }
+    if (avisado.current.sacado) return;
+    avisado.current.sacado = true;
+
+    Alert.alert(
+      'Te pusimos fuera de línea',
+      'Sin el permiso de ubicación en segundo plano no sabemos dónde estás cuando '
+      + 'guardas el teléfono, y el sistema dejaría de ofrecerte viajes.\n\n'
+      + 'Actívalo y vuelve a ponerte en línea cuando quieras.',
+      [
+        { text: 'Entendido', style: 'cancel' },
+        { text: 'Abrir ajustes', onPress: () => { void abrirAjustesDeUbicacion(); } }
+      ]
+    );
+  }, [sacadoDeServicioPorElPermiso, abrirAjustesDeUbicacion]);
+
+  useEffect(() => {
+    if (!faltaElPermisoDeFondo) {
+      avisado.current.enViaje = false;
+      return;
+    }
+    if (avisado.current.enViaje) return;
+    avisado.current.enViaje = true;
+
+    // El viaje NO se toca: romperlo con alguien subido a la moto sería mucho
+    // peor que la falta de permiso. Pero mientras tanto su posición sólo viaja
+    // con la pantalla encendida, y quien le espera necesita verla.
+    Alert.alert(
+      'Falta el permiso de ubicación',
+      'Tu viaje sigue en marcha, pero sin el permiso en segundo plano tu pasajera '
+      + 'deja de ver dónde estás en cuanto apagas la pantalla.\n\n'
+      + 'Actívalo ahora, o mantén la pantalla encendida hasta terminar.',
+      [
+        { text: 'Ahora no', style: 'cancel' },
+        { text: 'Abrir ajustes', onPress: () => { void abrirAjustesDeUbicacion(); } }
+      ]
+    );
+  }, [faltaElPermisoDeFondo, abrirAjustesDeUbicacion]);
+
+  // ---------------------------------------------------------------------
+  // SU UBICACION EN EL MAPA
+  //
+  // El proveedor de ubicacion es el UNICO watcher de primer plano y lo monta
+  // el layout raiz: aqui solo se lee. pedirUbicacion no abre nada nuevo, y
+  // solo hace algo la primera vez que se pregunta.
+  //
+  // Verla NO es publicarla: que su posicion salga hacia el servidor lo decide
+  // UbicacionEnVivo con la politica de siempre --fuera de linea, nada--. Por
+  // eso el conductor se ve a si mismo aunque este fuera de linea.
+  // ---------------------------------------------------------------------
+  const { estado: ubicacion, pedirUbicacion, refrescar: refrescarUbicacion } = useUbicacion();
+  const [camara, setCamara] = useState(CAMARA_INICIAL_DEL_CONDUCTOR);
+  // La primera posicion centra el mapa UNA vez. Despues manda quien mira: si
+  // la camara se recalculara con cada lectura, panear seria imposible.
+  const yaCentro = useRef(false);
+
+  useEffect(() => { void pedirUbicacion(); }, [pedirUbicacion]);
+
+  useEffect(() => {
+    const siguiente = camaraDelConductor({
+      posicion: ubicacion.posicion,
+      yaCentro: yaCentro.current,
+      anterior: camara
+    });
+    if (siguiente === camara) return;
+    yaCentro.current = true;
+    setCamara(siguiente);
+  }, [ubicacion.posicion, camara]);
+
+  /** El boton de centrar. Con posicion, centra; sin ella, la pide. */
+  const centrarEnMi = useCallback(() => {
+    if (ubicacion.posicion !== null) {
+      setCamara(camaraCentradaEn(ubicacion.posicion));
+      yaCentro.current = true;
+      return;
+    }
+    void refrescarUbicacion();
+  }, [ubicacion.posicion, refrescarUbicacion]);
+
+  const aviso = avisoDeUbicacion(ubicacion, Date.now());
+
+  //
+  // LAS CARRERAS QUE LE OFRECEN
+  //
+  // VA AQUI ARRIBA, Y NO JUNTO A DONDE SE DIBUJA, POR UNA RAZON DE PESO.
+  //
+  // Debajo hay tres salidas condicionales --sesion arrancando, sesion sin
+  // autenticar, y rol que no es de conductor-- y un hook que quede por debajo
+  // de ellas se ejecuta unas veces si y otras no. React cuenta los hooks de
+  // cada render y compara: en el arranque en frio la sesion pasa por
+  // ARRANCANDO --sale por la primera puerta, con menos hooks-- y al render
+  // siguiente ya esta AUTENTICADO y los ejecuta todos. Esa diferencia rompe
+  // la pantalla entera con "Rendered more hooks than during the previous
+  // render", y la oferta no llegaba a verse nunca en ese camino.
+  //
+  // No se le pasa si esta en servicio: el despacho solo ofrece a quien tiene
+  // por disponible, asi que recibir una oferta ya es la prueba de estarlo.
+  const carrera = useOfertaEnVivo();
+
+  //
+  // LA CARRERA QUE YA ES SUYA
+  //
+  // Va aquí arriba con el resto de los hooks, por lo mismo que `useOfertaEnVivo`:
+  // debajo hay salidas condicionales y un hook por debajo de ellas rompe la
+  // pantalla entera en el arranque en frío.
+  //
+  // No compite con la oferta: el despacho no ofrece carreras a quien ya lleva
+  // una, así que las dos superficies nunca tienen algo que enseñar a la vez.
+  const enCurso = useCarreraDelConductor();
+
+  // LA RUTA DE LA CARRERA, TRAZADA POR EL SERVIDOR.
+  //
+  // La misma que ve la pasajera y pedida por el mismo camino: los dos llaman a
+  // `/api/trips/:id/route` y el servidor decide el tramo. Dos trazados
+  // calculados por separado se habrían separado a la primera corrección, y
+  // entonces cada uno vería una calle distinta.
+  //
+  // El origen del tramo lo pone el servidor con la ÚLTIMA POSICIÓN ACEPTADA del
+  // conductor, no con la que diga este teléfono: aquí sólo se le dice dónde
+  // está para decidir si merece la pena volver a preguntar.
+  const rutaDeLaCarrera = useRutaDelViaje(
+    enCurso.viaje?.id ?? null,
+    enCurso.viaje?.estado ?? '',
+    ubicacion.posicion === null
+      ? null
+      : { lat: ubicacion.posicion.lat, lng: ubicacion.posicion.lng }
+  );
+
+  // EL MAPA VA DESPUÉS DE LA CARRERA, y no antes.
+  //
+  // Necesita la ruta, y la ruta necesita saber qué carrera hay en curso. Estaba
+  // más arriba cuando el mapa no dependía de nada más que del GPS.
+  const modeloDelMapa = useMemo(
+    () => modeloDelMapaDelConductor({
+      posicion: ubicacion.posicion,
+      camara,
+      ruta: rutaDeLaCarrera.puntos
+    }),
+    [ubicacion.posicion, camara, rutaDeLaCarrera.puntos]
+  );
 
   if (sesion.estado === 'ARRANCANDO' || sesion.estado === 'AUTENTICANDO') {
     return (
@@ -47,8 +236,116 @@ export default function InicioDeConductor() {
   const operativo = puedeOperarComoConductor(sesion);
 
   // Alguien con sesión de pasajera que llega aquí —por un enlace, o volviendo
-  // atrás— no ve nada de conductor. Se le manda a lo suyo.
-  if (usuario.role !== 'driver') return <Redirect href="/pasajero" />;
+  // atrás— no ve nada de conductor: se le manda a la postulación, que es el
+  // camino real para llegar a serlo. Allí se consulta al servidor y se decide
+  // si empieza, continúa o mira el estado de lo que ya mandó.
+  if (usuario.role !== 'driver') return <Redirect href="/postulacion" />;
+
+  // APROBADO: su pantalla de verdad.
+
+  // La misma que se aprobó en el recorrido de diseño, con el disco de la barra
+  // —que ya estaba dibujado y sin conectar— pidiendo el cambio de estado al
+  // servidor. Nada nuevo dibujado aquí.
+  if (operativo) {
+    return (
+      <ProveedorDeNavegacion ir={irA}>
+        {/* EL CONTENEDOR HACE FALTA, Y NO ES DECORATIVO
+          *
+          * `ProveedorDeNavegacion` es solo un contexto: no pinta ninguna
+          * `View`. Sin este envoltorio, la capa absoluta de la oferta no tiene
+          * padre con dimensiones y no llega a verse --el evento llegaba, el
+          * estado cambiaba, y en pantalla no aparecia nada. */}
+        <View style={{ flex: 1 }}>
+        <C2InicioConductor
+          enLinea={enLinea}
+          onAlternar={alternar}
+          modeloDelMapa={modeloDelMapa}
+          onCentrar={centrarEnMi}
+          avisoDeUbicacion={
+            <AvisoDeUbicacionEnMapa
+              mensaje={MENSAJES_DE_UBICACION[aviso]}
+              onReintentar={sePuedeReintentar(aviso) ? () => { void refrescarUbicacion(); } : undefined}
+            />
+          }
+        />
+
+        {/* LA OFERTA VA ENCIMA, NO DENTRO
+          *
+          * Se superpone al inicio aprobado en vez de modificarlo: el mapa, el
+          * disco de disponibilidad y la barra siguen siendo exactamente los
+          * mismos, y esta superficie aparece y desaparece sin tocarlos.
+          *
+          * `pointerEvents="box-none"` deja pasar los toques al mapa donde no hay
+          * tarjeta; sin eso, una capa invisible se comeria el paneo. */}
+        <View
+          pointerEvents="box-none"
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+        >
+          {carrera.estado === 'OFERTA' || carrera.estado === 'ACEPTANDO' ? (
+            carrera.oferta === null ? null : (
+              <SuperficieDeOferta
+                oferta={carrera.oferta}
+                segundos={carrera.segundos}
+                puedeAceptar={carrera.puedeAceptar}
+                puedeRechazar={carrera.puedeRechazar}
+                aceptando={carrera.estado === 'ACEPTANDO'}
+                onAceptar={carrera.aceptar}
+                onRechazar={carrera.rechazar}
+              />
+            )
+          ) : null}
+
+          {carrera.estado === 'ACEPTADA' || carrera.estado === 'RECHAZADA'
+            || carrera.estado === 'EXPIRADA' || carrera.estado === 'ERROR' ? (
+              <CierreDeOferta
+                estado={carrera.estado}
+                onCerrar={carrera.descartar}
+              />
+            ) : null}
+
+          {/* LA CARRERA EN CURSO, DEBAJO DEL MISMO MAPA
+            *
+            * Y no en `/viaje-activo`, que es la pantalla de la pasajera:
+            * mandarle allí al conductor le enseñaba «En camino» con sus propios
+            * datos de conductor, y le quitaba el mapa en el que va mirando por
+            * dónde tiene que ir. Se queda donde está y le aparece el botón que
+            * toca.
+            *
+            * La oferta manda mientras haya oferta: si las dos tuvieran algo que
+            * decir a la vez —que no puede pasar—, se enseña la que tiene reloj. */}
+          {carrera.estado === 'ESPERANDO' || carrera.estado === 'OFFLINE' ? (
+            enCurso.viaje === null || enCurso.accion === null ? null : (
+              <SuperficieDeCarrera
+                titular={titularDelConductor(enCurso.viaje.estado) ?? 'Carrera en curso'}
+                origen={enCurso.viaje.origen}
+                destino={enCurso.viaje.destino}
+                // QUIÉN VA DETRÁS Y CUÁNTO SE COBRA, DE VERDAD.
+                //
+                // Estos dos no se pasaban, y el componente traía por omisión
+                // una pasajera inventada y una tarifa de ejemplo: en una
+                // carrera REAL el conductor veía «Ana Rondón · 4.98 (42
+                // viajes)» y «.50». Los dos datos estaban aquí al lado, en el
+                // propio viaje.
+                pasajero={{
+                  nombre: enCurso.viaje.pasajero || 'Tu pasajera',
+                  iniciales: inicialesDelPasajero(enCurso.viaje.pasajero)
+                }}
+                tarifa={enCurso.viaje.importe === null ? undefined : enCurso.viaje.importe.toFixed(2)}
+                metodoPago={enCurso.viaje.metodoDePago || 'Efectivo'}
+                accion={enCurso.accion}
+                fase={enCurso.fase}
+                fallo={enCurso.fallo}
+                sePuede={enCurso.sePuede}
+                onPulsar={enCurso.pulsar}
+                onMensaje={() => router.push('/chat')}
+              />
+            )
+          ) : null}
+        </View>
+        </View>
+      </ProveedorDeNavegacion>
+    );
+  }
 
   return (
     <Pantalla desplazable testID="inicio-conductor">
@@ -61,27 +358,52 @@ export default function InicioDeConductor() {
         </Text>
       </View>
 
+      {/* Aquí sólo llega quien NO está aprobado: el aprobado se fue arriba a
+          su pantalla. La tarjeta de «todo listo, la disponibilidad llega en la
+          siguiente entrega» desaparece porque esa entrega es ésta. */}
       <View style={estilos.cuerpo}>
-        {operativo ? (
-          <View style={estilos.tarjeta} testID="conductor-operativo">
-            <Text style={estilos.tarjetaTitulo}>Todo listo</Text>
-            <Text style={estilos.tarjetaTexto}>
-              La disponibilidad y las carreras llegan en la siguiente entrega.
-            </Text>
-          </View>
-        ) : (
-          <SituacionSinAprobar />
-        )}
+        <SituacionSinAprobar />
       </View>
 
       <Boton
         titulo="Cerrar sesión"
         variante="secundario"
-        onPress={() => { void salir().then(() => { router.replace('/rol'); }); }}
+        onPress={() => { void salir().then(() => { router.replace('/bienvenida'); }); }}
         testID="boton-cerrar-sesion"
       />
     </Pantalla>
   );
+}
+
+/**
+ * A dónde lleva la barra del conductor.
+ *
+ * Sólo lo que ya existe conectado. Lo que todavía no tiene pantalla real no se
+ * enlaza: un destino que no lleva a ninguna parte se lee como una avería.
+ */
+/**
+ * Las iniciales de quien va detrás, para el disco de la tarjeta.
+ *
+ * Si no hay nombre no se inventa ninguna: un punto dice «no lo sabemos», y dos
+ * letras cualesquiera dirían que sí.
+ */
+function inicialesDelPasajero(nombre: string): string {
+  const letras = String(nombre ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(parte => parte.charAt(0).toUpperCase());
+  return letras.join('') || '·';
+}
+
+function irA(clave: string) {
+  if (clave === 'perfil') router.replace('/perfil');
+  if (clave === 'historial') router.replace('/historial');
+  if (clave === 'mapa') router.replace('/conductor');
+  if (clave === 'saldo') router.replace('/conductor-saldo');
+  // La campana APILA en vez de sustituir: se mira un aviso y se vuelve a lo
+  // que se estaba haciendo. Con `replace` no habría a dónde volver.
+  if (clave === 'avisos') router.push('/avisos');
 }
 
 /**

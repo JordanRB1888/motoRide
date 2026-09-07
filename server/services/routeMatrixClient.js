@@ -15,6 +15,8 @@
  * duracion y distancia. Sin polilineas, sin pasos, sin peajes, sin textos.
  */
 
+import { crearAuthDeMaps } from './googleMapsAuth.js';
+
 export const ROUTE_MATRIX_ERROR = Object.freeze({
   NOT_CONFIGURED: 'ROUTE_MATRIX_NOT_CONFIGURED',
   TIMEOUT: 'ROUTE_MATRIX_TIMEOUT',
@@ -35,13 +37,20 @@ export function createRouteMatrixClient({
   apiKey = process.env.DISPATCH_ROUTES_API_KEY,
   fetchImpl = fetch,
   timeoutMs = 1_500,
-  logger = console
+  logger = console,
+  // Ver la nota de `routeGeometryClient`: la autenticacion es de
+  // `googleMapsAuth`, y el despacho le pasa la compartida. Va DESPUES de
+  // `logger` porque lo usa: los parametros por defecto se evaluan en orden.
+  auth = crearAuthDeMaps({ apiKey, logger })
 } = {}) {
-  const clave = typeof apiKey === 'string' ? apiKey.trim() : '';
-
   return {
     isConfigured() {
-      return clave.length > 0;
+      return auth.estaConfigurado();
+    },
+
+    /** Con que se esta autenticando: 'oauth' | 'api-key' | 'sin-configurar'. */
+    get authMode() {
+      return auth.modo;
     },
 
     /**
@@ -57,6 +66,16 @@ export function createRouteMatrixClient({
         throw new Error(ROUTE_MATRIX_ERROR.MALFORMED);
       }
 
+      // El token se pide FUERA de la ventana de tiempo del matrix: la ventana
+      // de oferta es de quince segundos y el ranking tiene 1,5 s para
+      // responder; gastarlos en autenticarse dejaria al despacho sin matriz.
+      let cabecerasDeAuth;
+      try {
+        cabecerasDeAuth = await auth.cabeceras();
+      } catch {
+        throw new Error(ROUTE_MATRIX_ERROR.PROVIDER_ERROR);
+      }
+
       const abort = new AbortController();
       const timer = setTimeout(() => abort.abort(), timeoutMs);
       let respuesta;
@@ -66,7 +85,7 @@ export function createRouteMatrixClient({
           signal: abort.signal,
           headers: {
             'Content-Type': 'application/json',
-            'X-Goog-Api-Key': clave,
+            ...cabecerasDeAuth,
             'X-Goog-FieldMask': FIELD_MASK
           },
           body: JSON.stringify({

@@ -216,10 +216,15 @@ test('no se pide permiso al arrancar la pantalla', () => {
 
   // Lo unico que corre solo al montar la pantalla es la reconciliacion, que
   // por contrato no muestra ningun dialogo.
-  const arranqueSuelto = driverApp.slice(
-    driverApp.indexOf('getPushSubscriptionService()\n        .then'),
-    driverApp.indexOf('realtimeLifecycle.addListener(window, PUSH_NAVIGATE_EVENT')
-  );
+  // El recorte se busca con una expresion y no con un `indexOf` que lleve el
+  // salto de linea escrito: el fichero se registra con CRLF en unos worktrees
+  // y con LF en otros, y con el salto a mano el recorte salia VACIO --y una
+  // prueba sobre texto vacio pasa o falla por el motivo equivocado.
+  const inicioDelArranque = driverApp.search(/getPushSubscriptionService\(\)\s*\.then/);
+  const finDelArranque = driverApp.indexOf('realtimeLifecycle.addListener(window, PUSH_NAVIGATE_EVENT');
+  assert.ok(inicioDelArranque !== -1, 'no se encontro el arranque de la pantalla');
+  assert.ok(finDelArranque > inicioDelArranque, 'no se encontro donde acaba el arranque');
+  const arranqueSuelto = driverApp.slice(inicioDelArranque, finDelArranque);
   assert.match(arranqueSuelto, /servicio\.reconcile\(\)/);
   assert.ok(!/requestPermission/.test(arranqueSuelto), 'el arranque no puede pedir permiso');
   assert.ok(!/mostrarTarjetaPermisoPush/.test(arranqueSuelto), 'el arranque no puede mostrar la tarjeta');
@@ -330,7 +335,8 @@ test('PUSH-3A conecta exactamente una llamada semantica sin tocar la ventana ni 
   assert.equal(llamadas.length, 1, 'debe existir exactamente UNA invocacion semantica');
   assert.ok(!index.includes('pushService.notifyUser('), 'el despacho no usa el transporte generico');
   assert.ok(!/await\s+pushService\./.test(index), 'el despacho no puede esperar a push');
-  assert.ok(index.includes('offerExpiresAt: Date.now() + 15000'), 'la ventana de oferta cambio');
+  assert.ok(index.includes('const VENTANA_DE_OFERTA_MS = 15_000;'), 'la ventana de oferta cambio');
+  assert.ok(index.includes('offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS'), 'la ventana de oferta cambio');
   const eligibility = leer('server/domain/dispatchEligibility.js');
   assert.match(eligibility, /if \(!hasSocket\) return \{ eligible: false, reason: DISPATCH_REJECTION\.NO_SOCKET \};/);
 });

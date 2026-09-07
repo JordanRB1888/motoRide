@@ -32,13 +32,27 @@ const AMARILLO = {
   ink: '#1a1500'
 } as const;
 
-/** Los escalones de superficie del tema oscuro, de más hundido a más elevado. */
+/**
+ * Los escalones de superficie del tema oscuro, de más hundido a más elevado.
+ *
+ * SON LOS DE LA DIRECCIÓN C2
+ *
+ * Antes eran otros —`#0e0d0b` de fondo frente al `#0b0a09` de C2— y había dos
+ * sistemas de color en paralelo: uno para las pantallas reales y otro para el
+ * laboratorio. Las mismas superficies salían de dos tonos distintos según por
+ * dónde se entrara, que es justo la incoherencia que había que quitar.
+ *
+ * Se mantienen aquí, y no se importan de `directions.ts`, porque este fichero
+ * lo consumen componentes que no viven dentro del proveedor de tema y no pueden
+ * leer una dirección activa. Hay una prueba que comprueba que los dos ficheros
+ * no se separan.
+ */
 const GRAFITO = {
-  sunken: '#0a0908',
-  base: '#0e0d0b',
-  raised: '#161512',
-  overlay: '#1e1c19',
-  elevated: '#262420'
+  sunken: '#070605',
+  base: '#0b0a09',
+  raised: '#15140f',
+  overlay: '#1f1d18',
+  elevated: '#2a2721'
 } as const;
 
 export const colores = {
@@ -55,8 +69,8 @@ export const colores = {
   /** Lo que se escribe ENCIMA del acento. Nunca blanco: no contrasta. */
   sobreAcento: AMARILLO.ink,
 
-  textoPrimario: '#f7f6f3',
-  textoSecundario: '#a3a09a',
+  textoPrimario: '#faf9f6',
+  textoSecundario: '#adaaa2',
   textoTenue: '#817e77',
 
   exito: '#55e29a',

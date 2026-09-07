@@ -386,6 +386,186 @@ y no pertenece al futuro móvil. Hay una prueba que recorre **todos** los ficher
 del cliente y falla si aparece. Es fácil que se cuele copiando de la web por
 costumbre, y no daría ningún error: recibiría un 403 y nadie sabría por qué.
 
+## Dirección visual — C2, +58 Signature Refined
+
+**Pendiente de la decisión del dueño.** C2 es la recomendación actual; A, B y C
+siguen en el catálogo para poder compararlas, y no se retiran hasta que decida.
+
+C2 no es una dirección nueva: es C mirada en pantallas reales, con el mapa
+convertido en el suelo y los activos de marca dentro. Los colores son los de C,
+valor por valor, y hay una prueba que lo comprueba.
+
+```
+mapa primero      el mapa ocupa la pantalla; la hoja inferior flota encima
+sin bordes        las superficies se separan por color: una sola línea amarilla
+aire por dentro   +4 en el relleno y entre elementos, sin robarle alto al mapa
+etiquetas +1pt    lo único que se toma de B: leer de reojo, en moto y con sol
+```
+
+Quitar el borde de las superficies es el cambio con más consecuencias. Cada
+tarjeta con borde dibuja un rectángulo, y siete rectángulos apilados son la sopa
+de tarjetas que había que quitar. Sin ellos queda **una sola línea con derecho a
+llamar la atención: la amarilla**.
+
+### El filo, con disciplina
+
+Una firma que lo lleva todo no señala nada. Aparece una vez por zona: en la hoja
+de la pasajera lo lleva Transporte Seguro; en el selector, sólo el vehículo
+elegido; en el viaje, sólo el estado. Una prueba cuenta las superficies con filo
+y falla si son más de dos.
+
+### La hoja inferior
+
+Tres estados —26 %, 46 %, 62 %— y **nunca tapa el mapa entero**.
+
+El tope de 62 % salió de mirarlo en pantalla. Estaba en 72 %, que sobre el papel
+dejaba casi un tercio de mapa; en el teléfono no era así, porque la barra de
+navegación se lleva otros 80 puntos por debajo. Lo que quedaba era una franja
+donde ya no cabía ni el vehículo más cercano.
+
+Las medidas viven en `theme/hoja.ts`, sin dependencias de React Native, para que
+el generador de evidencia y las pruebas lean los mismos números que el teléfono
+en lugar de una copia.
+
+### Los activos de marca
+
+`mobile/theme/marca.ts` es el equivalente de `src/utils/vehicleMedia.js`: la moto
+y el automóvil amarillos, con dos tomas cada uno —tres cuartos para elegir
+servicio, cenital para el mapa—, más el emblema y el logotipo apaisado.
+
+Las dos tomas no son intercambiables. La cenital es cuadrada para poder girar
+sobre su centro y apuntar al rumbo; usar la de tres cuartos sobre el mapa daría
+una moto de perfil que siempre mira a la derecha.
+
+Son los archivos oficiales, sin recortar ni recolorear. El manifiesto completo
+está en [preservacion-visual.md](preservacion-visual.md), y
+`mobile/test/preservacion.test.mjs` comprueba que siguen ahí, que no se
+deformaron y que nadie los sustituyó por un pictograma.
+
+### El control de disponibilidad
+
+La pieza signature del conductor, heredada de `src/styles/modern-yellow-lab.css`:
+disco de 56 puntos en el centro de la barra, sobresaliendo por encima, con la
+moto real dentro, aro verde y latido lento al conectarse.
+
+No vuelve el interruptor de la cabecera: éste es el único control de
+disponibilidad, como ya había decidido el diseño de la web.
+
+### El mapa
+
+`ui/Mapa.tsx` pinta calles claras sobre manzanas oscuras, que es como se leen los
+mapas en tema oscuro. **No hay proveedor elegido**: se sustituye por dentro sin
+tocar la composición de alrededor, y una prueba vigila que no aparezca ninguno.
+
+La composición ya tiene sitio para elegir origen y destino, mover el pin,
+confirmar un punto y los favoritos. La lógica no está hecha y no se inventó
+backend; lo que hay es el hueco, para que el diseño no cierre esas puertas.
+
+## Dirección visual — VISUAL-PREVIEW-1
+
+**Pendiente de la decisión del dueño.** Se prepararon tres direcciones para
+comparar; ninguna está congelada. La fase siguiente, DESIGN-SYSTEM-1, convertirá
+la elegida en sistema oficial y retirará las otras dos.
+
+### Las tres
+
+```
+A  Premium Minimal    aire, calma y tipografía. El amarillo sólo donde se decide.
+B  Urban Functional   densa y directa. Todo a mano, alto contraste, para la calle.
+C  +58 Signature      grafito profundo y filo amarillo. RECOMENDADA.
+```
+
+Comparten marca, estructura, contenido y componentes. Lo que cambia es el
+**carácter**: cuánto aire hay, cuánto amarillo se ve, cuán marcadas están las
+superficies, qué tan redondo es todo. Si cada dirección tuviera pantallas
+distintas, comparar sería imposible: se estaría eligiendo entre contenidos.
+
+Hay una prueba que verifica que las tres tienen la misma estructura de tokens, y
+otra que comprueba que no son la misma con otro nombre.
+
+### La firma de C
+
+El **filo amarillo**: una línea vertical fina en el borde izquierdo de lo que
+importa —la tarjeta activa, el estado en curso, la opción elegida—.
+
+Es la decisión de identidad. Ni repartir amarillo por toda la pantalla, ni
+esconderlo en un botón: se reconoce de un vistazo, funciona a pleno sol, no
+cansa de noche y no se parece a ninguna referencia.
+
+> **Un ajuste que salió de mirar el resultado.** La primera versión de C ponía
+> borde amarillo *y* filo en las tarjetas destacadas. En el inicio de pasajera,
+> con dos tarjetas destacadas a la vez, el amarillo competía consigo mismo y
+> dejaba de destacar nada. Ahora el borde amarillo es exclusivo de B; en C la
+> señal es sólo el filo.
+
+### Sobre las referencias
+
+A se inspira en la claridad de Cabify y B en la eficiencia de Yummy Rides, pero
+**ninguna copia nada**: no hay colores suyos, ni sus proporciones, ni sus
+componentes. Lo que se toma es una idea sobre cómo tratar el espacio y la
+densidad, que es lo que se puede aprender de una aplicación buena sin calcarla.
+Una prueba comprueba que sus colores corporativos no aparecen en el código.
+
+### Estructura del sistema
+
+```
+theme/primitives.ts    los valores crudos. Ninguna pantalla los importa.
+theme/directions.ts    las tres direcciones: cada valor asignado a un ROL
+theme/ThemeContext.tsx qué dirección está activa
+ui/componentes.tsx     todo lee el tema; nadie escribe un color a mano
+ui/Icono.tsx           iconografía propia, dibujada con vistas
+```
+
+Separar primitivos de semánticos importa: cuando se diga «el amarillo un punto
+más cálido», se cambia en un sitio y las tres direcciones lo heredan.
+
+### Iconografía propia
+
+Se intentó instalar `@expo/vector-icons`, la solución oficial, y **declara
+incompatibilidad con `react@19.2.3`** — el tercer paquete del propio ecosistema
+de Expo que lo hace, después de AsyncStorage y `react-native-web`.
+
+Y conviene: los sets conocidos se reconocen al instante como «iconos de
+aplicación», y esta fase trata de que +58express no parezca una plantilla. La
+familia propia es geométrica, de trazo uniforme, y no pesa nada — son vistas, no
+fuentes ni SVG.
+
+### Tipografía
+
+La del sistema. La elección de fuente **todavía no está tomada**, y meter una
+familia ahora la daría por decidida. Además es la que mejor rinde en teléfonos
+económicos, que es donde se va a usar esto.
+
+### El laboratorio visual
+
+```
+/preview     sólo en desarrollo · protegido por __DEV__
+```
+
+Permite cambiar entre A, B y C con los mismos datos, y recorrer las ocho
+pantallas. Fuera de desarrollo la ruta no monta nada: enseña datos de
+demostración que no salen de ninguna API, y en manos de alguien que crea estar
+viendo su cuenta eso es información falsa presentada como verdadera.
+
+No llama a ninguna API, no toca la sesión real y no ejecuta operaciones
+financieras. Los datos de demostración viven en `preview/fixtures.ts`, son
+obviamente ficticios, y una prueba comprueba que ningún fichero de la aplicación
+real los importa.
+
+**La cifra de saldo del conductor se muestra vacía**, con una nota que lo
+explica. La cartera está apagada en el backend, y enseñar un número como si
+fuera real sería mentir.
+
+### Mapa
+
+```
+MAP_PROVIDER_FINAL_DECISION: DEFERRED
+```
+
+`MapaSimulado` es una superficie con retícula y punto, pensada para sustituirse
+por el mapa real sin tocar la composición de alrededor. **No se instaló ningún
+proveedor**, y una prueba lo vigila.
+
 ## Diseño
 
 Los tokens salen de la identidad que ya existe (`src/styles/design-system.css`,

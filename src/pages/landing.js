@@ -16,7 +16,38 @@ import { icon } from '../utils/icons.js';
  * El boton se RENDERIZA solo bajo peticion explicita, no se oculta con CSS:
  * asi tampoco aparece inspeccionando el DOM.
  */
+/**
+ * Si esta compilacion es SOLO el panel de administracion.
+ *
+ * POR QUE UN MODO Y NO BORRAR LOS BOTONES
+ *
+ * Este mismo codigo sirve la web publica, donde registrarse y elegir si eres
+ * pasajera o conductor SI tienen sentido. Borrarlos romperia esa. Asi que la
+ * diferencia se decide al COMPILAR: el despliegue de administracion se
+ * construye con `VITE_SOLO_ADMIN=1` y el publico sin ella.
+ *
+ * QUE SE QUITA, Y POR QUE NO ES SOLO ESTETICA
+ *
+ * En una pantalla de administracion, ofrecer «Registrarse» y «entrar con
+ * Google» amplia la superficie de ataque sin que nadie lo necesite: las
+ * cuentas de administracion no se crean desde ahi ni entran por un proveedor
+ * externo. Cuanto menos ofrece esta puerta, menos hay que vigilar en ella.
+ *
+ * Se conserva «olvidaste tu contrasena»: quien administra tambien la olvida, y
+ * dejarlo fuera obligaria a tocar la base de datos a mano.
+ */
+export function esSoloAdmin() {
+  try {
+    return String(import.meta.env?.VITE_SOLO_ADMIN ?? '') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function accesoAdminVisible() {
+  // En la compilacion de administracion no hace falta pedirlo por la URL: es
+  // lo unico que hay.
+  if (esSoloAdmin()) return true;
     if (typeof window === 'undefined') return false;
     const busqueda = new URLSearchParams(window.location.search);
     if (busqueda.get('admin') === '1') return true;
@@ -114,6 +145,7 @@ export function renderLanding(container) {
                 <!-- Disclosed Form Content (Liquid Wipe Stagger) -->
                 <div class="liquid-disclose-wrap" id="liquid-disclose">
                     <!-- Role Selector Pills -->
+                    ${esSoloAdmin() ? '' : `
                     <div id="role-selection" class="liquid-role-pills stagger-item s1">
                         <button class="role-tab active" data-role="passenger" type="button">
                             <span class="pill-tab-icon">${icon('user', 14)}</span>
@@ -128,13 +160,14 @@ export function renderLanding(container) {
                             <span class="pill-tab-icon">${icon('shield', 14)}</span>
                             <span>Admin</span>
                         </button>` : ''}
-                    </div>
+                    </div>`}
 
                     <!-- Auth Mode Tabs (Iniciar Sesión vs Registrarse) -->
+                    ${esSoloAdmin() ? '' : `
                     <div id="auth-mode-segmented" class="liquid-auth-tabs stagger-item s2">
                         <button type="button" class="auth-tab active" id="tab-mode-login">Iniciar Sesión</button>
                         <button type="button" class="auth-tab" id="tab-mode-register">Registrarse</button>
-                    </div>
+                    </div>`}
 
                     <!-- Form Body -->
                     <div id="login-form" class="liquid-form-body">
@@ -198,6 +231,7 @@ export function renderLanding(container) {
                                  preparados visualmente; el intercambio con cada
                                  proveedor todavia no existe, asi que se
                                  muestran deshabilitados y lo dicen. -->
+                            ${esSoloAdmin() ? '' : `
                             <div class="liquid-social-block stagger-item s7b">
                                 <div class="liquid-social-divider"><span>o continuar con</span></div>
                                 <div class="liquid-social-buttons">
@@ -212,7 +246,7 @@ export function renderLanding(container) {
                                     </button>
                                 </div>
                                 <p class="liquid-social-note">Disponible próximamente</p>
-                            </div>
+                            </div>`}
 
                             <!-- Conductor Special Callout -->
                             <div id="driver-register-section" class="hidden conductor-recruitment-banner stagger-item s8">
@@ -223,9 +257,10 @@ export function renderLanding(container) {
                             </div>
 
                             <!-- Passenger footer toggle link -->
+                            ${esSoloAdmin() ? '' : `
                             <p class="register-link stagger-item s9" id="passenger-reg-link">
                                 ¿No tienes cuenta? <a href="#" id="link-register">Registrarse</a>
-                            </p>
+                            </p>`}
                         </form>
                     </div>
                 </div>
@@ -258,7 +293,10 @@ export function renderLanding(container) {
     const speedVal = container.querySelector('#hud-speed-val');
     const cyberStage = container.querySelector('#cyber-hero-stage');
 
-    let selectedRole = 'passenger';
+    // En la compilacion de administracion no hay donde elegir el rol, asi que
+    // se parte del que corresponde: si no, el formulario intentaria entrar como
+    // pasajera y el acceso fallaria sin decir por que.
+    let selectedRole = esSoloAdmin() ? 'admin' : 'passenger';
     let registrationMode = false;
 
     // --- Interactive Tachometer RPM & Speed Simulation ---

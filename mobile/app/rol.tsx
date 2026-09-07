@@ -1,5 +1,5 @@
 /**
- * «¿Cómo quieres continuar?» — la primera pantalla real.
+ * El selector de DESARROLLO. La pantalla real es `bienvenida.tsx`.
  *
  * ESTO ES NAVEGACIÓN, NO AUTORIZACIÓN
  *
@@ -13,16 +13,29 @@
  */
 
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { AtajoAlLaboratorio } from '../components/AtajoAlLaboratorio';
 import { Boton } from '../components/Boton';
 import { Pantalla } from '../components/Pantalla';
+import { LogoQueEntra } from '../ui/Marca';
 import { colores, espaciado, tipografia } from '../theme/tokens';
 import { guardarUltimoRol, type RolMovil } from '../services/session';
 
+/** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
+const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+
 export default function SelectorDeRol() {
   const [guardando, setGuardando] = useState<RolMovil | null>(null);
+
+  // SÓLO EN DESARROLLO, Y SÓLO A PROPÓSITO
+  //
+  // Esta pantalla era la raíz de la aplicación sin sesión. Ya no: el arranque
+  // va al acceso real, y el rol lo decide el backend. Esto se queda como
+  // herramienta del dueño para entrar al recorrido de diseño y al laboratorio,
+  // alcanzable yendo a `/rol` expresamente. En release ni siquiera existe.
+  if (!EN_DESARROLLO) return <Redirect href="/bienvenida" />;
 
   const elegir = (rol: RolMovil) => {
     setGuardando(rol);
@@ -34,15 +47,17 @@ export default function SelectorDeRol() {
     });
     // Al ACCESO, no directamente a la experiencia: sin sesión no hay nada que
     // enseñar, y entrar «como conductor» sin autenticarse no significa nada.
-    router.push({ pathname: '/acceso', params: { rol } });
+    router.push({ pathname: '/acceso', params: { intencion: rol } });
   };
 
   return (
     <Pantalla desplazable testID="selector-de-rol">
+      {/* El logotipo oficial, con la moto. Aquí la marca estaba escrita como
+          texto —«+58Express» en dos colores—, y existiendo el logotipo de
+          verdad eso era quedarse corto justo en la pantalla que abre la
+          aplicación. */}
       <View style={estilos.cabecera}>
-        <Text style={estilos.marca}>
-          <Text style={estilos.marcaAcento}>+58</Text>Express
-        </Text>
+        <LogoQueEntra ancho={214} />
         <Text style={estilos.lema}>Mototaxi en Maracaibo</Text>
       </View>
 
@@ -77,21 +92,16 @@ export default function SelectorDeRol() {
         <Text style={estilos.nota}>
           Puedes cambiar de modo cuando quieras desde tu perfil.
         </Text>
+
+        {/* Sólo en desarrollo: en release no dibuja nada. */}
+        <AtajoAlLaboratorio />
       </View>
     </Pantalla>
   );
 }
 
 const estilos = StyleSheet.create({
-  cabecera: { paddingTop: espaciado.xxxl, alignItems: 'center', gap: espaciado.xs },
-  marca: {
-    color: colores.textoPrimario,
-    fontSize: tipografia.display.tamano,
-    lineHeight: tipografia.display.alto,
-    fontWeight: '700',
-    letterSpacing: -0.5
-  },
-  marcaAcento: { color: colores.acento },
+  cabecera: { paddingTop: espaciado.xxxl, alignItems: 'center', gap: espaciado.md },
   lema: {
     color: colores.textoSecundario,
     fontSize: tipografia.pie.tamano,

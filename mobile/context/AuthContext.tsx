@@ -26,16 +26,36 @@ import {
   type Sesion
 } from '../domain/authState';
 import {
+  crearCuenta,
   iniciarSesion as pedirAcceso,
   validarSesion,
   type CredencialesDeAcceso,
-  type ResultadoDeLogin
+  type ResultadoDeLogin,
+  type ResultadoDeRegistro
 } from '../services/auth';
+import type { DatosDeRegistro } from '../domain/registro';
 import { borrarToken, guardarToken, leerToken } from '../services/session';
+import { despedirse } from '../services/antesDeSalir';
 
 export interface ValorDelContexto {
   readonly sesion: Sesion;
   readonly entrar: (credenciales: CredencialesDeAcceso) => Promise<ResultadoDeLogin>;
+  /**
+   * Crea la cuenta y deja la sesión abierta, por el mismo camino que `entrar`.
+   *
+   * La cuenta nace como pasajera SIEMPRE: quien se registra para postularse a
+   * conductor también. El rol lo concede la aprobación del expediente.
+   */
+  readonly registrar: (datos: DatosDeRegistro) => Promise<ResultadoDeRegistro>;
+  /**
+   * Abre la sesión que devolvió Google o Apple, por el mismo camino que las
+   * otras dos. El proveedor demuestra la identidad; el rol lo sigue diciendo
+   * el servidor, y su token no se guarda.
+   */
+  readonly entrarConIdentidadSocial: (sesionNueva: {
+    readonly usuario: IdentidadDeUsuario;
+    readonly token: string;
+  }) => Promise<void>;
   readonly salir: (motivo?: MotivoDeCierre) => Promise<void>;
   /** Vuelve a preguntar al backend. Para reintentar tras un fallo de red. */
   readonly revalidar: () => Promise<void>;
@@ -100,6 +120,49 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
 
   useEffect(() => { void revalidar(); }, [revalidar]);
 
+  const registrar = useCallback(async (datos: DatosDeRegistro) => {
+    const numero = ++operacion.current;
+    aplicar(numero, { estado: 'AUTENTICANDO' });
+
+    const resultado = await crearCuenta(datos);
+
+    // Si mientras tanto empezó otra operación, esta respuesta ya no manda.
+    if (numero !== operacion.current) return resultado;
+
+    if (!resultado.ok) {
+      aplicar(numero, { estado: 'SIN_SESION', motivo: null });
+      return resultado;
+    }
+
+    // El token sale del servidor, como en el login. Aquí no se firma nada.
+    await guardarToken(resultado.token);
+    aplicar(numero, { estado: 'AUTENTICADO', usuario: resultado.usuario });
+    return resultado;
+  }, [aplicar]);
+
+  /**
+   * Abre la sesión que devolvió una entrada con Google o con Apple.
+   *
+   * AUTH-FINAL-3. El proveedor demuestra QUIÉN es alguien; la sesión sigue
+   * siendo la de +58Express, con el rol que decide el servidor. El token de
+   * Google o de Apple **no** se guarda: ya cumplió su función al ser verificado
+   * y conservarlo sería guardar una credencial de otro sistema sin motivo.
+   *
+   * Recibe lo que el servidor devolvió porque quien habla con el proveedor es
+   * la pantalla —necesita abrir su selector—; aquí sólo se persiste la sesión,
+   * por el mismo camino que `entrar` y `registrar`.
+   */
+  const entrarConIdentidadSocial = useCallback(
+    async (sesionNueva: { readonly usuario: IdentidadDeUsuario; readonly token: string }) => {
+      const numero = ++operacion.current;
+      aplicar(numero, { estado: 'AUTENTICANDO' });
+      await guardarToken(sesionNueva.token);
+      if (numero !== operacion.current) return;
+      aplicar(numero, { estado: 'AUTENTICADO', usuario: sesionNueva.usuario });
+    },
+    [aplicar]
+  );
+
   const entrar = useCallback(async (credenciales: CredencialesDeAcceso) => {
     const numero = ++operacion.current;
     aplicar(numero, { estado: 'AUTENTICANDO' });
@@ -128,13 +191,16 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
    */
   const salir = useCallback(async (motivo: MotivoDeCierre = 'PETICION_DE_LA_PERSONA') => {
     const numero = ++operacion.current;
+    // Primero las despedidas (la baja del dispositivo de los avisos, por
+    // ejemplo): necesitan el token, y en cuanto se borre ya no hay con qué.
+    await despedirse();
     await borrarToken().catch(() => {});
     aplicar(numero, { estado: 'SIN_SESION', motivo });
   }, [aplicar]);
 
   const valor = useMemo<ValorDelContexto>(
-    () => ({ sesion, entrar, salir, revalidar }),
-    [sesion, entrar, salir, revalidar]
+    () => ({ sesion, entrar, registrar, entrarConIdentidadSocial, salir, revalidar }),
+    [sesion, entrar, registrar, entrarConIdentidadSocial, salir, revalidar]
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

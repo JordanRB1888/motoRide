@@ -16,9 +16,22 @@ export const POSTGRES_TABLES = Object.freeze({
   driverDocuments: 'driver_documents',
   adminActions: 'admin_actions',
   pushSubscriptions: 'push_subscriptions',
+  // PUSH-1. La crea `supabase/migrations/20260905220000_push_deliveries.sql`.
+  pushDeliveries: 'push_deliveries',
   transportSubscriptions: 'transport_subscriptions',
-  scheduledRides: 'scheduled_rides'
+  scheduledRides: 'scheduled_rides',
+  // AUTH-FINAL-1. Las crea `supabase/migrations/20260904120000_auth_identity_foundation.sql`.
+  authIdentities: 'auth_identities',
+  verifiedContacts: 'verified_contacts',
+  authChallenges: 'auth_challenges'
 });
+
+/**
+ * Codigo SQLSTATE de Postgres para «la relacion no existe». Cuando una tabla
+ * de la lista falta, el arranque debe decir CUAL y que migracion la crea, no
+ * un error crudo de `pg` que obliga a adivinar.
+ */
+const RELACION_INEXISTENTE = '42P01';
 
 const SSL_TRUE = new Set(['1', 'true', 'require', 'required']);
 const SSL_FALSE = new Set(['0', 'false', 'disable', 'disabled']);
@@ -89,7 +102,21 @@ export async function loadPostgresDatabase(pool) {
   const database = {};
   for (const table of PERSISTED_TABLES) {
     const physical = POSTGRES_TABLES[table];
-    const result = await pool.query(`select payload from public.${physical} order by id`);
+    let result;
+    try {
+      result = await pool.query(`select payload from public.${physical} order by id`);
+    } catch (error) {
+      if (error?.code === RELACION_INEXISTENTE) {
+        const fallo = new Error(
+          `MISSING_TABLE:${physical} -- la tabla no existe en esta base de datos. ` +
+            'Aplica las migraciones de supabase/migrations/ antes de arrancar.'
+        );
+        fallo.code = 'MISSING_TABLE';
+        fallo.table = physical;
+        throw fallo;
+      }
+      throw error;
+    }
     database[table] = result.rows.map(row => row.payload);
   }
   return database;
@@ -194,6 +221,100 @@ export async function createPostgresPersistence({ pool, database, logger = conso
     });
   }
 
+  /**
+   * Reserva el UNICO hueco de viaje activo de una pasajera.
+   *
+   * POR QUE NO VALE COMPROBAR Y LUEGO INSERTAR
+   *
+   * `if (tieneViajeActivo) return 409; crear();` deja una ventana entre las dos
+   * lineas. Dos peticiones simultaneas comprueban a la vez, las dos ven el
+   * hueco libre, y las dos crean. Pasa de verdad: bastan dos toques del mismo
+   * dedo, o un reintento de la red mientras la primera sigue en camino.
+   *
+   * Y POR QUE TAMPOCO BASTA `INSERT ... WHERE NOT EXISTS`
+   *
+   * Parece que si --es UNA sentencia-- pero no lo es. PostgreSQL trabaja por
+   * omision en READ COMMITTED, donde cada sentencia ve una instantanea de lo
+   * que estaba CONFIRMADO cuando empezo. Dos transacciones a la vez:
+   *
+   *     A: insert ... where not exists (...)   no ve nada  -> inserta
+   *     B: insert ... where not exists (...)   TAMPOCO ve la fila de A,
+   *                                            que aun no ha hecho commit
+   *                                            -> inserta tambien
+   *
+   * Las dos prosperan y la pasajera acaba con dos viajes. La subconsulta no
+   * bloquea nada ni espera a nadie: un `NOT EXISTS` sobre una fila que todavia
+   * no existe para ti es cierto. Esto se reprodujo aqui con PostgreSQL real.
+   *
+   * LA GARANTIA DE VERDAD: UN CERROJO POR PASAJERA
+   *
+   * `pg_advisory_xact_lock` toma un cerrojo con el numero que se le de y lo
+   * suelta al terminar la transaccion. Derivado del id de la pasajera, serializa
+   * SOLO a las peticiones de esa misma persona: dos pasajeras distintas no se
+   * estorban. La segunda espera, y cuando entra ya ve el viaje de la primera
+   * confirmado, asi que su `NOT EXISTS` es falso y no inserta.
+   *
+   * Es garantia de PostgreSQL y sobrevive a varias instancias del servidor,
+   * porque el cerrojo vive en la base y no en la memoria de un proceso. No hace
+   * falta Redis para esto, y no se usa.
+   *
+   * SE PREFIERE AL INDICE UNICO PARCIAL
+   *
+   * `create unique index ... where status in (...)` tambien lo garantizaria,
+   * pero hay que migrarlo cada vez que se anada un estado --justo el olvido que
+   * esta fase vino a evitar-- y no se puede crear si la base ya arrastra alguna
+   * pasajera con dos viajes abiertos. El cerrojo no tiene ninguno de los dos
+   * problemas y deja la lista de estados donde ya vive, en el dominio.
+   *
+   * @param {object} trip  el viaje a crear
+   * @param {string[]} activeStatuses  los estados que cuentan como ocupado
+   * @returns {Promise<boolean>} `true` si el hueco quedo reservado
+   */
+  function reserveActiveTripSlot(trip, activeStatuses) {
+    return enqueue(async () => {
+      let payload;
+      try {
+        payload = serializeRecord('trips', trip);
+      } catch (error) {
+        logger.error('[+58express Database] No se pudo preparar el viaje:', error.message);
+        return false;
+      }
+
+      // Una conexion propia: el cerrojo y la insercion tienen que ir en la
+      // MISMA transaccion, y `pool.query` puede darle otra a cada sentencia.
+      const cliente = await pool.connect();
+      try {
+        await cliente.query('begin');
+        // El cerrojo se suelta solo al cerrar la transaccion, pase lo que pase.
+        // `hashtext` convierte el id en el entero que espera la funcion.
+        await cliente.query('select pg_advisory_xact_lock(hashtext($1))', [trip.passengerId]);
+
+        const result = await cliente.query(
+          `insert into public.trips (id, payload)
+           select $1, $2::jsonb
+            where not exists (
+                  select 1 from public.trips
+                   where passenger_id = $3
+                     and status = any($4::text[])
+                )
+           returning id`,
+          [trip.id, payload, trip.passengerId, activeStatuses]
+        );
+        await cliente.query('commit');
+
+        if (result.rowCount !== 1) return false;
+        shadow.get('trips').set(trip.id, payload);
+        return true;
+      } catch (error) {
+        try { await cliente.query('rollback'); } catch { /* la conexion ya no vale */ }
+        logger.error('[+58express Database] No se pudo reservar el viaje:', error.message);
+        return false;
+      } finally {
+        cliente.release();
+      }
+    });
+  }
+
   function reserveTripAssignment(tripId, driverId, updatedAt) {
     return enqueue(async () => {
       const result = await pool.query(
@@ -222,6 +343,7 @@ export async function createPostgresPersistence({ pool, database, logger = conso
     persist,
     persistRecord,
     reserveTripAssignment,
+    reserveActiveTripSlot,
     flush: () => writeQueue,
     shadowSize: table => shadow.get(table)?.size ?? 0,
     close: () => pool.end(),

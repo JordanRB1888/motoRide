@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { hasValidSignature, videoDurationSeconds } from '../services/privateStorage.js';
 import {
   driverApplicationListItem,
   driverApplicationAdminDetail,
@@ -10,16 +11,28 @@ import {
 } from '../domain/driverApplicationProjections.js';
 import {
   DRIVER_APPLICATION_STATUS,
-  DRIVER_DOCUMENT_TYPES,
-  REQUIRED_DRIVER_DOCUMENTS,
+  REQUIREMENTS_VERSION,
+  VIDEO_MAX_DURATION_SECONDS,
+  VIDEO_MAX_FILE_SIZE,
+  VIDEO_MIME_TYPES,
+  UPLOADABLE_DOCUMENT_TYPES,
+  defaultCheckpoints,
   missingRequiredDocuments,
-  normalizeDriverApplicationInput,
+  normalizeRequestedChanges,
+  normalizeStoredApplication,
+  validateApplicationForSubmission,
   validateDriverApplicationInput
 } from '../domain/driverApplicationModel.js';
+import {
+  PHONE_VERIFICATION_REQUIRED,
+  faltaTelefonoVerificadoParaConductor
+} from '../domain/politicaDeVerificacion.js';
 
+// Solo lo que se puede subir hoy. El vídeo de presentación está en el modelo
+// pero no aquí: el almacenamiento privado no lo admite todavía.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: DRIVER_DOCUMENT_TYPES.length },
+  limits: { fileSize: 5 * 1024 * 1024, files: UPLOADABLE_DOCUMENT_TYPES.length },
   fileFilter: (_req, file, callback) => {
     if (['image/jpeg','image/png','image/webp','application/pdf'].includes(file.mimetype)) return callback(null, true);
     const error = new Error('INVALID_FILE_TYPE');
@@ -28,23 +41,120 @@ const upload = multer({
   }
 });
 
-const uploadFields = upload.fields(DRIVER_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
+const uploadFields = upload.fields(UPLOADABLE_DOCUMENT_TYPES.map(name => ({ name, maxCount: 1 })));
 const singleDocumentUpload = upload.single('file');
 
-import { createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from '../services/httpRateLimit.js';
+/**
+ * El video va por su propia puerta.
+ *
+ * Cincuenta megas frente a los cinco de una foto: mezclarlos en el mismo
+ * `multer` significaria abrir ese techo para cualquier documento, y entonces
+ * una cedula de cuarenta megas pasaria sin que nadie lo hubiera decidido.
+ */
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: VIDEO_MAX_FILE_SIZE, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    if (VIDEO_MIME_TYPES.includes(String(file.mimetype || '').toLowerCase().split(';')[0])) {
+      callback(null, true);
+      return;
+    }
+    const error = new Error('INVALID_FILE_TYPE');
+    error.code = 'INVALID_FILE_TYPE';
+    callback(error);
+  }
+}).single('file');
+
+import { addressKey, createIdentityLimiter, MINUTO, CUARTO_DE_HORA } from '../services/httpRateLimit.js';
 
 // El limitador de /api/driver-applications no alcanza a todas estas rutas:
 // el router se monta en /api, de modo que /api/admin/driver-applications,
 // /api/admin/actions y /api/driver-documents/:id/content quedaban sin cubrir
 // pese a parecer que estaban dentro.
+// Cada operacion cuesta lo suyo, y por eso cada una tiene su propio techo. Los
+// de aqui van SIEMPRE detras de `requireAuth`, de modo que cuentan por cuenta:
+// dos personas que comparten la direccion de su operador no se restan.
 const limitadores = {
   // Lee un documento de disco en cada peticion.
   documentos: createIdentityLimiter({ name: 'documentos', limit: 120, windowMs: MINUTO }),
-  // Subir cedula, licencia o RCV: caro y poco frecuente.
-  subidas: createIdentityLimiter({ name: 'subidas-documento', limit: 40, windowMs: CUARTO_DE_HORA }),
-  // Revision de expedientes desde administracion.
-  expedientes: createIdentityLimiter({ name: 'expedientes', limit: 240, windowMs: MINUTO })
+  // Subir cedula, licencia o RCV: caro y poco frecuente. Un expediente completo
+  // son once fotos; con repeticiones y las correcciones que pida administracion,
+  // sesenta por cuenta y cuarto de hora deja sitio de sobra para el uso honrado
+  // y sigue siendo un techo real --sesenta ficheros de cinco megas--.
+  subidas: createIdentityLimiter({ name: 'subidas-documento', limit: 60, windowMs: CUARTO_DE_HORA }),
+  // Leer y corregir el expediente, propio o desde administracion.
+  expedientes: createIdentityLimiter({ name: 'expedientes', limit: 240, windowMs: MINUTO }),
+  // El video pesa diez veces mas que una foto y solo hay uno por expediente.
+  // Diez por cuarto de hora deja repetirlo las veces que haga falta --grabar
+  // uno bueno cuesta varios intentos-- sin abrir la puerta a medio giga.
+  video: createIdentityLimiter({ name: 'subida-video', limit: 10, windowMs: CUARTO_DE_HORA })
 };
+
+/**
+ * El alta: lo unico que no lleva sesion y si cuesta.
+ *
+ * Crea una cuenta y calcula un hash de contrasena, asi que cuenta tambien los
+ * aciertos y se agrupa por direccion --no hay cuenta todavia que usar como
+ * clave--. Veinte por cuarto de hora es el mismo techo que el registro normal
+ * de la aplicacion: dar de alta veinte conductores distintos desde la misma
+ * conexion en quince minutos no es un caso legitimo.
+ */
+const limitadorDeAlta = createIdentityLimiter({
+  name: 'postulacion-alta',
+  limit: 20,
+  windowMs: CUARTO_DE_HORA,
+  keyGenerator: addressKey
+});
+
+/** Los estados en los que el titular todavía puede tocar su expediente. */
+const EDITABLE_STATUSES = [
+  DRIVER_APPLICATION_STATUS.DRAFT,
+  DRIVER_APPLICATION_STATUS.NEEDS_CHANGES,
+  DRIVER_APPLICATION_STATUS.REJECTED
+];
+
+const cleanText = (value, max) => String(value ?? '').replace(/[\u0000-\u001f\u007f<>&"']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+
+/**
+ * Qué trozo del fichero pide una cabecera `Range`.
+ *
+ * Devuelve `null` cuando no hay que servir un trozo —sin cabecera, o con una
+ * que no se entiende, que por norma se ignora y se manda el fichero entero— y
+ * la cadena `'INVALIDO'` cuando el rango se entiende pero cae fuera del
+ * fichero, que es lo que merece un 416.
+ *
+ * Sólo se admite un rango simple: `bytes=inicio-fin`, `bytes=inicio-` o
+ * `bytes=-ultimos`. Los rangos múltiples exigirían respuesta multiparte, y
+ * ningún reproductor los necesita para esto.
+ */
+function leerRango(cabecera, tamano) {
+  if (typeof cabecera !== 'string') return null;
+  const partes = /^bytes=(\d*)-(\d*)$/.exec(cabecera.trim());
+  if (!partes) return null;
+
+  const [, inicioBruto, finBruto] = partes;
+  if (inicioBruto === '' && finBruto === '') return null;
+  if (tamano === 0) return 'INVALIDO';
+
+  let desde;
+  let hasta;
+  if (inicioBruto === '') {
+    // `bytes=-500`: los últimos quinientos bytes.
+    const ultimos = Number(finBruto);
+    if (!Number.isFinite(ultimos) || ultimos <= 0) return 'INVALIDO';
+    desde = Math.max(0, tamano - ultimos);
+    hasta = tamano - 1;
+  } else {
+    desde = Number(inicioBruto);
+    hasta = finBruto === '' ? tamano - 1 : Number(finBruto);
+    if (!Number.isFinite(desde) || !Number.isFinite(hasta)) return 'INVALIDO';
+    // Un final más allá del fichero se recorta; un principio, no: eso es pedir
+    // algo que no existe.
+    hasta = Math.min(hasta, tamano - 1);
+    if (desde > hasta || desde >= tamano) return 'INVALIDO';
+  }
+  return { desde, hasta };
+}
 
 export function createDriverApplicationsRouter({
   database,
@@ -52,10 +162,15 @@ export function createDriverApplicationsRouter({
   publicUser,
   signToken,
   requireAuth,
+  sesionOpcional,
   requireRole,
   io,
   bcrypt,
-  privateStorage
+  privateStorage,
+  // AUTH-FINAL-1: el almacen de identidades, para dar su identidad PASSWORD
+  // al User que nace aqui. Opcional para no romper a quien monte el router
+  // sin el; el relleno de arranque cubre a los que se quedaran sin ella.
+  authIdentities = null
 }) {
   const router = express.Router();
 
@@ -76,25 +191,68 @@ export function createDriverApplicationsRouter({
     return notification;
   };
 
-  router.post('/driver-applications', uploadFields, async (req, res) => {
-    const validation = validateDriverApplicationInput(req.body);
+  /**
+   * Crea la cuenta (o reutiliza la del pasajero) y el expediente.
+   *
+   * CON O SIN DOCUMENTOS
+   *
+   * Antes exigía todos los documentos en esta misma petición. Eso obligaba a
+   * hacer las once fotos de una vez y sin poder parar. Ahora el expediente
+   * nace como BORRADOR si falta algo, y se completa documento a documento con
+   * `PUT /me/documents/:type` hasta que `POST /me/submit` lo manda a revisión.
+   * Si llega completo y con los datos de envío, entra directamente en
+   * revisión, como antes.
+   */
+  router.post('/driver-applications', sesionOpcional, limitadorDeAlta, uploadFields, async (req, res) => {
+    // Un cliente que no declara servicios es de antes de que existieran (el
+    // registro web): su expediente nace con los requisitos de la version 1 y
+    // se postula, como siempre, a llevar personas. Quien declara el campo se
+    // valida estricto: vacio o desconocido es 400.
+    const legacyClient = req.body.servicesAppliedFor === undefined && req.body.requirementsVersion === undefined;
+    if (legacyClient) req.body.servicesAppliedFor = 'PASSENGER_TRANSPORT';
+    const requirementsVersion = legacyClient ? 1 : REQUIREMENTS_VERSION;
+    // La contrasena se comprueba mas abajo, cuando ya se sabe a que cuenta va
+    // el expediente: a quien llega con sesion propia no se le vuelve a pedir.
+    const validation = validateDriverApplicationInput(req.body, { requirePassword: false });
     if (!validation.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: validation.errors });
-    const { personal, vehicle } = validation.normalized;
+    const { personal, vehicle, license, medicalCertificate, servicesAppliedFor } = validation.normalized;
     const phoneKey = personal.phone.replace(/\D/g, '');
     const matchingUsers = database.users.filter(user => user.email?.toLowerCase() === personal.email || String(user.phone || '').replace(/\D/g, '') === phoneKey);
     const existingUser = matchingUsers.length === 1 ? matchingUsers[0] : null;
     if (matchingUsers.length > 1 || (existingUser && existingUser.role !== 'passenger')) return res.status(409).json({ error: 'USER_EXISTS' });
-    if (existingUser?.driverApplicationId) {
-      const existingApplication = database.driverApplications.find(item => item.id === existingUser.driverApplicationId);
-      return res.status(409).json({ error: 'DRIVER_APPLICATION_EXISTS', applicationStatus: existingApplication?.status || 'pending' });
+    // Un expediente por persona, y la comprobacion no se fia de un solo dato.
+    //
+    // El puntero `driverApplicationId` del usuario es lo primero que se mira,
+    // pero si por lo que sea no se hubiera escrito --una escritura a medias, un
+    // dato importado-- el expediente seguiria existiendo en su coleccion. Por
+    // eso se busca tambien por `userId`: es la misma pregunta hecha por el otro
+    // lado, y es la que impide que tocar dos veces el boton deje a alguien con
+    // dos expedientes vivos que administracion tendria que desempatar a mano.
+    const existingApplication = existingUser
+      ? database.driverApplications.find(item => item.userId === existingUser.id || item.id === existingUser.driverApplicationId)
+      : null;
+    if (existingApplication) {
+      return res.status(409).json({ error: 'DRIVER_APPLICATION_EXISTS', applicationStatus: existingApplication.status || 'pending' });
     }
-    if (existingUser && (!existingUser.passwordHash || !await bcrypt.compare(String(req.body.password || ''), existingUser.passwordHash))) {
+    // La sesion vale como prueba de identidad, y solo para su propia cuenta:
+    // quien viene autenticado pero declara el correo de otra persona sigue
+    // teniendo que demostrar que esa cuenta es suya.
+    const laSesionEsDeEstaPersona = Boolean(req.user && existingUser && req.user.id === existingUser.id);
+
+    if (!laSesionEsDeEstaPersona && String(req.body.password || '').length < 8) {
+      return res.status(400).json({
+        error: 'VALIDATION_FAILED',
+        fields: { password: 'La contrasena debe tener al menos 8 caracteres.' }
+      });
+    }
+    if (existingUser && !laSesionEsDeEstaPersona
+      && (!existingUser.passwordHash || !await bcrypt.compare(String(req.body.password || ''), existingUser.passwordHash))) {
       return res.status(401).json({ error: 'EXISTING_ACCOUNT_AUTH_REQUIRED' });
     }
 
-    const files = Object.entries(req.files || {}).flatMap(([type, items]) => items.map(file => ({ type, file })));
-    const missing = REQUIRED_DRIVER_DOCUMENTS.filter(type => !files.some(item => item.type === type));
-    if (missing.length) return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
+    const files = Object.entries(req.files || {})
+      .filter(([type]) => UPLOADABLE_DOCUMENT_TYPES.includes(type))
+      .flatMap(([type, items]) => items.map(file => ({ type, file })));
 
     const now = new Date().toISOString();
     const userId = existingUser?.id || `passenger_${crypto.randomUUID()}`;
@@ -136,6 +294,7 @@ export function createDriverApplicationsRouter({
       email: personal.email,
       phone: personal.phone,
       cedula: personal.identityNumber,
+      rif: personal.rif || null,
       birthDate: personal.birthDate,
       address: personal.address,
       city: personal.city,
@@ -158,6 +317,7 @@ export function createDriverApplicationsRouter({
         email: personal.email,
         phone: personal.phone,
         cedula: personal.identityNumber,
+        rif: personal.rif || user.rif || null,
         birthDate: personal.birthDate,
         address: personal.address,
         city: personal.city,
@@ -166,34 +326,59 @@ export function createDriverApplicationsRouter({
         updatedAt: now
       });
     }
+
     const application = {
       id: applicationId,
       userId,
-      status: DRIVER_APPLICATION_STATUS.PENDING,
+      requirementsVersion,
+      status: DRIVER_APPLICATION_STATUS.DRAFT,
+      servicesAppliedFor: [...servicesAppliedFor],
       personal,
       vehicle,
-      submittedAt: now,
+      license,
+      medicalCertificate,
+      checkpoints: defaultCheckpoints(),
+      submittedAt: null,
       createdAt: now,
       updatedAt: now,
       reviewedBy: null,
       reviewedAt: null,
       decisionReason: null,
-      requestedChanges: []
+      requestedChanges: [],
+      requestedChangeDetails: [],
+      textualCorrections: null
     };
-    if (!existingUser) database.users.push(user);
+
+    // Si llegó completo, entra en revisión directamente.
+    const missing = missingRequiredDocuments(stored, application);
+    const submission = validateApplicationForSubmission(application);
+    const complete = missing.length === 0 && submission.valid;
+    if (complete) {
+      application.status = DRIVER_APPLICATION_STATUS.PENDING;
+      application.submittedAt = now;
+    }
+
+    if (!existingUser) {
+      database.users.push(user);
+      // AUTH-FINAL-1: un User nuevo con contrasena recibe su identidad
+      // PASSWORD, como en el registro. El hash sigue en `users`.
+      authIdentities?.identidades.asegurarDeContrasena(user);
+    }
     database.driverApplications.push(application);
     database.driverDocuments.push(...stored);
-    const adminNotification = createNotification({
+    const adminNotification = complete ? createNotification({
       targetRole: 'admin',
       title: 'Nuevo conductor esperando aprobación',
       message: `${personal.firstName} ${personal.lastName} envió una solicitud con vehículo ${vehicle.type === 'CAR' ? 'automóvil' : 'moto'}.`
-    });
+    }) : null;
     if (!await persistDatabase()) {
       stored.forEach(document => privateStorage.remove(document.storageKey));
       return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
     }
-    io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
-    io.to('admins').emit('platform:notification', adminNotification);
+    if (complete) {
+      io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
+      io.to('admins').emit('platform:notification', adminNotification);
+    }
     res.status(201).json({
       status: 'created',
       user: publicUser(user),
@@ -202,33 +387,48 @@ export function createDriverApplicationsRouter({
     });
   });
 
-  router.get('/driver-applications/me', requireAuth, (req, res) => {
+  router.get('/driver-applications/me', requireAuth, limitadores.expedientes, (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
+  /**
+   * Corrige los datos de un expediente que todavía se puede tocar.
+   *
+   * Lo que no venga en el cuerpo se conserva. Eso incluye el vehículo: se
+   * puede pasar de moto a carro antes de enviar, y entonces cambian los
+   * documentos que faltan.
+   */
   router.patch('/driver-applications/me', requireAuth, limitadores.expedientes, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
-    if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
-      return res.status(409).json({ error: 'APPLICATION_LOCKED' });
-    }
+    if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
+    const stored = normalizeStoredApplication(application);
     const merged = {
-      ...application.personal,
-      ...application.vehicle,
+      ...stored.personal,
       ...req.body,
-      vehicleType: req.body.vehicleType || application.vehicle.type,
-      vehicleBrand: req.body.vehicleBrand || application.vehicle.brand,
-      vehicleModel: req.body.vehicleModel || application.vehicle.model,
-      vehicleYear: req.body.vehicleYear || application.vehicle.year,
-      vehicleColor: req.body.vehicleColor || application.vehicle.color,
-      vehiclePlate: req.body.vehiclePlate || application.vehicle.plate
+      servicesAppliedFor: req.body.servicesAppliedFor ?? stored.servicesAppliedFor,
+      rif: req.body.rif ?? stored.personal.rif,
+      vehicleType: req.body.vehicleType || stored.vehicle.type,
+      vehicleBrand: req.body.vehicleBrand || stored.vehicle.brand,
+      vehicleModel: req.body.vehicleModel || stored.vehicle.model,
+      vehicleYear: req.body.vehicleYear || stored.vehicle.year,
+      vehicleColor: req.body.vehicleColor || stored.vehicle.color,
+      vehiclePlate: req.body.vehiclePlate || stored.vehicle.plate,
+      vehicleLegalDocumentType: req.body.vehicleLegalDocumentType || stored.vehicle.legalDocumentType,
+      vehicleAdditionalInfo: req.body.vehicleAdditionalInfo ?? stored.vehicle.additionalInfo,
+      licenseGrade: req.body.licenseGrade ?? stored.license.grade ?? '',
+      licenseExpiration: req.body.licenseExpiration ?? stored.license.expiration ?? '',
+      medicalCertificateExpiration: req.body.medicalCertificateExpiration ?? stored.medicalCertificate.expiration ?? ''
     };
     const validation = validateDriverApplicationInput(merged, { requirePassword: false });
     if (!validation.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: validation.errors });
     application.personal = validation.normalized.personal;
     application.vehicle = validation.normalized.vehicle;
+    application.license = validation.normalized.license;
+    application.medicalCertificate = validation.normalized.medicalCertificate;
+    application.servicesAppliedFor = [...validation.normalized.servicesAppliedFor];
     application.status = DRIVER_APPLICATION_STATUS.DRAFT;
     application.updatedAt = new Date().toISOString();
     if (!await persistDatabase()) return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
@@ -238,10 +438,8 @@ export function createDriverApplicationsRouter({
   router.put('/driver-applications/me/documents/:type', requireAuth, limitadores.subidas, singleDocumentUpload, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
-    if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
-      return res.status(409).json({ error: 'APPLICATION_LOCKED' });
-    }
-    if (!DRIVER_DOCUMENT_TYPES.includes(req.params.type) || !req.file) return res.status(400).json({ error: 'INVALID_DOCUMENT' });
+    if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
+    if (!UPLOADABLE_DOCUMENT_TYPES.includes(req.params.type) || !req.file) return res.status(400).json({ error: 'INVALID_DOCUMENT' });
     const existing = database.driverDocuments.find(document => document.applicationId === application.id && document.type === req.params.type);
     let storageKey;
     try { storageKey = privateStorage.save(req.file, req.user.id); }
@@ -253,6 +451,14 @@ export function createDriverApplicationsRouter({
       database.driverDocuments.push({ id: `driver_document_${crypto.randomUUID()}`, applicationId: application.id, userId: req.user.id, type: req.params.type, storageKey, originalName: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size, status: 'pending', uploadedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     }
     application.status = DRIVER_APPLICATION_STATUS.DRAFT;
+    // Repetir el documento atiende la correccion que administracion pidio
+    // sobre el: deja de figurar como pendiente. El motivo global y las
+    // correcciones de texto siguen hasta el reenvio; si el nuevo tampoco
+    // sirve, administracion volvera a pedirlo.
+    const pendientes = normalizeStoredApplication(application).requestedChangeDetails
+      .filter(detail => detail.type !== req.params.type);
+    application.requestedChangeDetails = pendientes;
+    application.requestedChanges = pendientes.map(detail => detail.type);
     application.updatedAt = new Date().toISOString();
     if (!await persistDatabase()) {
       privateStorage.remove(storageKey);
@@ -261,18 +467,163 @@ export function createDriverApplicationsRouter({
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
   });
 
+  /**
+   * El vídeo de presentación.
+   *
+   * TIENE SU PROPIA RUTA, Y NO ES CAPRICHO
+   *
+   * Pesa diez veces más que una foto, dura lo que dura y se valida distinto.
+   * Meterlo en la ruta de los documentos habría significado subir el tope de
+   * tamaño para todos y colar la comprobación de duración en un camino que no
+   * la necesita. Aparte del contenedor, todo lo demás es igual: mismo
+   * expediente, mismo almacén privado, misma corrección por documento.
+   *
+   * LO QUE DICE EL CLIENTE NO CUENTA
+   *
+   * El teléfono manda un tipo y una duración. Aquí se comprueban los BYTES:
+   * que sean un contenedor ISO-BMFF de verdad y, cuando se puede leer, que la
+   * duración que trae dentro no pase del máximo. Un fichero de texto renombrado
+   * a `.mp4` no llega a guardarse.
+   */
+  router.put('/driver-applications/me/video', requireAuth, limitadores.video, (req, res) => {
+    videoUpload(req, res, async error => {
+      if (error) {
+        // Demasiado grande y tipo no admitido son cosas distintas para quien
+        // lo está subiendo: una se arregla grabando más corto y la otra no.
+        if (error.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: 'FILE_TOO_LARGE', maxBytes: VIDEO_MAX_FILE_SIZE });
+        }
+        return res.status(415).json({ error: error.code || 'INVALID_FILE_TYPE', accepted: VIDEO_MIME_TYPES });
+      }
+      if (!req.file) return res.status(400).json({ error: 'INVALID_DOCUMENT' });
+
+      const application = database.driverApplications.find(item => item.userId === req.user.id);
+      if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
+      if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
+
+      // Primero, que sea un vídeo. Después, cuánto dura.
+      //
+      // El orden importa por lo que se le dice a la persona: un texto renombrado
+      // a `.mp4` no es un vídeo que no sepamos medir, es que no es un vídeo. Dos
+      // problemas distintos merecen dos respuestas distintas.
+      if (!hasValidSignature(req.file.buffer, req.file.mimetype)) {
+        return res.status(415).json({ error: 'INVALID_FILE_TYPE', accepted: VIDEO_MIME_TYPES });
+      }
+
+      // La duración se lee del propio fichero, y el fichero es la autoridad.
+      //
+      // Lo que declara el teléfono sirve para avisar antes de gastar la red,
+      // pero no decide nada: es un número que cualquiera puede escribir. Y si
+      // el fichero no deja medirse, se RECHAZA. Dejarlo pasar convertía el
+      // tope de treinta segundos en una recomendación: bastaba con subir algo
+      // que no supiéramos leer. Antes de guardar un vídeo cuya duración no
+      // podemos certificar, preferimos pedir otro.
+      const duracion = videoDurationSeconds(req.file.buffer);
+      if (duracion === null) {
+        return res.status(422).json({
+          error: 'VIDEO_DURATION_UNVERIFIABLE',
+          maxSeconds: VIDEO_MAX_DURATION_SECONDS
+        });
+      }
+      if (duracion > VIDEO_MAX_DURATION_SECONDS + 0.5) {
+        return res.status(400).json({
+          error: 'VIDEO_TOO_LONG',
+          maxSeconds: VIDEO_MAX_DURATION_SECONDS,
+          seconds: Math.round(duracion)
+        });
+      }
+
+      const existing = database.driverDocuments.find(document => document.applicationId === application.id && document.type === 'presentation_video');
+      let storageKey;
+      // `save` vuelve a comprobar la firma antes de escribir un solo byte.
+      try { storageKey = privateStorage.save(req.file, req.user.id); }
+      catch (fallo) { return res.status(415).json({ error: fallo.code || 'INVALID_FILE_TYPE' }); }
+
+      const ahora = new Date().toISOString();
+      const anterior = existing?.storageKey ?? null;
+      if (existing) {
+        Object.assign(existing, {
+          storageKey,
+          originalName: String(req.file.originalname || 'presentacion').slice(0, 180),
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+          durationSeconds: duracion,
+          status: 'pending',
+          updatedAt: ahora
+        });
+      } else {
+        database.driverDocuments.push({
+          id: `driver_document_${crypto.randomUUID()}`,
+          applicationId: application.id,
+          userId: req.user.id,
+          type: 'presentation_video',
+          storageKey,
+          originalName: String(req.file.originalname || 'presentacion').slice(0, 180),
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+          durationSeconds: duracion,
+          status: 'pending',
+          uploadedAt: ahora,
+          updatedAt: ahora
+        });
+      }
+
+      application.status = DRIVER_APPLICATION_STATUS.DRAFT;
+      const pendientes = normalizeStoredApplication(application).requestedChangeDetails
+        .filter(detail => detail.type !== 'presentation_video');
+      application.requestedChangeDetails = pendientes;
+      application.requestedChanges = pendientes.map(detail => detail.type);
+      application.updatedAt = ahora;
+
+      if (!await persistDatabase()) {
+        // Lo que no se pudo registrar no se queda en disco.
+        privateStorage.remove(storageKey);
+        return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
+      }
+      // El anterior se borra DESPUÉS de que el nuevo esté registrado: si la
+      // escritura falla, la persona conserva el vídeo que ya tenía.
+      if (anterior && anterior !== storageKey) privateStorage.remove(anterior);
+
+      res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
+    });
+  });
+
+  /**
+   * Manda el expediente a revisión.
+   *
+   * Vuelve a comprobar los documentos según el vehículo declarado y, en los
+   * expedientes de la versión 2, que estén el RIF y los datos de la licencia.
+   * Las correcciones que administración había pedido se dan por atendidas:
+   * si no lo están, volverá a pedirlas.
+   */
   router.post('/driver-applications/me/submit', requireAuth, limitadores.expedientes, async (req, res) => {
     const application = database.driverApplications.find(item => item.userId === req.user.id);
     if (!application) return res.status(404).json({ error: 'APPLICATION_NOT_FOUND' });
-    if (![DRIVER_APPLICATION_STATUS.DRAFT, DRIVER_APPLICATION_STATUS.NEEDS_CHANGES, DRIVER_APPLICATION_STATUS.REJECTED].includes(application.status)) {
-      return res.status(409).json({ error: 'APPLICATION_LOCKED' });
-    }
-    const missing = missingRequiredDocuments(getApplicationDocuments(application.id));
+    if (!EDITABLE_STATUSES.includes(application.status)) return res.status(409).json({ error: 'APPLICATION_LOCKED' });
+    const missing = missingRequiredDocuments(getApplicationDocuments(application.id), application);
     if (missing.length) return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
+    const submission = validateApplicationForSubmission(application);
+    if (!submission.valid) return res.status(400).json({ error: 'VALIDATION_FAILED', fields: submission.errors });
+    // AUTH-FINAL-2: la politica de telefono verificado, HOY APAGADA. Se deja
+    // cableada aqui --el envio, no la aprobacion ni la entrada-- para que
+    // encenderla sea una variable de entorno y no un cambio de codigo. Con la
+    // politica apagada, `faltaTelefonoVerificadoParaConductor` devuelve
+    // siempre `false` y esta linea no hace nada. Ver el informe: encenderla
+    // hoy bloquearia a TODOS los expedientes existentes.
+    if (faltaTelefonoVerificadoParaConductor({
+      contactosVerificados: authIdentities?.contactos.deUsuario(req.user.id) ?? []
+    })) {
+      return res.status(403).json({ error: PHONE_VERIFICATION_REQUIRED, contactType: 'PHONE' });
+    }
+    const now = new Date().toISOString();
     application.status = DRIVER_APPLICATION_STATUS.PENDING;
-    application.submittedAt = new Date().toISOString();
-    application.updatedAt = application.submittedAt;
+    application.submittedAt = now;
+    application.updatedAt = now;
     application.decisionReason = null;
+    application.requestedChanges = [];
+    application.requestedChangeDetails = [];
+    application.textualCorrections = null;
+    application.checkpoints = { ...normalizeStoredApplication(application).checkpoints, DOCUMENTS_REVIEW: 'PENDING' };
     if (!await persistDatabase()) return res.status(503).json({ error: 'DATABASE_WRITE_FAILED' });
     io.to('admins').emit('driver_application:new', driverApplicationEvent(application));
     res.json(driverApplicationOwnerView(application, getApplicationDocuments(application.id)));
@@ -287,7 +638,7 @@ export function createDriverApplicationsRouter({
       .filter(application => {
         if (!query) return true;
         const user = database.users.find(item => item.id === application.userId);
-        return [application.personal.firstName, application.personal.lastName, application.personal.identityNumber, application.personal.phone, application.personal.email, application.vehicle.plate, user?.email]
+        return [application.personal.firstName, application.personal.lastName, application.personal.identityNumber, application.personal.rif, application.personal.phone, application.personal.email, application.vehicle.plate, user?.email]
           .filter(Boolean).some(value => String(value).toLowerCase().includes(query));
       })
       .sort((a, b) => new Date(b.submittedAt || b.createdAt) - new Date(a.submittedAt || a.createdAt))
@@ -308,16 +659,18 @@ export function createDriverApplicationsRouter({
     const user = database.users.find(item => item.id === application.userId);
     if (!user) return res.status(404).json({ error: 'USER_NOT_FOUND' });
     const action = String(req.body.action || '').toLowerCase();
-    const reason = String(req.body.reason || '').replace(/[\u0000-\u001f\u007f<>&"']/g, ' ').trim().slice(0, 600);
+    const reason = cleanText(req.body.reason, 600);
     const now = new Date().toISOString();
     const previousStatus = application.status;
+    const checkpoints = { ...normalizeStoredApplication(application).checkpoints };
     let notificationTitle;
     let notificationMessage;
 
     if (action === 'approve') {
-      const missing = missingRequiredDocuments(getApplicationDocuments(application.id));
+      const missing = missingRequiredDocuments(getApplicationDocuments(application.id), application);
       if (missing.length) return res.status(409).json({ error: 'MISSING_DOCUMENTS', missing });
       application.status = DRIVER_APPLICATION_STATUS.APPROVED;
+      checkpoints.DOCUMENTS_REVIEW = 'PASSED';
       user.role = 'driver';
       user.isVerified = true;
       user.status = 'OFFLINE';
@@ -330,6 +683,7 @@ export function createDriverApplicationsRouter({
         vehicleYear: application.vehicle.year,
         vehicleColor: application.vehicle.color,
         vehiclePlate: application.vehicle.plate,
+        rif: application.personal?.rif || user.rif || null,
         photoStorageKey: selfie ? privateStorage.clone(selfie.storageKey, user.id) : user.photoStorageKey,
         photoMimeType: selfie?.mimeType || user.photoMimeType,
         photoSize: selfie?.size || user.photoSize,
@@ -341,13 +695,20 @@ export function createDriverApplicationsRouter({
     } else if (action === 'reject') {
       if (!reason) return res.status(400).json({ error: 'REASON_REQUIRED' });
       application.status = DRIVER_APPLICATION_STATUS.REJECTED;
+      checkpoints.DOCUMENTS_REVIEW = 'FAILED';
       user.isVerified = false;
       notificationTitle = 'Tu solicitud necesita atención';
       notificationMessage = `La solicitud fue rechazada: ${reason}`;
     } else if (action === 'needs_changes') {
       if (!reason) return res.status(400).json({ error: 'REASON_REQUIRED' });
       application.status = DRIVER_APPLICATION_STATUS.NEEDS_CHANGES;
-      application.requestedChanges = Array.isArray(req.body.requestedChanges) ? req.body.requestedChanges.filter(item => DRIVER_DOCUMENT_TYPES.includes(item)) : [];
+      // Qué documento hay que repetir, y por qué cada uno. Se admite la forma
+      // vieja (solo tipos) y la nueva (tipo y motivo); el motivo general cubre
+      // a los que no traigan el suyo.
+      const details = normalizeRequestedChanges(req.body.requestedChanges, reason);
+      application.requestedChangeDetails = details;
+      application.requestedChanges = details.map(item => item.type);
+      application.textualCorrections = cleanText(req.body.textualCorrections, 600) || null;
       user.isVerified = false;
       notificationTitle = 'Debes actualizar tu solicitud';
       notificationMessage = reason;
@@ -369,6 +730,7 @@ export function createDriverApplicationsRouter({
       return res.status(400).json({ error: 'INVALID_ACTION' });
     }
 
+    application.checkpoints = checkpoints;
     application.reviewedBy = req.user.id;
     application.reviewedAt = now;
     application.updatedAt = now;
@@ -406,15 +768,42 @@ export function createDriverApplicationsRouter({
 
     const document = database.driverDocuments.find(item => item.id === req.params.id);
     if (!document) return documentNotAvailable();
+    // LA AUTORIZACIÓN VA ANTES QUE CUALQUIER BYTE, también en una petición
+    // parcial: pedir un rango no es una puerta de servicio.
     if (req.user.role !== 'admin' && document.userId !== req.user.id) return documentNotAvailable();
-    const absolutePath = privateStorage.resolve(document.storageKey);
-    if (!absolutePath) return documentNotAvailable();
-    res.setHeader('Content-Type', document.mimeType);
-    res.setHeader('Content-Length', String(document.size));
+
+    const fichero = privateStorage.abrirParaServir(document.storageKey, document.mimeType);
+    if (!fichero) return documentNotAvailable();
+
+    res.setHeader('Content-Type', fichero.mimeType);
     res.setHeader('Content-Disposition', `inline; filename="${String(document.originalName).replace(/["\r\n]/g, '_')}"`);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    fs.createReadStream(absolutePath).pipe(res);
+    // Se anuncia siempre: es lo que le dice al reproductor que puede pedir
+    // trozos en vez de tragarse cincuenta megas para enseñar el primer
+    // fotograma.
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    const tramo = leerRango(req.headers.range, fichero.size);
+    if (tramo === 'INVALIDO') {
+      // Un rango que no cabe en el fichero. Lo estándar es contestar 416 con
+      // el tamaño real, y no revelar nada más.
+      res.setHeader('Content-Range', `bytes */${fichero.size}`);
+      return res.status(416).json({ error: 'RANGE_NOT_SATISFIABLE' });
+    }
+
+    if (tramo === null) {
+      // Sin cabecera `Range`, o una que no se entiende: el fichero entero, como
+      // siempre. Una cabecera rara nunca es un error; simplemente se ignora.
+      res.setHeader('Content-Length', String(fichero.size));
+      fichero.crear().pipe(res);
+      return;
+    }
+
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${tramo.desde}-${tramo.hasta}/${fichero.size}`);
+    res.setHeader('Content-Length', String(tramo.hasta - tramo.desde + 1));
+    fichero.crear(tramo.desde, tramo.hasta).pipe(res);
   });
 
   return router;

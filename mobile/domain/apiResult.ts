@@ -26,6 +26,30 @@ export interface FalloDeApi {
   /** El código del backend (`{ error: CÓDIGO }`), si vino. */
   readonly codigo: string | null;
   readonly mensaje: string;
+  /**
+   * El cuerpo del error, tal cual.
+   *
+   * Hace falta porque algunos errores traen DETALLE que el código solo no
+   * lleva: `VALIDATION_FAILED` viene con `fields` diciendo qué campo falla y
+   * por qué, y sin eso un formulario sólo puede decir «algo está mal».
+   *
+   * Se deja sin tipar a propósito: es la respuesta cruda de otro sistema, y
+   * quien la lea tiene que comprobar su forma. Opcional, así que nada de lo
+   * que ya existía cambia.
+   */
+  readonly detalle?: unknown;
+  /**
+   * El código HTTP, cuando hubo respuesta.
+   *
+   * `motivo` agrupa: un 429 y un 503 son los dos `ERROR_DEL_SERVIDOR`, y para
+   * una pantalla eso basta —«el servidor no responde»—. Pero quien decide si
+   * reintentar necesita distinguirlos: ante un 429 hay que esperar, y ante un
+   * 503 la siguiente muestra puede intentarlo ya.
+   *
+   * `null` cuando no hubo respuesta: sin red, tiempo agotado o configuración
+   * inválida. Opcional, así que nada de lo que ya lo lee cambia.
+   */
+  readonly estadoHttp?: number | null;
 }
 
 /**

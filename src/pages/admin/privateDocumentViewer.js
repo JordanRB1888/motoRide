@@ -13,6 +13,7 @@
 
 const LABEL_IDLE_IMAGE = 'Ver documento protegido';
 const LABEL_IDLE_PDF = 'Ver PDF protegido';
+const LABEL_IDLE_VIDEO = 'Ver vídeo protegido';
 const LABEL_BUSY = 'Abriendo documento…';
 const LABEL_FAILED = 'No disponible · reintentar';
 
@@ -40,7 +41,18 @@ export function createPrivateDocumentViewer({
   let destroyed = false;
 
   const isPdf = element => element?.dataset?.mime === 'application/pdf';
-  const idleLabel = element => (isPdf(element) ? LABEL_IDLE_PDF : LABEL_IDLE_IMAGE);
+  /**
+   * El vídeo se descarga entero antes de reproducirlo, igual que una foto.
+   *
+   * La sesión de administración viaja en una cabecera, y un `<video src="…">`
+   * apuntando a la ruta protegida no la llevaría: el navegador pediría el
+   * fichero sin sesión y el servidor respondería 401, como debe. Bajarlo con
+   * la cabecera y reproducirlo desde la Blob URL es lo que mantiene la
+   * autorización donde tiene que estar. El precio es esperar la descarga; para
+   * medio minuto de vídeo es asumible, y evita abrir una puerta sin sesión.
+   */
+  const isVideo = element => String(element?.dataset?.mime || '').startsWith('video/');
+  const idleLabel = element => (isPdf(element) ? LABEL_IDLE_PDF : isVideo(element) ? LABEL_IDLE_VIDEO : LABEL_IDLE_IMAGE);
 
   const setLabel = (element, text) => {
     if (!element?.isConnected) return;
@@ -61,8 +73,19 @@ export function createPrivateDocumentViewer({
       element.textContent = 'Abrir PDF protegido';
       return true;
     }
-    // La imagen se pinta sin construir HTML a partir de datos del servidor.
+    // Ni la imagen ni el vídeo se pintan construyendo HTML a partir de datos
+    // del servidor: se crea el elemento y se le asigna la Blob URL.
     element.textContent = '';
+    if (isVideo(element)) {
+      const video = element.ownerDocument.createElement('video');
+      video.src = url;
+      video.controls = true;
+      // Sin autoplay: el revisor decide cuándo empieza, y así no suena solo.
+      video.preload = 'metadata';
+      video.playsInline = true;
+      element.appendChild(video);
+      return true;
+    }
     const image = element.ownerDocument.createElement('img');
     image.src = url;
     image.alt = 'Documento privado';

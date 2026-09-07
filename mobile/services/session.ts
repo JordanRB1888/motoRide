@@ -28,12 +28,23 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 import type { UserRole } from '../../shared/contracts/domain';
 
 /** Las claves del almacén. Estables: cambiarlas cierra la sesión de todo el mundo. */
 const CLAVE_TOKEN = 'plus58express.session.token';
 const CLAVE_ULTIMO_ROL = 'plus58express.preferencias.ultimoRol';
+
+/**
+ * Expo web no implementa SecureStore. El respaldo plano existe únicamente en
+ * el laboratorio web de desarrollo para poder recorrer la UI autenticada; un
+ * paquete nativo y cualquier build publicada siguen usando Keychain/Keystore.
+ */
+function almacenamientoDelLaboratorioWeb(): Storage | null {
+  if (Platform.OS !== 'web' || typeof __DEV__ === 'undefined' || !__DEV__) return null;
+  return typeof localStorage === 'undefined' ? null : localStorage;
+}
 
 /** Los roles que la aplicación móvil ofrece elegir. */
 export const ROLES_MOVILES = ['passenger', 'driver'] as const;
@@ -63,17 +74,105 @@ export function esRolMovil(valor: unknown): valor is RolMovil {
  * abrió ahí.
  */
 export async function guardarToken(token: string): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.setItem(CLAVE_TOKEN, token);
+    return;
+  }
   await SecureStore.setItemAsync(CLAVE_TOKEN, token, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
   });
 }
 
 export async function leerToken(): Promise<string | null> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) return web.getItem(CLAVE_TOKEN);
   return SecureStore.getItemAsync(CLAVE_TOKEN);
+}
+
+/**
+ * La suscripción push de ESTE teléfono, y de quién es.
+ *
+ * Se guarda junto al token de sesión y con las mismas garantías: no viaja en
+ * copias de seguridad. Lleva el `userId` a propósito: al abrir la aplicación
+ * con otra cuenta hay que saber que la suscripción guardada es de la anterior
+ * para volver a registrar el dispositivo a nombre de la nueva, y no fiarse de
+ * un identificador que ya no es de quien está delante.
+ */
+const CLAVE_SUSCRIPCION_PUSH = 'plus58express.push.suscripcion';
+
+export interface SuscripcionPushGuardada {
+  readonly userId: string;
+  readonly id: string;
+}
+
+export async function guardarSuscripcionPush(valor: SuscripcionPushGuardada): Promise<void> {
+  const texto = JSON.stringify(valor);
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.setItem(CLAVE_SUSCRIPCION_PUSH, texto);
+    return;
+  }
+  await SecureStore.setItemAsync(CLAVE_SUSCRIPCION_PUSH, texto, {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
+  });
+}
+
+export async function leerSuscripcionPush(): Promise<SuscripcionPushGuardada | null> {
+  const web = almacenamientoDelLaboratorioWeb();
+  const texto = web !== null ? web.getItem(CLAVE_SUSCRIPCION_PUSH) : await SecureStore.getItemAsync(CLAVE_SUSCRIPCION_PUSH);
+  if (typeof texto !== 'string' || texto === '') return null;
+  try {
+    const dato = JSON.parse(texto) as Partial<SuscripcionPushGuardada>;
+    if (typeof dato.userId === 'string' && typeof dato.id === 'string' && dato.userId !== '' && dato.id !== '') {
+      return { userId: dato.userId, id: dato.id };
+    }
+  } catch {
+    // Un valor ilegible se trata como inexistente: se volverá a registrar.
+  }
+  return null;
+}
+
+export async function borrarSuscripcionPush(): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.removeItem(CLAVE_SUSCRIPCION_PUSH);
+    return;
+  }
+  await SecureStore.deleteItemAsync(CLAVE_SUSCRIPCION_PUSH);
+}
+
+/**
+ * Si ya se pidió el permiso de notificaciones EN ESTE TELÉFONO. Es del
+ * aparato, no de la cuenta: no se borra al cerrar sesión. Ver la nota en
+ * `estadoDePermiso` sobre por qué Android obliga a recordarlo.
+ */
+const CLAVE_PERMISO_PUSH_PEDIDO = 'plus58express.push.permisoPedido';
+
+export async function marcarPermisoPushPedido(): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.setItem(CLAVE_PERMISO_PUSH_PEDIDO, '1');
+    return;
+  }
+  await SecureStore.setItemAsync(CLAVE_PERMISO_PUSH_PEDIDO, '1', {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
+  });
+}
+
+export async function sePidioPermisoPush(): Promise<boolean> {
+  const web = almacenamientoDelLaboratorioWeb();
+  const valor = web !== null ? web.getItem(CLAVE_PERMISO_PUSH_PEDIDO) : await SecureStore.getItemAsync(CLAVE_PERMISO_PUSH_PEDIDO);
+  return valor === '1';
 }
 
 /** Cierra la sesión. Borra el token; la preferencia de rol se conserva. */
 export async function borrarToken(): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.removeItem(CLAVE_TOKEN);
+    return;
+  }
   await SecureStore.deleteItemAsync(CLAVE_TOKEN);
 }
 
@@ -86,16 +185,30 @@ export async function borrarToken(): Promise<void> {
  * aprobado verá la pantalla que le corresponda según su estado real.
  */
 export async function guardarUltimoRol(rol: RolMovil): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.setItem(CLAVE_ULTIMO_ROL, rol);
+    return;
+  }
   await SecureStore.setItemAsync(CLAVE_ULTIMO_ROL, rol);
 }
 
 export async function leerUltimoRol(): Promise<RolMovil | null> {
-  const guardado = await SecureStore.getItemAsync(CLAVE_ULTIMO_ROL);
+  const web = almacenamientoDelLaboratorioWeb();
+  const guardado = web !== null
+    ? web.getItem(CLAVE_ULTIMO_ROL)
+    : await SecureStore.getItemAsync(CLAVE_ULTIMO_ROL);
   return esRolMovil(guardado) ? guardado : null;
 }
 
 /** Borra todo lo de esta aplicación. Para «cerrar sesión y olvidar el dispositivo». */
 export async function olvidarTodo(): Promise<void> {
+  const web = almacenamientoDelLaboratorioWeb();
+  if (web !== null) {
+    web.removeItem(CLAVE_TOKEN);
+    web.removeItem(CLAVE_ULTIMO_ROL);
+    return;
+  }
   await SecureStore.deleteItemAsync(CLAVE_TOKEN);
   await SecureStore.deleteItemAsync(CLAVE_ULTIMO_ROL);
 }

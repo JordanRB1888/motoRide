@@ -79,6 +79,13 @@ export const MAX_TRIP_DURATION_MIN = 12 * 60;
  * Métricas de ruta. Devuelve `{ distanceKm, durationMin }` cuando ambas son
  * utilizables, `null` cuando faltan las dos, y lanza `INVALID_ROUTE_METRICS`
  * cuando vienen presentes pero fuera de rango.
+ *
+ * SIN CONSUMIDOR EN PRODUCCIÓN DESDE PASSENGER-TRIP-HARDENING-1
+ *
+ * Existía para leer la distancia que mandaba el teléfono. Ya no se lee ninguna:
+ * el servidor mide el recorrido él mismo en `domain/tripMetrics.js`. Se
+ * conserva porque sus límites siguen describiendo qué es un viaje razonable, y
+ * porque borrarla no arregla nada que esté roto.
  */
 export function normalizeRouteMetrics({ distanceKm, durationMin } = {}) {
   const faltaDistancia = distanceKm === undefined || distanceKm === null || distanceKm === '';

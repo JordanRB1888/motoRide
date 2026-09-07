@@ -30,8 +30,28 @@ const CLAVE_ADMIN = 'legacy-payout-gate-admin';
 
 const arrancados = [];
 
+/**
+ * Este archivo levanta una decena de servidores a la vez, y sacar cada puerto
+ * de un sorteo independiente sobre 300 casillas hace que dos coincidan con
+ * bastante frecuencia --el segundo muere con EADDRINUSE y el fallo aparece en
+ * una prueba distinta en cada ejecucion, sin ninguna asercion rota--. El
+ * sorteo se mantiene, porque el bloque es el que declara `testPortRanges`;
+ * lo que se anade es la memoria de lo ya repartido.
+ */
+const puertosRepartidos = new Set();
+
+function puertoLibre() {
+  for (;;) {
+    const puerto = 25600 + Math.floor(Math.random() * 300);
+    if (!puertosRepartidos.has(puerto)) {
+      puertosRepartidos.add(puerto);
+      return puerto;
+    }
+  }
+}
+
 async function levantarServidor(dataFile, extra = {}) {
-  const puerto = 25600 + Math.floor(Math.random() * 300);
+  const puerto = puertoLibre();
   const hijo = spawn(process.execPath, ['index.js'], {
     cwd: dirServidor,
     env: {

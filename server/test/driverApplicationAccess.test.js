@@ -66,7 +66,8 @@ async function submitApplication(url, { email, phone, plate = 'PLACA01', identit
 }
 
 const CLAVES_LISTA = ['applicantName', 'createdAt', 'decisionReason', 'documentCount', 'documentsPendingCount',
-  'id', 'status', 'submittedAt', 'updatedAt', 'vehiclePlate', 'vehicleType'];
+  'id', 'missingDocumentCount', 'requirementsVersion', 'servicesAppliedFor',
+  'status', 'submittedAt', 'updatedAt', 'vehiclePlate', 'vehicleType'];
 
 const PROHIBIDOS_LISTA = ['personal', 'vehicle', 'documents', 'contentUrl', 'storageKey', 'originalName', 'userId', 'reviewedBy', 'user'];
 
@@ -114,14 +115,16 @@ test('el detalle administrativo entrega el expediente sin contentUrl', async (t)
 
   assert.deepEqual(
     Object.keys(detalle).sort(),
-    ['applicant', 'createdAt', 'decisionReason', 'documents', 'id', 'personal', 'requestedChanges',
-     'reviewedAt', 'reviewedBy', 'status', 'submittedAt', 'updatedAt', 'vehicle'].sort()
+    ['applicant', 'checkpoints', 'createdAt', 'decisionReason', 'documents', 'id', 'license',
+     'medicalCertificate', 'missingDocuments', 'personal', 'requestedChangeDetails', 'requestedChanges',
+     'requirementsVersion', 'reviewedAt', 'reviewedBy', 'servicesAppliedFor', 'status', 'submittedAt',
+     'textualCorrections', 'updatedAt', 'vehicle'].sort()
   );
   // El expediente sí lleva la identificación: es su función.
   assert.equal(detalle.personal.identityNumber, 'V-11111111');
   // Los documentos solo llevan metadatos.
   for (const documento of detalle.documents) {
-    assert.deepEqual(Object.keys(documento).sort(), ['id', 'mimeType', 'size', 'status', 'type', 'updatedAt']);
+    assert.deepEqual(Object.keys(documento).sort(), ['durationSeconds', 'id', 'mimeType', 'size', 'status', 'type', 'updatedAt']);
     assert.equal(documento.contentUrl, undefined);
     assert.equal(documento.storageKey, undefined);
     assert.equal(documento.originalName, undefined);
@@ -157,8 +160,9 @@ test('un conductor no puede leer el listado ni el detalle administrativo', async
   assert.equal(vista.id, propia.application.id);
   assert.deepEqual(
     Object.keys(vista).sort(),
-    ['createdAt', 'decisionReason', 'documents', 'id', 'personal', 'requestedChanges',
-     'status', 'submittedAt', 'updatedAt', 'vehicle'].sort()
+    ['checkpoints', 'createdAt', 'decisionReason', 'documents', 'id', 'license', 'medicalCertificate',
+     'missingDocuments', 'personal', 'requestedChangeDetails', 'requestedChanges', 'requirementsVersion',
+     'servicesAppliedFor', 'status', 'submittedAt', 'textualCorrections', 'updatedAt', 'vehicle'].sort()
   );
   assert.equal(vista.reviewedBy, undefined, 'quién revisó es información interna');
   assert.equal(vista.applicant, undefined);

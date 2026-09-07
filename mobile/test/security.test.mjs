@@ -81,9 +81,35 @@ test('el token de sesión sólo se guarda en el almacén SEGURO', () => {
   const codigo = soloCodigo(sesion);
 
   assert.match(codigo, /expo-secure-store/, 'usa el almacén seguro del sistema');
-  // Nada de almacenamiento plano para el token.
   assert.equal(codigo.includes('AsyncStorage'), false, 'el token no va a almacenamiento plano');
-  assert.equal(/localStorage|sessionStorage/.test(codigo), false, 'ni a almacenamiento del navegador');
+
+  // EN NATIVO, NUNCA EL NAVEGADOR
+  //
+  // Antes esta prueba prohibía la PALABRA `localStorage` en el fichero. Era
+  // una regla útil mientras no existía laboratorio web, pero prohibir una
+  // palabra no es lo mismo que prohibir un comportamiento: lo que hay que
+  // garantizar es que un teléfono jamás llegue ahí.
+  //
+  // Ahora se comprueba la guarda de plataforma, que es lo que de verdad
+  // protege: en iOS y Android `Platform.OS !== 'web'` corta antes, y en una
+  // build publicada `__DEV__` es falso, así que el respaldo plano sólo existe
+  // en el laboratorio web de desarrollo.
+  const guarda = codigo.match(
+    /function\s+\w+\([^)]*\)\s*:\s*Storage \| null \{[\s\S]{0,400}?\n\}/
+  );
+  assert.ok(guarda, 'el respaldo web debe estar en UNA función que devuelva Storage | null');
+  assert.match(guarda[0], /Platform\.OS !== 'web'/, 'corta en cuanto no es web');
+  assert.match(guarda[0], /__DEV__/, 'y sólo vale en desarrollo');
+
+  // Y nadie más toca el navegador: todos los accesos están dentro de ella.
+  const fuera = codigo.replace(guarda[0], '');
+  assert.equal(
+    /localStorage|sessionStorage/.test(fuera), false,
+    'hay un acceso al navegador fuera de la guarda de plataforma'
+  );
+
+  // El token se escribe con la protección más fuerte del almacén seguro.
+  assert.match(codigo, /WHEN_UNLOCKED_THIS_DEVICE_ONLY/, 'no viaja en copias de seguridad');
 });
 
 test('ningún fichero del móvil guarda el token en almacenamiento plano', () => {
@@ -161,9 +187,21 @@ test('NO se piden permisos al arrancar', () => {
 });
 
 test('no hay GPS en segundo plano ni registro de notificaciones', () => {
+  // Esta prueba prohibía `expo-location` entero. Ya no: el dueño autorizó
+  // la ubicación en primer plano, que es la que se ve y se explica sola.
+  //
+  // Lo que sigue vedado es medir con la aplicación cerrada, que es donde
+  // están la batería y el consentimiento de verdad: `expo-task-manager` es
+  // la pieza que hace falta para eso, y no está.
   const paquete = JSON.parse(fs.readFileSync(path.join(raizMovil, 'package.json'), 'utf8'));
   const dependencias = Object.keys(paquete.dependencies ?? {});
-  for (const nombre of ['expo-location', 'expo-notifications', 'expo-task-manager']) {
+  // `expo-task-manager` entra en DRIVER-LOCATION-RESILIENCE-1 con el
+  // seguimiento del conductor en servicio. `expo-notifications` entra en
+  // PUSH-NOTIFICATIONS-1 con su propio consentimiento: se pide con sesion
+  // confirmada, una sola vez, y si se deniega no se insiste --eso lo vigila
+  // `notificaciones.test.mjs`--. Lo que sigue vedado es medir en segundo
+  // plano por fuera del seguimiento del conductor.
+  for (const nombre of ['expo-background-fetch']) {
     assert.equal(dependencias.includes(nombre), false,
       `${nombre} no corresponde a esta fase`);
   }
@@ -173,14 +211,43 @@ test('no hay GPS en segundo plano ni registro de notificaciones', () => {
 // Mapas: decisión aplazada
 // ---------------------------------------------------------------------------
 
-test('no se ha elegido proveedor de mapas', () => {
-  // Google Navigation SDK frente a Mapbox sigue sin decidirse. Instalar uno
-  // ahora sería tomar la decisión por la puerta de atrás.
+test('el proveedor de mapas es el que el dueño eligió, y sólo ese', () => {
+  // La prueba anterior prohibía CUALQUIER proveedor porque la decisión estaba
+  // abierta. El dueño eligió Google con `react-native-maps`, así que lo que se
+  // protege ahora es que no entre un SEGUNDO proveedor por la puerta de atrás:
+  // dos mapas en la misma aplicación son dos facturas y dos aspectos.
   const paquete = JSON.parse(fs.readFileSync(path.join(raizMovil, 'package.json'), 'utf8'));
   const todas = Object.keys({ ...paquete.dependencies, ...paquete.devDependencies });
+
   for (const nombre of todas) {
-    assert.equal(/mapbox|react-native-maps|google-maps/i.test(nombre), false,
-      `proveedor de mapas instalado sin decisión: ${nombre}`);
+    assert.equal(/mapbox|maplibre|expo-maps|leaflet/i.test(nombre), false,
+      `segundo proveedor de mapas instalado: ${nombre}`);
+  }
+  assert.ok(todas.includes('react-native-maps'), 'falta el proveedor elegido');
+  // Fijada: un `npm install` limpio no puede traer otra versión que la probada
+  // contra este SDK de Expo.
+  assert.match(paquete.dependencies['react-native-maps'], /^\d+\.\d+\.\d+$/);
+});
+
+test('la clave del SERVIDOR no aparece en el cliente', () => {
+  // `DISPATCH_ROUTES_API_KEY` calcula rutas en el despacho y no tiene
+  // restricción de referente: publicada en una aplicación es una factura
+  // abierta. Sólo puede nombrarse para prohibirla.
+  const carpetas = ['app', 'mapa', 'domain', 'services', 'realtime', 'ui', 'preview', 'config'];
+  for (const carpeta of carpetas) {
+    const ruta = path.join(raizMovil, carpeta);
+    if (!fs.existsSync(ruta)) continue;
+    for (const nombre of fs.readdirSync(ruta, { recursive: true })) {
+      const completa = path.join(ruta, String(nombre));
+      if (!fs.statSync(completa).isFile() || !/\.tsx?$/.test(completa)) continue;
+      // El fichero de claves lo NOMBRA para declararlo prohibido.
+      if (completa.endsWith(path.join('mapa', 'claves.ts'))) continue;
+
+      assert.equal(
+        /DISPATCH_ROUTES_API_KEY/.test(fs.readFileSync(completa, 'utf8')), false,
+        `${carpeta}/${nombre} menciona la clave del servidor`
+      );
+    }
   }
 });
 
@@ -192,8 +259,18 @@ test('la configuración de la app no lleva secretos', () => {
   // Todo `EXPO_PUBLIC_*` queda incrustado en el paquete instalable y se puede
   // leer descompilándolo.
   const app = fs.readFileSync(path.join(raizMovil, 'app.json'), 'utf8');
-  const prohibido = /(secret|password|apiKey|api_key|token|privateKey|JWT_SECRET)\s*"?\s*:/i;
-  assert.equal(prohibido.test(app), false, 'app.json contiene algo con pinta de secreto');
+
+  // Las claves de Google se declaran por REFERENCIA -`$EXPO_PUBLIC_...`-, no
+  // por valor: Expo las sustituye al construir y el fichero no lleva ninguna.
+  // Esas referencias se descuentan antes de buscar secretos; cualquier otro
+  // `apiKey` con un valor de verdad sigue estando prohibido.
+  const sinReferencias = app.replace(/"\$EXPO_PUBLIC_[A-Z0-9_]+"/g, '"<referencia>"');
+
+  const prohibido = /(secret|password|api_key|token|privateKey|JWT_SECRET)\s*"?\s*:/i;
+  assert.equal(prohibido.test(sinReferencias), false, 'app.json contiene algo con pinta de secreto');
+
+  // Y ninguna clave literal de Google: siempre empiezan por `AIza`.
+  assert.equal(/AIza[0-9A-Za-z_-]{10,}/.test(app), false, 'hay una clave de Google escrita en app.json');
 });
 
 test('los identificadores de app son coherentes entre plataformas', () => {

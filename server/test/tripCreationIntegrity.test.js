@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { calculateFare } from '../domain/pricingService.js';
+import { metricasGeodesicas } from '../domain/tripMetrics.js';
 
 const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -20,13 +21,26 @@ function tarifaCanonica({ distanceKm, durationMin, rideType = 'MOTO' }) {
   return calculateFare({ distanceKm, durationMin, rideType }).fareUSD;
 }
 
+/**
+ * La tarifa de un recorrido, medido POR EL SERVIDOR.
+ *
+ * Desde PASSENGER-TRIP-HARDENING-1 el cuerpo de la peticion ya no aporta
+ * kilometros: el servidor mide los dos puntos con su propia regla. Por eso lo
+ * que se espera aqui se calcula igual que lo calcula el, en vez de fijar un
+ * numero a mano que dejaria de valer al tocar el estimador.
+ */
+function tarifaDelServidor(origen, destino, rideType = 'MOTO') {
+  const metricas = metricasGeodesicas(origen, destino);
+  return calculateFare({ ...metricas, rideType }).fareUSD;
+}
+
 async function startServer(t) {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-int-'));
   const dataFile = path.join(tempDir, 'database.json');
   const port = 14100 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
-    env: { ...process.env, PORT: String(port), DATA_FILE: dataFile, JWT_SECRET: 'integrity-test-secret' },
+    env: { ...process.env, PORT: String(port), DATA_FILE: dataFile, JWT_SECRET: 'integrity-test-secret', GOOGLE_MAPS_SERVICE_ACCOUNT_FILE: './no-existe/maps-service-account.json' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   t.after(() => child.kill());
@@ -75,6 +89,51 @@ test('reintentar la misma solicitud devuelve el viaje propio ya creado', async (
   assert.equal(repetida.trip.id, 'trip_idem');
   assert.equal(repetida.trip.createdAt, creado.createdAt, 'devuelve el mismo viaje, no uno nuevo');
   assert.equal(repetida.trip.fareUSD, creado.fareUSD, 'el reintento no cambia la tarifa');
+});
+
+test('reintentar sobre un viaje YA CANCELADO devuelve ese mismo viaje', async (t) => {
+  // El caso que se vio en el emulador. La pasajera pide, el viaje se cancela
+  // --nadie lo tomó-- y vuelve a tocar el botón con la misma clave. No puede
+  // salir un segundo viaje, y la respuesta tiene que ser legible: la pantalla
+  // se quedaba con «el viaje se creó pero no se pudo leer».
+  const { url } = await startServer(t);
+  const passenger = await registerPassenger(url, { email: 'idemcancel@58express.com', phone: '+584120002099' });
+
+  const primera = await crear(url, passenger.token, { ...BASE, id: 'trip_idem_cancel' });
+  assert.equal(primera.status, 200);
+  const creado = (await primera.json()).trip;
+
+  const admin = await asJson(`${url}/api/auth/login`, null, {
+    method: 'POST', body: JSON.stringify({ identifier: 'admin@58express.com', password: 'admin', role: 'admin' })
+  });
+  const { token: adminToken } = await admin.json();
+  const cancelacion = await asJson(`${url}/api/admin/trips/trip_idem_cancel`, adminToken, {
+    method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' })
+  });
+  assert.equal(cancelacion.status, 200);
+
+  const reintento = await crear(url, passenger.token, { ...BASE, id: 'trip_idem_cancel' });
+  assert.equal(reintento.status, 200);
+  const cuerpo = await reintento.json();
+
+  // Mismo viaje, cero duplicados, y el estado REAL: cancelado.
+  assert.equal(cuerpo.status, 'existing');
+  assert.equal(cuerpo.idempotentReplay, true);
+  assert.equal(cuerpo.trip.id, 'trip_idem_cancel');
+  assert.equal(cuerpo.trip.createdAt, creado.createdAt);
+  assert.equal(cuerpo.trip.status, 'CANCELLED', 'la respuesta tiene que decir la verdad del viaje');
+
+  // Y la forma es LA MISMA que la de una creación: un sobre con `trip` dentro.
+  // Si divergieran, el cliente tendría que aprender dos maneras de leer lo
+  // mismo, y ahí es justo donde se rompía.
+  assert.equal(typeof cuerpo.trip.id, 'string');
+  assert.equal(typeof cuerpo.trip.status, 'string');
+
+  // No se creó ningún viaje de más.
+  const historial = await asJson(`${url}/api/trips/me/history`, passenger.token, { method: 'GET' });
+  const viajes = await historial.json();
+  const lista = Array.isArray(viajes) ? viajes : (viajes.trips ?? []);
+  assert.equal(lista.filter(v => v.id === 'trip_idem_cancel').length, 1, 'el reintento duplicó el viaje');
 });
 
 test('otro pasajero no puede reutilizar un identificador ajeno', async (t) => {
@@ -210,75 +269,98 @@ test('la billetera conserva su semántica tras la normalización', async (t) => 
 
 // --- Manipulación de tarifa y métricas ---
 
-test('con métricas de ruta el servidor ignora por completo la tarifa del cliente', async (t) => {
+test('el precio no lo mueve NADA de lo que mande el cliente', async (t) => {
   const { url } = await startServer(t);
-  const passenger = await registerPassenger(url, { email: 'tarifa@58express.com', phone: '+584120002012' });
+  const esperada = tarifaDelServidor(PICKUP, DESTINATION);
 
-  // Base: 1.5 + 5×0.45 + 12×0.04 = 4.23, más el recargo horario que toque.
-  const conRuta = { ...BASE, distanceKm: 5, durationMin: 12, id: 'trip_tarifa_alta' };
-  const esperada = tarifaCanonica({ distanceKm: 5, durationMin: 12 });
+  // Cada intento con su propia pasajera: desde PASSENGER-TRIP-HARDENING-1 una
+  // sola no puede tener dos viajes abiertos, y aquí lo que se mide es el
+  // precio, no la invariante.
+  const casos = [
+    { nombre: 'inflada', cuerpo: { fareUSD: 999 } },
+    { nombre: 'barata', cuerpo: { fareUSD: 0.01 } },
+    { nombre: 'basura', cuerpo: { fareUSD: 'gratis' } },
+    // Y las MÉTRICAS: declarar cuarenta kilómetros donde hay uno era la vía
+    // por la que se inflaba el importe. Ahora se ignoran igual que la tarifa.
+    { nombre: 'kilometros inflados', cuerpo: { distanceKm: 40, durationMin: 90 } },
+    { nombre: 'kilometros ridiculos', cuerpo: { distanceKm: 0.01, durationMin: 1 } }
+  ];
 
-  const inflada = await crear(url, passenger.token, { ...conRuta, fareUSD: 999 });
-  assert.equal(inflada.status, 200);
-  const caraTrip = (await inflada.json()).trip;
-  assert.equal(caraTrip.fareUSD, esperada, 'manda el cálculo del servidor');
-  assert.equal(caraTrip.fareSource, 'SERVER_CALCULATED');
-  assert.notEqual(caraTrip.fareUSD, 999);
+  const importes = [];
+  for (const [indice, caso] of casos.entries()) {
+    const passenger = await registerPassenger(url, {
+      email: `tarifa${indice}@58express.com`, phone: `+58412000301${indice}`
+    });
+    const r = await crear(url, passenger.token, { ...BASE, ...caso.cuerpo, id: `trip_tarifa_${indice}` });
+    assert.equal(r.status, 200, caso.nombre);
+    const trip = (await r.json()).trip;
+    assert.equal(trip.fareUSD, esperada, `${caso.nombre}: manda el cálculo del servidor`);
+    assert.equal(trip.fareSource, 'SERVER_CALCULATED', caso.nombre);
+    importes.push(trip.fareUSD);
+  }
 
-  const barata = await crear(url, passenger.token, { ...conRuta, fareUSD: 0.01, id: 'trip_tarifa_baja' });
-  const baratoTrip = (await barata.json()).trip;
-  assert.equal(baratoTrip.fareUSD, esperada, 'el pasajero no paga menos manipulando el cuerpo');
-  assert.equal(caraTrip.fareUSD, baratoTrip.fareUSD, 'la tarifa declarada no influye en el importe');
-
-  // Incluso con una tarifa inválida, si hay ruta el servidor calcula igual.
-  const conBasura = await crear(url, passenger.token, { ...conRuta, fareUSD: 'gratis', id: 'trip_tarifa_basura' });
-  assert.equal(conBasura.status, 200);
-  assert.equal((await conBasura.json()).trip.fareUSD, esperada);
+  // Todos los intentos pagan lo mismo: es la prueba de que el cuerpo no influye.
+  assert.equal(new Set(importes).size, 1, 'alguien consiguió un precio distinto manipulando el cuerpo');
 });
 
-test('las métricas de ruta inválidas o desproporcionadas se rechazan', async (t) => {
+test('las métricas basura del cliente ya no se validan: se IGNORAN', async (t) => {
   const { url } = await startServer(t);
-  const passenger = await registerPassenger(url, { email: 'metricas@58express.com', phone: '+584120002013' });
+  const esperada = tarifaDelServidor(PICKUP, DESTINATION);
 
-  const invalidas = [
+  // Antes había que validarlas porque se usaban para cobrar, y una distancia
+  // negativa o un texto rompían el cálculo. Ahora no se leen: el servidor mide
+  // los dos puntos. Mandar basura no es un error --se descarta-- y sobre todo
+  // NO cambia el importe.
+  const basura = [
     { distanceKm: -5, durationMin: 12 },
     { distanceKm: 5, durationMin: -12 },
     { distanceKm: 'lejos', durationMin: 12 },
-    { distanceKm: 5, durationMin: 'rato' },
     { distanceKm: [], durationMin: 12 },
-    { distanceKm: 5 },
-    { durationMin: 12 }
+    { distanceKm: 99999, durationMin: 99999 }
   ];
-  for (const metricas of invalidas) {
-    const r = await crear(url, passenger.token, { ...BASE, ...metricas });
-    assert.equal(r.status, 400, `debía rechazarse: ${JSON.stringify(metricas)}`);
-    assert.equal((await r.json()).error, 'INVALID_ROUTE_METRICS');
+  for (const [indice, metricas] of basura.entries()) {
+    const passenger = await registerPassenger(url, {
+      email: `metricas${indice}@58express.com`, phone: `+58412000302${indice}`
+    });
+    const r = await crear(url, passenger.token, { ...BASE, ...metricas, id: `trip_metricas_${indice}` });
+    assert.equal(r.status, 200, `ya no se rechaza: ${JSON.stringify(metricas)}`);
+    const trip = (await r.json()).trip;
+    assert.equal(trip.fareUSD, esperada, `no cambia el precio: ${JSON.stringify(metricas)}`);
+    assert.ok(trip.distanceKm > 0 && trip.distanceKm < 100, 'la distancia guardada es la del servidor');
   }
-
-  const desproporcionadas = await crear(url, passenger.token, { ...BASE, distanceKm: 99999, durationMin: 99999 });
-  assert.equal(desproporcionadas.status, 400);
-  assert.equal((await desproporcionadas.json()).error, 'ROUTE_METRICS_OUT_OF_RANGE');
 });
 
-test('sin métricas de ruta la estimación del cliente se acota, y sigue siendo confiada', async (t) => {
+test('sin métricas en el cuerpo el servidor mide igual: no hay estimación del cliente', async (t) => {
   const { url } = await startServer(t);
-  const passenger = await registerPassenger(url, { email: 'estim@58express.com', phone: '+584120002014' });
+  const esperada = tarifaDelServidor(PICKUP, DESTINATION);
 
-  for (const fare of [0, -1, 999999, NaN, 'gratis', {}, [], true, null]) {
-    const r = await crear(url, passenger.token, { ...BASE, fareUSD: fare, fareEUR: undefined });
-    assert.equal(r.status, 400, `debía rechazarse: ${JSON.stringify(fare)}`);
-    assert.equal((await r.json()).error, 'INVALID_FARE_ESTIMATE');
+  // AQUI ESTABA EL RIESGO PENDIENTE (alta).
+  //
+  // Sin `distanceKm` el servidor se quedaba sin fuente propia y conservaba la
+  // tarifa que declaraba el cliente, acotada. Era la ultima via por la que una
+  // pasajera influia en el importe de su viaje. Ya no existe: sin metricas en
+  // el cuerpo --que es el caso NORMAL ahora-- el servidor mide los dos puntos.
+  for (const [indice, fare] of [0, -1, 999999, 'gratis', null].entries()) {
+    const passenger = await registerPassenger(url, {
+      email: `estim${indice}@58express.com`, phone: `+58412000303${indice}`
+    });
+    const r = await crear(url, passenger.token, {
+      ...BASE, fareUSD: fare, fareEUR: undefined, id: `trip_estim_${indice}`
+    });
+    assert.equal(r.status, 200, `ya no se rechaza: ${JSON.stringify(fare)}`);
+    const trip = (await r.json()).trip;
+    assert.equal(trip.fareUSD, esperada, `la tarifa es la del servidor: ${JSON.stringify(fare)}`);
+    assert.equal(trip.fareSource, 'SERVER_CALCULATED');
   }
 
-  // RIESGO CONOCIDO Y PENDIENTE: sin distancia ni duración el servidor no
-  // tiene fuente propia para calcular, así que acepta la estimación del
-  // cliente dentro de límites. Esta prueba documenta exactamente qué parte
-  // sigue siendo confiada.
-  const aceptada = await crear(url, passenger.token, { ...BASE, fareUSD: 4.5, id: 'trip_estimada' });
+  // Y NADIE lleva ya la marca de tarifa del cliente: ese camino se borro.
+  const ultima = await registerPassenger(url, { email: 'estimz@58express.com', phone: '+584120003039' });
+  const aceptada = await crear(url, ultima.token, { ...BASE, fareUSD: 4.5, id: 'trip_estimada' });
   assert.equal(aceptada.status, 200);
   const trip = (await aceptada.json()).trip;
-  assert.equal(trip.fareUSD, 4.5, 'la estimación del cliente se conserva');
-  assert.equal(trip.fareSource, 'CLIENT_ESTIMATE', 'y queda marcada como no autoritativa');
+  assert.notEqual(trip.fareUSD, 4.5, 'la estimación del cliente NO se conserva');
+  assert.equal(trip.fareSource, 'SERVER_CALCULATED');
+  assert.equal(trip.metricsSource, 'SERVER_GEODESIC', 'sin credencial de Routes, la regla propia');
 });
 
 test('la tarifa canónica del servidor es la que usan saldo y liquidación', async (t) => {
@@ -296,14 +378,14 @@ test('la tarifa canónica del servidor es la que usan saldo y liquidación', asy
     method: 'PATCH', body: JSON.stringify({ status: 'APPROVED', referenceConfirmed: true })
   });
 
-  // El cliente declara 0.01 pero la ruta da 4.23: el saldo debe reservarse
-  // contra la tarifa canónica, no contra la declarada.
+  // El cliente declara 0.01 pero el servidor mide el recorrido: el saldo debe
+  // reservarse contra la tarifa que sale de esa medida, no contra la declarada.
   const r = await crear(url, passenger.token, {
     ...BASE, paymentMethod: 'wallet', fareUSD: 0.01, distanceKm: 5, durationMin: 12, id: 'trip_canonico'
   });
   assert.equal(r.status, 200);
   const trip = (await r.json()).trip;
-  const esperada = tarifaCanonica({ distanceKm: 5, durationMin: 12 });
+  const esperada = tarifaDelServidor(PICKUP, DESTINATION);
   assert.equal(trip.fareUSD, esperada, 'tarifa canónica del servidor');
   assert.notEqual(trip.fareUSD, 0.01);
 
@@ -338,7 +420,38 @@ test('un pasajero no puede inyectar identidad ni estado junto a la tarifa', asyn
   assert.notEqual(trip.status, 'COMPLETED');
   assert.equal(trip.driverId, null);
   assert.equal(trip.walletBalance, undefined);
-  assert.equal(trip.fareUSD, tarifaCanonica({ distanceKm: 5, durationMin: 12 }), 'la tarifa la calcula el servidor');
+  assert.equal(trip.fareUSD, tarifaDelServidor(PICKUP, DESTINATION), 'la tarifa la calcula el servidor');
   assert.notEqual(trip.fareUSD, 0.01);
   assert.equal(trip.fareSource, 'SERVER_CALCULATED');
+});
+
+test('el guard de creación y /active/me nunca se contradicen', async (t) => {
+  // LA INVARIANTE, comprobada como bicondicional: una pasajera está bloqueada
+  // para crear SI Y SÓLO SI `/active/me` le enseña un viaje. Antes el guard y
+  // `/active/me` usaban criterios distintos y podía quedar bloqueada por un
+  // viaje que la aplicación ya no le mostraba. Ahora los dos preguntan a la
+  // misma autoridad, así que las dos respuestas tienen que concordar SIEMPRE,
+  // termine el primer viaje activo o cancelado (aquí no hay conductores, así que
+  // el despacho lo cancela; con conductor seguiría vivo y bloqueando).
+  const { url } = await startServer(t);
+  const passenger = await registerPassenger(url, { email: 'autoridad@58express.com', phone: '+584120002020' });
+
+  await crear(url, passenger.token, { ...BASE, id: 'trip_autoridad_1' });
+
+  const activo = await asJson(`${url}/api/trips/active/me`, passenger.token);
+  const leVeUnViaje = activo.status === 200;
+  const visto = leVeUnViaje ? (await activo.json()).trip : null;
+
+  // Crear OTRO --id distinto, para no caer en el reintento idempotente--.
+  const segundo = await crear(url, passenger.token, { ...BASE, id: 'trip_autoridad_2' });
+  const bloqueado = segundo.status === 409;
+  const cuerpo = await segundo.json();
+
+  assert.equal(bloqueado, leVeUnViaje,
+    `bloqueado=${bloqueado} pero /active/me le enseña un viaje=${leVeUnViaje}: se contradicen`);
+  if (bloqueado) {
+    // Y si bloquea, el viaje que bloquea es EXACTAMENTE el que enseña /active/me.
+    assert.equal(cuerpo.error, 'ACTIVE_TRIP_EXISTS');
+    assert.equal(cuerpo.trip.id, visto.id, 'el guard bloquea con el mismo viaje que /active/me muestra');
+  }
 });

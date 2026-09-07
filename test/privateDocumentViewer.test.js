@@ -436,3 +436,62 @@ test('la pantalla de solicitudes delega la descarga y no la hace por su cuenta',
   assert.ok(!/Promise\.all\(\[\.\.\.previews\]/.test(fuente), 'no queda descarga masiva');
   assert.ok(fuente.includes('Ver documento protegido'), 'el botón invita a pedirlo');
 });
+
+// ---------------------------------------------------------------------------
+// El vídeo de presentación se reproduce con la misma sesión que abre una foto
+// ---------------------------------------------------------------------------
+
+test('un vídeo se pinta como reproductor, no como imagen', async () => {
+  const { viewer, requested } = makeHarness();
+  const boton = makeButton({ id: 'vid-1', mime: 'video/mp4' });
+  viewer.attach(boton);
+  assert.equal(boton.textContent, 'Ver vídeo protegido');
+
+  await boton.click();
+
+  // Se pide por la MISMA ruta protegida que cualquier documento: no hay un
+  // camino aparte para el vídeo, y por tanto no hay uno sin autorización.
+  assert.deepEqual(requested, ['/driver-documents/vid-1/content']);
+  const reproductor = boton.children[0];
+  assert.equal(reproductor.tag, 'video');
+  assert.equal(reproductor.src, 'blob:documento-1');
+  assert.equal(reproductor.controls, true);
+  // Sin autoplay: el revisor decide cuándo empieza y no suena solo.
+  assert.equal(reproductor.autoplay, undefined);
+  assert.equal(reproductor.preload, 'metadata');
+});
+
+test('el vídeo viaja por Blob, nunca apuntando el reproductor a la ruta protegida', () => {
+  const fuente = fs.readFileSync(
+    path.resolve(here, '..', 'src', 'pages', 'admin', 'privateDocumentViewer.js'),
+    'utf8'
+  );
+  // Un reproductor apuntando a /api/... no llevaría la cabecera de sesión: el
+  // servidor respondería 401, como debe. La Blob URL se baja CON la cabecera.
+  assert.ok(!/video\.src\s*=\s*['"][/h]/.test(fuente), 'el reproductor no apunta a una ruta del servidor');
+  assert.ok(/video\.src = url/.test(fuente), 'el reproductor usa la Blob URL ya autorizada');
+});
+
+test('el vídeo se libera como cualquier otro documento al cerrar el expediente', async () => {
+  const { viewer, revoked } = makeHarness();
+  const boton = makeButton({ id: 'vid-2', mime: 'video/quicktime' });
+  viewer.attach(boton);
+  await boton.click();
+  assert.equal(viewer.openCount, 1);
+
+  viewer.releaseAll();
+
+  // Cincuenta megas colgando de una pestaña cerrada no se quedan ahí.
+  assert.deepEqual(revoked, ['blob:documento-1']);
+  assert.equal(viewer.openCount, 0);
+});
+
+test('la tarjeta dice cuánto pesa y cuánto dura sin descargar nada', () => {
+  const fuente = fs.readFileSync(
+    path.resolve(here, '..', 'src', 'pages', 'admin', 'driverApplicationsManagement.js'),
+    'utf8'
+  );
+  assert.ok(fuente.includes('describirPeso'), 'la tarjeta describe el peso');
+  assert.ok(fuente.includes('durationSeconds'), 'y la duración, que llega en los metadatos');
+  assert.ok(fuente.includes('presentation_video'), 'el vídeo tiene nombre propio en la lista');
+});

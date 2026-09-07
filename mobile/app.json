@@ -15,23 +15,61 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.plus58express.app"
+      "bundleIdentifier": "com.plus58express.app",
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.plus58express.app",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#0e0d0b"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "bundler": "metro"
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "react-native-maps",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "+58Express usa tu ubicación para mostrar dónde estás y ayudarte a solicitar o realizar un viaje.",
+          "locationAlwaysAndWhenInUsePermission": "+58Express comparte tu ubicación mientras estás en servicio, aunque la pantalla esté apagada, para que puedas recibir y realizar viajes. Deja de compartirse cuando sales de servicio.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "+58Express usa la cámara para fotografiar tus documentos y tu vehículo y para grabar tu vídeo de presentación cuando te postulas como conductor.",
+          "photosPermission": "+58Express accede a tus fotos y vídeos para adjuntar tus documentos cuando te postulas como conductor.",
+          "microphonePermission": "+58Express usa el micrófono para grabar el sonido de tu vídeo de presentación. Sin él, el vídeo saldría mudo."
+        }
+      ],
+      "./plugins/rutaCortaDeCmake",
+      "./plugins/httpLanSoloEnDevelopment",
+      "@react-native-google-signin/google-signin",
+      "expo-apple-authentication",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffd21f",
+          "defaultChannel": "carreras"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

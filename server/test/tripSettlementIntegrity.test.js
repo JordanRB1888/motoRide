@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { io } from 'socket.io-client';
 import { calculateFare } from '../domain/pricingService.js';
+import { metricasGeodesicas } from '../domain/tripMetrics.js';
 
 const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -20,7 +21,7 @@ async function startServer(t) {
   const port = 14900 + Math.floor(Math.random() * 399);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: serverDir,
-    env: { ...process.env, PORT: String(port), DATA_FILE: path.join(tempDir, 'database.json'), JWT_SECRET: 'settlement-test-secret' },
+    env: { ...process.env, PORT: String(port), DATA_FILE: path.join(tempDir, 'database.json'), JWT_SECRET: 'settlement-test-secret', GOOGLE_MAPS_SERVICE_ACCOUNT_FILE: './no-existe/maps-service-account.json' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   t.after(() => child.kill());
@@ -121,7 +122,17 @@ test('la tarifa canónica es la que se debita, se liquida y no se duplica', asyn
   const creado = (await creacion.json()).trip;
 
   // 3. La tarifa almacenada la calculó el servidor, no el cliente.
-  const canonica = calculateFare({ distanceKm: 5, durationMin: 12, rideType: 'MOTO' }).fareUSD;
+  //
+  // Desde PASSENGER-TRIP-HARDENING-1 sale de lo que MIDE el servidor entre los
+  // dos puntos, no de los `distanceKm: 5` que manda el cuerpo --que ahora se
+  // ignoran-- ni de los `fareUSD: 0.01` que declara.
+  const canonica = calculateFare({
+    ...metricasGeodesicas(
+      { lat: 10.6427, lng: -71.6125 },
+      { lat: 10.65, lng: -71.60 }
+    ),
+    rideType: 'MOTO'
+  }).fareUSD;
   assert.equal(creado.fareUSD, canonica, 'tarifa canónica del servidor');
   assert.equal(creado.fareSource, 'SERVER_CALCULATED');
   assert.notEqual(creado.fareUSD, 0.01);

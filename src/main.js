@@ -7,6 +7,8 @@ import './styles/finance.css';
 import './styles/fleet.css';
 import './styles/support.css';
 import './styles/users.css';
+import './styles/admin-phase1.css';
+import './styles/admin-control-center.css';
 import './styles/receipt.css';
 import './styles/local-avatar.css';
 import './styles/diorama.css';

@@ -1,3 +1,8 @@
+// PRIMERO, Y NO ES UN CAPRICHO DE ORDEN: el SDK de diagnóstico instrumenta
+// `http` y Express envolviéndolos al inicializarse, así que tiene que cargarse
+// antes que ellos. El porqué completo está en `instrumentacion.js`.
+import { observabilidad } from './instrumentacion.js';
+
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -11,7 +16,15 @@ import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
-import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
+import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS, TRIP_STATUS_ALIASES } from './domain/tripStateMachine.js';
+import { calculateDistance, estadosActivos, metricasDelRecorrido } from './domain/tripMetrics.js';
+import { createRouteMatrixClient } from './services/routeMatrixClient.js';
+import { createRouteGeometryClient } from './services/routeGeometryClient.js';
+import { capturarExcepcion, capturarFalloDeSocket } from './services/observabilidad.js';
+import { crearAuthDeMaps, MODO_DE_AUTH } from './services/googleMapsAuth.js';
+import { createPlacesClient, PLACES_ERROR } from './services/placesClient.js';
+import { crearCacheDeRecorridos } from './services/routeMetricsCache.js';
+import { SIN_RUTA, tramoDeLaRuta } from './domain/rutaDelViaje.js';
 import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
 import { passengerPublicProfile, driverPublicProfile, sanitizeEmbeddedTripDriver } from './domain/userProjections.js';
 import { canViewUserPhoto, userPhotoUrl } from './domain/photoAccess.js';
@@ -19,9 +32,7 @@ import { canViewChatMedia, findMessageByMediaId } from './domain/chatMediaAccess
 import {
   PAYMENT_METHODS,
   normalizeTripId,
-  normalizePaymentMethod,
-  normalizeRouteMetrics,
-  normalizeClientFareEstimate
+  normalizePaymentMethod
 } from './domain/tripInput.js';
 import { createPrivateStorage } from './services/privateStorage.js';
 import { openDatabaseBackend } from './services/databaseBackend.js';
@@ -38,8 +49,28 @@ import { parseUserFilters, filterUsers, isSuspended } from './domain/userFilters
 import { averageAdminResponseMs } from './domain/supportMetrics.js';
 import { parseSupportSearch, filterSupportThreads } from './domain/supportSearch.js';
 import { parseTripFilters, filterTrips, summarizeTripsByUser, tripRecency, MAX_TRIP_USER_IDS } from './domain/tripFilters.js';
+// UNA sola autoridad de «viaje activo», para todos los que preguntan: el
+// despacho, `/api/trips/active/me`, el guard de creacion y el restauro. Antes
+// convivia con un `viajeActivoDe(passengerId)` local que resolvia lo mismo con
+// otro criterio --sin la ventana del SEARCHING--, y por eso una pasajera podia
+// quedar bloqueada para crear por un viaje que `/active/me` ya no le enseniaba.
+// Ese criterio local se elimino; aqui esta el unico.
+import {
+  esViajeObsoleto,
+  viajeActivoDe,
+  viajeQueOcupaAlConductor
+} from './domain/viajeActivo.js';
 import { selectEligibleDrivers } from './domain/dispatchEligibility.js';
 import { createDriverApplicationsRouter } from './routes/driverApplications.js';
+import { createHash } from 'node:crypto';
+import { createAuthRouter } from './routes/auth.js';
+import { createAuthIdentityStore } from './services/authIdentityStore.js';
+import { createVerificationService } from './services/verificationChallenges.js';
+import { crearProveedores, describirConfiguracion } from './services/verificationProviders.js';
+import { crearTransporteHttp, TIMEOUT_POR_OMISION_MS } from './services/verificationTransport.js';
+import { crearVerificadorSocial } from './services/socialTokenVerifier.js';
+import { normalizarTelefono } from './domain/contactos.js';
+import { ESTADO_BORRADO, tokenSigueValiendo } from './domain/borradoDeCuenta.js';
 import { createPushRouter } from './routes/push.js';
 import { createTripOfflineEventsRouter } from './routes/tripOfflineEvents.js';
 import { createTransportSubscriptionsRouter } from './routes/transportSubscriptions.js';
@@ -49,7 +80,9 @@ import {
   DEFAULT_SAFE_TRANSPORT_PRICING,
   sanitizeSafeTransportPricing
 } from './services/safeTransport.js';
-import { createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
+import { PUSH_TYPE, createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
+import { createFcmSender } from './services/fcmSender.js';
+import { crearSenderCompuesto } from './services/pushSender.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
 import {
@@ -85,6 +118,15 @@ const limitadores = {
   cercania: createIdentityLimiter({ name: 'cercania', limit: 180, windowMs: MINUTO }),
   // Leen de disco en cada peticion. El panel abre una por ficha desplegada.
   archivos: createIdentityLimiter({ name: 'archivos', limit: 180, windowMs: MINUTO }),
+  // La geometria de la ruta puede acabar en una llamada de PAGO a Google. La
+  // cache absorbe la mayoria --dos minutos, clave redondeada-- pero el techo lo
+  // pone esto: sesenta por minuto es un pulso cada segundo, cuatro veces mas de
+  // lo que el movil pide, y aun asi acotado si alguien decide insistir.
+  rutas: createIdentityLimiter({ name: 'rutas', limit: 60, windowMs: MINUTO }),
+  // Buscar el destino es escribir: cada pulsacion podria ser una llamada de
+  // PAGO a Places. El cliente agrupa las teclas antes de preguntar, pero el
+  // techo lo pone esto.
+  lugares: createIdentityLimiter({ name: 'lugares', limit: 60, windowMs: MINUTO }),
   // Subidas: caras y raras.
   subidas: createIdentityLimiter({ name: 'subidas', limit: 30, windowMs: CUARTO_DE_HORA }),
 
@@ -129,7 +171,18 @@ const credenciales = {
   // no deben gastar de los cubos de arriba, pero tampoco pueden quedarse sin
   // proteccion al retirar el limitador global.
   sesion: createIdentityLimiter({ name: 'sesion', limit: 240, windowMs: MINUTO }),
-  perfil: createIdentityLimiter({ name: 'perfil', limit: 60, windowMs: MINUTO })
+  perfil: createIdentityLimiter({ name: 'perfil', limit: 60, windowMs: MINUTO }),
+  // AUTH-FINAL-1. Pedir codigos cuesta dinero por cada envio, asi que va tan
+  // ajustado como el registro; escribirlos es la fuerza bruta de un codigo de
+  // seis cifras y encima cada desafio ya tiene su propio tope de intentos.
+  desafio: createIdentityLimiter({ name: 'desafio', limit: 20, windowMs: CUARTO_DE_HORA }),
+  verificacion: createIdentityLimiter({ name: 'verificacion', limit: 30, windowMs: CUARTO_DE_HORA }),
+  // Entrar con Google o Apple es un intento de credenciales como el login.
+  social: createIdentityLimiter({ name: 'social', limit: 30, windowMs: CUARTO_DE_HORA }),
+  identidades: createIdentityLimiter({ name: 'identidades', limit: 60, windowMs: MINUTO }),
+  // AUTH-FINAL-4. Borrar una cuenta es irreversible y no se hace en rafaga:
+  // un tope bajo y propio, que no comparte cubo con nada.
+  borrado: createIdentityLimiter({ name: 'borrado', limit: 5, windowMs: CUARTO_DE_HORA })
 };
 
 /**
@@ -208,7 +261,40 @@ const guardiaMedios = createIdentityLimiter({
   skipSuccessfulRequests: true
 });
 app.use('/api/chat-media', guardiaMedios);
-app.use('/api/driver-applications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
+
+/**
+ * La guardia de entrada de los expedientes de conductor.
+ *
+ * Antes aquí había un tope de veinte peticiones por dirección cada quince
+ * minutos, y contaba TODO: postularse cuesta una creación, once subidas de
+ * documento, alguna corrección y el envío. Catorce peticiones para el
+ * recorrido más corto. Detrás del NAT de un operador venezolano, donde
+ * cientos de personas comparten dirección, la segunda persona del día se
+ * quedaba fuera sin haber hecho nada malo.
+ *
+ * Ahora se separa lo que protege cada cosa:
+ *
+ *   - Esta guardia, por dirección, sólo cuenta lo que FALLA (peticiones sin
+ *     sesión válida, cuerpos rechazados). Es la red contra el abuso que ni
+ *     siquiera llega a autenticarse, y por eso puede ser amplia.
+ *   - Lo que ya está autenticado tiene su techo POR CUENTA dentro del router
+ *     del expediente (`documentos`, `subidas`, `expedientes`), donde compartir
+ *     dirección con otra persona no resta a nadie.
+ *   - Crear un expediente, que es lo único que no lleva sesión y sí cuesta
+ *     (una cuenta nueva y un hash de contraseña), tiene su propio tope por
+ *     dirección en la ruta, contando también los aciertos.
+ */
+const TOPE_GUARDIA_EXPEDIENTES = /^[1-9]\d*$/.test(String(process.env.DRIVER_APPLICATION_GUARD_LIMIT ?? ''))
+  ? Number(process.env.DRIVER_APPLICATION_GUARD_LIMIT)
+  : 300;
+const guardiaExpedientes = createIdentityLimiter({
+  name: 'expedientes-previa',
+  limit: TOPE_GUARDIA_EXPEDIENTES,
+  windowMs: CUARTO_DE_HORA,
+  keyGenerator: addressKey,
+  skipSuccessfulRequests: true
+});
+app.use('/api/driver-applications', guardiaExpedientes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -254,6 +340,69 @@ const chatMediaPipeline = createChatMediaPipeline({
     `[+58express chat-media] archivo huerfano tras fallo de persistencia: ${detalle.reason} (${detalle.mimeType}, ${detalle.bytes} bytes)`
   )
 });
+/**
+ * Quien mide los recorridos, y la cache que evita repetir la pregunta.
+ *
+ * Es el MISMO cliente que usa el ranking del despacho: una sola integracion con
+ * Google en todo el servidor, con la credencial dedicada de servidor
+ * --DISPATCH_ROUTES_API_KEY-- que jamas sale de este proceso ni llega a un
+ * telefono. Sin ella el medidor cae a su geodesica propia.
+ *
+ * Lo que NUNCA hace es preguntarle la distancia al cliente.
+ */
+/**
+ * LA AUTENTICACION DE GOOGLE MAPS, UNA SOLA PARA TODO EL SERVIDOR
+ *
+ * Con cuenta de servicio se usa un token OAuth, que NO depende de la IP: en
+ * este entorno la pone una VPN y cambiaba cada vez que se cambiaba de
+ * servidor, dejando el calculo de distancia y tiempo fuera de juego hasta que
+ * alguien anadia la IP nueva en Google Cloud a mano.
+ *
+ * Compartida a proposito: un solo token cacheado para el medidor y para el
+ * ranking, en vez de que cada cliente se autentique por su cuenta.
+ */
+const authDeMaps = crearAuthDeMaps({
+  // Misma convencion que FCM: si nadie dice otra cosa, el fichero vive junto al
+  // servidor y git lo ignora. En produccion no hay fichero y la cuenta llega
+  // por GOOGLE_MAPS_SERVICE_ACCOUNT_B64, que `crearAuthDeMaps` ya mira sola.
+  rutaDeLaCuenta: process.env.GOOGLE_MAPS_SERVICE_ACCOUNT_FILE || path.join(serverDir, 'maps-service-account.json'),
+  logger: console
+});
+
+const routeMatrix = createRouteMatrixClient({ auth: authDeMaps, logger: console });
+const cacheDeRecorridos = crearCacheDeRecorridos();
+
+/**
+ * Quien traza la GEOMETRIA de la ruta, y su propia cache (ROUTE-1).
+ *
+ * Aparte del medidor a proposito. El medidor pregunta CUANTO y pide
+ * expresamente que no le manden polilineas; este pregunta POR DONDE y pide
+ * justo la polilinea. Juntarlos habria hecho que ordenar conductores para el
+ * despacho empezara a descargar geometria que se tira.
+ *
+ * La credencial es la misma --DISPATCH_ROUTES_API_KEY, dedicada de servidor-- y
+ * las reglas tambien: no sale de este proceso y no se imprime.
+ *
+ * Cache propia y mas larga que la del medidor: por donde se va a un sitio no
+ * cambia en dos minutos, y una carrera entera son decenas de posiciones del
+ * conductor que caen todas en la misma clave redondeada.
+ */
+const clienteDeGeometria = createRouteGeometryClient({ auth: authDeMaps, logger: console });
+const clienteDeLugares = createPlacesClient({ auth: authDeMaps, logger: console });
+const cacheDeGeometria = crearCacheDeRecorridos({ ttlMs: 120_000 });
+
+/** Los estados que ocupan a una pasajera. Derivados, no escritos a mano. */
+const ESTADOS_DE_VIAJE_ACTIVO = estadosActivos(TRIP_STATUS, TRIP_STATUS_ALIASES);
+
+/** Mide un recorrido con la autoridad del servidor. Nunca mira el cuerpo. */
+function medirRecorrido(pickup, destination) {
+  return metricasDelRecorrido(pickup, destination, {
+    routeMatrix,
+    cache: cacheDeRecorridos,
+    logger: console
+  });
+}
+
 let pricingConfig = {
   ...DEFAULT_PRICING,
   bcvRate: Number(process.env.BCV_RATE || 0),
@@ -314,6 +463,7 @@ const initialDatabase = {
   driverDocuments: [],
   adminActions: [],
   pushSubscriptions: [],
+  pushDeliveries: [],
   transportSubscriptions: [],
   scheduledRides: []
 };
@@ -392,6 +542,47 @@ async function persistHttp(res) {
 }
 
 await ensureSeedCredentials();
+
+// AUTH-FINAL-1: la identidad canonica. Cada User con contrasena recibe su
+// identidad PASSWORD (el hash sigue en `users`; aqui no se duplica). Corre en
+// cada arranque y la segunda vez no crea nada.
+const identidad = createAuthIdentityStore({ database });
+{
+  const creadas = identidad.identidades.rellenarContrasenas();
+  if (creadas > 0) {
+    if (!await persistDatabase()) throw new Error('AUTH_IDENTITY_BACKFILL_PERSIST_FAILED');
+    console.log(`[+58express Auth] identidades PASSWORD creadas al arrancar: ${creadas}`);
+  }
+}
+
+// Los codigos se firman con OTP_PEPPER si existe. Si no, el secreto se DERIVA
+// del de las sesiones en vez de reutilizarlo tal cual: comprometer uno no
+// entrega el otro, y la derivacion siempre tiene la longitud que el HMAC exige
+// aunque el secreto de desarrollo sea corto. Los proveedores de envio se leen
+// del entorno y hoy ninguno esta cableado a un transporte real: el arranque lo
+// cuenta por nombre de variable, nunca por valor.
+const otpSecret = process.env.OTP_PEPPER || createHash('sha256').update(`otp-pepper:${jwtSecret}`).digest('hex');
+// El transporte HTTP real, con su timeout. Es lo unico que separa a los
+// adaptadores de enviar de verdad: en cuanto haya configuracion autentica,
+// envian. Ver `services/verificationTransport.js`.
+const transporteDeVerificacion = await crearTransporteHttp({
+  timeoutMs: Number(process.env.VERIFICATION_TIMEOUT_MS) || TIMEOUT_POR_OMISION_MS
+});
+const verificacion = createVerificationService({
+  database,
+  secreto: otpSecret,
+  proveedores: crearProveedores({ env: process.env, transporte: transporteDeVerificacion }),
+  // Diagnostico con metadata segura: canal, proposito, categoria del
+  // resultado, latencia y el destino ENMASCARADO. Nunca el codigo.
+  registrar: metadata => console.log(`[+58express OTP] ${JSON.stringify(metadata)}`)
+});
+const verificadorSocial = crearVerificadorSocial({ env: process.env });
+{
+  const canales = describirConfiguracion(process.env);
+  const resumen = Object.entries(canales).map(([canal, c]) => `${canal}=${c.configurado ? 'configurado' : `faltan ${c.faltan.length}`}`);
+  const sociales = ['GOOGLE', 'APPLE'].map(p => `${p}=${verificadorSocial.configurado(p) ? 'configurado' : 'sin audiencia'}`);
+  console.log(`[+58express Auth] verificacion: ${resumen.join(', ')}; social: ${sociales.join(', ')}`);
+}
 
 function publicUser(user) {
   if (!user) return null;
@@ -623,6 +814,38 @@ function anunciarTransicionDelConductor(trip, settlement) {
     canonicalStatus: trip.status,
     updatedAt: trip.updatedAt
   });
+  avisarDelCambioDeViaje(trip);
+}
+
+/**
+ * El push del cambio de estado, para quien espera (PUSH-1).
+ *
+ * ACOMPANA al socket, no lo sustituye. El socket ya llevo el cambio a quien
+ * tenia la aplicacion abierta; esto es para el telefono guardado en el bolsillo.
+ *
+ * SIN AWAIT, Y SIN PODER ROMPER NADA
+ *
+ * Igual que la oferta de carrera desde PUSH-3A: la transicion ya esta
+ * persistida y anunciada, y un proveedor lento no puede robarle segundos a
+ * nadie. El servicio nunca rechaza, y aun asi se captura por si acaso.
+ *
+ * Solo a la PASAJERA: el conductor es quien provoca estos cambios pulsando los
+ * botones, asi que avisarle de lo que acaba de hacer seria ruido.
+ */
+const TIPO_DE_PUSH_POR_ESTADO = Object.freeze({
+  [TRIP_STATUS.DRIVER_ASSIGNED]: PUSH_TYPE.TRIP_ACCEPTED,
+  [TRIP_STATUS.ARRIVED]: PUSH_TYPE.TRIP_ARRIVED,
+  [TRIP_STATUS.IN_PROGRESS]: PUSH_TYPE.TRIP_STARTED,
+  [TRIP_STATUS.COMPLETED]: PUSH_TYPE.TRIP_COMPLETED,
+  [TRIP_STATUS.CANCELLED]: PUSH_TYPE.TRIP_CANCELLED
+});
+
+function avisarDelCambioDeViaje(trip) {
+  const tipo = TIPO_DE_PUSH_POR_ESTADO[normalizeTripStatus(trip?.status)];
+  if (!tipo || !trip?.passengerId) return;
+  pushService.notifyTripLifecycle(trip, tipo, trip.passengerId).catch(error => {
+    console.error(`[+58express Push] rechazo inesperado de notifyTripLifecycle: ${error?.name || 'UNKNOWN'}`);
+  });
 }
 
 function requireAuth(req, res, next) {
@@ -632,12 +855,117 @@ function requireAuth(req, res, next) {
     const payload = jwt.verify(token, jwtSecret);
     const user = database.users.find(item => item.id === payload.sub);
     if (!user) return res.status(401).json({ error: 'INVALID_SESSION' });
+    // Una cuenta eliminada no entra, y no se le dice que esta «desactivada»:
+    // ya no existe como cuenta.
+    if (user.accountStatus === ESTADO_BORRADO) return res.status(401).json({ error: 'INVALID_SESSION' });
     if (user.accountStatus === 'DISABLED') return res.status(403).json({ error: 'ACCOUNT_DISABLED' });
+    // AUTH-FINAL-4: un token firmado ANTES de que cambiaran las credenciales
+    // deja de valer. Sin lista negra ni Redis: `requireAuth` ya recarga al
+    // usuario en cada peticion, asi que basta comparar con su marca.
+    if (!tokenSigueValiendo(user, payload.iat)) {
+      return res.status(401).json({ error: 'SESSION_EXPIRED' });
+    }
     req.user = user;
     next();
   } catch {
     res.status(401).json({ error: 'INVALID_SESSION' });
   }
+}
+
+/**
+ * Exige que la cuenta haya demostrado que un contacto suyo es suyo.
+ *
+ * EL AGUJERO QUE CIERRA
+ *
+ * `POST /api/auth/register` crea la cuenta y devuelve el token en el acto. Eso
+ * esta bien --la aplicacion necesita sesion para poder pedir el codigo-- pero
+ * nadie comprobaba despues si el contacto se habia verificado, asi que con un
+ * correo inventado se podia pedir una carrera de verdad, a un conductor de
+ * verdad, que se desplaza de verdad. Y sin forma de avisar a nadie despues.
+ *
+ * POR QUE NO SE MIRA SOLO `emailVerified === true`
+ *
+ * Porque dejaria fuera a quien no paso por el registro publico. El
+ * administrador que se siembra al arrancar y los conductores que crea el
+ * panel NO tienen ese campo --ni verdadero ni falso: no existe--, y su
+ * identidad esta respaldada por otra via. Solo las cuentas auto-registradas
+ * llevan el `false` explicito, y son exactamente las que hay que retener.
+ *
+ * Un campo ausente es «esta cuenta es anterior a esta comprobacion»; un `false`
+ * es «lo sabemos y no lo ha hecho». No es lo mismo y no se tratan igual.
+ *
+ * QUE NO SE BLOQUEA
+ *
+ * Ni `/auth/me`, ni pedir o comprobar el codigo, ni salir, ni borrar la cuenta.
+ * Bloquear eso dejaria a alguien encerrado: con sesion, sin poder verificarse y
+ * sin poder irse.
+ */
+function contactoSinVerificar(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return false;
+  const declarado = user.emailVerified !== undefined || user.phoneVerified !== undefined;
+  if (!declarado) return false;
+  return user.emailVerified !== true && user.phoneVerified !== true;
+}
+
+/**
+ * Si el servidor PUEDE mandar un codigo por algun canal.
+ *
+ * UNA PUERTA QUE NADIE PUEDE CRUZAR NO SE CIERRA
+ *
+ * Exigir la verificacion cuando no hay ni un canal configurado dejaria a TODO
+ * el mundo fuera y sin salida: nadie podria verificarse, porque no hay como
+ * mandarle el codigo. La aplicacion entera quedaria inservible, y por una
+ * medida de seguridad que en ese estado no protege de nada --si no se puede
+ * mandar un codigo, tampoco se pueden crear cuentas verificadas--.
+ *
+ * Asi que la guarda se exige cuando se puede satisfacer, y no antes. En
+ * staging y en produccion, con el correo configurado, se exige. En una maquina
+ * de desarrollo sin proveedor, no.
+ *
+ * Y NO EN SILENCIO
+ *
+ * Se dice al arrancar, igual que el modo de Maps. Que una comprobacion de
+ * seguridad este apagada tiene que poder leerse en el registro, no deducirse.
+ */
+function sePuedeVerificar() {
+  return verificacion.canalesDisponibles().some(canal => canal.available === true);
+}
+
+function requireContactoVerificado(req, res, next) {
+  if (sePuedeVerificar() && contactoSinVerificar(req.user)) {
+    // El codigo es explicito para que la aplicacion sepa a donde llevar a la
+    // persona, en vez de ensenar un «no autorizado» que no dice que hacer.
+    return res.status(403).json({ error: 'CONTACT_NOT_VERIFIED' });
+  }
+  next();
+}
+
+/**
+ * Resuelve la sesion si la hay, sin exigirla.
+ *
+ * Postularse a conductor es una ruta PUBLICA a proposito: alguien que todavia
+ * no tiene cuenta tiene que poder hacerlo, y para eso manda una contrasena con
+ * la que se le crea. Pero quien ya entro en la aplicacion no tiene su
+ * contrasena a mano --nadie se la pidio-- y volver a pedirsela para algo que
+ * la sesion ya demuestra es friccion inutil.
+ *
+ * Un token invalido o caducado es como no traer ninguno: la ruta sigue siendo
+ * publica y quien llame tendra que identificarse por el otro camino.
+ */
+function sesionOpcional(req, _res, next) {
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+  if (!token) return next();
+  try {
+    const payload = jwt.verify(token, jwtSecret);
+    const user = database.users.find(item => item.id === payload.sub);
+    const utilizable = user
+      && user.accountStatus !== 'DISABLED'
+      && user.accountStatus !== ESTADO_BORRADO
+      && tokenSigueValiendo(user, payload.iat);
+    if (utilizable) req.user = user;
+  } catch { /* Sin sesion utilizable: se sigue como visitante. */ }
+  next();
 }
 
 function requireRole(role) {
@@ -666,7 +994,102 @@ function requireApprovedDriver(req, res, next) {
 // no se lee ninguna variable VAPID, no se configura nada y no existe forma de
 // contactar con un proveedor.
 function construirPushSender() {
-  if (!isWebPushEnabled()) return { sender: null, enabled: false };
+  // Dos transportes, cada uno con su credencial, compuestos en UN sender.
+  // Push queda encendido si al menos uno esta configurado; el otro se omite
+  // sin penalizar a nadie. Ver `services/pushSender.js`.
+  const webpush = construirWebPushSender();
+  const fcm = construirFcmSender();
+  const compuesto = crearSenderCompuesto({ webpush, fcm });
+  if (compuesto.enabled) console.log(`[+58express Push] transportes activos: ${compuesto.transportes.join(', ')}`);
+
+  // SI SE EXIGE VERIFICAR EL CONTACTO, DICHO EN VOZ ALTA.
+  //
+  // Apagada, cualquiera se registra con un correo inventado y pide una carrera
+  // de verdad. Que este apagada es legitimo --sin canal no hay forma de
+  // verificarse-- pero no puede ser una sorpresa.
+  if (sePuedeVerificar()) {
+    console.log('[+58express Auth] verificacion de contacto EXIGIDA para pedir viajes y gastar');
+  } else {
+    console.log('[+58express Auth] verificacion de contacto NO exigida: no hay ningun canal para mandar codigos');
+  }
+
+  // COMO SE AUTENTICA MAPS, DICHO EN VOZ ALTA
+  //
+  // No es informacion decorativa: en `api-key` las llamadas dependen de que
+  // la IP publica este en la lista de Google, y esta IP la mueve la VPN.
+  // Quien vea rutas cayendo sin motivo mira esta linea primero.
+  if (authDeMaps.modo === MODO_DE_AUTH.OAUTH) {
+    console.log('[+58express Maps] autenticacion: OAuth con cuenta de servicio (no depende de la IP)');
+  } else if (authDeMaps.modo === MODO_DE_AUTH.API_KEY) {
+    console.log('[+58express Maps] autenticacion: clave de API (RESPALDO: depende de la IP permitida en Google Cloud)');
+  } else {
+    console.log('[+58express Maps] sin autenticacion: las rutas caen a la medida geodesica');
+  }
+  return { sender: compuesto.sender, enabled: compuesto.enabled };
+}
+
+/**
+ * El emisor de FCM V1 para los telefonos (PUSH-1 · Firebase).
+ *
+ * DOS CAMINOS, Y EL FICHERO VA PRIMERO
+ *
+ * En local, un fichero que git ignora --por omision
+ * `server/fcm-service-account.json`, o la ruta de FCM_SERVICE_ACCOUNT_FILE--.
+ * Es explicito y se ve en el disco de quien programa.
+ *
+ * En Railway no hay donde montar un fichero: la imagen no copia ninguna
+ * credencial a proposito --meterla dejaria una clave privada en cada capa y en
+ * el registro de contenedores-- asi que la cuenta llega por
+ * FCM_SERVICE_ACCOUNT_B64, en base64 y decodificada EN MEMORIA.
+ *
+ * Base64 y no JSON crudo por lo mismo que en Maps: un JSON de varias lineas en
+ * el entorno acaba mal escapado y, peor, acaba impreso el dia que alguien
+ * vuelca el entorno para depurar. Es la misma convencion que
+ * GOOGLE_MAPS_SERVICE_ACCOUNT_B64, y eso es deliberado: una sola forma de dar
+ * una cuenta de servicio es una sola forma de equivocarse.
+ *
+ * Sin ninguna de las dos, FCM queda apagado y se dice. Nada se cae.
+ */
+function construirFcmSender() {
+  const ruta = process.env.FCM_SERVICE_ACCOUNT_FILE || path.join(serverDir, 'fcm-service-account.json');
+  const enBase64 = process.env.FCM_SERVICE_ACCOUNT_B64;
+  const hayFichero = fs.existsSync(ruta);
+
+  if (!hayFichero && !enBase64) {
+    console.log('[+58express Push] FCM apagado: sin cuenta de servicio');
+    return null;
+  }
+  try {
+    // El fichero manda: se le pasa `cuentaEnBase64: null` a proposito, porque
+    // si no la funcion tomaria la variable de entorno por su cuenta y el
+    // fichero de quien programa dejaria de tener efecto.
+    const sender = hayFichero
+      ? createFcmSender({ rutaDeLaCuenta: ruta, cuentaEnBase64: null, logger: console })
+      : createFcmSender({ cuentaEnBase64: enBase64, logger: console });
+    console.log(`[+58express Push] FCM configurado (${hayFichero ? 'fichero' : 'entorno'})`);
+    return sender;
+  } catch (error) {
+    // El codigo es escueto y nunca lleva material de la cuenta dentro. Los
+    // NOMBRES de los campos que fallan si viajan: son lo unico que permite
+    // diagnosticar «valida en mi portatil, invalida en el servidor» sin llegar
+    // a imprimir la credencial.
+    const campos = Array.isArray(error.campos) && error.campos.length > 0
+      ? ` (campos: ${error.campos.join(', ')})`
+      : '';
+    // Si fallan TODOS los campos, lo que llego no es la cuenta y hay que saber
+    // que es. Los NOMBRES de las claves presentes lo dicen sin publicar ningun
+    // valor: una cuenta de servicio real trae `type`, `project_id`, `auth_uri`…
+    const claves = Array.isArray(error.claves) && error.claves.length > 0
+      ? ` (claves recibidas: ${error.claves.join(', ')})`
+      : '';
+    const via = hayFichero ? 'fichero' : 'entorno';
+    console.error(`[+58express Push] cuenta de servicio de FCM invalida por ${via}: ${error.message}${campos}${claves}. FCM queda DESACTIVADO.`);
+    return null;
+  }
+}
+
+function construirWebPushSender() {
+  if (!isWebPushEnabled()) return null;
   try {
     const sender = createWebPushSender({
       publicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY,
@@ -674,8 +1097,8 @@ function construirPushSender() {
       subject: process.env.WEB_PUSH_VAPID_SUBJECT,
       logger: console
     });
-    console.log('[+58express Push] adaptador real configurado');
-    return { sender, enabled: true };
+    console.log('[+58express Push] Web Push configurado');
+    return sender;
   } catch (error) {
     // Falla cerrado, pero SIN tumbar el servidor.
     //
@@ -691,8 +1114,8 @@ function construirPushSender() {
     // sensible a cambio de nada.
     //
     // El codigo es escueto y nunca lleva material de clave dentro.
-    console.error(`[+58express Push] configuracion VAPID invalida: ${error.message}. Push queda DESACTIVADO.`);
-    return { sender: null, enabled: false };
+    console.error(`[+58express Push] configuracion VAPID invalida: ${error.message}. Web Push queda DESACTIVADO.`);
+    return null;
   }
 }
 
@@ -708,7 +1131,23 @@ const pushService = createPushNotificationService({
   persistRecord,
   sender: pushSender,
   enabled: pushEnabled,
-  logger: console
+  logger: console,
+  /**
+   * Cuantos sockets vivos tiene esa persona AHORA.
+   *
+   * Sale de SU sala, que es estado del servidor: ningun cliente puede
+   * declararse presente para silenciarse los avisos. Solo se usa para suprimir
+   * el aviso de un mensaje de chat, que es el unico que se puede permitir
+   * perder; las ofertas y los cambios de estado del viaje no se suprimen nunca.
+   */
+  contarConexiones: async userId => {
+    try {
+      const sockets = await io.in(`user:${userId}`).fetchSockets();
+      return sockets.length;
+    } catch {
+      return 0;
+    }
+  }
 });
 
 app.use('/api', createPushRouter({
@@ -736,9 +1175,35 @@ app.use('/api', createDriverApplicationsRouter({
   publicUser,
   signToken,
   requireAuth,
+  sesionOpcional,
   requireRole,
   io,
   bcrypt,
+  privateStorage,
+  authIdentities: identidad
+}));
+
+// AUTH-FINAL-1: codigos de verificacion, Google/Apple y vinculacion. Al lado
+// del login y el registro, que siguen tal cual.
+app.use('/api', createAuthRouter({
+  database,
+  persistDatabase,
+  publicUser,
+  signToken,
+  requireAuth,
+  sesionOpcional,
+  identidad,
+  verificacion,
+  verificadorSocial,
+  limitadores: {
+    desafio: credenciales.desafio,
+    verificacion: credenciales.verificacion,
+    social: credenciales.social,
+    identidades: credenciales.identidades,
+    borrado: credenciales.borrado
+  },
+  bcrypt,
+  sanitizeText,
   privateStorage
 }));
 
@@ -853,6 +1318,7 @@ const safeTransportTripBridge = {
       updatedAt: trip.updatedAt,
       driver: trip.driver ?? null
     });
+    avisarDelCambioDeViaje(trip);
   },
   dispatchTrip: trip => dispatchTripToDrivers(trip)
 };
@@ -916,17 +1382,9 @@ const tripLocks = new Map();
 const dispatchTimers = new Map();
 const dispatchSessions = new Map();
 
-// Calculate distance using Haversine formula
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c * 1.35; // Urban road factor
-}
+// La distancia por calle vive ahora en domain/tripMetrics.js, que la comparten
+// el radio de despacho, el estimador de viajes programados y el precio. Se
+// importa arriba: aqui habia una copia de la formula.
 
 function normalizeLocation(location) {
   const coordinates = normalizeCoordinates(location);
@@ -949,11 +1407,12 @@ function tripLocation(location) {
 // Un conductor solo existe para administración, para sí mismo y para el
 // pasajero con el que comparte un viaje activo. Ese es el alcance máximo de
 // cualquier evento de flota.
+// La lista de estados vivia aqui a mano y en `/api/trips/active/me` por
+// separado, con ventanas distintas. Ahora las dos preguntan a `domain/viajeActivo`,
+// que es la unica autoridad: si divergen, un conductor puede quedar ocupado por
+// un viaje que su propia aplicacion ya no le ensenia.
 function activeTripForDriver(driverId) {
-  return database.trips.findLast(trip =>
-    trip.driverId === driverId &&
-    ['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(trip.status)
-  ) || null;
+  return viajeQueOcupaAlConductor(database.trips, driverId);
 }
 
 function emitDriverPresence(driver, { includeActivePassenger = true } = {}) {
@@ -1004,21 +1463,91 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+/**
+ * Comprobar que la observabilidad funciona de verdad.
+ *
+ * POR QUÉ HACE FALTA UN ENDPOINT PARA ESTO
+ *
+ * Porque «Sentry está configurado» y «los errores llegan a Sentry» son dos
+ * afirmaciones distintas, y sólo la segunda sirve de algo. Entre las dos hay un
+ * DSN mal copiado, una red que bloquea la salida, un `beforeSend` que devuelve
+ * `null` por un fallo propio, o un proyecto equivocado. Todo eso compila,
+ * arranca y no dice nada.
+ *
+ * POR QUÉ NO ES UNA PUERTA TRASERA
+ *
+ * Tres cierres, y hacen falta los tres:
+ *
+ *   1. NO EXISTE en producción. La ruta ni se registra —no es que responda 403:
+ *      es que no está—, así que no hay nada que descubrir escaneando.
+ *   2. Exige sesión de administración.
+ *   3. No hace nada. Lanza un error, lo manda y responde. No lee ni escribe
+ *      datos, no toca la base y no cambia ningún estado.
+ *
+ * Lo que devuelve es el identificador del evento, para poder buscarlo en Sentry
+ * y confirmar que llegó de verdad en vez de suponerlo.
+ */
+const EN_PRODUCCION_DE_VERDAD = String(process.env.SENTRY_ENVIRONMENT ?? process.env.RAILWAY_ENVIRONMENT_NAME ?? '')
+  .trim().toLowerCase() === 'production';
+
+if (!EN_PRODUCCION_DE_VERDAD) {
+  app.post('/api/diagnostico/prueba', requireAuth, requireRole('admin'), (req, res) => {
+    const marca = `prueba-${Date.now()}`;
+    const error = new Error(`Error de prueba de observabilidad (${marca})`);
+    error.name = 'PruebaDeObservabilidad';
+    capturarExcepcion(error, {
+      usuario: { id: req.user.id, role: req.user.role },
+      etiquetas: { area: 'diagnostico', prueba: 'manual' },
+      extra: { marca }
+    });
+    res.json({ status: 'sent', marca, observabilidad: observabilidad.activo, entorno: observabilidad.entorno });
+  });
+}
+
 app.get('/api/pricing/config', requireAuth, (req, res) => res.json(pricingConfig));
 
-app.post('/api/pricing/estimate', requireAuth, (req, res) => {
-  const distanceKm = Number(req.body.distanceKm);
-  const durationMin = Number(req.body.durationMin);
-  if (!Number.isFinite(distanceKm) || !Number.isFinite(durationMin)) {
-    return res.status(400).json({ error: 'INVALID_ROUTE_METRICS' });
+/**
+ * Cuanto cuesta ir de un sitio a otro.
+ *
+ * EL CLIENTE DICE DONDE, NO CUANTO
+ *
+ * Antes recibia `distanceKm` y `durationMin` del telefono y calculaba la tarifa
+ * con ellos. El precio lo ponia el servidor, si, pero con la regla que le
+ * prestaba el cliente: declarar cuatro kilometros donde hay uno cambiaba el
+ * importe.
+ *
+ * Ahora recibe los dos PUNTOS y mide el recorrido el mismo. Lo que llegue en
+ * `distanceKm`, `durationMin` o `fareUSD` se ignora por completo.
+ *
+ * `requestedAt` tambien lo pone el servidor: si lo pusiera el cliente, bastaria
+ * declarar las tres de la tarde para esquivar el recargo nocturno.
+ */
+// Va con la guarda porque cada estimacion puede ser una llamada DE PAGO a
+// Google: sin ella, una cuenta inventada gasta la factura de mapas sin pedir
+// jamas una carrera.
+app.post('/api/pricing/estimate', requireAuth, requireContactoVerificado, limitadores.telemetria, async (req, res) => {
+  const pickup = normalizeLocation(req.body.pickup ?? req.body.origin);
+  const destination = normalizeLocation(req.body.destination);
+  if (!pickup || !destination) {
+    return res.status(400).json({ error: 'VALID_GPS_COORDINATES_REQUIRED' });
   }
-  res.json(calculateFare({
-    distanceKm,
-    durationMin,
-    requestedAt: req.body.requestedAt || new Date(),
+
+  let metrics;
+  try {
+    metrics = await medirRecorrido(pickup, destination);
+  } catch (error) {
+    return res.status(400).json({ error: error.code || 'INVALID_ROUTE_METRICS' });
+  }
+
+  const fare = calculateFare({
+    distanceKm: metrics.distanceKm,
+    durationMin: metrics.durationMin,
+    requestedAt: new Date(),
     exchangeRateType: req.body.exchangeRateType || 'BCV',
     rideType: req.body.rideType || 'MOTO'
-  }, pricingConfig));
+  }, pricingConfig);
+
+  res.json({ ...fare, metricsSource: metrics.source });
 });
 
 app.post('/api/auth/login', credenciales.login, async (req, res) => {
@@ -1028,6 +1557,9 @@ app.post('/api/auth/login', credenciales.login, async (req, res) => {
     [item.email, item.phone].filter(Boolean).some(value => String(value).trim().toLowerCase() === loginId)
   );
   if (identityUser?.accountStatus === 'DISABLED') return res.status(403).json({ error: 'ACCOUNT_DISABLED' });
+  // Una cuenta eliminada no se distingue de una que no existe: decir «esta
+  // eliminada» confirmaria que ese correo estuvo registrado.
+  if (identityUser?.accountStatus === ESTADO_BORRADO) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
   if (!identityUser || !identityUser.passwordHash || !await bcrypt.compare(String(password || ''), identityUser.passwordHash)) {
     return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
   }
@@ -1039,6 +1571,11 @@ app.post('/api/auth/login', credenciales.login, async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
   }
+  // AUTH-FINAL-1: se anota el uso de la identidad PASSWORD. Si no se pudiera
+  // guardar, el login sigue siendo el de siempre: esto es contabilidad, no
+  // autorizacion.
+  identidad.identidades.marcarUso(identidad.identidades.asegurarDeContrasena(user).identidad);
+  await persistDatabase();
   res.json({ status: 'success', user: publicUser(user), token: signToken(user) });
 });
 
@@ -1082,7 +1619,14 @@ app.post('/api/auth/register', credenciales.registro, async (req, res) => {
     updatedAt: now
   };
   database.users.push(user);
+  // AUTH-FINAL-1: la identidad PASSWORD y los contactos declarados, SIN
+  // verificar. Aparecer en el registro no demuestra posesion.
+  const alta = identidad.altaConContrasena(user, {
+    email: normalizedEmail,
+    phoneE164: normalizarTelefono(normalizedPhone).e164
+  });
   if (!await persistHttp(res)) {
+    alta.deshacer();
     database.users.splice(database.users.indexOf(user), 1);
     return;
   }
@@ -1620,7 +2164,7 @@ app.get('/api/wallet/me', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/wallet/topups', requireAuth, limitadores.cartera, async (req, res) => {
+app.post('/api/wallet/topups', requireAuth, requireContactoVerificado, limitadores.cartera, async (req, res) => {
   const amount = Math.round(Number(req.body.amount) * 100) / 100;
   const reference = String(req.body.reference || '').replace(/\D/g, '').slice(0, 20);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1000 || reference.length < 6) return res.status(400).json({ error: 'INVALID_TOPUP' });
@@ -1787,6 +2331,7 @@ app.patch('/api/admin/trips/:id', requireAuth, requireRole('admin'), limitadores
     tripId: trip.id,
     status: trip.status
   });
+  avisarDelCambioDeViaje(trip);
   res.json(trip);
 });
 
@@ -1877,15 +2422,18 @@ app.get('/api/trips/me/history', requireAuth, (req, res) => {
 });
 
 app.get('/api/trips/active/me', requireAuth, (req, res) => {
-  const activeStatuses = ['SEARCHING', 'DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'];
-  const now = Date.now();
-  const trip = database.trips.findLast(item =>
-    activeStatuses.includes(item.status) &&
-    now - new Date(item.createdAt || 0).getTime() < (item.status === 'SEARCHING' ? 3 * 60 * 1000 : 12 * 60 * 60 * 1000) &&
-    (item.passengerId === req.user.id || item.driverId === req.user.id)
-  );
+  // MISMO CRITERIO QUE EL DESPACHO, y no es un detalle de estilo.
+  //
+  // Antes esto caducaba a las doce horas y `activeTripForDriver` no caducaba
+  // nunca. El resultado era un conductor ocupado por un viaje que su propia
+  // aplicacion habia dejado de enseniarle: no recibia carreras y no tenia como
+  // cerrarlo. Ahora los dos preguntan a `domain/viajeActivo`.
+  const trip = viajeActivoDe(database.trips, req.user.id);
   if (!trip) return res.status(204).end();
-  res.json(tripParticipantsView(trip, req.user));
+  // `obsoleto` marca el que lleva demasiado abierto. No lo cierra nadie por su
+  // cuenta --eso seria mover dinero sin que lo pidan-- pero deja de ser
+  // invisible, que era el problema.
+  res.json({ ...tripParticipantsView(trip, req.user), obsoleto: esViajeObsoleto(trip) });
 });
 
 app.get('/api/trips/pending-review/me', requireAuth, requireRole('passenger'), (req, res) => {
@@ -1907,16 +2455,124 @@ app.get('/api/trips/:id', requireAuth, (req, res) => {
   res.json(tripParticipantsView(trip, req.user));
 });
 
+/**
+ * La GEOMETRIA de la ruta del viaje (ROUTE-1).
+ *
+ * EL SERVIDOR SIGUE SIENDO LA AUTORIDAD
+ *
+ * El telefono no dice por donde va la ruta: la pide. Aqui se decide que tramo
+ * toca segun el estado --`rutaDelViaje.js`, funcion pura-- y se traza con el
+ * proveedor. Lo que el cliente aporta es CERO: ni origen, ni destino, ni
+ * posicion del conductor, que sale del registro del propio conductor.
+ *
+ * SOLO LAS DOS PARTES, Y DE FORMA EXPLICITA
+ *
+ * Ni administracion. `userCanAccessTrip` la autorizaria por herencia y aqui no
+ * debe: el mapa de flota tiene su propio canal, y la ruta de una carrera
+ * concreta es de quien la hace y de quien la va a hacer. Misma decision que ya
+ * se tomo para los adjuntos del chat.
+ *
+ * SIN PROVEEDOR NO HAY GEOMETRIA, Y SE DICE
+ *
+ * Nunca una recta entre los dos extremos. Una recta sobre un mapa se lee como
+ * «por aqui se va», y por ahi puede no haber calle. Se responde
+ * `available:false` con el motivo, y la pantalla degrada con honestidad.
+ */
+app.get('/api/trips/:id/route', requireAuth, limitadores.rutas, async (req, res) => {
+  const trip = database.trips.find(item => item.id === req.params.id);
+  if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
+  const esParte = trip.passengerId === req.user.id || trip.driverId === req.user.id;
+  if (!esParte) return res.status(403).json({ error: 'FORBIDDEN' });
+
+  // La posicion del conductor sale de SU registro, nunca del cuerpo de la
+  // peticion. Un telefono que dijera donde esta la moto podria dibujar la ruta
+  // desde donde quisiera.
+  const conductor = trip.driverId ? database.users.find(item => item.id === trip.driverId) : null;
+  const conductorEn = conductor?.location ? { lat: conductor.location.lat, lng: conductor.location.lng } : null;
+
+  const tramo = tramoDeLaRuta(trip, conductorEn);
+  if (!tramo.ok) return res.json({ available: false, reason: tramo.motivo });
+
+  if (!clienteDeGeometria.isConfigured()) {
+    return res.json({ available: false, reason: 'ROUTE_PROVIDER_NOT_CONFIGURED', leg: tramo.tramo });
+  }
+
+  try {
+    // La cache reparte una misma llamada entre quien la pida y guarda el
+    // resultado dos minutos: una carrera son decenas de posiciones que caen en
+    // la misma clave redondeada.
+    const geometria = await cacheDeGeometria.medir(
+      tramo.origen,
+      tramo.destino,
+      () => clienteDeGeometria.computeRoute(tramo.origen, tramo.destino)
+    );
+    return res.json({
+      available: true,
+      leg: tramo.tramo,
+      source: 'GOOGLE_ROUTES',
+      points: geometria.puntos,
+      distanceMeters: geometria.metros,
+      durationMillis: geometria.duracionMs,
+      origin: tramo.origen,
+      destination: tramo.destino
+    });
+  } catch (error) {
+    // Caido, lento o ilegible: no hay geometria. No se sustituye por una recta.
+    console.warn(`[+58express Ruta] sin geometria para el viaje (${error?.message || 'sin detalle'})`);
+    return res.json({ available: false, reason: 'ROUTE_PROVIDER_UNAVAILABLE', leg: tramo.tramo });
+  }
+});
+
+/**
+ * La busqueda escrita del destino.
+ *
+ * Vive en el servidor a proposito: si la hiciera el telefono llevaria dentro
+ * una credencial de Places, y una credencial dentro de un APK es publica. Aqui
+ * la peticion la firma la cuenta de servicio y el movil solo ve resultados.
+ *
+ * Solo devuelve lo que hace falta para pintar la lista y fijar un destino.
+ */
+app.get('/api/places/search', requireAuth, requireContactoVerificado, limitadores.lugares, async (req, res) => {
+  if (!clienteDeLugares.isConfigured()) {
+    return res.status(503).json({ error: PLACES_ERROR.NOT_CONFIGURED });
+  }
+
+  // El sesgo es una ayuda, no un requisito: sin coordenada valida se busca sin el.
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  const cerca = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+
+  try {
+    const resultados = await clienteDeLugares.buscar(req.query.q, cerca);
+    return res.json({ results: resultados });
+  } catch (error) {
+    const codigo = error?.message;
+    if (codigo === PLACES_ERROR.INVALID_QUERY) {
+      return res.status(400).json({ error: PLACES_ERROR.INVALID_QUERY });
+    }
+    // Caido, lento o ilegible: no hay sugerencias. No se inventa ninguna.
+    console.warn(`[+58express Lugares] busqueda sin resultado del proveedor (${codigo || 'sin detalle'})`);
+    return res.status(503).json({ error: PLACES_ERROR.PROVIDER_ERROR });
+  }
+});
+
 app.get('/api/trips/:id/messages', requireAuth, (req, res) => {
   const trip = database.trips.find(item => item.id === req.params.id);
   if (!trip) return res.status(404).json({ error: 'TRIP_NOT_FOUND' });
   if (!userCanAccessTrip(req.user.id, req.user.role, trip)) {
     return res.status(403).json({ error: 'FORBIDDEN' });
   }
-  res.json(publicChatMessages(database.messages.filter(message => message.tripId === trip.id)));
+  // ORDEN DETERMINISTA, y no el de insercion. En memoria coinciden, pero tras
+  // un reinicio la coleccion vuelve de la base y ese orden ya no es promesa de
+  // nadie. Se ordena por marca de tiempo, con el id como desempate para que
+  // dos mensajes del mismo milisegundo salgan siempre igual.
+  const conversacion = database.messages
+    .filter(message => message.tripId === trip.id)
+    .sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : a.id < b.id ? -1 : 1));
+  res.json(publicChatMessages(conversacion));
 });
 
-app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores.viajes, async (req, res) => {
+app.post('/api/trips/create', requireAuth, requireContactoVerificado, requireRole('passenger'), limitadores.viajes, async (req, res) => {
   // Identificador: lo aporta el cliente por compatibilidad, pero con forma
   // acotada. `Idempotency-Key` sirve cuando el cuerpo no trae `id`, que es lo
   // que ocurre al reenviar desde la cola sin conexión.
@@ -1932,7 +2588,11 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
     // es el viaje.
     if (claimed) {
       if (claimed.passengerId !== req.user.id) return res.status(409).json({ error: 'TRIP_ID_UNAVAILABLE' });
-      return res.json({ status: 'existing', trip: claimed });
+      // IDEMPOTENCIA. El mismo intento logico --doble toque, reintento de red,
+      // reenvio desde la cola sin conexion-- devuelve EL MISMO viaje en vez de
+      // crear otro. La clave es el propio id del viaje, que es unico para
+      // siempre: mas fuerte que una ventana de horas.
+      return res.json({ status: 'existing', trip: claimed, idempotentReplay: true });
     }
   }
 
@@ -1949,11 +2609,21 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
     : normalizePaymentMethod(req.body.paymentMethod);
   if (!paymentMethod) return res.status(400).json({ error: 'INVALID_PAYMENT_METHOD' });
 
+  // LAS METRICAS LAS MIDE EL SERVIDOR, SIEMPRE
+  //
+  // Se miden aqui a partir de los mismos dos puntos que llegan en esta
+  // peticion, asi que no hay ventana entre estimar y crear: pedir precio para
+  // un recorrido y crear otro no cambia el importe, porque el importe se
+  // vuelve a calcular con el recorrido que se esta creando de verdad.
+  //
+  // Lo que venga en `distanceKm`, `durationMin`, `fareUSD` o `fareEUR` se
+  // ignora. Sigue llegando de clientes viejos y no se rechaza por eso --seria
+  // romperlos sin motivo-- pero no influye en nada.
   let routeMetrics;
   try {
-    routeMetrics = normalizeRouteMetrics(req.body);
+    routeMetrics = await medirRecorrido(pickup, destination);
   } catch (error) {
-    return res.status(400).json({ error: error.code });
+    return res.status(400).json({ error: error.code || 'INVALID_ROUTE_METRICS' });
   }
 
   const trip = {
@@ -1963,10 +2633,9 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
     paymentMethod,
     exchangeRateType: req.body.exchangeRateType === 'PARALLEL' ? 'PARALLEL' : 'BCV'
   };
-  if (routeMetrics) {
-    trip.distanceKm = routeMetrics.distanceKm;
-    trip.durationMin = routeMetrics.durationMin;
-  }
+  trip.distanceKm = routeMetrics.distanceKm;
+  trip.durationMin = routeMetrics.durationMin;
+  trip.metricsSource = routeMetrics.source;
 
   // Identidad derivada siempre del usuario autenticado.
   trip.passengerId = req.user.id;
@@ -1982,35 +2651,54 @@ app.post('/api/trips/create', requireAuth, requireRole('passenger'), limitadores
   trip.createdAt = new Date().toISOString();
   trip.updatedAt = trip.createdAt;
   trip.statusHistory = [{ status: trip.status, at: trip.createdAt, actorId: req.user.id }];
-  if (routeMetrics) {
-    // Con métricas de ruta utilizables manda el cálculo del servidor: la
-    // tarifa que envíe el cliente se descarta por completo.
-    trip.pricing = calculateFare({
-      distanceKm: routeMetrics.distanceKm,
-      durationMin: routeMetrics.durationMin,
-      exchangeRateType: trip.exchangeRateType || 'BCV',
-      rideType: trip.rideType
-    }, pricingConfig);
-    trip.fareUSD = trip.pricing.fareUSD;
-    trip.fareVES = trip.pricing.fareVES;
-    trip.fareSource = 'SERVER_CALCULATED';
-  } else {
-    // RIESGO PENDIENTE (alta): sin métricas de ruta el servidor no tiene una
-    // fuente propia para calcular la tarifa —distancia y duración las produce
-    // el navegador— así que conserva la estimación del cliente, acotada. Es la
-    // única vía por la que un pasajero todavía influye en el importe. Cerrarlo
-    // exige cotizaciones firmadas o cálculo de ruta en el servidor: fase aparte.
-    const estimate = normalizeClientFareEstimate(req.body.fareUSD ?? req.body.fareEUR);
-    if (estimate === null) return res.status(400).json({ error: 'INVALID_FARE_ESTIMATE' });
-    trip.fareUSD = estimate;
-    trip.fareSource = 'CLIENT_ESTIMATE';
-  }
+  // El precio, con las metricas que acaba de medir el servidor.
+  //
+  // Ya no hay segundo camino. El que aceptaba la estimacion del cliente estaba
+  // marcado en este mismo sitio como RIESGO PENDIENTE (alta) y era la ultima
+  // via por la que una pasajera influia en el importe de su propio viaje.
+  trip.pricing = calculateFare({
+    distanceKm: routeMetrics.distanceKm,
+    durationMin: routeMetrics.durationMin,
+    exchangeRateType: trip.exchangeRateType || 'BCV',
+    rideType: trip.rideType
+  }, pricingConfig);
+  trip.fareUSD = trip.pricing.fareUSD;
+  trip.fareVES = trip.pricing.fareVES;
+  trip.fareSource = 'SERVER_CALCULATED';
   try {
     ensureWalletCanCoverTrip(trip, req.user);
   } catch (error) {
     return res.status(402).json({ error: error.code, balance: error.balance, required: error.required });
   }
+  // UN SOLO VIAJE ACTIVO POR PASAJERA
+  //
+  // La comprobacion y el alta van juntas y sin ceder el control: en memoria
+  // porque Node es de un solo hilo y entre estas dos lineas no hay `await`, y
+  // en PostgreSQL porque `reserveActiveTripSlot` es UNA sentencia condicional.
+  //
+  // Comprobar y despues insertar en dos pasos deja una ventana por la que dos
+  // toques del mismo dedo crean dos viajes.
+  // La MISMA autoridad que `/api/trips/active/me`. Asi lo que bloquea crear es
+  // exactamente lo que la aplicacion le ensenia a la pasajera: un SEARCHING ya
+  // caducado no cuenta aqui como no cuenta alli, y nunca hay un bloqueo por un
+  // viaje invisible.
+  const yaTieneUno = viajeActivoDe(database.trips, req.user.id);
+  if (yaTieneUno) {
+    // Se devuelve el viaje para que la aplicacion pueda llevar a la persona a
+    // el sin una segunda peticion.
+    return res.status(409).json({ error: 'ACTIVE_TRIP_EXISTS', trip: yaTieneUno });
+  }
   database.trips.push(trip);
+
+  // Y la misma invariante en la base, que es la que sobrevive a varias
+  // instancias del servidor. En SQLite no hay nada que reservar --un proceso,
+  // un hilo-- y responde que si.
+  if (!await persistence.reserveActiveTripSlot(trip, ESTADOS_DE_VIAJE_ACTIVO)) {
+    database.trips.splice(database.trips.indexOf(trip), 1);
+    return res.status(409).json({ error: 'ACTIVE_TRIP_EXISTS', trip: viajeActivoDe(database.trips, req.user.id) });
+  }
+  // La reserva ya dejo la fila puesta en PostgreSQL; esto es lo que la guarda
+  // en SQLite, donde la reserva no escribe.
   if (!await persistHttp(res)) {
     database.trips.splice(database.trips.indexOf(trip), 1);
     return;
@@ -2086,6 +2774,76 @@ app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, limitador
   res.json(publicUser(driver));
 });
 
+/**
+ * Lo que dura una oferta delante de un conductor.
+ *
+ * UNA SOLA FUENTE, Y VIAJA DE DOS MANERAS
+ *
+ * Este numero manda el temporizador que pasa al siguiente candidato y el
+ * vencimiento que se le anuncia al telefono. Estaba escrito dos veces, y dos
+ * copias de un numero que tiene que ser el mismo acaban divergiendo.
+ *
+ * Al cliente se le manda `offerExpiresInMs` --lo que queda, contado desde
+ * ahora-- ademas de `offerExpiresAt` --la marca absoluta, para administracion
+ * y registros--. La marca absoluta esta en el reloj de ESTE proceso, y el
+ * telefono no tiene por que compartirlo: restarla contra el reloj del aparato
+ * convierte cualquier desajuste del telefono en segundos inventados. La
+ * duracion relativa no tiene ese problema: el cliente la ancla a su propio
+ * reloj en cuanto la recibe, y lo unico que se pierde es la latencia de la
+ * red, que son milisegundos.
+ *
+ * POR QUE TREINTA Y NO QUINCE
+ *
+ * Quince segundos alcanzan si el conductor esta mirando la pantalla. No
+ * alcanzan para lo que pasa de verdad: el telefono en el bolsillo, bloqueado,
+ * llega el push, hay que sacarlo, desbloquear, abrir, leer donde recoge, leer
+ * a donde va, mirar la tarifa y decidir. Medido en el emulador, solo la
+ * secuencia de desbloquear y abrir ya se come varios segundos.
+ *
+ * Treinta, y no cuarenta, porque el despacho es SECUENCIAL --ver el aviso de
+ * abajo-- y cada segundo de esta ventana se lo cobra la persona que espera la
+ * moto. Se sube a cuarenta solo si las pruebas reales demuestran que treinta
+ * se queda corto.
+ *
+ * CUIDADO AL SUBIRLO: EL DESPACHO ES SECUENCIAL
+ *
+ * `offerNext` ofrece a UN conductor, espera esta ventana entera y solo
+ * entonces pasa al siguiente. Y `selectEligibleDrivers` no tiene tope: en un
+ * radio de quince kilometros pueden salir diez conductores. La espera maxima
+ * del pasajero es esta ventana MULTIPLICADA por el numero de candidatos, asi
+ * que con diez conductores que no contesten son cinco minutos mirando
+ * «Buscando tu moto».
+ *
+ * Subir este numero sin poner antes un tope a la espera total del pasajero
+ * convierte una mejora para el conductor en un castigo para quien pide. El
+ * analisis y la propuesta estan en
+ * `agent-reports/ventana-de-oferta-y-despacho-secuencial.md`.
+ */
+const VENTANA_DE_OFERTA_POR_OMISION_MS = 30_000;
+
+/**
+ * Se puede ajustar sin tocar codigo, que es lo que hace falta mientras se
+ * afina con conductores de verdad. Un valor ilegible o fuera de rango NO se
+ * adivina: se usa el de omision y se dice al arrancar.
+ *
+ * El rango va de cinco segundos --por debajo no da tiempo ni a leer-- a dos
+ * minutos, que ya seria abusivo para quien espera.
+ */
+function ventanaDeOfertaConfigurada(entorno = process.env) {
+  const bruto = entorno.DRIVER_OFFER_TIMEOUT_MS;
+  if (bruto === undefined || bruto === null || String(bruto).trim() === '') {
+    return { valor: VENTANA_DE_OFERTA_POR_OMISION_MS, fuente: 'por omision' };
+  }
+  const ms = /^\d+$/.test(String(bruto).trim()) ? Number(String(bruto).trim()) : Number.NaN;
+  if (!Number.isInteger(ms) || ms < 5_000 || ms > 120_000) {
+    return { valor: VENTANA_DE_OFERTA_POR_OMISION_MS, fuente: 'valor invalido, se usa el de omision' };
+  }
+  return { valor: ms, fuente: 'entorno' };
+}
+
+const ventanaDeOferta = ventanaDeOfertaConfigurada();
+const VENTANA_DE_OFERTA_MS = ventanaDeOferta.valor;
+
 function dispatchTripToDrivers(trip) {
   const pickup = normalizeLocation(trip.pickup);
   if (!pickup) {
@@ -2134,6 +2892,7 @@ function dispatchTripToDrivers(trip) {
         status: TRIP_STATUS.CANCELLED,
         reason: 'NO_DRIVERS_AVAILABLE'
       });
+      avisarDelCambioDeViaje(trip);
       return;
     }
     session.currentDriverId = candidate.driver.id;
@@ -2143,14 +2902,17 @@ function dispatchTripToDrivers(trip) {
       offeredDriverId: candidate.driver.id,
       distanceToPickupKm: Math.round(candidate.dist * 100) / 100,
       candidatesCount: session.candidates.length,
-      offerExpiresAt: Date.now() + 15000
+      // La marca absoluta se conserva para administracion y registros; el
+      // telefono cuenta con la relativa, que no depende de su reloj.
+      offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS,
+      offerExpiresInMs: VENTANA_DE_OFERTA_MS
     };
     if (socketId) {
       io.to(socketId).emit('rideRequested', offer);
       console.log(`[+58express Dispatcher] ${JSON.stringify({ event: 'driver_offer_emitted', tripId: trip.id, emitted: true })}`);
       // PUSH-3A: aviso de atencion que acompana a ESTA misma oferta, para
       // ESTE mismo conductor. Es mejor esfuerzo puro: sin `await`, porque la
-      // ventana de quince segundos no puede depender de un proveedor de push.
+      // ventana de oferta no puede depender de un proveedor de push.
       // El servicio nunca rechaza por contrato --clasifica y absorbe todos
       // los desenlaces--; el `catch` es la red de ultima instancia por si ese
       // contrato se rompiera algun dia, y no registra mas que el nombre.
@@ -2161,7 +2923,7 @@ function dispatchTripToDrivers(trip) {
     io.to('admins').emit('rideRequested', offer);
     const timer = setTimeout(() => offerNext().catch(error => {
       console.error('[+58express Dispatcher] No se pudo continuar el despacho:', error.message);
-    }), 15000);
+    }), VENTANA_DE_OFERTA_MS);
     dispatchTimers.set(trip.id, timer);
   };
 
@@ -2172,7 +2934,7 @@ function dispatchTripToDrivers(trip) {
   if (dispatchRanker.enabled && session.candidates.length > 1) {
     // DISPATCH-2A: UNA llamada acotada de matriz por ciclo de despacho, con
     // su propio timeout duro, ANTES de la primera oferta. La ventana de
-    // 15000 ms por conductor no se toca: son relojes distintos. El ranking
+    // oferta por conductor no se toca: son relojes distintos. El ranking
     // devuelve SIEMPRE el mismo conjunto (jamas añade ni quita elegibles);
     // cualquier fallo → el orden geografico actual.
     dispatchRanker.rank({ pickup: { lat: pickupLat, lng: pickupLng }, candidates: session.candidates })
@@ -2244,6 +3006,22 @@ io.on('connection', (socket) => {
       await handler(data);
     } catch (error) {
       console.error(`[+58express Socket.IO] Error no controlado en ${event}:`, error?.message);
+      // UN SOLO SITIO PARA TODO EL TIEMPO REAL.
+      //
+      // Cada evento pasa por aquí, así que instrumentar este `catch` cubre el
+      // canal entero sin tocar ningún handler. Es donde hay que mirar cuando
+      // alguien dice «se quedó pensando»: por el socket van el despacho, la
+      // aceptación y el seguimiento, y un fallo aquí no devuelve ningún código
+      // HTTP que delate nada.
+      capturarFalloDeSocket(error, {
+        evento: event,
+        usuario: socket.data?.auth
+          ? { id: socket.data.auth.userId, role: socket.data.auth.role }
+          : undefined,
+        // El payload NO viaja: lo manda el cliente y puede traer cualquier cosa.
+        // Sus claves sí, que es lo que dice si faltaba un campo.
+        extra: { camposRecibidos: Object.keys(data).join(',') || '(vacio)' }
+      });
       socket.emit('socket:error', { event, error: 'EVENT_FAILED' });
     }
   });
@@ -2320,7 +3098,25 @@ io.on('connection', (socket) => {
     const lat = Number(data.latitude ?? data.lat);
     const lng = Number(data.longitude ?? data.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    trip.pickup = { ...(trip.pickup || {}), lat, lng };
+    // EL PUNTO DE RECOGIDA SE CONGELA CUANDO UN CONDUCTOR ACEPTA
+    //
+    // Decision del dueno: PASSENGER_PICKUP_POLICY = FREEZE_ON_DRIVER_ACCEPT.
+    //
+    // Buscando conductor tiene sentido que el punto siga a quien lo pidio: aun
+    // esta bajando las escaleras o caminando hacia la calle, y nadie ha salido
+    // todavia a buscarla.
+    //
+    // Con un conductor YA en camino, no. El sitio al que va cambiaria bajo sus
+    // ruedas sin que el se entere: acepto ir a un punto y acabaria en otro. El
+    // punto que recibio al aceptar es el que se queda.
+    //
+    // Esto NO depende de que el telefono deje de mandar: se comprueba el estado
+    // aqui, que es donde esta la autoridad. La posicion en vivo de la pasajera
+    // sigue viajando --el conductor la ve acercarse-- pero ya no mueve la
+    // recogida.
+    if (normalizeTripStatus(trip.status) === TRIP_STATUS.SEARCHING) {
+      trip.pickup = { ...(trip.pickup || {}), lat, lng };
+    }
     trip.passengerLocation = { lat, lng, heading: Number(data.heading || 0), updatedAt: Date.now() };
     // Un evento por cada movimiento del pasajero: solo cambia este viaje.
     if (!await persistRecord('trips', trip)) {
@@ -2439,6 +3235,8 @@ io.on('connection', (socket) => {
       updatedAt: trip.updatedAt,
       driver
     });
+    // Y al telefono guardado: «Tu moto viene». Sin await, como todos.
+    avisarDelCambioDeViaje(trip);
   });
 
   on('rideRejected', ({ tripId } = {}) => {
@@ -2545,15 +3343,51 @@ io.on('connection', (socket) => {
 
   on('chat:send_message', async (data = {}) => {
     const trip = database.trips.find(item => item.id === data.tripId);
+    // La identidad sale de la sesion firmada. `data.senderId`, si viene, se
+    // ignora: nadie habla en nombre de otro por escribirlo en el payload.
     const { userId, role } = socket.data.auth;
     if (!trip || !userCanAccessTrip(userId, role, trip) || role === 'admin') {
       socket.emit('chat:error', { error: 'FORBIDDEN', tripId: data.tripId });
       return;
     }
+    // LA POLITICA DE CONTACTO YA EXISTIA; EL CHAT NO LA APLICABA.
+    //
+    // `isContactableTrip` es la que decide cuando viaja el telefono del
+    // conductor: solo mientras la carrera esta viva. Es la misma regla para
+    // escribir. Un viaje terminado conserva su historial --se lee igual-- pero
+    // no admite mensajes nuevos: no es una conversacion, es un registro.
+    if (!isContactableTrip(trip)) {
+      socket.emit('chat:error', { error: 'CHAT_CLOSED', tripId: trip.id });
+      return;
+    }
     const text = String(data.text || '').trim().slice(0, 1000);
     // Misma semantica que el productor de soporte, por el mismo pipeline.
     const tieneImagen = isChatImageDataUrl(data.image);
-    if (!text && !tieneImagen) return;
+    // Vacio se contesta, no se traga: el cliente que mando algo espera saber
+    // que paso con ello.
+    if (!text && !tieneImagen) {
+      socket.emit('chat:error', { error: 'EMPTY_MESSAGE', tripId: trip.id });
+      return;
+    }
+
+    // IDEMPOTENCIA DEL CLIENTE.
+    //
+    // Un reintento tras un corte --el mismo mensaje reenviado al reconectar--
+    // no puede aparecer dos veces. El cliente manda una clave por intento, y
+    // si ya hay un mensaje de ESTA persona en ESTE viaje con esa clave, se
+    // vuelve a anunciar el existente en vez de crear otro. La clave se acota
+    // para que no sirva de almacen de nada.
+    const clientId = typeof data.clientId === 'string'
+      ? data.clientId.trim().slice(0, 64)
+      : '';
+    if (clientId) {
+      const repetido = database.messages.find(m =>
+        m.tripId === trip.id && m.senderId === userId && m.clientId === clientId);
+      if (repetido) {
+        io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', publicChatMessage(repetido));
+        return;
+      }
+    }
     const sender = database.users.find(user => user.id === userId);
 
     const construir = async (media) => {
@@ -2565,6 +3399,9 @@ io.on('connection', (socket) => {
         recipientId: role === 'driver' ? trip.passengerId : trip.driverId,
         text,
         ...(media || {}),
+        // Se guarda para poder reconocer el reintento. Viaja al cliente, que es
+        // quien la genero, para casar su pendiente con el mensaje durable.
+        ...(clientId ? { clientId } : {}),
         timestamp: new Date().toISOString()
       };
       database.messages.push(message);
@@ -2595,6 +3432,22 @@ io.on('connection', (socket) => {
     }
 
     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', publicChatMessage(message));
+
+    // El push del mensaje, para la CONTRAPARTE (PUSH-1).
+    //
+    // Quien escribio no necesita que le avisen de su propio mensaje. Y si la
+    // contraparte tiene la aplicacion conectada tampoco: ya lo esta viendo
+    // aparecer en la conversacion, y el servicio lo suprime solo.
+    //
+    // El payload lleva el tipo y el viaje. Ni el texto, ni el nombre de quien
+    // escribio, ni la imagen: eso se lee al abrir, con sesion.
+    const destinatario = userId === trip.passengerId ? trip.driverId : trip.passengerId;
+    if (destinatario) {
+      pushService.notifyChatMessage({ tripId: trip.id, messageId: message.id, userId: destinatario })
+        .catch(error => {
+          console.error(`[+58express Push] rechazo inesperado de notifyChatMessage: ${error?.name || 'UNKNOWN'}`);
+        });
+    }
   });
 
   on('tripRated', async (data = {}) => {
@@ -2648,9 +3501,49 @@ app.use((error, _req, res, _next) => {
   }
   if (error?.message === 'ORIGIN_NOT_ALLOWED') return res.status(403).json({ error: 'ORIGIN_NOT_ALLOWED' });
   console.error('[+58express HTTP]', error);
+  // LOS 4xx DE ARRIBA NO SE MANDAN, ÉSTE SÍ.
+  //
+  // Un fichero demasiado grande o un origen no permitido son respuestas
+  // correctas a peticiones incorrectas: no hay nada que arreglar y llenarían
+  // Sentry de ruido. Llegar aquí, en cambio, es un fallo del servidor.
+  capturarExcepcion(error, {
+    usuario: _req?.user ? { id: _req.user.id, role: _req.user.role } : undefined,
+    etiquetas: { area: 'http', metodo: _req?.method ?? '?', ruta: _req?.route?.path ?? _req?.path ?? '?' }
+  });
   return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR' });
+});
+
+/**
+ * Lo que se escapa de todos los `try`.
+ *
+ * Sin esto, una promesa rechazada sin capturar sale por la consola de Railway y
+ * ahí se queda: nadie la ve hasta que alguien va a mirar los registros, que es
+ * justo lo que la observabilidad viene a evitar.
+ *
+ * NO SE MATA EL PROCESO en ninguno de los dos casos. Con testers externos
+ * usando la beta, un rechazo no capturado en una rama secundaria no puede
+ * tumbar el servidor de todos: se registra, se envía y se sigue sirviendo.
+ */
+process.on('unhandledRejection', razon => {
+  console.error('[+58express Proceso] promesa rechazada sin capturar:', razon);
+  capturarExcepcion(razon instanceof Error ? razon : new Error(String(razon)), {
+    etiquetas: { area: 'proceso', tipo: 'unhandledRejection' }
+  });
+});
+
+process.on('uncaughtException', error => {
+  console.error('[+58express Proceso] excepcion sin capturar:', error);
+  capturarExcepcion(error, { etiquetas: { area: 'proceso', tipo: 'uncaughtException' } });
 });
 
 server.listen(PORT, () => {
   console.log(`🚀 [+58express Backend Server] Running on http://localhost:${PORT}`);
+  console.log(
+    observabilidad.activo
+      ? `[+58express Observabilidad] Sentry ENCENDIDO (entorno=${observabilidad.entorno}, version=${observabilidad.version ?? 'sin declarar'})`
+      : `[+58express Observabilidad] Sentry apagado: ${observabilidad.motivo} (entorno=${observabilidad.entorno})`
+  );
+  // Se anuncia porque es un numero que se va a afinar con conductores reales, y
+  // hay que poder leer en los registros cual estaba puesto en cada prueba.
+  console.log(`[+58express Dispatcher] ventana de oferta = ${VENTANA_DE_OFERTA_MS} ms (${ventanaDeOferta.fuente})`);
 });

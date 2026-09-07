@@ -76,7 +76,10 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   assert.equal(duplicateApproval.status, 409);
   const walletCredited = await fetch(`${url}/api/wallet/me`, { headers:{ authorization:`Bearer ${passengerToken}` } });
   assert.equal((await walletCredited.json()).balance, 10);
-  const unaffordableRide = await fetch(`${url}/api/trips/create`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({id:'too_expensive',pickup:{lat:10.6427,lng:-71.6125},destination:{lat:10.65,lng:-71.60},fareUSD:25,paymentMethod:'wallet'}) });
+  // Declarar 25 dolares ya no encarece nada: el servidor mide el recorrido.
+  // Para que el viaje NO quepa en los 10 de saldo hay que pedir uno largo de
+  // verdad --unos 17 km hasta el norte del lago-- en vez de decir que es caro.
+  const unaffordableRide = await fetch(`${url}/api/trips/create`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({id:'too_expensive',pickup:{lat:10.6427,lng:-71.6125},destination:{lat:10.80,lng:-71.60},fareUSD:25,paymentMethod:'wallet'}) });
   assert.equal(unaffordableRide.status, 402);
   assert.equal((await unaffordableRide.json()).error, 'INSUFFICIENT_WALLET_BALANCE');
   const scheduledResponse = await fetch(`${url}/api/trips/scheduled`, { method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${passengerToken}`}, body:JSON.stringify({pickup:{address:'Vereda del Lago'},destination:{address:'Sambil Maracaibo'},scheduledAt:new Date(Date.now()+60*60*1000).toISOString(),fareUSD:4.5,rideType:'MOTO'}) });
@@ -137,6 +140,11 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
     })
   });
   assert.equal(tripCreation.status, 200);
+  // La tarifa la mide el servidor: los 4.5 del cuerpo se ignoran. Todo lo que
+  // se comprueba mas abajo se deriva de ELLA, para que la liquidacion siga
+  // verificandose sin depender de un numero escrito a mano.
+  const tarifa = (await tripCreation.json()).trip.fareUSD;
+  const centavos = x => Math.round(x * 100) / 100;
 
   const update = await updatePromise;
   assert.equal(adminSawRequest, true);
@@ -211,15 +219,15 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
 
   const passengerWalletResponse = await fetch(`${url}/api/wallet/me`, { headers:{authorization:`Bearer ${passengerToken}`} });
   const passengerWallet = await passengerWalletResponse.json();
-  assert.equal(passengerWallet.balance, 5.5);
+  assert.equal(passengerWallet.balance, centavos(10 - tarifa));
   const ridePayments = passengerWallet.transactions.filter(transaction => transaction.type === 'RIDE_PAYMENT' && transaction.tripId === 'test_trip');
   assert.equal(ridePayments.length, 1);
-  assert.equal(ridePayments[0].amount, -4.5);
+  assert.equal(ridePayments[0].amount, -tarifa);
   driver.emit('tripStatusUpdated', { tripId: 'test_trip', status: 'COMPLETED' });
   await new Promise(resolve => setTimeout(resolve, 80));
   const walletAfterDuplicateCompletion = await fetch(`${url}/api/wallet/me`, { headers:{authorization:`Bearer ${passengerToken}`} });
   const walletAfterDuplicate = await walletAfterDuplicateCompletion.json();
-  assert.equal(walletAfterDuplicate.balance, 5.5);
+  assert.equal(walletAfterDuplicate.balance, centavos(10 - tarifa), 'completar dos veces no cobra dos veces');
   assert.equal(walletAfterDuplicate.transactions.filter(transaction => transaction.type === 'RIDE_PAYMENT' && transaction.tripId === 'test_trip').length, 1);
 
   const driverWalletResponse = await fetch(`${url}/api/wallet/me`, { headers:{authorization:`Bearer ${driverToken}`} });
@@ -281,10 +289,14 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera', 
   const cashCompleted = new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('No finalizó la carrera en efectivo')),5000);passenger.on('tripStatusUpdated',update=>{if(update.tripId==='cash_trip'&&update.status==='COMPLETED'){clearTimeout(timeout);resolve(update);}});});
   driver.emit('tripStatusUpdated',{tripId:'cash_trip',status:'COMPLETED'});await cashCompleted;
   const driverDebtResponse=await fetch(`${url}/api/wallet/me`,{headers:{authorization:`Bearer ${driverToken}`}});const driverDebt=await driverDebtResponse.json();
-  assert.equal(driverDebt.balance,-1.5);const commissionEntries=driverDebt.transactions.filter(transaction=>transaction.type==='PLATFORM_COMMISSION'&&transaction.tripId==='cash_trip');assert.equal(commissionEntries.length,1);assert.equal(commissionEntries[0].amount,-1.5);
-  const passengerAfterCash=await fetch(`${url}/api/wallet/me`,{headers:{authorization:`Bearer ${passengerToken}`}});assert.equal((await passengerAfterCash.json()).balance,5.5);
+  // En efectivo el conductor cobra en mano y le QUEDA A DEBER la comision a la
+  // plataforma. El 15 % sale de la tarifa que midio el servidor, no de los 10
+  // que declaraba el cuerpo: ese numero ya no lo lee nadie.
+  const comisionEfectivo=centavos(tarifa*0.15);
+  assert.equal(driverDebt.balance,-comisionEfectivo);const commissionEntries=driverDebt.transactions.filter(transaction=>transaction.type==='PLATFORM_COMMISSION'&&transaction.tripId==='cash_trip');assert.equal(commissionEntries.length,1);assert.equal(commissionEntries[0].amount,-comisionEfectivo);
+  const passengerAfterCash=await fetch(`${url}/api/wallet/me`,{headers:{authorization:`Bearer ${passengerToken}`}});assert.equal((await passengerAfterCash.json()).balance,centavos(10 - tarifa),'el viaje en efectivo no toca el saldo del pasajero');
   const debtTopupResponse=await fetch(`${url}/api/wallet/topups`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${driverToken}`},body:JSON.stringify({amount:5,reference:'87654321'})});
   assert.equal(debtTopupResponse.status,201);const debtTopup=await debtTopupResponse.json();
   const approveDebtTopup=await fetch(`${url}/api/admin/transactions/${debtTopup.id}`,{method:'PATCH',headers:{'content-type':'application/json',authorization:`Bearer ${adminToken}`},body:JSON.stringify({status:'APPROVED',referenceConfirmed:true})});
-  assert.equal(approveDebtTopup.status,200);assert.equal((await approveDebtTopup.json()).balance,3.5);
+  assert.equal(approveDebtTopup.status,200);assert.equal((await approveDebtTopup.json()).balance,centavos(5-comisionEfectivo));
 });

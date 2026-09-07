@@ -310,7 +310,8 @@ test('el despacho ni conoce el modulo de navegacion', () => {
   const elegibilidad = leer('server/domain/dispatchEligibility.js');
   assert.ok(!elegibilidad.toLowerCase().includes('google'));
   // La ventana de oferta sigue intacta (tambien vigilada por sus suites).
-  assert.ok(indice.includes('offerExpiresAt: Date.now() + 15000'));
+  assert.ok(indice.includes('const VENTANA_DE_OFERTA_MS = 15_000;'));
+  assert.ok(indice.includes('offerExpiresAt: Date.now() + VENTANA_DE_OFERTA_MS'));
 });
 
 // --------------------------------------------------------------------------
