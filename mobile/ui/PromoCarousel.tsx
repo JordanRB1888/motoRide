@@ -230,7 +230,14 @@ export function PromoCarousel({
                 ) : null}
 
                 <View style={estilos.cuerpo}>
-                  <Text style={[estilos.titular, { color: tema.color.sobreImagen }]} numberOfLines={2}>
+                  {/* En 360 dp el titular no cabe en dos líneas a 24 puntos y se
+                      truncaba («es tu ci…»): encoge hasta el 80 % antes de eso. */}
+                  <Text
+                    style={[estilos.titular, { color: tema.color.sobreImagen }]}
+                    numberOfLines={3}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
                     {banner.title}
                     {banner.tituloDestacado ? <Text style={{ color: tema.color.acentoSobreImagen }}>{' '}{banner.tituloDestacado}</Text> : null}
                   </Text>
@@ -271,7 +278,7 @@ const estilos = StyleSheet.create({
   tarjeta: { height: ALTO_DEL_HERO, overflow: 'hidden', justifyContent: 'flex-end' },
   rotulo: { position: 'absolute', top: 16, right: 18, alignItems: 'flex-end', transform: [{ rotate: '-6deg' }] },
   rotuloTexto: { fontSize: 13, fontStyle: 'italic', fontWeight: '700', letterSpacing: 0.2 },
-  cuerpo: { padding: 18, gap: 6, maxWidth: '68%' },
+  cuerpo: { padding: 18, gap: 6, maxWidth: '72%' },
   titular: { fontSize: 24, lineHeight: 27, fontWeight: '800', letterSpacing: -0.6 },
   apoyo: { fontSize: 12.5, lineHeight: 17, opacity: 0.92 },
   cta: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, height: 36, paddingHorizontal: 14, marginTop: 6 },
