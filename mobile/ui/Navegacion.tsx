@@ -89,7 +89,6 @@ import Reanimated, {
   Extrapolation,
   cancelAnimation,
   interpolate,
-  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
@@ -593,17 +592,22 @@ function llevaAro(indice: number): boolean {
  * con lo que el proyecto ya tiene, y todo va por `transform`.
  */
 function MitadDelAro({ avance, derecha, color }: {
-  /** Cuánto de ESTA mitad está dibujado, de 0 a 1. */
+  /** El avance del aro ENTERO, de 0 a 1. Cada mitad se queda con su tramo. */
   readonly avance: SharedValue<number>;
   readonly derecha: boolean;
   readonly color: string;
 }) {
   const estilo = useAnimatedStyle(() => {
+    // La derecha se dibuja en la primera mitad del avance y la izquierda en la
+    // segunda: así el trazo da la vuelta entera de una sola pasada, de las doce
+    // a las seis por el este y de las seis a las doce por el oeste.
+    const propio = derecha
+      ? interpolate(avance.get(), [0, 0.5], [0, 1], Extrapolation.CLAMP)
+      : interpolate(avance.get(), [0.5, 1], [0, 1], Extrapolation.CLAMP);
     // Derecha: de -135° (todo el arco escondido en la otra mitad) a 45° (medio
     // aro justo encima de esta ventana). Izquierda: la continuación, de 45° a
     // 225°, que es lo que la hace empezar a las seis y no a las doce.
-    const desde = derecha ? -135 : 45;
-    const grados = desde + interpolate(avance.get(), [0, 1], [0, 180], Extrapolation.CLAMP);
+    const grados = (derecha ? -135 : 45) + propio * 180;
     return { transform: [{ rotate: `${grados}deg` }] };
   });
 
@@ -655,18 +659,6 @@ function Aro({ avance, x, color }: {
   readonly x: SharedValue<number>;
   readonly color: string;
 }) {
-  const derecha = useSharedValue(0);
-  const izquierda = useSharedValue(0);
-
-  useAnimatedReaction(
-    () => avance.get(),
-    valor => {
-      derecha.set(interpolate(valor, [0, 0.5], [0, 1], Extrapolation.CLAMP));
-      izquierda.set(interpolate(valor, [0.5, 1], [0, 1], Extrapolation.CLAMP));
-    },
-    [avance, derecha, izquierda]
-  );
-
   const estilo = useAnimatedStyle(() => ({
     opacity: avance.get() <= 0 ? 0 : OPACIDAD_DEL_TRAZO,
     transform: [{ translateX: x.get() - DIAMETRO_DEL_ARO / 2 }]
@@ -687,8 +679,8 @@ function Aro({ avance, x, color }: {
         estilo
       ]}
     >
-      <MitadDelAro avance={derecha} derecha color={color} />
-      <MitadDelAro avance={izquierda} derecha={false} color={color} />
+      <MitadDelAro avance={avance} derecha color={color} />
+      <MitadDelAro avance={avance} derecha={false} color={color} />
     </Reanimated.View>
   );
 }
