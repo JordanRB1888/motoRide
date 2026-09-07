@@ -160,6 +160,8 @@ export default function InicioDePasajera() {
       iniciales: inicialesDe(usuario.firstName ?? '', usuario.lastName ?? ''),
       zona: null,
       tasa: null,
+      // La cartera no está encendida en el servidor: sin importe no se inventa.
+      saldo: null,
       avisosSinLeer: 0,
       lugares: [],
       campanas: [],

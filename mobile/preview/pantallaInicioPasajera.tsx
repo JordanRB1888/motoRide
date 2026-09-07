@@ -1,24 +1,29 @@
 /**
- * El inicio map-first de la pasajera.
+ * El inicio de la pasajera, según la referencia visual del dueño.
  *
- * El mapa vuelve a ser el suelo de la pantalla: cabecera, destino y navegación
- * flotan encima. El catálogo conserva exactamente sus piezas y comportamiento,
- * pero vive en una hoja inferior que abre el control central «Pedir».
+ * Debajo de la top bar —que no se toca— va el bloque utilitario (saldo,
+ * ubicación, buscador y accesos rápidos), el hero publicitario, los aliados
+ * comerciales, las promociones y la rejilla «Nuestros servicios». Todo
+ * desliza; la top bar queda fija.
+ *
+ * LO QUE SE CONSERVA
+ *
+ * La hoja «¿Qué necesitas hoy?» que abre el botón amarillo, con sus casillas,
+ * los sitios guardados, las campañas y el adelanto de aliados; y el modo mapa
+ * al pedir. Son navegación y comportamiento, y el encargo era visual.
  *
  * LA REJILLA NO PROMETE LO QUE NO HAY
  *
- * Viajes, Comercios y Transporte Seguro existen. Envíos, Comida, Mercado y
- * Compra y vende NO: no hay backend, ni comercios dados de alta, ni forma de
- * cobrar. Salen igualmente, porque la rejilla completa dice a dónde va
- * +58express, pero llevan su etiqueta de PRONTO y no navegan a ninguna parte.
+ * Moto, Comercios y Transporte Seguro existen. Delivery, Comida, Envíos,
+ * Mercado, Compra y venta y +58Moto Plus NO: salen porque la referencia los
+ * lleva y dicen a dónde va +58express, pero llevan su píldora de PRONTO y
+ * navegan a la pantalla que lo explica. Un botón que no lleva a nada, sin
+ * decirlo, es una promesa rota a la primera pulsación.
  *
- * Un botón de «Comida» que no lleva a nada, sin decirlo, es una promesa rota a
- * la primera pulsación, y de las que las tiendas rechazan.
+ * VIAJES SIGUE OCUPANDO EL ANCHO ENTERO EN LA HOJA
  *
- * VIAJES OCUPA EL ANCHO ENTERO
- *
- * No es maquetación: es lo único que la aplicación hace hoy. Seis casillas
- * iguales dirían que +58express es seis cosas a medias en vez de una bien.
+ * `ancho` es la disposición de la hoja y del dibujo web; la rejilla del inicio
+ * es uniforme, como en la referencia.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -43,10 +48,14 @@ import { useAireDeArriba } from '../ui/seguro';
 import { useIr } from '../ui/navegar';
 import { ARTE_DE_CAMPANA, ARTE_DE_SERVICIO, VEHICULOS } from '../theme/marca';
 import {
+  ACCESOS_RAPIDOS,
   AVISOS_DEMO,
   CAMPANAS_DEMO,
   LUGARES_DEMO,
   PASAJERA_DEMO,
+  REJILLA_DEL_INICIO,
+  SALDO_DEMO,
+  SERVICIO_DESTACADO,
   SERVICIOS_DE_INICIO,
   TASA_DEMO
 } from './fixtures';
@@ -57,6 +66,8 @@ import { LienzoDeMapa } from '../ui/Mapa';
 import type { ModeloDelMapa } from '../mapa/modelo';
 import { AvisoPostulacionDriver, type PropiedadesAvisoPostulacion, type VarianteAvisoPostulacion } from '../ui/AvisoPostulacionDriver';
 import { PassengerHomeCommercial } from '../ui/PassengerHomeCommercial';
+import { TarjetaDeSaldo, BotonDeUbicacion, type SaldoDelInicio } from '../ui/TarjetaDeSaldo';
+import { AccesosRapidos } from '../ui/AccesosRapidos';
 
 import { useMovimientoReducido } from '../ui/movimiento';
 
@@ -86,6 +97,8 @@ export interface DatosDelInicio {
   readonly zona: string | null;
   /** La tasa del día. `null` mientras no exista una de verdad. */
   readonly tasa: { readonly etiqueta: string; readonly valor: string } | null;
+  /** El saldo, si la cartera lo da. `null` mientras no exista uno de verdad. */
+  readonly saldo: SaldoDelInicio | null;
   readonly avisosSinLeer: number;
   readonly lugares: readonly Lugar[];
   readonly campanas: readonly Campana[];
@@ -98,6 +111,7 @@ const DATOS_DEMO: DatosDelInicio = Object.freeze({
   iniciales: PASAJERA_DEMO.iniciales,
   zona: PASAJERA_DEMO.zona,
   tasa: TASA_DEMO,
+  saldo: { etiqueta: SALDO_DEMO.pasajera.rotulo, valor: SALDO_DEMO.pasajera.importe },
   avisosSinLeer: AVISOS_DEMO.filter(aviso => aviso.sinLeer).length,
   lugares: LUGARES_DEMO,
   campanas: CAMPANAS_DEMO,
@@ -924,6 +938,25 @@ export function C2InicioPasajera({
         ]
   }));
 
+  // Los servicios de la rejilla del inicio, en el orden de la referencia.
+  const serviciosDelInicio = REJILLA_DEL_INICIO
+    .map(clave => SERVICIOS_DE_INICIO.find(dato => dato.clave === clave))
+    .filter((dato): dato is (typeof SERVICIOS_DE_INICIO)[number] => dato !== undefined);
+
+  // El bloque utilitario. Desliza con el resto; sólo la top bar queda fija.
+  const encabezado = (
+    <View style={{ gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <TarjetaDeSaldo saldo={datos.saldo} onPress={() => ir('saldo')} />
+        <BotonDeUbicacion onPress={() => ir('pedir')} />
+      </View>
+      <CampoDeDestino onPress={() => ir('buscar-destino')} />
+      <AccesosRapidos accesos={ACCESOS_RAPIDOS} onElegir={() => ir('buscar-destino')} />
+      {avisoPostulacion ? <AvisoPostulacionDriver {...avisoPostulacion} /> : null}
+      {slotBanner ?? null}
+    </View>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: tema.color.fondo }}>
       {modoMapa ? (
@@ -977,30 +1010,21 @@ export function C2InicioPasajera({
         </LienzoDeMapa>
       ) : (
         <View style={{ flex: 1 }}>
-          {/* Header fijo superior con saludo, campana y buscador */}
-          <View style={{
-            backgroundColor: tema.color.fondo,
-            borderBottomWidth: 1,
-            borderBottomColor: tema.color.borde,
-            paddingBottom: 10
-          }}>
+          {/* La top bar, fija. No se toca: mismo componente, mismos datos. */}
+          <View style={{ backgroundColor: tema.color.fondo }}>
             <Cabecera datos={datos} />
-            <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
-              <CampoDeDestino onPress={() => ir('buscar-destino')} />
-              {avisoPostulacion ? (
-                <View style={{ marginTop: 8 }}>
-                  <AvisoPostulacionDriver {...avisoPostulacion} />
-                </View>
-              ) : null}
-              {slotBanner ?? null}
-            </View>
           </View>
-
-          {/* Gran superficie comercial plana y premium: banners auto-slide, aliados y promociones */}
           <View style={{ flex: 1 }}>
             <PassengerHomeCommercial
+              encabezado={encabezado}
+              servicios={serviciosDelInicio}
+              destacado={SERVICIO_DESTACADO}
               onPedirViaje={() => ir('pedir')}
               onVerAliados={() => ir('comercios')}
+              onSeleccionarAliado={() => ir('comercios')}
+              onAbrirPromocion={promo => ir(promo.accion)}
+              onVerPromociones={() => ir('comercios')}
+              onElegirServicio={clave => ir('servicio', { servicio: clave })}
             />
           </View>
         </View>

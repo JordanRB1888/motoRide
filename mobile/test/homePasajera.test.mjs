@@ -56,6 +56,10 @@ test('los dos esquemas declaran la tinta sobre imagen, y se lee sobre el velo', 
     assert.equal(typeof esquema.sobreImagen, 'string', `${nombre}: falta sobreImagen`);
     const relacion = contraste(esquema.sobreImagen, VELO_SOBRE_FOTO);
     assert.ok(relacion >= 4.5, `${nombre}: sobreImagen da ${relacion.toFixed(2)}:1 sobre el velo`);
+    // Y el amarillo como texto, que de día no vale sobre marfil, sobre el velo sí.
+    assert.equal(typeof esquema.acentoSobreImagen, 'string', `${nombre}: falta acentoSobreImagen`);
+    const amarillo = contraste(esquema.acentoSobreImagen, VELO_SOBRE_FOTO);
+    assert.ok(amarillo >= 4.5, `${nombre}: acentoSobreImagen da ${amarillo.toFixed(2)}:1 sobre el velo`);
   }
 });
 
@@ -146,4 +150,81 @@ test('los accesos rápidos son chips, todos con nombre accesible', () => {
   assert.match(fuente, /borderRadius: tema\.radio\.insignia/);
   assert.match(fuente, /accessibilityRole="button"/);
   assert.match(fuente, /accessibilityLabel=\{acceso\.nombre\}/);
+});
+
+// ---------------------------------------------------------------------------
+// Las secciones comerciales
+// ---------------------------------------------------------------------------
+
+test('el hero es una pieza publicitaria con imagen, titular destacado, CTA y puntos', () => {
+  const fuente = despojarComentarios(leer('ui/PromoCarousel.tsx'));
+  assert.match(fuente, /tema\.color\.sobreImagen/, 'el texto sobre la foto sale del token');
+  assert.match(fuente, /tituloDestacado/, 'falta la palabra en amarillo del titular');
+  assert.match(fuente, /VEHICULOS\.MOTO\.tarjeta/, 'sin foto, la composición de marca lleva la moto real');
+  assert.match(fuente, /title: 'Más que un destino,'/);
+  assert.match(fuente, /tituloDestacado: 'es tu ciudad'/);
+  assert.match(fuente, /ctaLabel: 'Descubre \+58Express'/);
+  assert.match(fuente, /tag: 'Venezuela se mueve contigo'/);
+  assert.ok((fuente.match(/active: true/g) ?? []).length >= 3, 'la referencia enseña tres puntos');
+});
+
+test('los aliados son los de la referencia, en discos, con hueco para el logotipo', () => {
+  const fuente = despojarComentarios(leer('ui/CommercialPartners.tsx'));
+  for (const nombre of ['McDonald’s', 'Farmatodo', 'Automercado', 'Café Amanecer', 'Yummy', 'MultiMax']) {
+    assert.ok(fuente.includes(`name: '${nombre}'`), `falta el aliado «${nombre}»`);
+  }
+  assert.match(fuente, /aliado\.logo !== undefined/, 'cuando haya logotipo se pinta; mientras, el monograma');
+  assert.match(fuente, /<CabeceraDeSeccion/);
+  assert.match(fuente, /borderRadius: DIAMETRO \/ 2/);
+});
+
+test('las promociones son las tres de la referencia, con foto y palabra destacada', () => {
+  const fuente = despojarComentarios(leer('ui/PromocionesDelInicio.tsx'));
+  for (const etiqueta of ['HASTA 30% OFF', 'VIAJA SEGURO', 'TU MERCADO EN MINUTOS']) {
+    assert.ok(fuente.includes(`etiqueta: '${etiqueta}'`), `falta la promoción «${etiqueta}»`);
+  }
+  assert.match(fuente, /tituloDestacado: '20% OFF'/);
+  assert.match(fuente, /tema\.color\.sobreImagen/);
+  assert.match(fuente, /<CabeceraDeSeccion/);
+  assert.match(fuente, /nombre="chevron-derecha"/);
+});
+
+test('la rejilla del inicio es de cuatro columnas, con ilustración, y dice lo que no está', () => {
+  const fuente = despojarComentarios(leer('ui/RejillaDeServicios.tsx'));
+  assert.match(fuente, /COLUMNAS = 4/);
+  assert.match(fuente, /ARTE_DE_SERVICIO\[dato\.arte\]/, 'las casillas usan las ilustraciones encargadas');
+  assert.match(fuente, /arte === undefined/, 'sin ilustración cae al icono, no a un hueco');
+  assert.match(fuente, /accessibilityState=\{\{ disabled: !dato\.listo \}\}/);
+  assert.match(fuente, /PRONTO/, 'lo pendiente lo dice, aunque sea en pequeño');
+  assert.match(fuente, /export function ServicioDestacado/);
+  assert.match(fuente, /nombre="corona"/);
+  assert.match(fuente, /VEHICULOS\.MOTO\.tarjeta/, 'la tarjeta destacada lleva la moto real');
+});
+
+test('la superficie comercial compone las cinco secciones de la referencia, en orden', () => {
+  const fuente = despojarComentarios(leer('ui/PassengerHomeCommercial.tsx'));
+  const orden = ['{encabezado}', '<PromoCarousel', '<CommercialPartners', '<PromocionesDelInicio', '<RejillaDeServicios'];
+  const posiciones = orden.map(marca => fuente.indexOf(marca));
+  assert.ok(posiciones.every(p => p >= 0), `falta alguna sección: ${orden.filter((_, i) => posiciones[i] < 0).join(', ')}`);
+  assert.deepEqual([...posiciones].sort((a, b) => a - b), posiciones, 'las secciones no van en el orden de la referencia');
+  assert.doesNotMatch(fuente, /Recarga tu saldo sin comisiones/, 'las tarjetas de promoción antiguas se fueron');
+});
+
+// ---------------------------------------------------------------------------
+// La pantalla
+// ---------------------------------------------------------------------------
+
+test('el inicio conserva su top bar y monta el bloque utilitario debajo, en orden', () => {
+  const fuente = despojarComentarios(leer('preview/pantallaInicioPasajera.tsx'));
+  // La cabecera no se toca: mismo componente, mismos datos.
+  assert.match(fuente, /<Cabecera datos=\{datos\} \/>/);
+  const bloque = fuente.slice(fuente.indexOf('const encabezado ='), fuente.indexOf('<PassengerHomeCommercial'));
+  const orden = ['<TarjetaDeSaldo', '<BotonDeUbicacion', "<CampoDeDestino onPress={() => ir('buscar-destino')} />", '<AccesosRapidos'];
+  const posiciones = orden.map(marca => bloque.indexOf(marca));
+  assert.ok(posiciones.every(p => p >= 0), 'falta alguna pieza del bloque utilitario');
+  assert.deepEqual([...posiciones].sort((a, b) => a - b), posiciones);
+  assert.match(fuente, /saldo: SaldoDelInicio \| null/);
+  assert.match(fuente, /onPress=\{\(\) => ir\('saldo'\)\}/);
+  // La app real no inventa un saldo.
+  assert.match(despojarComentarios(leer('app/pasajero.tsx')), /saldo: null/);
 });
