@@ -286,7 +286,15 @@ test('sin servidor configurado NO se monta la sesión ni las pantallas reales', 
   assert.match(rama, /ProveedorDeSesion/, 'la sesión vive dentro de la rama con configuración');
   assert.match(rama, /<Stack/, 'las pantallas reales, también');
 
-  const aviso = fuente.slice(fuente.indexOf('function AvisoDeConfiguracion'), fuente.indexOf('export default'));
+  // El corte termina donde empieza el componente raíz, NO en `export default`:
+  // ese export dejó de estar pegado a la función el día que la raíz pasó a
+  // exportarse envuelta para el diagnóstico, al final del fichero. Con el
+  // delimitador viejo este trozo se tragaba la aplicación entera y la prueba
+  // fallaba sin que la guarda se hubiera tocado.
+  const aviso = fuente.slice(
+    fuente.indexOf('function AvisoDeConfiguracion'),
+    fuente.indexOf('function DisposicionRaiz')
+  );
   assert.doesNotMatch(aviso, /ProveedorDeSesion/, 'el aviso no monta sesión');
   assert.doesNotMatch(aviso, /<Stack/, 'el aviso no monta las pantallas reales');
 });

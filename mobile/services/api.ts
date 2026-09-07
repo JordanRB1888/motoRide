@@ -64,6 +64,7 @@ const TIEMPO_MAXIMO_MS = 15_000;
 // apoyara en estos tipos quedaria atrapada detras de `expo-secure-store` y no
 // se podria ejecutar fuera de un emulador.
 export { MOTIVOS_DE_ERROR, type MotivoDeError, type Resultado } from '../domain/apiResult';
+import { anotarFalloDeApi } from '../observabilidad/sentry';
 
 const fallo = (
   motivo: MotivoDeError,
@@ -133,7 +134,31 @@ export async function llamar<T>(ruta: string, opciones: OpcionesDePeticion = {})
     clearTimeout(temporizador);
   }
 
-  return resultadoDesde<T>(respuesta.status, respuesta.status === 204 ? '' : await respuesta.text());
+  const resultado = resultadoDesde<T>(respuesta.status, respuesta.status === 204 ? '' : await respuesta.text());
+  anotarSiMerecelaPena(ruta, opciones.metodo ?? 'GET', resultado);
+  return resultado;
+}
+
+/**
+ * Deja constancia de una llamada que falló, para el diagnóstico.
+ *
+ * NO SE ANOTA TODO, Y ESO ES LA MITAD DEL VALOR
+ *
+ * Un 401 al abrir la aplicación es la sesión caducada; un 404 de expediente es
+ * que esa persona no tiene expediente; un 403 de contacto sin verificar es la
+ * guardia haciendo su trabajo. Los tres son respuestas correctas, y anotarlos
+ * llena las migas de ruido hasta que el fallo de verdad no se distingue.
+ *
+ * Se anota lo que nadie espera: que el servidor se rompa (5xx) o que no
+ * conteste. Que es, además, lo que la persona vive como «no carga».
+ */
+function anotarSiMerecelaPena(ruta: string, metodo: string, resultado: Resultado<unknown>): void {
+  if (resultado.ok) return;
+  const estado = resultado.estadoHttp ?? null;
+  const esFalloDelServidor = estado !== null && estado >= 500;
+  const esFaltaDeRespuesta = resultado.motivo === 'SIN_RED' || resultado.motivo === 'TIEMPO_AGOTADO';
+  if (!esFalloDelServidor && !esFaltaDeRespuesta) return;
+  anotarFalloDeApi({ ruta, metodo, estadoHttp: estado, codigo: resultado.codigo ?? null });
 }
 
 /** Traduce el estado HTTP y el cuerpo a un `Resultado`, venga de donde venga. */

@@ -1,3 +1,8 @@
+// PRIMERO, Y NO ES UN CAPRICHO DE ORDEN: el SDK de diagnóstico instrumenta
+// `http` y Express envolviéndolos al inicializarse, así que tiene que cargarse
+// antes que ellos. El porqué completo está en `instrumentacion.js`.
+import { observabilidad } from './instrumentacion.js';
+
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -15,6 +20,7 @@ import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS, TR
 import { calculateDistance, estadosActivos, metricasDelRecorrido } from './domain/tripMetrics.js';
 import { createRouteMatrixClient } from './services/routeMatrixClient.js';
 import { createRouteGeometryClient } from './services/routeGeometryClient.js';
+import { capturarExcepcion, capturarFalloDeSocket } from './services/observabilidad.js';
 import { crearAuthDeMaps, MODO_DE_AUTH } from './services/googleMapsAuth.js';
 import { createPlacesClient, PLACES_ERROR } from './services/placesClient.js';
 import { crearCacheDeRecorridos } from './services/routeMetricsCache.js';
@@ -1422,6 +1428,47 @@ app.get('/api/health', (req, res) => {
     timestamp: Date.now()
   });
 });
+
+/**
+ * Comprobar que la observabilidad funciona de verdad.
+ *
+ * POR QUÉ HACE FALTA UN ENDPOINT PARA ESTO
+ *
+ * Porque «Sentry está configurado» y «los errores llegan a Sentry» son dos
+ * afirmaciones distintas, y sólo la segunda sirve de algo. Entre las dos hay un
+ * DSN mal copiado, una red que bloquea la salida, un `beforeSend` que devuelve
+ * `null` por un fallo propio, o un proyecto equivocado. Todo eso compila,
+ * arranca y no dice nada.
+ *
+ * POR QUÉ NO ES UNA PUERTA TRASERA
+ *
+ * Tres cierres, y hacen falta los tres:
+ *
+ *   1. NO EXISTE en producción. La ruta ni se registra —no es que responda 403:
+ *      es que no está—, así que no hay nada que descubrir escaneando.
+ *   2. Exige sesión de administración.
+ *   3. No hace nada. Lanza un error, lo manda y responde. No lee ni escribe
+ *      datos, no toca la base y no cambia ningún estado.
+ *
+ * Lo que devuelve es el identificador del evento, para poder buscarlo en Sentry
+ * y confirmar que llegó de verdad en vez de suponerlo.
+ */
+const EN_PRODUCCION_DE_VERDAD = String(process.env.SENTRY_ENVIRONMENT ?? process.env.RAILWAY_ENVIRONMENT_NAME ?? '')
+  .trim().toLowerCase() === 'production';
+
+if (!EN_PRODUCCION_DE_VERDAD) {
+  app.post('/api/diagnostico/prueba', requireAuth, requireRole('admin'), (req, res) => {
+    const marca = `prueba-${Date.now()}`;
+    const error = new Error(`Error de prueba de observabilidad (${marca})`);
+    error.name = 'PruebaDeObservabilidad';
+    capturarExcepcion(error, {
+      usuario: { id: req.user.id, role: req.user.role },
+      etiquetas: { area: 'diagnostico', prueba: 'manual' },
+      extra: { marca }
+    });
+    res.json({ status: 'sent', marca, observabilidad: observabilidad.activo, entorno: observabilidad.entorno });
+  });
+}
 
 app.get('/api/pricing/config', requireAuth, (req, res) => res.json(pricingConfig));
 
@@ -2875,6 +2922,22 @@ io.on('connection', (socket) => {
       await handler(data);
     } catch (error) {
       console.error(`[+58express Socket.IO] Error no controlado en ${event}:`, error?.message);
+      // UN SOLO SITIO PARA TODO EL TIEMPO REAL.
+      //
+      // Cada evento pasa por aquí, así que instrumentar este `catch` cubre el
+      // canal entero sin tocar ningún handler. Es donde hay que mirar cuando
+      // alguien dice «se quedó pensando»: por el socket van el despacho, la
+      // aceptación y el seguimiento, y un fallo aquí no devuelve ningún código
+      // HTTP que delate nada.
+      capturarFalloDeSocket(error, {
+        evento: event,
+        usuario: socket.data?.auth
+          ? { id: socket.data.auth.userId, role: socket.data.auth.role }
+          : undefined,
+        // El payload NO viaja: lo manda el cliente y puede traer cualquier cosa.
+        // Sus claves sí, que es lo que dice si faltaba un campo.
+        extra: { camposRecibidos: Object.keys(data).join(',') || '(vacio)' }
+      });
       socket.emit('socket:error', { event, error: 'EVENT_FAILED' });
     }
   });
@@ -3354,9 +3417,46 @@ app.use((error, _req, res, _next) => {
   }
   if (error?.message === 'ORIGIN_NOT_ALLOWED') return res.status(403).json({ error: 'ORIGIN_NOT_ALLOWED' });
   console.error('[+58express HTTP]', error);
+  // LOS 4xx DE ARRIBA NO SE MANDAN, ÉSTE SÍ.
+  //
+  // Un fichero demasiado grande o un origen no permitido son respuestas
+  // correctas a peticiones incorrectas: no hay nada que arreglar y llenarían
+  // Sentry de ruido. Llegar aquí, en cambio, es un fallo del servidor.
+  capturarExcepcion(error, {
+    usuario: _req?.user ? { id: _req.user.id, role: _req.user.role } : undefined,
+    etiquetas: { area: 'http', metodo: _req?.method ?? '?', ruta: _req?.route?.path ?? _req?.path ?? '?' }
+  });
   return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR' });
+});
+
+/**
+ * Lo que se escapa de todos los `try`.
+ *
+ * Sin esto, una promesa rechazada sin capturar sale por la consola de Railway y
+ * ahí se queda: nadie la ve hasta que alguien va a mirar los registros, que es
+ * justo lo que la observabilidad viene a evitar.
+ *
+ * NO SE MATA EL PROCESO en ninguno de los dos casos. Con testers externos
+ * usando la beta, un rechazo no capturado en una rama secundaria no puede
+ * tumbar el servidor de todos: se registra, se envía y se sigue sirviendo.
+ */
+process.on('unhandledRejection', razon => {
+  console.error('[+58express Proceso] promesa rechazada sin capturar:', razon);
+  capturarExcepcion(razon instanceof Error ? razon : new Error(String(razon)), {
+    etiquetas: { area: 'proceso', tipo: 'unhandledRejection' }
+  });
+});
+
+process.on('uncaughtException', error => {
+  console.error('[+58express Proceso] excepcion sin capturar:', error);
+  capturarExcepcion(error, { etiquetas: { area: 'proceso', tipo: 'uncaughtException' } });
 });
 
 server.listen(PORT, () => {
   console.log(`🚀 [+58express Backend Server] Running on http://localhost:${PORT}`);
+  console.log(
+    observabilidad.activo
+      ? `[+58express Observabilidad] Sentry ENCENDIDO (entorno=${observabilidad.entorno}, version=${observabilidad.version ?? 'sin declarar'})`
+      : `[+58express Observabilidad] Sentry apagado: ${observabilidad.motivo} (entorno=${observabilidad.entorno})`
+  );
 });

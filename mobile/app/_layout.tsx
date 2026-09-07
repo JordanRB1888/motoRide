@@ -32,6 +32,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 
 import { procedenciaDelBundle } from '../dev/procedenciaDelBundle';
+import { Sentry, iniciarObservabilidad } from '../observabilidad/sentry';
+import { IdentidadEnDiagnostico } from '../observabilidad/IdentidadEnDiagnostico';
 
 import { configuracion } from '../config/environment';
 import { ProveedorDeSesion } from '../context/AuthContext';
@@ -50,6 +52,19 @@ import LaboratorioVisual from './preview';
 
 /** `true` sólo cuando Metro sirve la aplicación. En release, `false`. */
 const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
+
+/**
+ * El diagnóstico arranca aquí, en el cuerpo del módulo y no dentro de un
+ * componente.
+ *
+ * Lo que hay que capturar antes que nada es justo lo que pasa antes de que
+ * React monte nada: un módulo que revienta al cargarse, una llamada a una API
+ * nativa que no existe en ese dispositivo. Un `useEffect` corre demasiado
+ * tarde para eso; para cuando se ejecuta, la aplicación ya se cerró.
+ *
+ * En desarrollo y sin DSN no hace nada: ver `observabilidad/sentry.ts`.
+ */
+const observabilidad = iniciarObservabilidad();
 
 /**
  * De qué carpeta salió este código, dicho en voz alta al arrancar.
@@ -131,8 +146,16 @@ function AvisoDeConfiguracion({ detalle }: { readonly detalle: string }) {
   );
 }
 
-export default function DisposicionRaiz() {
+function DisposicionRaiz() {
   useAvisoDeProcedencia();
+  useEffect(() => {
+    if (!EN_DESARROLLO) return;
+    console.log(
+      observabilidad.activo
+        ? `[+58express dev] diagnostico ENCENDIDO (${observabilidad.entorno})`
+        : `[+58express dev] diagnostico apagado: ${observabilidad.motivo}`
+    );
+  }, []);
 
   return (
     <SafeAreaProvider>
@@ -148,6 +171,11 @@ export default function DisposicionRaiz() {
         // servidor al que preguntar, arrancar la sesión no tendría sentido y
         // sólo produciría un fallo de red confuso.
         <ProveedorDeSesion>
+          {/* No pinta nada: sólo observa la sesión para etiquetar los eventos
+              de diagnóstico con quién los produce. Va aquí, y no dentro del
+              contexto de sesión, porque ese fichero maneja contraseñas y tiene
+              prohibida cualquier vía hacia el reportador. */}
+          <IdentidadEnDiagnostico />
           {/* El tiempo real va DENTRO de la sesión y una sola vez, aquí.
               Es lo que garantiza «una sesión, un socket»: montarlo en cada
               pantalla abriría una conexión por pantalla, y navegar entre
@@ -256,6 +284,16 @@ export default function DisposicionRaiz() {
     </SafeAreaProvider>
   );
 }
+
+/**
+ * `Sentry.wrap` envuelve la raíz para cazar lo que React no deja escapar de
+ * otra forma: un error lanzado durante el render de cualquier pantalla.
+ *
+ * Sin esto, un fallo de render se ve como una pantalla en blanco o un cierre
+ * seco, y no queda constancia de nada. Cuando el diagnóstico está apagado
+ * --desarrollo, o sin DSN-- el envoltorio no hace nada.
+ */
+export default Sentry.wrap(DisposicionRaiz);
 
 const estilos = StyleSheet.create({
   centro: { flex: 1, justifyContent: 'center', gap: espaciado.lg },
