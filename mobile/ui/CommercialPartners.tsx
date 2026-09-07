@@ -1,79 +1,43 @@
-﻿/**
- * Aliados comerciales locales para el Home Comercial de Pasajero.
+/**
+ * Aliados comerciales: seis discos con logotipo y el nombre debajo.
  *
- * Muestra comercios asociados a +58Express con sus beneficios exclusivos.
- * Estructurado para poblarse desde el Panel de Administración en el futuro.
+ * LOS LOGOTIPOS NO ESTÁN
  *
- * LA TINTA SALE DEL TEMA, NO DE LA HOJA DE ESTILOS
+ * La referencia enseña seis marcas reales. Ninguna ha entregado su logotipo,
+ * así que cada disco lleva un monograma sobre el color de la marca: es el hueco
+ * preparado, no un adorno. El día que llegue el archivo, va en `logo` y el
+ * monograma deja de pintarse. Los colores de marca son DATOS del aliado, no
+ * tintas de la interfaz: por eso viven en el mock y no en el tema.
  *
- * Esta sección nació con los colores escritos a mano —`#FFFFFF` en los títulos,
- * `#8E8E93` en las líneas de apoyo— porque se dibujó sobre grafito y allí
- * funcionaba. En el modo día eso pinta blanco sobre marfil: los nombres de los
- * aliados y el título de la sección DESAPARECÍAN, mientras las líneas grises
- * seguían leyéndose. Era exactamente lo que se veía en pantalla.
- *
- * Y el amarillo tiene dos papeles que en claro no pueden ser el mismo (lo
- * explica `theme/esquemas.ts`): como FONDO de la insignia sigue siendo el de
- * marca, `acento`; como TEXTO tiene que ser `acentoTexto`, que en día baja a un
- * ámbar legible y en noche vuelve a ser el amarillo de siempre.
+ * El nombre debajo va en la tinta del tema, que es la que sabe si es de día.
  */
 
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, type ImageSourcePropType, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useTema } from '../theme/ThemeContext';
+import { CabeceraDeSeccion } from './CabeceraDeSeccion';
 import { useMovimientoReducido } from './movimiento';
 
 export interface CommercialPartner {
   readonly id: string;
   readonly name: string;
-  readonly category: string;
-  readonly benefit: string;
-  readonly rating?: string;
-  readonly iconLetter?: string;
+  readonly logo?: ImageSourcePropType;
+  readonly colorDeMarca?: string;
+  readonly tintaDeMarca?: string;
+  readonly inicial?: string;
 }
 
 export const ALIADOS_MOCK: readonly CommercialPartner[] = Object.freeze([
-  {
-    id: 'aliado-1',
-    name: 'Arepas Santa Rita',
-    category: 'Restaurante',
-    benefit: '15% con +58Express',
-    rating: '4.9',
-    iconLetter: 'AS'
-  },
-  {
-    id: 'aliado-2',
-    name: 'Farmatodo Delicias',
-    category: 'Farmacia & Salud',
-    benefit: 'Envio prioritario gratis',
-    rating: '4.8',
-    iconLetter: 'FD'
-  },
-  {
-    id: 'aliado-3',
-    name: 'De Candido Express',
-    category: 'Supermercado',
-    benefit: '10% en compras',
-    rating: '4.7',
-    iconLetter: 'DC'
-  },
-  {
-    id: 'aliado-4',
-    name: 'La Suiza Bella Vista',
-    category: 'Panaderia & Cafe',
-    benefit: 'Cafe de cortesia',
-    rating: '4.9',
-    iconLetter: 'LS'
-  },
-  {
-    id: 'aliado-5',
-    name: 'MotoRepuestos 58',
-    category: 'Motos & Repuestos',
-    benefit: '12% de descuento',
-    rating: '4.9',
-    iconLetter: 'MR'
-  }
+  { id: 'mcdonalds', name: 'McDonald’s', colorDeMarca: '#da291c', tintaDeMarca: '#ffc72c', inicial: 'M' },
+  { id: 'farmatodo', name: 'Farmatodo', colorDeMarca: '#0b4ea2', tintaDeMarca: '#ffffff', inicial: 'F' },
+  { id: 'automercado', name: 'Automercado', colorDeMarca: '#1d7a3a', tintaDeMarca: '#ffffff', inicial: 'A' },
+  { id: 'cafe-amanecer', name: 'Café Amanecer', colorDeMarca: '#5b3a1e', tintaDeMarca: '#f7d774', inicial: 'C' },
+  { id: 'yummy', name: 'Yummy', colorDeMarca: '#2dbb8f', tintaDeMarca: '#ffffff', inicial: 'Y' },
+  { id: 'multimax', name: 'MultiMax', colorDeMarca: '#ffffff', tintaDeMarca: '#1a2b6d', inicial: 'M' }
 ]);
+
+const DIAMETRO = 70;
+const ANCHO_DE_CELDA = 84;
 
 interface PropiedadesCommercialPartners {
   readonly aliados?: readonly CommercialPartner[];
@@ -81,94 +45,49 @@ interface PropiedadesCommercialPartners {
   readonly onVerTodos?: () => void;
 }
 
-export function CommercialPartners({
-  aliados = ALIADOS_MOCK,
-  onSeleccionarAliado,
-  onVerTodos
-}: PropiedadesCommercialPartners) {
+export function CommercialPartners({ aliados = ALIADOS_MOCK, onSeleccionarAliado, onVerTodos }: PropiedadesCommercialPartners) {
   const tema = useTema();
   const quieto = useMovimientoReducido();
 
   if (aliados.length === 0) return null;
 
   return (
-    <View style={estilos.contenedor}>
-      {/* Cabecera de la seccion */}
-      <View style={[estilos.cabecera, { paddingHorizontal: tema.ritmo.margenPantalla }]}>
-        <View style={estilos.titulos}>
-          <Text style={[estilos.tituloSeccion, { color: tema.color.textoPrimario }]}>Aliados comerciales</Text>
-          <Text style={[estilos.subtituloSeccion, { color: tema.color.textoSecundario }]}>Beneficios en Maracaibo</Text>
-        </View>
-        {onVerTodos ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Ver todos los aliados"
-            onPress={onVerTodos}
-            hitSlop={8}
-            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-          >
-            <Text style={[estilos.verTodos, { color: tema.color.acentoTexto }]}>Ver todos</Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      {/* Tira horizontal de cards compactas */}
+    <View>
+      <CabeceraDeSeccion titulo="Aliados comerciales" accion="Ver todos" onAccion={onVerTodos} />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingHorizontal: tema.ritmo.margenPantalla,
-          gap: 10,
-          paddingVertical: 4
-        }}
+        style={{ marginHorizontal: -tema.ritmo.margenPantalla, marginTop: 12 }}
+        contentContainerStyle={{ paddingHorizontal: tema.ritmo.margenPantalla, gap: 6 }}
       >
         {aliados.map(aliado => (
           <Pressable
             key={aliado.id}
             accessibilityRole="button"
-            accessibilityLabel={`${aliado.name}, ${aliado.category}. ${aliado.benefit}`}
+            accessibilityLabel={aliado.name}
             onPress={() => onSeleccionarAliado?.(aliado)}
             style={({ pressed }) => [
-              estilos.card,
-              {
-                backgroundColor: tema.color.superficie,
-                borderColor: tema.color.borde,
-                opacity: pressed ? 0.92 : 1,
-                transform: [{ scale: pressed && !quieto ? 0.98 : 1 }]
-              }
+              estilos.celda,
+              { opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed && !quieto ? 0.97 : 1 }] }
             ]}
           >
-            {/* Cabecera de card: Icono/Insignia + Rating */}
-            <View style={estilos.filaInsignia}>
-              <View style={[estilos.insignia, { backgroundColor: `${tema.color.acento}18`, borderColor: `${tema.color.acento}38` }]}>
-                <Text style={[estilos.insigniaTexto, { color: tema.color.acentoTexto }]}>
-                  {aliado.iconLetter ?? aliado.name.slice(0, 2).toUpperCase()}
+            <View style={[
+              estilos.disco,
+              {
+                backgroundColor: aliado.colorDeMarca ?? tema.color.superficieElevada,
+                borderColor: tema.color.borde,
+                ...tema.superficie.sombra
+              }
+            ]}>
+              {aliado.logo !== undefined ? (
+                <Image source={aliado.logo} resizeMode="contain" style={{ width: DIAMETRO * 0.62, height: DIAMETRO * 0.62 }} />
+              ) : (
+                <Text style={[estilos.monograma, { color: aliado.tintaDeMarca ?? tema.color.acentoTexto }]}>
+                  {aliado.inicial ?? aliado.name.slice(0, 1).toUpperCase()}
                 </Text>
-              </View>
-              {aliado.rating ? (
-                <View style={[estilos.ratingBadge, { backgroundColor: tema.color.superficieHundida }]}>
-                  <Text style={[estilos.ratingEstrella, { color: tema.color.acentoTexto }]}>★</Text>
-                  <Text style={[estilos.ratingNumero, { color: tema.color.textoSecundario }]}>{aliado.rating}</Text>
-                </View>
-              ) : null}
+              )}
             </View>
-
-            {/* Nombre y categoria */}
-            <View style={estilos.bloqueNombres}>
-              <Text style={[estilos.nombre, { color: tema.color.textoPrimario }]} numberOfLines={1}>
-                {aliado.name}
-              </Text>
-              <Text style={[estilos.categoria, { color: tema.color.textoSecundario }]} numberOfLines={1}>
-                {aliado.category}
-              </Text>
-            </View>
-
-            {/* Beneficio destacado */}
-            <View style={[estilos.beneficioPill, { backgroundColor: `${tema.color.acento}14`, borderColor: `${tema.color.acento}30` }]}>
-              <Text style={[estilos.beneficioTexto, { color: tema.color.acentoTexto }]} numberOfLines={1}>
-                {aliado.benefit}
-              </Text>
-            </View>
+            <Text style={[estilos.nombre, { color: tema.color.textoPrimario }]} numberOfLines={2}>{aliado.name}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -177,94 +96,8 @@ export function CommercialPartners({
 }
 
 const estilos = StyleSheet.create({
-  contenedor: {
-    marginVertical: 8
-  },
-  cabecera: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: 10
-  },
-  titulos: {
-    gap: 2
-  },
-  // Sin `color` a propósito: lo pone el tema en el punto de uso. Dejarlo aquí
-  // volvería a fijar una tinta de noche que en día no se lee.
-  tituloSeccion: {
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.2
-  },
-  subtituloSeccion: {
-    fontSize: 12
-  },
-  verTodos: {
-    fontSize: 13,
-    fontWeight: '700'
-  },
-  card: {
-    width: 170,
-    minHeight: 142,
-    borderRadius: 16,
-    padding: 13,
-    borderWidth: 1.2,
-    justifyContent: 'space-between'
-  },
-  filaInsignia: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  insignia: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  insigniaTexto: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.5
-  },
-  ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6
-  },
-  ratingEstrella: {
-    fontSize: 10
-  },
-  ratingNumero: {
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  bloqueNombres: {
-    gap: 2,
-    marginVertical: 8
-  },
-  nombre: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    letterSpacing: -0.2
-  },
-  categoria: {
-    fontSize: 11
-  },
-  beneficioPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center'
-  },
-  beneficioTexto: {
-    fontSize: 10.5,
-    fontWeight: '700'
-  }
+  celda: { width: ANCHO_DE_CELDA, alignItems: 'center', gap: 8 },
+  disco: { width: DIAMETRO, height: DIAMETRO, borderRadius: DIAMETRO / 2, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  monograma: { fontSize: 28, fontWeight: '900', fontStyle: 'italic' },
+  nombre: { fontSize: 12.5, fontWeight: '600', textAlign: 'center', lineHeight: 16 }
 });
