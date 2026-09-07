@@ -20,6 +20,14 @@
  * `ancho` no se mira aquí: es la disposición de la hoja y del dibujo web. La
  * rejilla del inicio es uniforme, como en la referencia.
  *
+ * CUATRO COLUMNAS DONDE CABEN, TRES DONDE NO
+ *
+ * La referencia es un teléfono de 393 puntos. En uno de 360, cuatro casillas
+ * son setenta y dos puntos cada una y ni «Comercios» ni «Restaurantes» caben:
+ * se partían por la mitad. Por debajo de unos 370 puntos útiles la rejilla
+ * pasa a tres columnas —cien puntos por casilla— y la destacada ocupa dos, que
+ * es además lo que la referencia insinúa con su tarjeta más ancha.
+ *
  * Los tipos se declaran aquí y no se importan del fixture: `ui/` no depende de
  * `preview/`. Lo que el fixture exporta encaja en ellos.
  */
@@ -51,7 +59,10 @@ export interface ServicioDestacadoDelInicio {
   readonly listo: boolean;
 }
 
-const COLUMNAS = 4;
+const COLUMNAS_ANCHAS = 4;
+const COLUMNAS_ESTRECHAS = 3;
+/** Por debajo de esto, cuatro columnas ya no caben con este texto. */
+const ANCHO_UTIL_PARA_CUATRO = 372;
 const HUECO = 10;
 const ALTO_DE_CASILLA = 148;
 
@@ -104,10 +115,19 @@ function Casilla({ dato, ancho, onPress }: {
         nivel="etiqueta"
         estilo={{ fontWeight: '700', textAlign: 'center' }}
         numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
       >
         {dato.titulo}
       </Txt>
-      <Text style={[estilos.detalle, { color: tema.color.textoSecundario }]} numberOfLines={2}>{dato.detalle}</Text>
+      <Text
+        style={[estilos.detalle, { color: tema.color.textoSecundario }]}
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+      >
+        {dato.detalle}
+      </Text>
       {dato.listo ? null : <PildoraPronto />}
     </Pressable>
   );
@@ -181,31 +201,45 @@ export function RejillaDeServicios({ servicios, destacado, onElegir }: {
   const tema = useTema();
   const { width } = useWindowDimensions();
   const anchoUtil = width - tema.ritmo.margenPantalla * 2;
-  const columna = (anchoUtil - HUECO * (COLUMNAS - 1)) / COLUMNAS;
+  const columnas = anchoUtil >= ANCHO_UTIL_PARA_CUATRO ? COLUMNAS_ANCHAS : COLUMNAS_ESTRECHAS;
+  const columna = (anchoUtil - HUECO * (columnas - 1)) / columnas;
 
-  // Primera fila: cuatro iguales. Segunda: tres un poco más estrechas y la
-  // destacada con el resto, como en la referencia. En un teléfono de 360 dp
-  // la columna ya es estrecha de por sí: ahí no se estrecha más y la
-  // destacada ocupa una columna normal.
-  const primeraFila = servicios.slice(0, COLUMNAS);
-  const segundaFila = servicios.slice(COLUMNAS, COLUMNAS * 2 - 1);
-  const anchoEstrecho = columna >= 84 ? Math.floor(columna * 0.86) : Math.floor(columna);
-  const anchoDestacado = anchoUtil - anchoEstrecho * segundaFila.length - HUECO * segundaFila.length;
+  // Las casillas van en filas completas; la destacada cierra la última fila
+  // con las columnas que queden libres (al menos una). Con cuatro columnas
+  // las casillas de esa fila se estrechan un poco para que la destacada sea
+  // más ancha, como en la referencia; con tres, la destacada ya ocupa dos.
+  const filas: ServicioDelInicio[][] = [];
+  for (let i = 0; i < servicios.length; i += columnas) filas.push(servicios.slice(i, i + columnas));
+  if (filas.at(-1)?.length !== undefined && filas.at(-1)?.length === columnas) filas.push([]);
+  if (filas.length === 0) filas.push([]);
+  const ultima = filas[filas.length - 1] ?? [];
+  const libres = Math.max(1, columnas - ultima.length);
+  const anchoDeUltima = columnas === COLUMNAS_ANCHAS && libres === 1
+    ? Math.floor(columna * 0.86)
+    : Math.floor(columna);
+  const anchoDestacado = anchoUtil - anchoDeUltima * ultima.length - HUECO * ultima.length;
 
   return (
     <View>
       <CabeceraDeSeccion titulo="Nuestros servicios" />
-      <View style={{ flexDirection: 'row', gap: HUECO, marginTop: 12 }}>
-        {primeraFila.map(dato => (
-          <Casilla key={dato.clave} dato={dato} ancho={columna} onPress={() => onElegir(dato.clave)} />
-        ))}
-      </View>
-      <View style={{ flexDirection: 'row', gap: HUECO, marginTop: HUECO }}>
-        {segundaFila.map(dato => (
-          <Casilla key={dato.clave} dato={dato} ancho={anchoEstrecho} onPress={() => onElegir(dato.clave)} />
-        ))}
-        <ServicioDestacado dato={destacado} ancho={anchoDestacado} onPress={() => onElegir(destacado.clave)} />
-      </View>
+      {filas.map((fila, indice) => {
+        const esUltima = indice === filas.length - 1;
+        return (
+          <View key={indice} style={{ flexDirection: 'row', gap: HUECO, marginTop: indice === 0 ? 12 : HUECO }}>
+            {fila.map(dato => (
+              <Casilla
+                key={dato.clave}
+                dato={dato}
+                ancho={esUltima ? anchoDeUltima : columna}
+                onPress={() => onElegir(dato.clave)}
+              />
+            ))}
+            {esUltima ? (
+              <ServicioDestacado dato={destacado} ancho={anchoDestacado} onPress={() => onElegir(destacado.clave)} />
+            ) : null}
+          </View>
+        );
+      })}
     </View>
   );
 }

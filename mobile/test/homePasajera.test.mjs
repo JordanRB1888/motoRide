@@ -234,7 +234,11 @@ test('Txt reenvía al texto nativo las props que sus usos llevan años pasándol
 
 test('la rejilla del inicio es de cuatro columnas, con ilustración, y dice lo que no está', () => {
   const fuente = despojarComentarios(leer('ui/RejillaDeServicios.tsx'));
-  assert.match(fuente, /COLUMNAS = 4/);
+  // Cuatro columnas donde caben; tres en un teléfono estrecho, con la
+  // destacada ocupando dos. Con cuatro a 360 dp, «Comercios» se partía.
+  assert.match(fuente, /COLUMNAS_ANCHAS = 4/);
+  assert.match(fuente, /COLUMNAS_ESTRECHAS = 3/);
+  assert.match(fuente, /anchoUtil >= ANCHO_UTIL_PARA_CUATRO/);
   assert.match(fuente, /ARTE_DE_SERVICIO\[dato\.arte\]/, 'las casillas usan las ilustraciones encargadas');
   assert.match(fuente, /arte === undefined/, 'sin ilustración cae al icono, no a un hueco');
   assert.match(fuente, /accessibilityState=\{\{ disabled: !dato\.listo \}\}/);
