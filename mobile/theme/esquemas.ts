@@ -32,7 +32,7 @@
  * el amarillo que se puede leer. En noche coinciden; en día no.
  */
 
-import { AMARILLO, ESTADO, GRAFITO, TEXTO } from './primitives';
+import { AMARILLO, ESTADO, GRAFITO, SOBRE_IMAGEN, TEXTO } from './primitives';
 
 /** Los colores de un esquema. Es lo único que cambia entre día y noche. */
 export interface EsquemaDeColor {
@@ -110,6 +110,17 @@ export interface EsquemaDeColor {
    * mantiene contraste sin encenderse.
    */
   readonly rutaDelMapa: string;
+  /**
+   * La tinta que va ENCIMA de una fotografía con velo oscuro (el hero y las
+   * promociones del inicio).
+   *
+   * No cambia con el esquema: el velo es el mismo de día que de noche, y lo que
+   * hay debajo es una imagen, no una superficie del tema. Existe como token
+   * para que ninguna pieza escriba un blanco a mano —que es exactamente lo que
+   * `inicioPasajera.test.mjs` prohíbe— y para que, si el velo cambia, la tinta
+   * cambie en un solo sitio.
+   */
+  readonly sobreImagen: string;
 }
 
 /**
@@ -137,7 +148,8 @@ export const ESQUEMA_OSCURO: EsquemaDeColor = {
   fondoDelMapa: '#15140f',
   calleDelMapa: TEXTO.tenue,
   // Sobre grafito el verde puede subir un punto sin deslumbrar.
-  rutaDelMapa: '#22C55E'
+  rutaDelMapa: '#22C55E',
+  sobreImagen: SOBRE_IMAGEN
 };
 
 /**
@@ -176,7 +188,8 @@ export const ESQUEMA_CLARO: EsquemaDeColor = {
   calleDelMapa: '#ffffff',
   // Un punto mas profundo que en noche: sobre marfil y calles blancas, el
   // #22C55E puro empieza a lavarse.
-  rutaDelMapa: '#15A34A'
+  rutaDelMapa: '#15A34A',
+  sobreImagen: SOBRE_IMAGEN
 };
 
 /**

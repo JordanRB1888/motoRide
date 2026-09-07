@@ -88,3 +88,11 @@ export const ESPACIO = {
 
 /** Área táctil mínima: el mayor entre los 44 de Apple y los 48 de Material. */
 export const AREA_TACTIL_MINIMA = 48;
+
+/**
+ * La tinta sobre fotografía con velo oscuro. Blanco cálido, el mismo que el
+ * texto principal de noche, porque lo que hay debajo es siempre una imagen
+ * oscurecida y no una superficie del tema. La usan los dos esquemas y las
+ * direcciones; el número vive sólo aquí.
+ */
+export const SOBRE_IMAGEN = '#faf9f6';

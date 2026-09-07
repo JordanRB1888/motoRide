@@ -22,7 +22,7 @@
  * C es la propuesta del equipo: la identidad propia de +58express.
  */
 
-import { AMARILLO, ESPACIO, ESTADO, GRAFITO, TEXTO, AREA_TACTIL_MINIMA } from './primitives';
+import { AMARILLO, ESPACIO, ESTADO, GRAFITO, SOBRE_IMAGEN, TEXTO, AREA_TACTIL_MINIMA } from './primitives';
 
 /**
  * El verde de la ruta, igual en las tres direcciones.
@@ -83,6 +83,8 @@ export interface Direccion {
     readonly calleDelMapa: string;
     /** La ruta trazada. VERDE: el amarillo es la identidad. Ver `esquemas.ts`. */
     readonly rutaDelMapa: string;
+    /** Texto sobre fotografía con velo. Igual en los dos esquemas. Ver `esquemas.ts`. */
+    readonly sobreImagen: string;
   };
 
   /** Cuánto aire respira la interfaz. */
@@ -169,7 +171,8 @@ const PREMIUM_MINIMAL: Direccion = {
     veloDelMapa: GRAFITO.fondo,
     fondoDelMapa: GRAFITO.superficie,
     calleDelMapa: TEXTO.tenue,
-    rutaDelMapa: RUTA_VERDE
+    rutaDelMapa: RUTA_VERDE,
+    sobreImagen: SOBRE_IMAGEN
   },
   ritmo: {
     margenPantalla: ESPACIO['6'],
@@ -224,7 +227,8 @@ const URBAN_FUNCTIONAL: Direccion = {
     veloDelMapa: GRAFITO.fondo,
     fondoDelMapa: GRAFITO.superficie,
     calleDelMapa: TEXTO.tenue,
-    rutaDelMapa: RUTA_VERDE
+    rutaDelMapa: RUTA_VERDE,
+    sobreImagen: SOBRE_IMAGEN
   },
   ritmo: {
     margenPantalla: ESPACIO['4'],
@@ -289,7 +293,8 @@ const SIGNATURE: Direccion = {
     veloDelMapa: GRAFITO.fondo,
     fondoDelMapa: GRAFITO.superficie,
     calleDelMapa: TEXTO.tenue,
-    rutaDelMapa: RUTA_VERDE
+    rutaDelMapa: RUTA_VERDE,
+    sobreImagen: SOBRE_IMAGEN
   },
   ritmo: {
     margenPantalla: ESPACIO['5'],
