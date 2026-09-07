@@ -69,7 +69,6 @@ const LIENZO = Object.freeze({
 });
 
 const ALTO_DEL_HERO = 228;
-const HUECO = 12;
 
 export const BANNERS_MOCK: readonly BannerItem[] = Object.freeze([
   {
@@ -120,6 +119,10 @@ export function PromoCarousel({
   const [indiceActivo, setIndiceActivo] = useState(0);
   const interactuandoRef = useRef(false);
   const anchoTarjeta = anchoPantalla - tema.ritmo.margenPantalla * 2;
+  // Dos márgenes de hueco: la siguiente tarjeta empieza justo en el borde de
+  // la pantalla y no asoma, y cada paso del carrusel mide exactamente el
+  // ancho de la pantalla, como en la referencia.
+  const HUECO = tema.ritmo.margenPantalla * 2;
 
   const bannersActivos = banners.filter(b => b.active);
   const total = bannersActivos.length;

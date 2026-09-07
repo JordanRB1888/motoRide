@@ -97,7 +97,17 @@ function Casilla({ dato, ancho, onPress }: {
       ) : (
         <Image source={arte} resizeMode="cover" style={estilos.miniatura} />
       )}
-      <Txt nivel="etiqueta" estilo={{ fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>{dato.titulo}</Txt>
+      {/* Una sola línea que encoge antes de partirse: «Comercios» no cabe a
+          trece puntos en la casilla estrecha y se partía en «Comercio / s». */}
+      <Txt
+        nivel="etiqueta"
+        estilo={{ fontWeight: '700', textAlign: 'center' }}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.78}
+      >
+        {dato.titulo}
+      </Txt>
       <Text style={[estilos.detalle, { color: tema.color.textoSecundario }]} numberOfLines={2}>{dato.detalle}</Text>
       {dato.listo ? null : <PildoraPronto />}
     </Pressable>
@@ -137,13 +147,28 @@ export function ServicioDestacado({ dato, ancho, onPress }: {
       </View>
       <Image source={VEHICULOS.MOTO.tarjeta} resizeMode="contain" style={estilos.destacadoMoto} />
       <View style={{ gap: 2, paddingRight: 30 }}>
-        <Txt nivel="etiqueta" estilo={{ fontWeight: '800', fontSize: 14 }} numberOfLines={1}>{dato.titulo}</Txt>
+        <Txt
+          nivel="etiqueta"
+          estilo={{ fontWeight: '800', fontSize: 14 }}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+        >
+          {dato.titulo}
+        </Txt>
         <Text style={[estilos.detalle, { color: tema.color.textoSecundario, textAlign: 'left' }]} numberOfLines={2}>{dato.detalle}</Text>
       </View>
-      <View style={[estilos.destacadoBoton, { backgroundColor: tema.color.superficieElevada }]}>
-        <Icono nombre="chevron-derecha" color={tema.color.textoPrimario} tamano={14} />
-      </View>
-      {dato.listo ? null : <PildoraPronto />}
+      {/* El sitio del botón: el chevron cuando el servicio existe, y mientras
+          no, la píldora de PRONTO. Arriba a la derecha tapaba el rótulo. */}
+      {dato.listo ? (
+        <View style={[estilos.destacadoBoton, { backgroundColor: tema.color.superficieElevada }]}>
+          <Icono nombre="chevron-derecha" color={tema.color.textoPrimario} tamano={14} />
+        </View>
+      ) : (
+        <View style={[estilos.prontoDestacado, { backgroundColor: tema.color.superficieElevada }]}>
+          <Text style={[estilos.prontoTexto, { color: tema.color.textoTenue }]}>PRONTO</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -184,7 +209,7 @@ export function RejillaDeServicios({ servicios, destacado, onElegir }: {
 }
 
 const estilos = StyleSheet.create({
-  casilla: { height: ALTO_DE_CASILLA, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 12, alignItems: 'center', gap: 6 },
+  casilla: { height: ALTO_DE_CASILLA, borderWidth: 1, paddingHorizontal: 5, paddingVertical: 12, alignItems: 'center', gap: 6 },
   miniatura: { width: 50, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   detalle: { fontSize: 11, lineHeight: 14, textAlign: 'center' },
   pronto: { position: 'absolute', top: 6, right: 6, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6 },
@@ -193,5 +218,6 @@ const estilos = StyleSheet.create({
   destacadoRotulo: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   destacadoRotuloTexto: { fontSize: 11, fontWeight: '700' },
   destacadoMoto: { alignSelf: 'flex-end', width: 92, height: 54, marginTop: -6, marginRight: -6 },
-  destacadoBoton: { position: 'absolute', right: 10, bottom: 12, width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }
+  destacadoBoton: { position: 'absolute', right: 10, bottom: 12, width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  prontoDestacado: { position: 'absolute', right: 10, bottom: 14, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7 }
 });

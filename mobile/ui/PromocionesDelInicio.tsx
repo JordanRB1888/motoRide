@@ -66,7 +66,10 @@ const ANCHO = 152;
 const ALTO = 190;
 const HUECO = 10;
 /** El velo sobre la foto, en dos capas. Igual de día que de noche. */
-const VELO = Object.freeze({ alto: 'rgba(11, 10, 9, 0.16)', bajo: 'rgba(11, 10, 9, 0.66)' });
+// Los artes de publicidad ya son oscuros: con un velo denso la tarjeta se
+// leía como una caja negra. El de arriba casi no existe; el de abajo cubre
+// sólo la franja del texto.
+const VELO = Object.freeze({ alto: 'rgba(11, 10, 9, 0.06)', bajo: 'rgba(11, 10, 9, 0.6)' });
 
 export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, onVerTodas }: {
   readonly promociones?: readonly Promocion[];
@@ -119,7 +122,7 @@ export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, 
             >
               {promo.imagen !== undefined ? <Image source={promo.imagen} resizeMode="cover" style={StyleSheet.absoluteFill} /> : null}
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: VELO.alto }]} />
-              <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '70%', backgroundColor: VELO.bajo }} />
+              <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '56%', backgroundColor: VELO.bajo }} />
 
               <View style={[estilos.etiqueta, { backgroundColor: fondoEtiqueta }]}>
                 <Text style={[estilos.etiquetaTexto, { color: tintaEtiqueta }]} numberOfLines={2}>{promo.etiqueta}</Text>
