@@ -146,7 +146,9 @@ export function ServicioDestacado({ dato, ancho, onPress }: {
         <Text style={[estilos.destacadoRotuloTexto, { color: tema.color.acentoTexto }]} numberOfLines={1}>{dato.rotulo}</Text>
       </View>
       <Image source={VEHICULOS.MOTO.tarjeta} resizeMode="contain" style={estilos.destacadoMoto} />
-      <View style={{ gap: 2, paddingRight: 30 }}>
+      <View style={{ gap: 2 }}>
+        {/* El título va a todo el ancho; el hueco para el botón lo deja sólo
+            la línea de detalle, que es la que el botón pisa. */}
         <Txt
           nivel="etiqueta"
           estilo={{ fontWeight: '800', fontSize: 14 }}
@@ -156,7 +158,12 @@ export function ServicioDestacado({ dato, ancho, onPress }: {
         >
           {dato.titulo}
         </Txt>
-        <Text style={[estilos.detalle, { color: tema.color.textoSecundario, textAlign: 'left' }]} numberOfLines={2}>{dato.detalle}</Text>
+        <Text
+          style={[estilos.detalle, { color: tema.color.textoSecundario, textAlign: 'left', paddingRight: 34 }]}
+          numberOfLines={2}
+        >
+          {dato.detalle}
+        </Text>
       </View>
       {/* El sitio del botón: el chevron cuando el servicio existe, y mientras
           no, la píldora de PRONTO. Arriba a la derecha tapaba el rótulo. */}

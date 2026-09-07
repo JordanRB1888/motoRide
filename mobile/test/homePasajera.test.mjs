@@ -187,6 +187,10 @@ test('las promociones son las tres de la referencia, con foto y palabra destacad
   assert.match(fuente, /tema\.color\.sobreImagen/);
   assert.match(fuente, /<CabeceraDeSeccion/);
   assert.match(fuente, /nombre="chevron-derecha"/);
+  // Ilustraciones cuadradas, no los banners apaisados: en una tarjeta vertical
+  // el recorte de aquéllos se quedaba con el fondo negro y el arte desaparecía.
+  assert.doesNotMatch(fuente, /ARTE_DE_ALIADO/, 'los banners apaisados no valen para una tarjeta vertical');
+  assert.match(fuente, /ajuste === 'contener'/, 'una ilustración se contiene; una foto se cubre');
 });
 
 test('la rejilla del inicio es de cuatro columnas, con ilustración, y dice lo que no está', () => {
