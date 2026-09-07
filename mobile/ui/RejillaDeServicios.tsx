@@ -159,7 +159,7 @@ export function ServicioDestacado({ dato, ancho, onPress }: {
           {dato.titulo}
         </Txt>
         <Text
-          style={[estilos.detalle, { color: tema.color.textoSecundario, textAlign: 'left', paddingRight: 34 }]}
+          style={[estilos.detalle, { color: tema.color.textoSecundario, textAlign: 'left', paddingRight: dato.listo ? 34 : 0 }]}
           numberOfLines={2}
         >
           {dato.detalle}
@@ -226,5 +226,7 @@ const estilos = StyleSheet.create({
   destacadoRotuloTexto: { fontSize: 11, fontWeight: '700' },
   destacadoMoto: { alignSelf: 'flex-end', width: 92, height: 54, marginTop: -6, marginRight: -6 },
   destacadoBoton: { position: 'absolute', right: 10, bottom: 12, width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  prontoDestacado: { position: 'absolute', right: 10, bottom: 14, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7 }
+  // Sobre la banda de la moto, donde no pisa ningún texto. Abajo a la derecha
+  // tapaba la segunda línea del detalle.
+  prontoDestacado: { position: 'absolute', right: 10, top: 34, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7 }
 });

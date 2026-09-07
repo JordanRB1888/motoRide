@@ -145,7 +145,9 @@ export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, 
                   <Image
                     source={promo.imagen}
                     resizeMode="contain"
-                    style={{ position: 'absolute', top: 30, left: 6, right: 6, height: ALTO * 0.5 }}
+                    // Ancho explícito: con `left`/`right` y sin `width`, Android
+                    // no pintaba la imagen.
+                    style={{ position: 'absolute', top: 34, left: 6, width: ANCHO - 12, height: ALTO * 0.48 }}
                   />
                 ) : (
                   <Image source={promo.imagen} resizeMode="cover" style={StyleSheet.absoluteFill} />
