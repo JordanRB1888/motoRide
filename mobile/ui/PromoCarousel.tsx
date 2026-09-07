@@ -1,84 +1,104 @@
-﻿/**
- * Carrusel promocional con auto-slide para el Home Comercial de Pasajero.
+/**
+ * El hero del inicio: una pieza publicitaria grande que domina la pantalla.
  *
- * ESTRUCTURA PREPARADA PARA ADMIN
+ * DOS DUEÑOS DEL MISMO HUECO
  *
- * Los banners están definidos con un contrato de datos desacoplado { id, title,
- * subtitle, image, ctaLabel, ctaAction, active, tag } para que posteriormente
- * el Panel Administrativo pueda inyectar promociones dinámicas.
+ * Un banner puede ser +58express contando algo suyo —se compone con los
+ * tokens: titular con una palabra en amarillo, línea de apoyo, botón— o el
+ * arte que entrega un anunciante con su texto dentro (`soloImagen`), que la
+ * aplicación sólo enmarca. El contrato { id, title, tituloDestacado, subtitle,
+ * imagen, ctaLabel, ctaAction, tag, active } es el que el panel administrativo
+ * podrá rellenar.
  *
- * EL COLOR DEL BANNER ES UNA SUPERFICIE, NO UNA TINTA
+ * SIN FOTOGRAFÍA, LA MOTO REAL
  *
- * `colorAcento` viene con el banner y sirve para el resplandor, el filo, el
- * fondo de la etiqueta y el del botón. Como TEXTO no siempre vale: los tres
- * amarillos de la lista sobre el marfil del día rondan el 1,3:1 —el mismo
- * cálculo que ya trae `theme/esquemas.ts`— y la etiqueta se volvía un fantasma.
- * Por eso en día la etiqueta se escribe con `acentoTexto`, el ámbar legible, y
- * en noche sigue con el color propio del banner. El botón no cambia: ahí el
- * amarillo es fondo y lleva tinta oscura encima, que es su papel correcto.
+ * La referencia lleva la foto de un motorizado con su caja +58. Mientras no
+ * exista, la composición de marca pone la moto amarilla real sobre grafito: es
+ * un activo aprobado, no un pictograma «mientras tanto». Cuando llegue la foto,
+ * va en `imagen` y esta composición deja de pintarse sola.
  *
- * El titular y el subtítulo estaban fijados en blanco y gris de noche, y en día
- * el titular desaparecía por completo mientras el subtítulo aguantaba. Ahora los
- * dos salen del tema.
+ * EL TEXTO SOBRE LA FOTO NO SABE DE ESQUEMAS
+ *
+ * Va con `sobreImagen`, que es igual de día que de noche porque lo que hay
+ * debajo es un velo oscuro sobre una imagen, no una superficie del tema. El
+ * velo se dibuja con vistas —no hay degradados sin biblioteca— en dos capas.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Dimensions,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  Image,
+  type ImageSourcePropType,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from 'react-native';
 
-import { useEsquema, useTema } from '../theme/ThemeContext';
+import { useTema } from '../theme/ThemeContext';
+import { ARTE_DE_CAMPANA, VEHICULOS } from '../theme/marca';
 import { useMovimientoReducido } from './movimiento';
 
 export interface BannerItem {
   readonly id: string;
   readonly title: string;
+  /** La parte del titular que va en amarillo. Va DESPUÉS de `title`. */
+  readonly tituloDestacado?: string;
   readonly subtitle: string;
-  readonly image?: any;
+  readonly imagen?: ImageSourcePropType;
+  /** El arte trae su propio texto: se enmarca y no se escribe nada encima. */
+  readonly soloImagen?: boolean;
   readonly ctaLabel?: string;
   readonly ctaAction?: string;
   readonly active: boolean;
+  /** El rótulo manuscrito de arriba a la derecha. */
   readonly tag?: string;
-  readonly colorAcento?: string;
 }
+
+/**
+ * El grafito del lienzo de marca y el velo sobre las fotografías. Son los
+ * mismos de día que de noche: un anuncio no cambia de color con la hora.
+ */
+const LIENZO = Object.freeze({
+  fondo: '#15140f',
+  veloAlto: 'rgba(11, 10, 9, 0.18)',
+  veloBajo: 'rgba(11, 10, 9, 0.62)'
+});
+
+const ALTO_DEL_HERO = 228;
+const HUECO = 12;
 
 export const BANNERS_MOCK: readonly BannerItem[] = Object.freeze([
   {
-    id: 'promo-1',
-    title: '20% de descuento',
-    subtitle: 'En tu próximo viaje en moto o auto. Válido esta semana.',
-    tag: 'EXCLUSIVO',
-    ctaLabel: 'Pedir ahora',
+    id: 'hero-ciudad',
+    title: 'Más que un destino,',
+    tituloDestacado: 'es tu ciudad',
+    subtitle: 'Movilidad, entregas y más, en una sola app.',
+    ctaLabel: 'Descubre +58Express',
     ctaAction: 'pedir',
-    active: true,
-    colorAcento: '#FFD700'
+    tag: 'Venezuela se mueve contigo',
+    active: true
   },
   {
-    id: 'promo-2',
-    title: 'Delivery gratis',
-    subtitle: 'En comercios aliados seleccionados al pagar con +58Express.',
-    tag: 'FIN DE SEMANA',
-    ctaLabel: 'Ver aliados',
+    id: 'hero-repuestos',
+    title: 'Repuestos y accesorios',
+    subtitle: 'Moter Repuestos UM',
+    imagen: ARTE_DE_CAMPANA['campana-repuestos'],
+    soloImagen: true,
     ctaAction: 'comercios',
-    active: true,
-    colorAcento: '#FFC72C'
+    active: true
   },
   {
-    id: 'promo-3',
-    title: 'Comercios aliados',
-    subtitle: 'Acumula saldo y beneficios comprando cerca de ti en Maracaibo.',
-    tag: 'COMUNIDAD',
-    ctaLabel: 'Explorar',
+    id: 'hero-aviso',
+    title: 'Espacio de aviso',
+    subtitle: 'Para lo que +58express necesite contar ese día.',
+    imagen: ARTE_DE_CAMPANA['campana-aviso'],
+    soloImagen: true,
     ctaAction: 'comercios',
-    active: true,
-    colorAcento: '#FFE066'
+    active: true
   }
 ]);
 
@@ -91,16 +111,15 @@ interface PropiedadesPromoCarousel {
 export function PromoCarousel({
   banners = BANNERS_MOCK,
   onSeleccionarBanner,
-  intervaloMs = 5500
+  intervaloMs = 6000
 }: PropiedadesPromoCarousel) {
   const tema = useTema();
-  const esquema = useEsquema();
   const quieto = useMovimientoReducido();
+  const { width: anchoPantalla } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [indiceActivo, setIndiceActivo] = useState(0);
   const interactuandoRef = useRef(false);
-  const anchoPantalla = Dimensions.get('window').width;
-  const anchoTarjeta = Math.min(anchoPantalla - tema.ritmo.margenPantalla * 2, 380);
+  const anchoTarjeta = anchoPantalla - tema.ritmo.margenPantalla * 2;
 
   const bannersActivos = banners.filter(b => b.active);
   const total = bannersActivos.length;
@@ -109,10 +128,7 @@ export function PromoCarousel({
     if (interactuandoRef.current || total <= 1 || quieto) return;
     setIndiceActivo(prev => {
       const siguiente = (prev + 1) % total;
-      scrollRef.current?.scrollTo({
-        x: siguiente * (anchoTarjeta + 12),
-        animated: true
-      });
+      scrollRef.current?.scrollTo({ x: siguiente * (anchoTarjeta + HUECO), animated: true });
       return siguiente;
     });
   }, [total, quieto, anchoTarjeta]);
@@ -124,8 +140,7 @@ export function PromoCarousel({
   }, [irAlSiguiente, intervaloMs, total, quieto]);
 
   const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const offsetX = e.nativeEvent.contentOffset.x;
-    const indice = Math.round(offsetX / (anchoTarjeta + 12));
+    const indice = Math.round(e.nativeEvent.contentOffset.x / (anchoTarjeta + HUECO));
     setIndiceActivo(Math.max(0, Math.min(indice, total - 1)));
     interactuandoRef.current = false;
   };
@@ -133,102 +148,99 @@ export function PromoCarousel({
   if (total === 0) return null;
 
   return (
-    <View style={estilos.contenedor}>
+    <View>
       <ScrollView
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        snapToInterval={anchoTarjeta + 12}
+        snapToInterval={anchoTarjeta + HUECO}
         decelerationRate="fast"
-        onTouchStart={() => { interactuandoRef.current = true; }}
-        onTouchEnd={() => {
-          setTimeout(() => { interactuandoRef.current = false; }, 2000);
-        }}
         onScrollBeginDrag={() => { interactuandoRef.current = true; }}
         onMomentumScrollEnd={onMomentumScrollEnd}
-        contentContainerStyle={{
-          paddingHorizontal: tema.ritmo.margenPantalla,
-          gap: 12
-        }}
+        style={{ marginHorizontal: -tema.ritmo.margenPantalla }}
+        contentContainerStyle={{ paddingHorizontal: tema.ritmo.margenPantalla, gap: HUECO }}
       >
-        {bannersActivos.map(banner => {
-          const colorMarca = banner.colorAcento ?? tema.color.acento;
-          // El mismo amarillo no puede ser superficie y tinta en día: aquí sólo
-          // se decide con qué se ESCRIBE la etiqueta.
-          const tintaDeMarca = esquema === 'claro' ? tema.color.acentoTexto : colorMarca;
-          return (
-            <Pressable
-              key={banner.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${banner.title}. ${banner.subtitle}`}
-              onPress={() => onSeleccionarBanner?.(banner)}
-              style={({ pressed }) => [
-                estilos.tarjeta,
-                {
-                  width: anchoTarjeta,
-                  backgroundColor: tema.color.superficieElevada,
-                  borderColor: `${colorMarca}44`,
-                  opacity: pressed ? 0.92 : 1,
-                  transform: [{ scale: pressed && !quieto ? 0.985 : 1 }]
-                }
-              ]}
-            >
-              {/* Resplandor superior sutil */}
-              <View
-                pointerEvents="none"
-                style={[
-                  estilos.resplandor,
-                  { backgroundColor: `${colorMarca}18` }
-                ]}
+        {bannersActivos.map(banner => (
+          <Pressable
+            key={banner.id}
+            accessibilityRole="button"
+            accessibilityLabel={`${banner.title} ${banner.tituloDestacado ?? ''}. ${banner.subtitle}`}
+            onPress={() => onSeleccionarBanner?.(banner)}
+            style={({ pressed }) => [
+              estilos.tarjeta,
+              {
+                width: anchoTarjeta,
+                borderRadius: tema.radio.tarjeta,
+                backgroundColor: LIENZO.fondo,
+                opacity: pressed ? 0.94 : 1,
+                transform: [{ scale: pressed && !quieto ? 0.99 : 1 }]
+              }
+            ]}
+          >
+            {banner.imagen !== undefined ? (
+              <Image source={banner.imagen} resizeMode="cover" style={StyleSheet.absoluteFill} />
+            ) : (
+              // La composición de marca: la moto real, grande, a la derecha.
+              <Image
+                source={VEHICULOS.MOTO.tarjeta}
+                resizeMode="contain"
+                style={{
+                  position: 'absolute',
+                  right: -anchoTarjeta * 0.08,
+                  bottom: 6,
+                  width: anchoTarjeta * 0.66,
+                  height: ALTO_DEL_HERO * 0.78
+                }}
               />
+            )}
 
-              {/* Tag superior */}
-              {banner.tag ? (
-                <View style={[estilos.tagPill, { borderColor: `${colorMarca}55`, backgroundColor: `${colorMarca}1c` }]}>
-                  <Text style={[estilos.tagTexto, { color: tintaDeMarca }]}>
-                    {banner.tag}
-                  </Text>
-                </View>
-              ) : null}
+            {banner.soloImagen ? null : (
+              <>
+                {/* El velo, en dos capas: clara arriba, densa abajo. Es lo que
+                    hace legible el texto sin apagar la imagen entera. */}
+                <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: LIENZO.veloAlto }]} />
+                <View
+                  pointerEvents="none"
+                  style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '62%', backgroundColor: LIENZO.veloBajo }}
+                />
 
-              {/* Textos */}
-              <View style={estilos.cuerpoTexto}>
-                <Text style={[estilos.titulo, { color: tema.color.textoPrimario }]} numberOfLines={1}>
-                  {banner.title}
-                </Text>
-                <Text style={[estilos.subtitulo, { color: tema.color.textoSecundario }]} numberOfLines={2}>
-                  {banner.subtitle}
-                </Text>
-              </View>
-
-              {/* Boton de accion / CTA */}
-              {banner.ctaLabel ? (
-                <View style={estilos.filaAccion}>
-                  <View style={[estilos.botonCta, { backgroundColor: colorMarca }]}>
-                    <Text style={[estilos.botonCtaTexto, { color: tema.color.sobreAcento }]}>{banner.ctaLabel}</Text>
-                    <Text style={[estilos.botonCtaFlecha, { color: tema.color.sobreAcento }]}>→</Text>
+                {banner.tag ? (
+                  <View style={estilos.rotulo}>
+                    <Text style={[estilos.rotuloTexto, { color: tema.color.sobreImagen }]}>{banner.tag}</Text>
+                    <View style={{ height: 2, borderRadius: 1, backgroundColor: tema.color.acento, marginTop: 2, width: '70%', alignSelf: 'flex-end' }} />
                   </View>
+                ) : null}
+
+                <View style={estilos.cuerpo}>
+                  <Text style={[estilos.titular, { color: tema.color.sobreImagen }]} numberOfLines={2}>
+                    {banner.title}
+                    {banner.tituloDestacado ? <Text style={{ color: tema.color.acento }}>{' '}{banner.tituloDestacado}</Text> : null}
+                  </Text>
+                  <Text style={[estilos.apoyo, { color: tema.color.sobreImagen }]} numberOfLines={2}>{banner.subtitle}</Text>
+                  {banner.ctaLabel ? (
+                    <View style={[estilos.cta, { backgroundColor: tema.color.acento, borderRadius: tema.radio.boton }]}>
+                      <Text style={[estilos.ctaTexto, { color: tema.color.sobreAcento }]}>{banner.ctaLabel}</Text>
+                      <Text style={[estilos.ctaTexto, { color: tema.color.sobreAcento }]}>→</Text>
+                    </View>
+                  ) : null}
                 </View>
-              ) : null}
-            </Pressable>
-          );
-        })}
+              </>
+            )}
+          </Pressable>
+        ))}
       </ScrollView>
 
-      {/* Indicador de puntos (dots) */}
       {total > 1 ? (
-        <View style={estilos.dotsContenedor}>
+        <View style={estilos.puntos} accessibilityElementsHidden importantForAccessibility="no">
           {bannersActivos.map((_, i) => (
             <View
               key={i}
-              style={[
-                estilos.dot,
-                {
-                  // El punto apagado era blanco al 20%: sobre marfil no se veía.
-                  backgroundColor: i === indiceActivo ? tema.color.acento : tema.color.borde,
-                  width: i === indiceActivo ? 18 : 6
-                }
-              ]}
+              style={{
+                width: i === indiceActivo ? 10 : 8,
+                height: i === indiceActivo ? 10 : 8,
+                borderRadius: 5,
+                backgroundColor: i === indiceActivo ? tema.color.acento : tema.color.borde
+              }}
             />
           ))}
         </View>
@@ -238,83 +250,13 @@ export function PromoCarousel({
 }
 
 const estilos = StyleSheet.create({
-  contenedor: {
-    marginVertical: 12
-  },
-  tarjeta: {
-    height: 146,
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1.2,
-    justifyContent: 'space-between',
-    overflow: 'hidden',
-    position: 'relative'
-  },
-  resplandor: {
-    position: 'absolute',
-    top: -30,
-    right: -20,
-    width: 120,
-    height: 120,
-    borderRadius: 60
-  },
-  tagPill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1
-  },
-  tagTexto: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.6
-  },
-  cuerpoTexto: {
-    gap: 4
-  },
-  // Sin `color`: lo pone el tema en el punto de uso.
-  titulo: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.3
-  },
-  subtitulo: {
-    fontSize: 12.5,
-    lineHeight: 17
-  },
-  filaAccion: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start'
-  },
-  botonCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 8
-  },
-  // Tinta oscura sobre el amarillo: la pone `sobreAcento`, que es el token que
-  // significa exactamente eso.
-  botonCtaTexto: {
-    fontSize: 12,
-    fontWeight: '800'
-  },
-  botonCtaFlecha: {
-    fontSize: 12,
-    fontWeight: '800'
-  },
-  dotsContenedor: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 10
-  },
-  dot: {
-    height: 5,
-    borderRadius: 2.5
-  }
+  tarjeta: { height: ALTO_DEL_HERO, overflow: 'hidden', justifyContent: 'flex-end' },
+  rotulo: { position: 'absolute', top: 16, right: 18, alignItems: 'flex-end', transform: [{ rotate: '-6deg' }] },
+  rotuloTexto: { fontSize: 13, fontStyle: 'italic', fontWeight: '700', letterSpacing: 0.2 },
+  cuerpo: { padding: 18, gap: 6, maxWidth: '68%' },
+  titular: { fontSize: 24, lineHeight: 27, fontWeight: '800', letterSpacing: -0.6 },
+  apoyo: { fontSize: 12.5, lineHeight: 17, opacity: 0.92 },
+  cta: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, height: 36, paddingHorizontal: 14, marginTop: 6 },
+  ctaTexto: { fontSize: 13, fontWeight: '800' },
+  puntos: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 10 }
 });
