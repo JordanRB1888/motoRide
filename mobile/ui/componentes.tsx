@@ -82,6 +82,14 @@ export function Txt({
   return (
     <Text
       {...resto}
+      // Se destructuran arriba para tiparlas, y por eso NO viajan en `resto`:
+      // hay que reenviarlas a mano. Sin esto, `numberOfLines` no cortaba nada
+      // en ningún sitio de la aplicación y `accessibilityRole="header"` nunca
+      // llegaba al lector de pantalla.
+      accessibilityRole={accessibilityRole}
+      numberOfLines={numberOfLines}
+      adjustsFontSizeToFit={adjustsFontSizeToFit}
+      minimumFontScale={minimumFontScale}
       style={[
         {
           color: colores[tono],
