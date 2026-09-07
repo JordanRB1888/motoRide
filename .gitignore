@@ -57,3 +57,24 @@ fcm-service-account.json.json
 # FCM. Es una llave privada; en Git seria publica para siempre.
 maps-service-account.json
 maps-service-account.json.json
+
+# --- Traido de la rama del chat-media al sincronizar con master (2026-09-07) ---
+# master ya cubria .env.*, las cuentas de servicio con nombre propio, *.pem y
+# *.key. Faltaban estas: las claves de firma de Android, las cuentas de servicio
+# por patron, las sesiones de las herramientas de agente --que llevan token
+# dentro--, los informes de error de Android y la carpeta de otro proyecto que
+# vive aqui por accidente.
+!.env*.example
+*service-account*.json
+*serviceAccount*.json
+firebase-adminsdk*.json
+.codex-*-session.json
+.codex-*.log
+.codex/
+.agents/
+*.keystore
+*.jks
+!android/app/debug.keystore
+bugreport-*.zip
+/Dedicatorias Digitales/
+.claude/settings.local.json

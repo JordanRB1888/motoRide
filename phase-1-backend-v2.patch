@@ -1,0 +1,1936 @@
+From c6238fc3deb50cefae5aaa1efba6daa8645ed238 Mon Sep 17 00:00:00 2001
+From: jordanrb188 <jordaneeuu18@gmail.com>
+Date: Tue, 11 Aug 2026 03:14:55 -0400
+Subject: [PATCH 1/2] fix: harden socket authorization and business-hour
+ pricing
+
+Calculate night and peak surcharges in America/Caracas through Intl,
+configurable with BUSINESS_TIME_ZONE, instead of reading the server
+clock. Fares and multipliers are unchanged.
+
+Verify trip ownership from the signed session before cancelling a ride,
+reject cancellations of trips that are already closed, and report every
+refusal through rideCancellationRejected.
+
+Scope every broadcast: administrative events reach the admins room only,
+locations reach administration and the participants of the active trip,
+and driver profiles are no longer emitted to the whole fleet. The former
+global emits leaked the bcrypt password hash of every connecting driver.
+
+Validate driver status and coordinates from one module shared by REST and
+Socket.IO, always resolving the driver from socket.data.auth so a payload
+identifier can no longer modify another driver.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ server/.env.example              |   3 +
+ server/domain/businessTime.js    |  76 +++++++
+ server/domain/driverState.js     |  73 +++++++
+ server/domain/pricingService.js  |   9 +-
+ server/index.js                  | 233 +++++++++++---------
+ server/test/businessTime.test.js | 135 ++++++++++++
+ server/test/security.test.js     | 361 +++++++++++++++++++++++++++++++
+ 7 files changed, 790 insertions(+), 100 deletions(-)
+ create mode 100644 server/domain/businessTime.js
+ create mode 100644 server/domain/driverState.js
+ create mode 100644 server/test/businessTime.test.js
+ create mode 100644 server/test/security.test.js
+
+diff --git a/server/.env.example b/server/.env.example
+index e46e28d..1c5de61 100644
+--- a/server/.env.example
++++ b/server/.env.example
+@@ -5,3 +5,6 @@ DATA_FILE=./data/plus58express.sqlite
+ JWT_SECRET=change-this-secret-in-production
+ ADMIN_EMAIL=admin@58express.com
+ ADMIN_PASSWORD=change-admin-password
++# Zona horaria con la que se calculan el recargo nocturno y la hora pico.
++# Es independiente de la zona del servidor; por omisión America/Caracas.
++BUSINESS_TIME_ZONE=America/Caracas
+diff --git a/server/domain/businessTime.js b/server/domain/businessTime.js
+new file mode 100644
+index 0000000..2dcc34e
+--- /dev/null
++++ b/server/domain/businessTime.js
+@@ -0,0 +1,76 @@
++export const DEFAULT_BUSINESS_TIME_ZONE = 'America/Caracas';
++
++const formatterCache = new Map();
++
++function createFormatter(timeZone) {
++  return new Intl.DateTimeFormat('en-US', {
++    timeZone,
++    hourCycle: 'h23',
++    year: 'numeric',
++    month: '2-digit',
++    day: '2-digit',
++    hour: '2-digit',
++    minute: '2-digit'
++  });
++}
++
++export function isSupportedTimeZone(timeZone) {
++  if (!timeZone || typeof timeZone !== 'string') return false;
++  try {
++    createFormatter(timeZone);
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++// La operación es de Venezuela: cualquier zona inválida cae al horario de Caracas
++// en vez de degradar silenciosamente a la zona del servidor.
++export function resolveBusinessTimeZone(candidate) {
++  const requested = String(candidate ?? '').trim();
++  if (!requested) return DEFAULT_BUSINESS_TIME_ZONE;
++  if (isSupportedTimeZone(requested)) return requested;
++  console.warn(`[+58express Pricing] BUSINESS_TIME_ZONE inválida (${requested}); se usa ${DEFAULT_BUSINESS_TIME_ZONE}.`);
++  return DEFAULT_BUSINESS_TIME_ZONE;
++}
++
++function getFormatter(timeZone) {
++  let formatter = formatterCache.get(timeZone);
++  if (!formatter) {
++    formatter = createFormatter(timeZone);
++    formatterCache.set(timeZone, formatter);
++  }
++  return formatter;
++}
++
++/**
++ * Descompone un instante en la hora local del negocio, sin depender de la
++ * zona horaria del proceso ni del sistema operativo del servidor.
++ */
++export function getBusinessTimeParts(instant = new Date(), timeZone = DEFAULT_BUSINESS_TIME_ZONE) {
++  const date = instant instanceof Date ? instant : new Date(instant);
++  if (Number.isNaN(date.getTime())) {
++    const error = new Error('INVALID_BUSINESS_INSTANT');
++    error.code = 'INVALID_BUSINESS_INSTANT';
++    throw error;
++  }
++  const zone = resolveBusinessTimeZone(timeZone);
++  const parts = Object.fromEntries(
++    getFormatter(zone).formatToParts(date)
++      .filter(part => part.type !== 'literal')
++      .map(part => [part.type, Number(part.value)])
++  );
++  return {
++    timeZone: zone,
++    year: parts.year,
++    month: parts.month,
++    day: parts.day,
++    // Intl puede devolver 24 para medianoche en algunas plataformas.
++    hour: parts.hour % 24,
++    minute: parts.minute
++  };
++}
++
++export function getBusinessHour(instant = new Date(), timeZone = DEFAULT_BUSINESS_TIME_ZONE) {
++  return getBusinessTimeParts(instant, timeZone).hour;
++}
+diff --git a/server/domain/driverState.js b/server/domain/driverState.js
+new file mode 100644
+index 0000000..c05e87f
+--- /dev/null
++++ b/server/domain/driverState.js
+@@ -0,0 +1,73 @@
++// Estados que un conductor puede fijar por su cuenta desde la app.
++export const DRIVER_STATUS = Object.freeze({
++  AVAILABLE: 'AVAILABLE',
++  BUSY: 'BUSY',
++  IN_TRIP: 'IN_TRIP',
++  OFFLINE: 'OFFLINE'
++});
++
++// Estados internos que solamente administración puede asignar.
++export const ADMIN_DRIVER_STATUS = Object.freeze({
++  SUSPENDED: 'SUSPENDED',
++  PENDING_APPROVAL: 'PENDING_APPROVAL'
++});
++
++// `ONLINE` sobrevive en clientes y registros antiguos con el mismo significado
++// que `AVAILABLE`; se normaliza en lugar de rechazarse para no romper sesiones.
++const STATUS_ALIASES = Object.freeze({
++  ONLINE: DRIVER_STATUS.AVAILABLE,
++  DISPONIBLE: DRIVER_STATUS.AVAILABLE,
++  OCUPADO: DRIVER_STATUS.BUSY,
++  EN_VIAJE: DRIVER_STATUS.IN_TRIP,
++  DESCONECTADO: DRIVER_STATUS.OFFLINE
++});
++
++const SELF_ASSIGNABLE = new Set(Object.values(DRIVER_STATUS));
++const ALL_DRIVER_STATUSES = new Set([...SELF_ASSIGNABLE, ...Object.values(ADMIN_DRIVER_STATUS)]);
++
++/**
++ * Devuelve el estado canónico que el propio conductor puede asignarse, o null
++ * si el valor no está expresamente permitido. Los estados administrativos
++ * (`SUSPENDED`, `PENDING_APPROVAL`) se rechazan aquí a propósito: un conductor
++ * no debe poder auto-suspenderse ni auto-reactivarse.
++ */
++export function normalizeDriverStatus(status) {
++  const raw = String(status ?? '').trim().toUpperCase().replaceAll(' ', '_');
++  if (!raw) return null;
++  const canonical = STATUS_ALIASES[raw] || raw;
++  return SELF_ASSIGNABLE.has(canonical) ? canonical : null;
++}
++
++export function isKnownDriverStatus(status) {
++  const raw = String(status ?? '').trim().toUpperCase().replaceAll(' ', '_');
++  return ALL_DRIVER_STATUSES.has(STATUS_ALIASES[raw] || raw);
++}
++
++export function isValidLatitude(value) {
++  const latitude = Number(value);
++  return Number.isFinite(latitude) && latitude >= -90 && latitude <= 90;
++}
++
++export function isValidLongitude(value) {
++  const longitude = Number(value);
++  return Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
++}
++
++/**
++ * Normaliza un par de coordenadas admitiendo los nombres que usan los clientes
++ * (`lat`/`latitude`, `lng`/`longitude`). Devuelve null si algo está fuera de
++ * rango, no es finito o viene vacío.
++ */
++export function normalizeCoordinates(input = {}) {
++  const rawLat = input?.lat ?? input?.latitude;
++  const rawLng = input?.lng ?? input?.longitude;
++  if (rawLat === null || rawLat === undefined || String(rawLat).trim() === '') return null;
++  if (rawLng === null || rawLng === undefined || String(rawLng).trim() === '') return null;
++  if (!isValidLatitude(rawLat) || !isValidLongitude(rawLng)) return null;
++  const heading = Number(input?.heading);
++  return {
++    lat: Number(rawLat),
++    lng: Number(rawLng),
++    heading: Number.isFinite(heading) ? ((heading % 360) + 360) % 360 : 0
++  };
++}
+diff --git a/server/domain/pricingService.js b/server/domain/pricingService.js
+index 83093c4..fc80f28 100644
+--- a/server/domain/pricingService.js
++++ b/server/domain/pricingService.js
+@@ -1,3 +1,5 @@
++import { DEFAULT_BUSINESS_TIME_ZONE, getBusinessHour, resolveBusinessTimeZone } from './businessTime.js';
++
+ export const DEFAULT_PRICING = Object.freeze({
+   vehicleTypes: {
+     MOTO: { baseFareUSD: 1.5, pricePerKmUSD: 0.45, pricePerMinuteUSD: 0.04, minimumFareUSD: 2.5 },
+@@ -16,7 +18,10 @@ export function calculateFare({ distanceKm, durationMin, requestedAt = new Date(
+   const normalizedRideType = rideType === 'CAR' ? 'CAR' : 'MOTO';
+   const vehiclePricing = { ...DEFAULT_PRICING.vehicleTypes[normalizedRideType], ...(pricing.vehicleTypes?.[normalizedRideType] || {}) };
+   const date = new Date(requestedAt);
+-  const hour = date.getHours();
++  // La franja nocturna y la hora pico son reglas comerciales de Venezuela: se
++  // evalúan siempre en la zona del negocio, nunca en la del servidor.
++  const timeZone = resolveBusinessTimeZone(pricing.timeZone || process.env.BUSINESS_TIME_ZONE || DEFAULT_BUSINESS_TIME_ZONE);
++  const hour = getBusinessHour(date, timeZone);
+   const isNight = hour >= 21 || hour < 6;
+   const isPeak = (hour >= 7 && hour < 9) || (hour >= 16 && hour < 19);
+   const subtotal = vehiclePricing.baseFareUSD + Math.max(0, distanceKm) * vehiclePricing.pricePerKmUSD + Math.max(0, durationMin) * vehiclePricing.pricePerMinuteUSD;
+@@ -33,6 +38,8 @@ export function calculateFare({ distanceKm, durationMin, requestedAt = new Date(
+     rideType: normalizedRideType,
+     isNight,
+     isPeak,
++    timeZone,
++    localHour: hour,
+     multiplier: roundMoney(multiplier),
+     calculatedAt: new Date().toISOString()
+   };
+diff --git a/server/index.js b/server/index.js
+index d7abce9..95ffeea 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -12,7 +12,8 @@ import bcrypt from 'bcryptjs';
+ import jwt from 'jsonwebtoken';
+ import { DatabaseSync } from 'node:sqlite';
+ import { calculateFare, DEFAULT_PRICING } from './domain/pricingService.js';
+-import { transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
++import { canTransitionTrip, normalizeTripStatus, transitionTrip, TRIP_STATUS } from './domain/tripStateMachine.js';
++import { DRIVER_STATUS, normalizeCoordinates, normalizeDriverStatus } from './domain/driverState.js';
+ import { createPrivateStorage } from './services/privateStorage.js';
+ import { createDriverApplicationsRouter } from './routes/driverApplications.js';
+ 
+@@ -406,15 +407,31 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
+ }
+ 
+ function normalizeLocation(location) {
+-  if (location?.lat === null || location?.lat === undefined || location?.lng === null || location?.lng === undefined || String(location.lat).trim() === '' || String(location.lng).trim() === '') {
+-    return null;
+-  }
+-  const lat = Number(location?.lat);
+-  const lng = Number(location?.lng);
+-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+-    return null;
+-  }
+-  return { ...location, lat, lng };
++  const coordinates = normalizeCoordinates(location);
++  if (!coordinates) return null;
++  return { ...location, lat: coordinates.lat, lng: coordinates.lng };
++}
++
++// Un conductor solo existe para administración, para sí mismo y para el
++// pasajero con el que comparte un viaje activo. Ese es el alcance máximo de
++// cualquier evento de flota.
++function activeTripForDriver(driverId) {
++  return database.trips.findLast(trip =>
++    trip.driverId === driverId &&
++    ['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(trip.status)
++  ) || null;
++}
++
++function emitDriverPresence(driver, { includeActivePassenger = true } = {}) {
++  if (!driver?.id) return;
++  const summary = { driverId: driver.id, userId: driver.id, status: driver.status || 'OFFLINE' };
++  let audience = io.to('admins').to(`user:${driver.id}`);
++  const activeTrip = includeActivePassenger ? activeTripForDriver(driver.id) : null;
++  if (activeTrip?.passengerId) audience = audience.to(`user:${activeTrip.passengerId}`);
++  audience.emit('driverStatusChanged', summary);
++  // El perfil completo (correo, teléfono, cédula, documentos) es exclusivo de
++  // administración; el resto de la flota solo recibe el resumen de estado.
++  io.to('admins').emit('admin:driver_updated', publicUser(driver));
+ }
+ 
+ function userCanAccessTrip(userId, role, trip) {
+@@ -423,10 +440,7 @@ function userCanAccessTrip(userId, role, trip) {
+ 
+ function emitDriverLocation(driverId, location) {
+   const payload = { ...location, driverId, userId: driverId };
+-  const activeTrip = database.trips.findLast(trip =>
+-    trip.driverId === driverId &&
+-    ['DRIVER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'IN_TRIP'].includes(trip.status)
+-  );
++  const activeTrip = activeTripForDriver(driverId);
+   io.to('admins').to(`user:${driverId}`).emit('driverLocationUpdated', {
+     ...payload,
+     tripId: activeTrip?.id || null
+@@ -437,6 +451,8 @@ function emitDriverLocation(driverId, location) {
+       tripId: activeTrip.id
+     });
+   }
++  // El mapa de flota es una pantalla exclusiva de administración.
++  io.to('admins').emit('admin:driver_location', payload);
+ }
+ 
+ // REST Endpoints
+@@ -1092,28 +1108,24 @@ app.patch('/api/drivers/status', requireAuth, requireApprovedDriver, (req, res)
+   const driverId = req.user.id;
+   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
+   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
+-  driver.status = req.body.status || driver.status;
++  const status = normalizeDriverStatus(req.body.status);
++  if (!status) return res.status(400).json({ error: 'INVALID_DRIVER_STATUS' });
++  driver.status = status;
+   persistDatabase();
+-  io.emit('driverStatusChanged', { driverId, userId: driverId, status: driver.status });
+-  io.emit('admin:driver_updated', driver);
+-  res.json(driver);
++  emitDriverPresence(driver);
++  res.json(publicUser(driver));
+ });
+ 
+ app.patch('/api/drivers/location', requireAuth, requireApprovedDriver, (req, res) => {
+   const driverId = req.user.id;
+   const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
+   if (!driver) return res.status(404).json({ error: 'DRIVER_NOT_FOUND' });
+-  driver.location = {
+-    lat: Number(req.body.latitude ?? req.body.lat),
+-    lng: Number(req.body.longitude ?? req.body.lng),
+-    heading: Number(req.body.heading || 0),
+-    updatedAt: Date.now()
+-  };
++  const coordinates = normalizeCoordinates(req.body);
++  if (!coordinates) return res.status(400).json({ error: 'INVALID_COORDINATES' });
++  driver.location = { ...coordinates, updatedAt: Date.now() };
+   persistDatabase();
+-  const payload = { ...driver.location, driverId, userId: driverId };
+-  emitDriverLocation(driverId, payload);
+-  io.emit('admin:driver_location', payload);
+-  res.json(driver);
++  emitDriverLocation(driverId, { ...driver.location });
++  res.json(publicUser(driver));
+ });
+ 
+ function dispatchTripToDrivers(trip) {
+@@ -1200,52 +1212,48 @@ io.on('connection', (socket) => {
+ 
+   socket.on('driver:connect', (data = {}) => {
+     if (!allowSocketRole(socket, 'driver')) return;
+-    data.userId = socket.data.auth.userId;
+     socket.join('drivers');
+-    const driver = database.users.find(u => u.id === data.userId) || database.users.find(u => u.role === 'driver');
+-    if (driver) {
+-      driver.status = data.status || 'AVAILABLE';
+-      driver.socketId = socket.id;
+-      driverRegistry.set(driver.id, socket.id);
+-      persistDatabase();
++    // Nunca se resuelve el conductor por el payload: solo por la sesión firmada.
++    const driver = database.users.find(u => u.id === socket.data.auth.userId && u.role === 'driver');
++    if (!driver) {
++      socket.emit('authorization:error', { error: 'DRIVER_NOT_FOUND' });
++      return;
++    }
++    const requestedStatus = data.status === undefined ? DRIVER_STATUS.AVAILABLE : normalizeDriverStatus(data.status);
++    if (!requestedStatus) {
++      socket.emit('driver:status_rejected', { error: 'INVALID_DRIVER_STATUS', status: data.status });
++      return;
+     }
+-    socket.emit('driver:connected', { success: true, socketId: socket.id, driver: driver || null });
+-    io.emit('admin:driver_updated', driver || { userId: data.userId, status: data.status || 'AVAILABLE' });
++    driver.status = requestedStatus;
++    driver.socketId = socket.id;
++    driverRegistry.set(driver.id, socket.id);
++    persistDatabase();
++    socket.emit('driver:connected', { success: true, socketId: socket.id, driver: publicUser(driver) });
++    emitDriverPresence(driver);
+   });
+ 
+   // Driver GPS Continuous Streaming Event
+-  socket.on('driver:location', (data) => {
++  const handleDriverLocation = (data = {}) => {
+     if (!allowSocketRole(socket, 'driver')) return;
+-    data.driverId = socket.data.auth.userId;
+-    const driverId = data.driverId;
+-    const lat = Number(data.latitude ?? data.lat);
+-    const lng = Number(data.longitude ?? data.lng);
+-    const heading = Number(data.heading || 0);
+-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+-    const driver = database.users.find(u => u.id === driverId);
+-    if (driver) {
+-      driver.location = { lat, lng, heading: heading || 0, updatedAt: Date.now() };
+-      driver.status = driver.status || 'AVAILABLE';
+-      persistDatabase();
++    // El identificador siempre proviene de la sesión, jamás del payload.
++    const driverId = socket.data.auth.userId;
++    const coordinates = normalizeCoordinates(data);
++    if (!coordinates) {
++      socket.emit('driver:location_rejected', { error: 'INVALID_COORDINATES' });
++      return;
+     }
+-    emitDriverLocation(driverId, { lat, lng, heading: heading || 0, updatedAt: Date.now() });
+-  });
++    const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
++    if (!driver) return;
++    driver.location = { ...coordinates, updatedAt: Date.now() };
++    // Reportar GPS no reactiva a un conductor suspendido ni cambia su estado:
++    // solo cubre el caso de una cuenta sin estado previo.
++    if (!driver.status) driver.status = DRIVER_STATUS.AVAILABLE;
++    persistDatabase();
++    emitDriverLocation(driverId, { ...driver.location });
++  };
+ 
+-  socket.on('driver:location_update', (data) => {
+-    if (!allowSocketRole(socket, 'driver')) return;
+-    data.userId = socket.data.auth.userId;
+-    const driverId = data.userId || data.driverId;
+-    const lat = data.latitude ?? data.lat;
+-    const lng = data.longitude ?? data.lng;
+-    const driver = database.users.find(u => u.id === driverId);
+-    if (driver && Number.isFinite(lat) && Number.isFinite(lng)) {
+-      driver.location = { lat, lng, heading: data.heading || 0, updatedAt: Date.now() };
+-      persistDatabase();
+-    }
+-    const payload = { ...data, driverId, lat, lng };
+-    emitDriverLocation(driverId, payload);
+-    io.emit('admin:driver_location', payload);
+-  });
++  socket.on('driver:location', handleDriverLocation);
++  socket.on('driver:location_update', handleDriverLocation);
+ 
+   socket.on('passenger:location_update', (data = {}) => {
+     if (!allowSocketRole(socket, 'passenger')) return;
+@@ -1265,31 +1273,24 @@ io.on('connection', (socket) => {
+     io.to(`user:${trip.driverId}`).to('admins').emit('passengerLocationUpdated', payload);
+   });
+ 
+-  // Driver Status Toggle Event ('AVAILABLE' | 'BUSY' | 'OFFLINE')
+-  socket.on('driver:status', (data) => {
++  // Driver Status Toggle Event ('AVAILABLE' | 'BUSY' | 'IN_TRIP' | 'OFFLINE')
++  const handleDriverStatus = (data = {}) => {
+     if (!allowSocketRole(socket, 'driver')) return;
+-    data.driverId = socket.data.auth.userId;
+-    const { driverId, status } = data;
+-    const driver = database.users.find(u => u.id === driverId);
+-    if (driver) {
+-      driver.status = status;
+-      persistDatabase();
++    const driverId = socket.data.auth.userId;
++    const status = normalizeDriverStatus(data.status);
++    if (!status) {
++      socket.emit('driver:status_rejected', { error: 'INVALID_DRIVER_STATUS', status: data.status });
++      return;
+     }
+-    io.emit('driverStatusChanged', { driverId, status });
+-  });
++    const driver = database.users.find(u => u.id === driverId && u.role === 'driver');
++    if (!driver) return;
++    driver.status = status;
++    persistDatabase();
++    emitDriverPresence(driver);
++  };
+ 
+-  socket.on('driver:status_change', (data) => {
+-    if (!allowSocketRole(socket, 'driver')) return;
+-    data.userId = socket.data.auth.userId;
+-    const driverId = data.userId || data.driverId;
+-    const driver = database.users.find(u => u.id === driverId);
+-    if (driver) {
+-      driver.status = data.status;
+-      persistDatabase();
+-    }
+-    io.emit('driverStatusChanged', { driverId, userId: driverId, status: data.status });
+-    io.emit('admin:driver_updated', driver || data);
+-  });
++  socket.on('driver:status', handleDriverStatus);
++  socket.on('driver:status_change', handleDriverStatus);
+ 
+   // Passenger Ride Request Event
+   socket.on('rideRequested', (tripData) => {
+@@ -1369,8 +1370,9 @@ io.on('connection', (socket) => {
+ 
+     console.log(`[+58express Socket.IO] Atomic lock success! Ride [${tripId}] assigned to ${driver.firstName}`);
+ 
+-    // Broadcast confirmation to ALL clients (Passengers, Drivers, Admin)
+-    io.to(`user:${trip?.passengerId}`).to('drivers').to('admins').emit('tripStatusUpdated', {
++    // Solo los participantes del viaje y administración: el perfil del conductor
++    // (correo, teléfono, cédula, documentos) no se difunde al resto de la flota.
++    io.to(`user:${trip?.passengerId}`).to(`user:${driver.id}`).to('admins').emit('tripStatusUpdated', {
+       tripId,
+       status: 'EN_ROUTE',
+       driver
+@@ -1422,27 +1424,58 @@ io.on('connection', (socket) => {
+       persistDatabase();
+       emitCompletedTripWalletUpdates(trip, settlement);
+     }
+-    io.to(`user:${trip?.passengerId}`).to('drivers').to('admins').emit('tripStatusUpdated', data);
++    io.to(`user:${trip?.passengerId}`).to(`user:${socket.data.auth.userId}`).to('admins').emit('tripStatusUpdated', data);
+   });
+ 
+   // Passenger Ride Cancelled Event
+-  socket.on('rideCancelled', (data) => {
++  socket.on('rideCancelled', (data = {}) => {
+     if (!allowSocketRole(socket, 'passenger')) return;
+     const { tripId } = data;
++    const passengerId = socket.data.auth.userId;
++    const trip = database.trips.find(t => t.id === tripId);
++    if (!trip) {
++      socket.emit('rideCancellationRejected', { tripId, error: 'TRIP_NOT_FOUND' });
++      return;
++    }
++    // La propiedad del viaje se comprueba antes de tocar cerrojos o temporizadores:
++    // de lo contrario un tercero podría desarmar el despacho de un viaje ajeno.
++    if (trip.passengerId !== passengerId) {
++      socket.emit('rideCancellationRejected', { tripId, error: 'FORBIDDEN' });
++      return;
++    }
++    // `canTransitionTrip` admite el estado consigo mismo, así que los viajes ya
++    // terminados se descartan aparte.
++    const isClosed = [TRIP_STATUS.COMPLETED, TRIP_STATUS.CANCELLED].includes(normalizeTripStatus(trip.status));
++    if (isClosed || !canTransitionTrip(trip.status, TRIP_STATUS.CANCELLED)) {
++      socket.emit('rideCancellationRejected', { tripId, error: 'TRIP_NOT_CANCELLABLE', status: trip.status });
++      return;
++    }
++
++    // Se captura al conductor con la oferta abierta antes de limpiar la sesión,
++    // para poder cerrarle el modal de carrera entrante.
++    const offeredDriverId = dispatchSessions.get(tripId)?.currentDriverId || null;
+     tripLocks.delete(tripId);
+     dispatchSessions.delete(tripId);
+     if (dispatchTimers.has(tripId)) {
+       clearTimeout(dispatchTimers.get(tripId));
+       dispatchTimers.delete(tripId);
+     }
+-    const trip = database.trips.find(t => t.id === tripId);
+-    if (trip) {
+-      transitionTrip(trip, TRIP_STATUS.CANCELLED, { actorId: socket.data.auth.userId, actorRole: 'passenger' });
+-      persistDatabase();
++    try {
++      transitionTrip(trip, TRIP_STATUS.CANCELLED, { actorId: passengerId, actorRole: 'passenger' });
++    } catch (error) {
++      socket.emit('rideCancellationRejected', { tripId, error: error.code || 'TRIP_NOT_CANCELLABLE', status: trip.status });
++      return;
+     }
++    const assignedDriver = database.users.find(user => user.id === trip.driverId);
++    if (assignedDriver) assignedDriver.status = DRIVER_STATUS.AVAILABLE;
++    persistDatabase();
+ 
+     console.log(`[+58express Socket.IO] Ride [${tripId}] cancelled by passenger`);
+-    io.emit('rideCancelled', { tripId });
++    let audience = io.to(`user:${passengerId}`).to('admins');
++    if (trip.driverId) audience = audience.to(`user:${trip.driverId}`);
++    if (offeredDriverId && offeredDriverId !== trip.driverId) audience = audience.to(`user:${offeredDriverId}`);
++    audience.emit('rideCancelled', { tripId });
++    if (assignedDriver) emitDriverPresence(assignedDriver, { includeActivePassenger: false });
+   });
+ 
+   socket.on('chat:send_message', (data = {}) => {
+@@ -1496,10 +1529,12 @@ io.on('connection', (socket) => {
+         driverRegistry.delete(driverId);
+         const driver = database.users.find(u => u.id === driverId);
+         if (driver) {
+-          driver.status = 'OFFLINE';
++          driver.status = DRIVER_STATUS.OFFLINE;
+           persistDatabase();
++          emitDriverPresence(driver);
++        } else {
++          io.to('admins').emit('admin:driver_updated', { userId: driverId, status: DRIVER_STATUS.OFFLINE });
+         }
+-        io.emit('admin:driver_updated', driver || { userId: driverId, status: 'OFFLINE' });
+       }
+     }
+     console.log(`[+58express Socket.IO] Client disconnected: ${socket.id}`);
+diff --git a/server/test/businessTime.test.js b/server/test/businessTime.test.js
+new file mode 100644
+index 0000000..6174e6a
+--- /dev/null
++++ b/server/test/businessTime.test.js
+@@ -0,0 +1,135 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { spawnSync } from 'node:child_process';
++import path from 'node:path';
++import { fileURLToPath, pathToFileURL } from 'node:url';
++import { calculateFare } from '../domain/pricingService.js';
++import {
++  DEFAULT_BUSINESS_TIME_ZONE,
++  getBusinessHour,
++  resolveBusinessTimeZone
++} from '../domain/businessTime.js';
++
++const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
++const pricingModuleUrl = pathToFileURL(path.join(serverDir, 'domain', 'pricingService.js')).href;
++
++// Ejecuta el cálculo en un proceso con otra zona horaria de sistema para
++// comprobar que el resultado comercial no depende del reloj del servidor.
++function calculateFareUnderSystemTimeZone(timeZone, requestedAt) {
++  const script = `
++    import { calculateFare } from ${JSON.stringify(pricingModuleUrl)};
++    const fare = calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: ${JSON.stringify(requestedAt)} });
++    console.log(JSON.stringify({
++      isNight: fare.isNight,
++      isPeak: fare.isPeak,
++      localHour: fare.localHour,
++      timeZone: fare.timeZone,
++      fareUSD: fare.fareUSD,
++      systemHour: new Date(${JSON.stringify(requestedAt)}).getHours()
++    }));
++  `;
++  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
++    env: { ...process.env, TZ: timeZone, BUSINESS_TIME_ZONE: '' },
++    encoding: 'utf8'
++  });
++  assert.equal(result.status, 0, `El subproceso falló bajo TZ=${timeZone}: ${result.stderr}`);
++  return JSON.parse(result.stdout);
++}
++
++test('la franja nocturna se evalúa en la hora de Caracas', () => {
++  // 22:00 en Venezuela (UTC-4) es horario nocturno aunque en UTC sean las 02:00
++  // del día siguiente y en Tokio las 11:00 de la mañana.
++  const fare = calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: '2026-08-08T22:00:00-04:00' });
++  assert.equal(fare.timeZone, 'America/Caracas');
++  assert.equal(fare.localHour, 22);
++  assert.equal(fare.isNight, true);
++  assert.equal(fare.isPeak, false);
++});
++
++test('la hora pico de la mañana y la tarde usan la hora de Caracas', () => {
++  const morningPeak = calculateFare({ distanceKm: 3, durationMin: 8, requestedAt: '2026-08-10T07:30:00-04:00' });
++  assert.equal(morningPeak.localHour, 7);
++  assert.equal(morningPeak.isPeak, true);
++  assert.equal(morningPeak.isNight, false);
++
++  const afternoonPeak = calculateFare({ distanceKm: 3, durationMin: 8, requestedAt: '2026-08-10T17:00:00-04:00' });
++  assert.equal(afternoonPeak.isPeak, true);
++
++  const midday = calculateFare({ distanceKm: 3, durationMin: 8, requestedAt: '2026-08-10T12:00:00-04:00' });
++  assert.equal(midday.isPeak, false);
++  assert.equal(midday.isNight, false);
++  assert.equal(midday.multiplier, 1);
++});
++
++test('el resultado es idéntico en servidores con zonas horarias distintas', () => {
++  const instant = '2026-08-08T22:00:00-04:00';
++  const tokyo = calculateFareUnderSystemTimeZone('Asia/Tokyo', instant);
++  const utc = calculateFareUnderSystemTimeZone('UTC', instant);
++  const caracas = calculateFareUnderSystemTimeZone('America/Caracas', instant);
++
++  // Comprobación de que la variable TZ realmente cambió el reloj del proceso:
++  // sin ella, la prueba no demostraría nada.
++  assert.notEqual(tokyo.systemHour, utc.systemHour);
++
++  for (const result of [tokyo, utc, caracas]) {
++    assert.equal(result.timeZone, 'America/Caracas');
++    assert.equal(result.localHour, 22);
++    assert.equal(result.isNight, true);
++    assert.equal(result.isPeak, false);
++  }
++  assert.equal(tokyo.fareUSD, utc.fareUSD);
++  assert.equal(tokyo.fareUSD, caracas.fareUSD);
++});
++
++test('BUSINESS_TIME_ZONE permite mover la operación de zona', () => {
++  const instant = '2026-08-08T22:00:00-04:00';
++  const caracas = calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: instant });
++  // En Madrid ese mismo instante son las 04:00: sigue siendo franja nocturna
++  // pero la hora local es distinta, lo que prueba que la zona sí se aplica.
++  const madrid = calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: instant }, { timeZone: 'Europe/Madrid' });
++  assert.equal(caracas.localHour, 22);
++  assert.equal(madrid.timeZone, 'Europe/Madrid');
++  assert.equal(madrid.localHour, 4);
++
++  // Y a mediodía de Caracas, Madrid ya está en hora pico de la tarde.
++  const noon = '2026-08-08T12:00:00-04:00';
++  assert.equal(calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: noon }).isPeak, false);
++  assert.equal(calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: noon }, { timeZone: 'Europe/Madrid' }).isPeak, true);
++});
++
++test('una zona horaria inválida cae en Caracas en lugar de la del servidor', () => {
++  assert.equal(resolveBusinessTimeZone('Marte/Olympus'), DEFAULT_BUSINESS_TIME_ZONE);
++  assert.equal(resolveBusinessTimeZone(''), DEFAULT_BUSINESS_TIME_ZONE);
++  assert.equal(resolveBusinessTimeZone(undefined), DEFAULT_BUSINESS_TIME_ZONE);
++  assert.equal(resolveBusinessTimeZone('Europe/Madrid'), 'Europe/Madrid');
++
++  const fare = calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: '2026-08-08T22:00:00-04:00' }, { timeZone: 'Marte/Olympus' });
++  assert.equal(fare.timeZone, DEFAULT_BUSINESS_TIME_ZONE);
++  assert.equal(fare.isNight, true);
++});
++
++test('la hora de negocio cubre los bordes de la franja nocturna', () => {
++  const hourAt = iso => getBusinessHour(new Date(iso), DEFAULT_BUSINESS_TIME_ZONE);
++  assert.equal(hourAt('2026-08-08T00:00:00-04:00'), 0);
++  assert.equal(hourAt('2026-08-08T23:59:00-04:00'), 23);
++
++  assert.equal(calculateFare({ distanceKm: 4, durationMin: 10, requestedAt: '2026-08-08T20:59:00-04:00' }).isNight, false);
++  assert.equal(calculateFare({ distanceKm: 4, durationMin: 10, requestedAt: '2026-08-08T21:00:00-04:00' }).isNight, true);
++  assert.equal(calculateFare({ distanceKm: 4, durationMin: 10, requestedAt: '2026-08-08T05:59:00-04:00' }).isNight, true);
++  assert.equal(calculateFare({ distanceKm: 4, durationMin: 10, requestedAt: '2026-08-08T06:00:00-04:00' }).isNight, false);
++});
++
++test('las tarifas base y los recargos no cambiaron', () => {
++  // Viaje diurno sin recargos: 1.5 + 5*0.45 + 12*0.04 = 4.23
++  const daytime = calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: '2026-08-08T12:00:00-04:00' });
++  assert.equal(daytime.fareUSD, 4.23);
++  assert.equal(daytime.multiplier, 1);
++
++  const night = calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: '2026-08-08T22:00:00-04:00' });
++  assert.equal(night.multiplier, 1.2);
++  assert.equal(night.fareUSD, 5.08);
++
++  const peak = calculateFare({ distanceKm: 5, durationMin: 12, requestedAt: '2026-08-08T08:00:00-04:00' });
++  assert.equal(peak.multiplier, 1.15);
++  assert.equal(peak.fareUSD, 4.86);
++});
+diff --git a/server/test/security.test.js b/server/test/security.test.js
+new file mode 100644
+index 0000000..baf4d30
+--- /dev/null
++++ b/server/test/security.test.js
+@@ -0,0 +1,361 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { spawn } from 'node:child_process';
++import { mkdtemp } from 'node:fs/promises';
++import { tmpdir } from 'node:os';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { io } from 'socket.io-client';
++
++const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
++
++async function startServer(t) {
++  const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-security-'));
++  const port = 5000 + Math.floor(Math.random() * 400);
++  const child = spawn(process.execPath, ['index.js'], {
++    cwd: serverDir,
++    env: {
++      ...process.env,
++      PORT: String(port),
++      DATA_FILE: path.join(tempDir, 'database.json'),
++      JWT_SECRET: 'security-test-secret'
++    },
++    stdio: ['ignore', 'pipe', 'pipe']
++  });
++  t.after(() => child.kill());
++  await new Promise((resolve, reject) => {
++    const timeout = setTimeout(() => reject(new Error('El servidor no inició')), 10000);
++    child.stdout.on('data', chunk => {
++      if (chunk.toString().includes('Running')) {
++        clearTimeout(timeout);
++        resolve();
++      }
++    });
++    child.once('exit', code => reject(new Error(`Servidor finalizó con código ${code}`)));
++  });
++  return `http://127.0.0.1:${port}`;
++}
++
++const asJson = (url, token, options = {}) => fetch(url, {
++  ...options,
++  headers: {
++    'content-type': 'application/json',
++    ...(token ? { authorization: `Bearer ${token}` } : {}),
++    ...(options.headers || {})
++  }
++});
++
++async function login(url, identifier, password, role) {
++  const response = await asJson(`${url}/api/auth/login`, null, {
++    method: 'POST',
++    body: JSON.stringify({ identifier, password, role })
++  });
++  assert.equal(response.status, 200, `Login fallido para ${identifier}`);
++  return (await response.json()).token;
++}
++
++async function registerPassenger(url, { email, phone, firstName }) {
++  const response = await asJson(`${url}/api/auth/register`, null, {
++    method: 'POST',
++    body: JSON.stringify({ email, phone, password: 'password123', role: 'passenger', firstName, lastName: 'Prueba' })
++  });
++  assert.equal(response.status, 201);
++  return response.json();
++}
++
++async function createDriver(url, adminToken, { email, phone, firstName, plate }) {
++  const response = await asJson(`${url}/api/admin/drivers`, adminToken, {
++    method: 'POST',
++    body: JSON.stringify({ email, phone, firstName, lastName: 'Conductor', vehicleBrand: 'Bera', vehicleModel: 'BR200', vehiclePlate: plate })
++  });
++  assert.equal(response.status, 201);
++  const account = await response.json();
++  return { ...account, token: await login(url, email, account.temporaryPassword, 'driver') };
++}
++
++function waitFor(socket, event, { predicate = () => true, timeoutMs = 5000, label = event } = {}) {
++  return new Promise((resolve, reject) => {
++    const timer = setTimeout(() => {
++      socket.off(event, handler);
++      reject(new Error(`No llegó el evento ${label}`));
++    }, timeoutMs);
++    function handler(payload) {
++      if (!predicate(payload)) return;
++      clearTimeout(timer);
++      socket.off(event, handler);
++      resolve(payload);
++    }
++    socket.on(event, handler);
++  });
++}
++
++// Comprueba que un evento NO se recibe durante la ventana indicada.
++function expectSilence(socket, event, windowMs = 600) {
++  const received = [];
++  socket.on(event, payload => received.push(payload));
++  return new Promise(resolve => setTimeout(() => resolve(received), windowMs));
++}
++
++async function connectDriver(url, token, { lat, lng }) {
++  const socket = io(url, { auth: { token } });
++  await waitFor(socket, 'connect', { label: 'connect' });
++  socket.emit('driver:connect', { status: 'AVAILABLE' });
++  await waitFor(socket, 'driver:connected', { label: 'driver:connected' });
++  socket.emit('driver:location', { latitude: lat, longitude: lng, heading: 0 });
++  await new Promise(resolve => setTimeout(resolve, 120));
++  return socket;
++}
++
++const findUser = (users, id) => users.find(user => user.id === id);
++
++test('un pasajero no puede cancelar la carrera de otro pasajero', async (t) => {
++  const url = await startServer(t);
++  const adminToken = await login(url, 'admin@58express.com', 'admin', 'admin');
++  const owner = await registerPassenger(url, { email: 'dueno@58express.com', phone: '+584120001111', firstName: 'Ana' });
++  const intruder = await registerPassenger(url, { email: 'intruso@58express.com', phone: '+584120002222', firstName: 'Beto' });
++  const driver = await createDriver(url, adminToken, { email: 'conductor.sec@58express.com', phone: '+584140005555', firstName: 'Carlos', plate: 'SEC001' });
++
++  // Un conductor disponible mantiene el viaje en SEARCHING en vez de que el
++  // despacho lo cancele por falta de candidatos.
++  const driverSocket = await connectDriver(url, driver.token, { lat: 10.6428, lng: -71.6126 });
++  const ownerSocket = io(url, { auth: { token: owner.token } });
++  const intruderSocket = io(url, { auth: { token: intruder.token } });
++  t.after(() => [driverSocket, ownerSocket, intruderSocket].forEach(socket => socket.close()));
++  await Promise.all([
++    waitFor(ownerSocket, 'connect', { label: 'connect dueño' }),
++    waitFor(intruderSocket, 'connect', { label: 'connect intruso' })
++  ]);
++
++  const creation = await asJson(`${url}/api/trips/create`, owner.token, {
++    method: 'POST',
++    body: JSON.stringify({
++      id: 'trip_propiedad',
++      pickup: { lat: 10.6427, lng: -71.6125 },
++      destination: { lat: 10.65, lng: -71.60 },
++      fareUSD: 5,
++      paymentMethod: 'efectivo',
++      rideType: 'MOTO'
++    })
++  });
++  assert.equal(creation.status, 200);
++
++  // El intruso intenta cancelar un viaje que no le pertenece.
++  const rejection = waitFor(intruderSocket, 'rideCancellationRejected', {
++    predicate: payload => payload.tripId === 'trip_propiedad',
++    label: 'rechazo de cancelación ajena'
++  });
++  const ownerNotified = expectSilence(ownerSocket, 'rideCancelled');
++  intruderSocket.emit('rideCancelled', { tripId: 'trip_propiedad' });
++  assert.equal((await rejection).error, 'FORBIDDEN');
++  assert.deepEqual(await ownerNotified, [], 'El viaje ajeno no debe cancelarse');
++
++  // El viaje sigue vivo para su dueño.
++  const stillActive = await asJson(`${url}/api/trips/active/me`, owner.token);
++  assert.equal(stillActive.status, 200);
++  assert.equal((await stillActive.json()).trip.id, 'trip_propiedad');
++
++  // El dueño sí puede cancelarlo.
++  const cancelled = waitFor(ownerSocket, 'rideCancelled', { predicate: payload => payload.tripId === 'trip_propiedad' });
++  ownerSocket.emit('rideCancelled', { tripId: 'trip_propiedad' });
++  await cancelled;
++  await new Promise(resolve => setTimeout(resolve, 120));
++
++  const trips = await (await asJson(`${url}/api/trips`, adminToken)).json();
++  assert.equal(trips.find(trip => trip.id === 'trip_propiedad').status, 'CANCELLED');
++
++  // Y no puede volver a cancelar un viaje ya cerrado.
++  const secondRejection = waitFor(ownerSocket, 'rideCancellationRejected', {
++    predicate: payload => payload.tripId === 'trip_propiedad',
++    label: 'rechazo de doble cancelación'
++  });
++  ownerSocket.emit('rideCancelled', { tripId: 'trip_propiedad' });
++  assert.equal((await secondRejection).error, 'TRIP_NOT_CANCELLABLE');
++
++  // Un viaje inexistente tampoco filtra información.
++  const missingRejection = waitFor(ownerSocket, 'rideCancellationRejected', {
++    predicate: payload => payload.tripId === 'trip_inexistente'
++  });
++  ownerSocket.emit('rideCancelled', { tripId: 'trip_inexistente' });
++  assert.equal((await missingRejection).error, 'TRIP_NOT_FOUND');
++});
++
++test('un conductor no puede modificar a otro conductor con identificadores del payload', async (t) => {
++  const url = await startServer(t);
++  const adminToken = await login(url, 'admin@58express.com', 'admin', 'admin');
++  const attacker = await createDriver(url, adminToken, { email: 'atacante@58express.com', phone: '+584140006666', firstName: 'Atacante', plate: 'SEC002' });
++  const victim = await createDriver(url, adminToken, { email: 'victima@58express.com', phone: '+584140007777', firstName: 'Victima', plate: 'SEC003' });
++
++  const attackerSocket = await connectDriver(url, attacker.token, { lat: 10.6400, lng: -71.6100 });
++  const victimSocket = await connectDriver(url, victim.token, { lat: 10.7000, lng: -71.7000 });
++  t.after(() => [attackerSocket, victimSocket].forEach(socket => socket.close()));
++
++  const before = await (await asJson(`${url}/api/users`, adminToken)).json();
++  assert.equal(findUser(before, victim.user.id).status, 'AVAILABLE');
++  assert.equal(findUser(before, victim.user.id).location.lat, 10.7);
++
++  // Intento de apagar al otro conductor suplantando su identificador.
++  attackerSocket.emit('driver:status', { driverId: victim.user.id, userId: victim.user.id, status: 'OFFLINE' });
++  await new Promise(resolve => setTimeout(resolve, 200));
++  attackerSocket.emit('driver:status_change', { driverId: victim.user.id, userId: victim.user.id, status: 'OFFLINE' });
++  await new Promise(resolve => setTimeout(resolve, 200));
++
++  // Intento de mover el GPS del otro conductor.
++  attackerSocket.emit('driver:location', { driverId: victim.user.id, userId: victim.user.id, latitude: 1.1, longitude: 2.2 });
++  await new Promise(resolve => setTimeout(resolve, 200));
++  attackerSocket.emit('driver:location_update', { driverId: victim.user.id, userId: victim.user.id, latitude: 3.3, longitude: 4.4 });
++  await new Promise(resolve => setTimeout(resolve, 200));
++
++  // Intento por REST enviando el identificador ajeno en el cuerpo.
++  const restStatus = await asJson(`${url}/api/drivers/status`, attacker.token, {
++    method: 'PATCH',
++    body: JSON.stringify({ driverId: victim.user.id, userId: victim.user.id, status: 'OFFLINE' })
++  });
++  assert.equal(restStatus.status, 200);
++  const restLocation = await asJson(`${url}/api/drivers/location`, attacker.token, {
++    method: 'PATCH',
++    body: JSON.stringify({ driverId: victim.user.id, userId: victim.user.id, latitude: 5.5, longitude: 6.6 })
++  });
++  assert.equal(restLocation.status, 200);
++
++  const after = await (await asJson(`${url}/api/users`, adminToken)).json();
++  const victimAfter = findUser(after, victim.user.id);
++  const attackerAfter = findUser(after, attacker.user.id);
++
++  // La víctima quedó intacta.
++  assert.equal(victimAfter.status, 'AVAILABLE');
++  assert.equal(victimAfter.location.lat, 10.7);
++  assert.equal(victimAfter.location.lng, -71.7);
++
++  // Los cambios recayeron sobre el propio atacante.
++  assert.equal(attackerAfter.status, 'OFFLINE');
++  assert.equal(attackerAfter.location.lat, 5.5);
++  assert.equal(attackerAfter.location.lng, 6.6);
++
++  // Las respuestas REST nunca devuelven el hash de contraseña.
++  assert.equal((await restStatus.json()).passwordHash, undefined);
++  assert.equal((await restLocation.json()).passwordHash, undefined);
++});
++
++test('se rechazan estados y coordenadas inválidos en REST y en Socket.IO', async (t) => {
++  const url = await startServer(t);
++  const adminToken = await login(url, 'admin@58express.com', 'admin', 'admin');
++  const driver = await createDriver(url, adminToken, { email: 'validacion@58express.com', phone: '+584140008888', firstName: 'Validador', plate: 'SEC004' });
++  const driverSocket = await connectDriver(url, driver.token, { lat: 10.6428, lng: -71.6126 });
++  t.after(() => driverSocket.close());
++
++  for (const status of ['SUSPENDED', 'PENDING_APPROVAL', 'HACKED', '', null, 42, { evil: true }]) {
++    const response = await asJson(`${url}/api/drivers/status`, driver.token, {
++      method: 'PATCH',
++      body: JSON.stringify({ status })
++    });
++    assert.equal(response.status, 400, `El estado ${JSON.stringify(status)} debió rechazarse`);
++    assert.equal((await response.json()).error, 'INVALID_DRIVER_STATUS');
++  }
++
++  for (const status of ['AVAILABLE', 'BUSY', 'IN_TRIP', 'OFFLINE', 'available', 'ONLINE']) {
++    const response = await asJson(`${url}/api/drivers/status`, driver.token, {
++      method: 'PATCH',
++      body: JSON.stringify({ status })
++    });
++    assert.equal(response.status, 200, `El estado ${status} debió aceptarse`);
++    const expected = status.toUpperCase() === 'ONLINE' ? 'AVAILABLE' : status.toUpperCase();
++    assert.equal((await response.json()).status, expected);
++  }
++
++  const invalidCoordinates = [
++    { latitude: 91, longitude: 0 },
++    { latitude: -91, longitude: 0 },
++    { latitude: 0, longitude: 181 },
++    { latitude: 0, longitude: -181 },
++    { latitude: 'abc', longitude: 'def' },
++    { latitude: null, longitude: null },
++    { latitude: Infinity, longitude: 0 },
++    {}
++  ];
++  for (const body of invalidCoordinates) {
++    const response = await asJson(`${url}/api/drivers/location`, driver.token, {
++      method: 'PATCH',
++      body: JSON.stringify(body)
++    });
++    assert.equal(response.status, 400, `Las coordenadas ${JSON.stringify(body)} debieron rechazarse`);
++    assert.equal((await response.json()).error, 'INVALID_COORDINATES');
++  }
++
++  // La ubicación válida previa no fue sobrescrita por los intentos inválidos.
++  const users = await (await asJson(`${url}/api/users`, adminToken)).json();
++  assert.equal(findUser(users, driver.user.id).location.lat, 10.6428);
++
++  // Socket.IO aplica exactamente la misma validación.
++  const locationRejected = waitFor(driverSocket, 'driver:location_rejected', { label: 'rechazo de coordenadas por socket' });
++  driverSocket.emit('driver:location', { latitude: 120, longitude: 500 });
++  assert.equal((await locationRejected).error, 'INVALID_COORDINATES');
++
++  const statusRejected = waitFor(driverSocket, 'driver:status_rejected', { label: 'rechazo de estado por socket' });
++  driverSocket.emit('driver:status', { status: 'SUSPENDED' });
++  assert.equal((await statusRejected).error, 'INVALID_DRIVER_STATUS');
++
++  const changeRejected = waitFor(driverSocket, 'driver:status_rejected', { label: 'rechazo de estado alterno por socket' });
++  driverSocket.emit('driver:status_change', { status: 'TELEPORTING' });
++  assert.equal((await changeRejected).error, 'INVALID_DRIVER_STATUS');
++
++  await new Promise(resolve => setTimeout(resolve, 150));
++  const finalUsers = await (await asJson(`${url}/api/users`, adminToken)).json();
++  const finalDriver = findUser(finalUsers, driver.user.id);
++  assert.equal(finalDriver.location.lat, 10.6428);
++  assert.equal(finalDriver.status, 'AVAILABLE');
++});
++
++test('los eventos de flota y administración no llegan a conductores ni pasajeros ajenos', async (t) => {
++  const url = await startServer(t);
++  const adminToken = await login(url, 'admin@58express.com', 'admin', 'admin');
++  const passenger = await registerPassenger(url, { email: 'curioso@58express.com', phone: '+584120009999', firstName: 'Curioso' });
++  const watcher = await createDriver(url, adminToken, { email: 'mirón@58express.com', phone: '+584140001010', firstName: 'Miron', plate: 'SEC005' });
++  const mover = await createDriver(url, adminToken, { email: 'movil@58express.com', phone: '+584140002020', firstName: 'Movil', plate: 'SEC006' });
++
++  const watcherSocket = await connectDriver(url, watcher.token, { lat: 10.60, lng: -71.60 });
++  const passengerSocket = io(url, { auth: { token: passenger.token } });
++  const adminSocket = io(url, { auth: { token: adminToken } });
++  t.after(() => [watcherSocket, passengerSocket, adminSocket].forEach(socket => socket.close()));
++  await Promise.all([
++    waitFor(passengerSocket, 'connect', { label: 'connect pasajero' }),
++    waitFor(adminSocket, 'connect', { label: 'connect admin' })
++  ]);
++
++  const adminSawUpdate = waitFor(adminSocket, 'admin:driver_updated', {
++    predicate: payload => payload.id === mover.user.id,
++    label: 'actualización de conductor en administración'
++  });
++  const adminSawLocation = waitFor(adminSocket, 'admin:driver_location', {
++    predicate: payload => payload.driverId === mover.user.id,
++    label: 'ubicación de conductor en administración'
++  });
++
++  const passengerLeaks = [
++    expectSilence(passengerSocket, 'admin:driver_updated', 1200),
++    expectSilence(passengerSocket, 'admin:driver_location', 1200),
++    expectSilence(passengerSocket, 'driverStatusChanged', 1200)
++  ];
++  const watcherLeaks = [
++    expectSilence(watcherSocket, 'admin:driver_updated', 1200),
++    expectSilence(watcherSocket, 'admin:driver_location', 1200),
++    expectSilence(watcherSocket, 'driverStatusChanged', 1200)
++  ];
++
++  const moverSocket = await connectDriver(url, mover.token, { lat: 10.65, lng: -71.65 });
++  t.after(() => moverSocket.close());
++  moverSocket.emit('driver:status', { status: 'BUSY' });
++
++  const adminUpdate = await adminSawUpdate;
++  await adminSawLocation;
++
++  // Administración recibe el perfil, pero nunca el hash de contraseña.
++  assert.equal(adminUpdate.passwordHash, undefined);
++  assert.equal(adminUpdate.email, 'movil@58express.com');
++
++  for (const leak of await Promise.all(passengerLeaks)) {
++    assert.deepEqual(leak, [], 'Un pasajero sin viaje activo no debe recibir datos de la flota');
++  }
++  for (const leak of await Promise.all(watcherLeaks)) {
++    assert.deepEqual(leak, [], 'Un conductor no debe recibir datos de otros conductores');
++  }
++});
+-- 
+2.54.0.windows.1
+
+
+From 53bf3de1a30d09fb5156480060f51b83c7049ca8 Mon Sep 17 00:00:00 2001
+From: jordanrb188 <jordaneeuu18@gmail.com>
+Date: Tue, 11 Aug 2026 03:48:59 -0400
+Subject: [PATCH 2/2] fix: harden ride acceptance and canonicalise trip
+ broadcasts
+
+Require an active dispatch session whose current driver matches the
+signed session before accepting a ride, and verify the trip exists and
+is still SEARCHING before touching the lock, timers or session. The
+transition is guarded and the lock reverted on failure, so a hostile
+event can no longer assign a ride that was never offered.
+
+Wrap socket handlers so a non-object payload is normalised and any
+throw stays contained. A literal null bypassed the `= {}` default, so
+destructuring threw synchronously and killed the whole process: any
+authenticated client could stop the server with one malformed event.
+
+Stop creating trips from an inbound rideRequested event. POST
+/api/trips/create is now the only path, and passengers emitting the
+event get rideRequestFailed with USE_REST_API. The outbound offer to
+the selected driver keeps the same name and behaviour.
+
+Build tripStatusUpdated payloads on the server from the persisted trip
+instead of rebroadcasting the driver's object, so injected fields never
+reach passengers or administration, and send the driver only as a
+summary without email, cedula, documents or wallet balance.
+
+The dispatch integration test now creates its trip over REST, since the
+socket path it previously used no longer creates trips. Every assertion
+in that test is unchanged.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ server/index.js                     | 229 +++++++++------
+ server/test/dispatch.test.js        |  19 +-
+ server/test/socketHardening.test.js | 432 ++++++++++++++++++++++++++++
+ 3 files changed, 579 insertions(+), 101 deletions(-)
+ create mode 100644 server/test/socketHardening.test.js
+
+diff --git a/server/index.js b/server/index.js
+index 95ffeea..ca893fb 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -223,6 +223,26 @@ function publicUser(user) {
+   return safeUser;
+ }
+ 
++// Representación mínima del conductor para el pasajero: solo lo que la tarjeta
++// de viaje necesita. Deja fuera correo, cédula, documentos, saldo y ubicación.
++function driverPublicSummary(driver) {
++  if (!driver) return null;
++  return {
++    id: driver.id,
++    firstName: driver.firstName || '',
++    lastName: driver.lastName || '',
++    phone: driver.phone || '',
++    photoUrl: driver.photoUrl || null,
++    rating: Number(driver.rating || 0),
++    totalTrips: Number(driver.totalTrips || 0),
++    vehicleType: driver.vehicleType || 'MOTO',
++    vehicleBrand: driver.vehicleBrand || '',
++    vehicleModel: driver.vehicleModel || '',
++    vehiclePlate: driver.vehiclePlate || '',
++    vehicleColor: driver.vehicleColor || ''
++  };
++}
++
+ function signToken(user) {
+   return jwt.sign({ sub: user.id, role: user.role }, jwtSecret, { expiresIn: '7d' });
+ }
+@@ -1203,6 +1223,20 @@ io.on('connection', (socket) => {
+   socket.join(`${socket.data.auth.role}s`);
+   socket.join(`user:${socket.data.auth.userId}`);
+ 
++  // Registra un handler de evento a prueba de payloads hostiles. Un valor por
++  // defecto (`data = {}`) no cubre un `null` explícito, así que desestructurar
++  // lanzaba y, al ser síncrono, tumbaba el proceso entero. Aquí el payload se
++  // normaliza a objeto y cualquier excepción queda contenida en el socket.
++  const on = (event, handler) => socket.on(event, payload => {
++    const data = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
++    try {
++      handler(data);
++    } catch (error) {
++      console.error(`[+58express Socket.IO] Error no controlado en ${event}:`, error?.message);
++      socket.emit('socket:error', { event, error: 'EVENT_FAILED' });
++    }
++  });
++
+   socket.on('join:room', (room) => {
+     const allowedRooms = [`${socket.data.auth.role}s`, `user:${socket.data.auth.userId}`];
+     if (!allowedRooms.includes(room)) return;
+@@ -1210,7 +1244,7 @@ io.on('connection', (socket) => {
+     console.log(`[+58express Socket.IO] Socket ${socket.id} joined room: ${room}`);
+   });
+ 
+-  socket.on('driver:connect', (data = {}) => {
++  on('driver:connect', (data = {}) => {
+     if (!allowSocketRole(socket, 'driver')) return;
+     socket.join('drivers');
+     // Nunca se resuelve el conductor por el payload: solo por la sesión firmada.
+@@ -1252,10 +1286,10 @@ io.on('connection', (socket) => {
+     emitDriverLocation(driverId, { ...driver.location });
+   };
+ 
+-  socket.on('driver:location', handleDriverLocation);
+-  socket.on('driver:location_update', handleDriverLocation);
++  on('driver:location', handleDriverLocation);
++  on('driver:location_update', handleDriverLocation);
+ 
+-  socket.on('passenger:location_update', (data = {}) => {
++  on('passenger:location_update', (data = {}) => {
+     if (!allowSocketRole(socket, 'passenger')) return;
+     const passengerId = socket.data.auth.userId;
+     const trip = database.trips.findLast(item =>
+@@ -1289,97 +1323,92 @@ io.on('connection', (socket) => {
+     emitDriverPresence(driver);
+   };
+ 
+-  socket.on('driver:status', handleDriverStatus);
+-  socket.on('driver:status_change', handleDriverStatus);
++  on('driver:status', handleDriverStatus);
++  on('driver:status_change', handleDriverStatus);
+ 
+   // Passenger Ride Request Event
+-  socket.on('rideRequested', (tripData) => {
++  on('rideRequested', (tripData) => {
+     if (!allowSocketRole(socket, 'passenger')) return;
+-    const pickup = normalizeLocation(tripData?.pickup);
+-    const destination = normalizeLocation(tripData?.destination);
+-    if (!pickup || !destination) {
+-      socket.emit('rideRequestFailed', { tripId: tripData?.id, reason: 'VALID_GPS_COORDINATES_REQUIRED' });
+-      return;
+-    }
+-    tripData.pickup = pickup;
+-    tripData.destination = destination;
+-    tripData.passengerId = socket.data.auth.userId;
+-    try {
+-      ensureWalletCanCoverTrip(tripData, database.users.find(user => user.id === socket.data.auth.userId));
+-    } catch (error) {
+-      socket.emit('rideRequestFailed', { tripId: tripData?.id, reason: error.code, balance: error.balance, required: error.required });
+-      return;
+-    }
+-    console.log(`[+58express Socket.IO] Passenger requested ride [${tripData.id}]`);
+-    const existing = database.trips.find(t => t.id === tripData.id);
+-    const trip = existing || {
+-      ...tripData,
+-      id: tripData.id || 'trip_' + Date.now(),
+-      status: 'SEARCHING',
+-      createdAt: tripData.createdAt || new Date().toISOString()
+-    };
+-    if (!existing) {
+-      database.trips.push(trip);
+-      persistDatabase();
+-    }
+-    dispatchTripToDrivers(trip);
++    // `rideRequested` entrante ya no crea, modifica ni redespacha viajes: la
++    // única vía es POST /api/trips/create, que valida tarifa, saldo y GPS y
++    // persiste en SQLite antes de despachar. El evento saliente del mismo
++    // nombre (oferta al conductor) no se ve afectado.
++    socket.emit('rideRequestFailed', {
++      tripId: typeof tripData?.id === 'string' ? tripData.id : null,
++      reason: 'USE_REST_API'
++    });
+   });
+ 
+   // Driver Atomic Ride Acceptance Event
+-  socket.on('rideAccepted', (data) => {
++  on('rideAccepted', (data = {}) => {
+     if (!allowSocketRole(socket, 'driver')) return;
+-    const { tripId } = data;
+-    const authenticatedDriver = database.users.find(user =>
+-      user.id === socket.data.auth.userId && user.role === 'driver'
+-    );
+-    if (!authenticatedDriver?.isVerified) {
+-      socket.emit('rideAcceptanceFailed', { tripId, reason: 'DRIVER_NOT_APPROVED' });
+-      return;
++    // Del cliente solo se acepta el identificador del viaje.
++    const tripId = typeof data.tripId === 'string' ? data.tripId : null;
++    const driverId = socket.data.auth.userId;
++    // Todo rechazo sale por aquí sin haber tocado viaje, conductor, cerrojo,
++    // sesión ni temporizador.
++    const reject = reason => socket.emit('rideAcceptanceFailed', { tripId, reason });
++
++    if (!tripId) return reject('INVALID_TRIP_ID');
++    const authenticatedDriver = database.users.find(user => user.id === driverId && user.role === 'driver');
++    if (!authenticatedDriver?.isVerified || authenticatedDriver.status === 'SUSPENDED') {
++      return reject('DRIVER_NOT_APPROVED');
+     }
+-    const driver = publicUser(authenticatedDriver);
++    // Sin sesión de despacho no hay oferta que aceptar: conocer el ID del viaje
++    // no basta.
+     const dispatchSession = dispatchSessions.get(tripId);
+-    if (dispatchSession && dispatchSession.currentDriverId !== driver.id) {
+-      socket.emit('rideAcceptanceFailed', { tripId, reason: 'NOT_CURRENT_OFFER' });
+-      return;
+-    }
++    if (!dispatchSession) return reject('NO_ACTIVE_OFFER');
++    if (dispatchSession.currentDriverId !== driverId) return reject('NOT_CURRENT_OFFER');
+ 
+-    // Atomic Lock Check
+-    if (tripLocks.get(tripId)) {
+-      socket.emit('rideAcceptanceFailed', { tripId, reason: 'ALREADY_ACCEPTED' });
+-      return;
++    const trip = database.trips.find(item => item.id === tripId);
++    if (!trip) return reject('TRIP_NOT_FOUND');
++    if (normalizeTripStatus(trip.status) !== TRIP_STATUS.SEARCHING) {
++      return reject('TRIP_NOT_SEARCHING');
++    }
++    if (tripLocks.get(tripId)) return reject('ALREADY_ACCEPTED');
++    if (!canTransitionTrip(trip.status, TRIP_STATUS.DRIVER_ASSIGNED)) {
++      return reject('INVALID_TRIP_TRANSITION');
+     }
+ 
++    // A partir de aquí se muta estado. La transición va protegida para que un
++    // evento malicioso no pueda derribar el proceso, y el cerrojo se revierte
++    // si algo falla.
+     tripLocks.set(tripId, true);
++    try {
++      transitionTrip(trip, TRIP_STATUS.DRIVER_ASSIGNED, { actorId: driverId, actorRole: 'driver' });
++    } catch (error) {
++      tripLocks.delete(tripId);
++      return reject(error.code || 'INVALID_TRIP_TRANSITION');
++    }
++
+     if (dispatchTimers.has(tripId)) {
+       clearTimeout(dispatchTimers.get(tripId));
+       dispatchTimers.delete(tripId);
+     }
+     dispatchSessions.delete(tripId);
+ 
+-    // Update trip and driver status
+-    const trip = database.trips.find(t => t.id === tripId);
+-    if (trip) {
+-      transitionTrip(trip, TRIP_STATUS.DRIVER_ASSIGNED, { actorId: driver.id, actorRole: 'driver' });
+-      trip.driver = driver;
+-      trip.driverId = driver?.id;
+-      persistDatabase();
+-    }
+-
+-    const dUser = database.users.find(u => u.id === driver.id);
+-    if (dUser) dUser.status = 'BUSY';
++    const driver = driverPublicSummary(authenticatedDriver);
++    trip.driver = driver;
++    trip.driverId = driverId;
++    // El conductor pasa a BUSY solo con la asignación ya consolidada.
++    authenticatedDriver.status = DRIVER_STATUS.BUSY;
++    persistDatabase();
+ 
+     console.log(`[+58express Socket.IO] Atomic lock success! Ride [${tripId}] assigned to ${driver.firstName}`);
+ 
+-    // Solo los participantes del viaje y administración: el perfil del conductor
+-    // (correo, teléfono, cédula, documentos) no se difunde al resto de la flota.
+-    io.to(`user:${trip?.passengerId}`).to(`user:${driver.id}`).to('admins').emit('tripStatusUpdated', {
+-      tripId,
++    // Solo los participantes del viaje y administración.
++    io.to(`user:${trip.passengerId}`).to(`user:${driverId}`).to('admins').emit('tripStatusUpdated', {
++      tripId: trip.id,
++      // `EN_ROUTE` es el alias que consumen las pantallas actuales; el estado
++      // realmente persistido viaja en canonicalStatus.
+       status: 'EN_ROUTE',
++      canonicalStatus: trip.status,
++      updatedAt: trip.updatedAt,
+       driver
+     });
+   });
+ 
+-  socket.on('rideRejected', ({ tripId } = {}) => {
++  on('rideRejected', ({ tripId } = {}) => {
+     if (!allowSocketRole(socket, 'driver')) return;
+     const session = dispatchSessions.get(tripId);
+     if (!session || session.currentDriverId !== socket.data.auth.userId) return;
+@@ -1392,43 +1421,55 @@ io.on('connection', (socket) => {
+   });
+ 
+   // Trip Status Transition Event ('ARRIVED', 'IN_PROGRESS', 'COMPLETED')
+-  socket.on('tripStatusUpdated', (data) => {
++  on('tripStatusUpdated', (data = {}) => {
+     if (!allowSocketRole(socket, 'driver')) return;
+-    const { tripId, status, driver } = data;
+-    const trip = database.trips.find(t => t.id === tripId);
++    // Del payload del conductor solo se leen estos dos campos; cualquier otra
++    // cosa que venga (driver, roles, HTML, campos extra) se descarta.
++    const tripId = typeof data.tripId === 'string' ? data.tripId : null;
++    const status = typeof data.status === 'string' ? data.status : null;
++    const trip = tripId ? database.trips.find(t => t.id === tripId) : null;
+     if (!trip || trip.driverId !== socket.data.auth.userId) {
+       socket.emit('authorization:error', { error: 'FORBIDDEN', tripId });
+       return;
+     }
+-    if (trip) {
+-      if (status === TRIP_STATUS.COMPLETED) {
+-        try {
+-          ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
+-        } catch (error) {
+-          socket.emit('tripStatusRejected', { tripId, status, error: error.code, balance: error.balance, required: error.required });
+-          return;
+-        }
+-      }
++    if (!status) {
++      socket.emit('tripStatusRejected', { tripId, status: null, error: 'INVALID_TRIP_STATUS' });
++      return;
++    }
++    if (status === TRIP_STATUS.COMPLETED) {
+       try {
+-        transitionTrip(trip, status, { actorId: socket.data.auth.userId, actorRole: 'driver' });
++        ensureWalletCanCoverTrip(trip, database.users.find(user => user.id === trip.passengerId));
+       } catch (error) {
+-        socket.emit('tripStatusRejected', { tripId, status, error: error.code });
++        socket.emit('tripStatusRejected', { tripId, status, error: error.code, balance: error.balance, required: error.required });
+         return;
+       }
+-      if (status === 'COMPLETED' || status === 'CANCELLED') {
+-        const assignedDriver = database.users.find(user => user.id === trip.driverId);
+-        if (assignedDriver) assignedDriver.status = 'AVAILABLE';
+-        tripLocks.delete(tripId);
+-      }
+-      const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
+-      persistDatabase();
+-      emitCompletedTripWalletUpdates(trip, settlement);
+     }
+-    io.to(`user:${trip?.passengerId}`).to(`user:${socket.data.auth.userId}`).to('admins').emit('tripStatusUpdated', data);
++    try {
++      transitionTrip(trip, status, { actorId: socket.data.auth.userId, actorRole: 'driver' });
++    } catch (error) {
++      socket.emit('tripStatusRejected', { tripId, status, error: error.code || 'INVALID_TRIP_TRANSITION' });
++      return;
++    }
++    if ([TRIP_STATUS.COMPLETED, TRIP_STATUS.CANCELLED].includes(trip.status)) {
++      const assignedDriver = database.users.find(user => user.id === trip.driverId);
++      if (assignedDriver) assignedDriver.status = DRIVER_STATUS.AVAILABLE;
++      tripLocks.delete(tripId);
++    }
++    const settlement = trip.status === TRIP_STATUS.COMPLETED ? settleCompletedTrip(trip) : null;
++    persistDatabase();
++    emitCompletedTripWalletUpdates(trip, settlement);
++    // Payload construido por el servidor a partir del viaje ya persistido:
++    // nunca se retransmite el objeto recibido del conductor.
++    io.to(`user:${trip.passengerId}`).to(`user:${socket.data.auth.userId}`).to('admins').emit('tripStatusUpdated', {
++      tripId: trip.id,
++      status: trip.status,
++      canonicalStatus: trip.status,
++      updatedAt: trip.updatedAt
++    });
+   });
+ 
+   // Passenger Ride Cancelled Event
+-  socket.on('rideCancelled', (data = {}) => {
++  on('rideCancelled', (data = {}) => {
+     if (!allowSocketRole(socket, 'passenger')) return;
+     const { tripId } = data;
+     const passengerId = socket.data.auth.userId;
+@@ -1478,7 +1519,7 @@ io.on('connection', (socket) => {
+     if (assignedDriver) emitDriverPresence(assignedDriver, { includeActivePassenger: false });
+   });
+ 
+-  socket.on('chat:send_message', (data = {}) => {
++  on('chat:send_message', (data = {}) => {
+     const trip = database.trips.find(item => item.id === data.tripId);
+     const { userId, role } = socket.data.auth;
+     if (!trip || !userCanAccessTrip(userId, role, trip) || role === 'admin') {
+@@ -1504,7 +1545,7 @@ io.on('connection', (socket) => {
+     io.to(`user:${trip.passengerId}`).to(`user:${trip.driverId}`).emit('chat:message', message);
+   });
+ 
+-  socket.on('tripRated', (data = {}) => {
++  on('tripRated', (data = {}) => {
+     const trip = database.trips.find(item => item.id === data.tripId);
+     const { userId, role } = socket.data.auth;
+     if (!trip || !userCanAccessTrip(userId, role, trip) || !['driver', 'passenger'].includes(role)) return;
+diff --git a/server/test/dispatch.test.js b/server/test/dispatch.test.js
+index 4f1b0c7..b3820a3 100644
+--- a/server/test/dispatch.test.js
++++ b/server/test/dispatch.test.js
+@@ -117,14 +117,19 @@ test('pasajero, conductor y administración comparten el ciclo de una carrera',
+     });
+   });
+ 
+-  passenger.emit('rideRequested', {
+-    id: 'test_trip',
+-    passengerId,
+-    pickup: { lat: 10.6427, lng: -71.6125 },
+-    destination: { lat: 10.65, lng: -71.60 },
+-    fareEUR: 4.5,
+-    paymentMethod: 'wallet'
++  // El viaje se crea por REST: `rideRequested` entrante ya no crea viajes.
++  const tripCreation = await fetch(`${url}/api/trips/create`, {
++    method: 'POST',
++    headers: { 'content-type': 'application/json', authorization: `Bearer ${passengerToken}` },
++    body: JSON.stringify({
++      id: 'test_trip',
++      pickup: { lat: 10.6427, lng: -71.6125 },
++      destination: { lat: 10.65, lng: -71.60 },
++      fareEUR: 4.5,
++      paymentMethod: 'wallet'
++    })
+   });
++  assert.equal(tripCreation.status, 200);
+ 
+   const update = await updatePromise;
+   assert.equal(adminSawRequest, true);
+diff --git a/server/test/socketHardening.test.js b/server/test/socketHardening.test.js
+new file mode 100644
+index 0000000..66f612e
+--- /dev/null
++++ b/server/test/socketHardening.test.js
+@@ -0,0 +1,432 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { spawn } from 'node:child_process';
++import { mkdtemp } from 'node:fs/promises';
++import { tmpdir } from 'node:os';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { io } from 'socket.io-client';
++
++const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
++
++async function startServer(t) {
++  const tempDir = await mkdtemp(path.join(tmpdir(), 'plus58express-hardening-'));
++  const port = 5500 + Math.floor(Math.random() * 400);
++  const child = spawn(process.execPath, ['index.js'], {
++    cwd: serverDir,
++    env: {
++      ...process.env,
++      PORT: String(port),
++      DATA_FILE: path.join(tempDir, 'database.json'),
++      JWT_SECRET: 'hardening-test-secret'
++    },
++    stdio: ['ignore', 'pipe', 'pipe']
++  });
++  t.after(() => child.kill());
++  await new Promise((resolve, reject) => {
++    const timeout = setTimeout(() => reject(new Error('El servidor no inició')), 10000);
++    child.stdout.on('data', chunk => {
++      if (chunk.toString().includes('Running')) {
++        clearTimeout(timeout);
++        resolve();
++      }
++    });
++    child.once('exit', code => reject(new Error(`Servidor finalizó con código ${code}`)));
++  });
++  return { url: `http://127.0.0.1:${port}`, child };
++}
++
++const asJson = (url, token, options = {}) => fetch(url, {
++  ...options,
++  headers: {
++    'content-type': 'application/json',
++    ...(token ? { authorization: `Bearer ${token}` } : {}),
++    ...(options.headers || {})
++  }
++});
++
++async function login(url, identifier, password, role) {
++  const response = await asJson(`${url}/api/auth/login`, null, {
++    method: 'POST',
++    body: JSON.stringify({ identifier, password, role })
++  });
++  assert.equal(response.status, 200, `Login fallido para ${identifier}`);
++  return (await response.json()).token;
++}
++
++async function registerPassenger(url, { email, phone, firstName }) {
++  const response = await asJson(`${url}/api/auth/register`, null, {
++    method: 'POST',
++    body: JSON.stringify({ email, phone, password: 'password123', role: 'passenger', firstName, lastName: 'Prueba' })
++  });
++  assert.equal(response.status, 201);
++  return response.json();
++}
++
++async function createDriver(url, adminToken, { email, phone, firstName, plate }) {
++  const response = await asJson(`${url}/api/admin/drivers`, adminToken, {
++    method: 'POST',
++    body: JSON.stringify({ email, phone, firstName, lastName: 'Conductor', vehicleBrand: 'Bera', vehicleModel: 'BR200', vehiclePlate: plate })
++  });
++  assert.equal(response.status, 201);
++  const account = await response.json();
++  return { ...account, token: await login(url, email, account.temporaryPassword, 'driver') };
++}
++
++function waitFor(socket, event, { predicate = () => true, timeoutMs = 5000, label = event } = {}) {
++  return new Promise((resolve, reject) => {
++    const timer = setTimeout(() => {
++      socket.off(event, handler);
++      reject(new Error(`No llegó el evento ${label}`));
++    }, timeoutMs);
++    function handler(payload) {
++      if (!predicate(payload)) return;
++      clearTimeout(timer);
++      socket.off(event, handler);
++      resolve(payload);
++    }
++    socket.on(event, handler);
++  });
++}
++
++function collect(socket, event) {
++  const received = [];
++  socket.on(event, payload => received.push(payload));
++  return received;
++}
++
++async function connectDriver(url, token, { lat, lng }) {
++  const socket = io(url, { auth: { token } });
++  await waitFor(socket, 'connect', { label: 'connect' });
++  socket.emit('driver:connect', { status: 'AVAILABLE' });
++  await waitFor(socket, 'driver:connected', { label: 'driver:connected' });
++  socket.emit('driver:location', { latitude: lat, longitude: lng, heading: 0 });
++  await new Promise(resolve => setTimeout(resolve, 150));
++  return socket;
++}
++
++const findUser = (users, id) => users.find(user => user.id === id);
++const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
++
++const PICKUP = { lat: 10.6427, lng: -71.6125 };
++const DESTINATION = { lat: 10.65, lng: -71.60 };
++
++async function createTripByRest(url, token, id, extra = {}) {
++  const response = await asJson(`${url}/api/trips/create`, token, {
++    method: 'POST',
++    body: JSON.stringify({ id, pickup: PICKUP, destination: DESTINATION, fareUSD: 5, paymentMethod: 'efectivo', rideType: 'MOTO', ...extra })
++  });
++  assert.equal(response.status, 200, `No se pudo crear el viaje ${id}`);
++  return (await response.json()).trip;
++}
++
++test('un conductor que no recibió la oferta no puede aceptar la carrera', async (t) => {
++  const { url } = await startServer(t);
++  const adminToken = await login(url, 'admin@58express.com', 'admin', 'admin');
++  const passenger = await registerPassenger(url, { email: 'oferta@58express.com', phone: '+584120011111', firstName: 'Ana' });
++  // El conductor pegado al punto de recogida recibe la oferta primero.
++  const offered = await createDriver(url, adminToken, { email: 'ofertado@58express.com', phone: '+584140011111', firstName: 'Ofertado', plate: 'OFR001' });
++  const outsider = await createDriver(url, adminToken, { email: 'ajeno@58express.com', phone: '+584140022222', firstName: 'Ajeno', plate: 'OUT001' });
++
++  const offeredSocket = await connectDriver(url, offered.token, { lat: 10.6428, lng: -71.6126 });
++  const outsiderSocket = await connectDriver(url, outsider.token, { lat: 10.7000, lng: -71.6800 });
++  const passengerSocket = io(url, { auth: { token: passenger.token } });
++  t.after(() => [offeredSocket, outsiderSocket, passengerSocket].forEach(socket => socket.close()));
++  await waitFor(passengerSocket, 'connect', { label: 'connect pasajero' });
++
++  const offerReceived = waitFor(offeredSocket, 'rideRequested', {
++    predicate: payload => payload.id === 'trip_oferta',
++    label: 'oferta al conductor cercano'
++  });
++  const outsiderOffers = collect(outsiderSocket, 'rideRequested');
++  await createTripByRest(url, passenger.token, 'trip_oferta');
++  const offer = await offerReceived;
++  assert.equal(offer.offeredDriverId, offered.user.id);
++  assert.deepEqual(outsiderOffers, [], 'El conductor lejano no debía recibir la oferta todavía');
++
++  // El conductor ajeno conoce el ID e intenta quedarse la carrera.
++  const rejection = waitFor(outsiderSocket, 'rideAcceptanceFailed', {
++    predicate: payload => payload.tripId === 'trip_oferta',
++    label: 'rechazo al conductor no ofrecido'
++  });
++  outsiderSocket.emit('rideAccepted', { tripId: 'trip_oferta', driver: { id: offered.user.id } });
++  assert.equal((await rejection).reason, 'NOT_CURRENT_OFFER');
++  await pause(200);
++
++  // Un intento rechazado no deja al conductor en BUSY ni toca el viaje.
++  const usersAfterRejection = await (await asJson(`${url}/api/users`, adminToken)).json();
++  assert.equal(findUser(usersAfterRejection, outsider.user.id).status, 'AVAILABLE');
++  assert.equal(findUser(usersAfterRejection, offered.user.id).status, 'AVAILABLE');
++  const tripsAfterRejection = await (await asJson(`${url}/api/trips`, adminToken)).json();
++  const pending = tripsAfterRejection.find(trip => trip.id === 'trip_oferta');
++  assert.equal(pending.status, 'SEARCHING');
++  assert.equal(pending.driverId, null);
++
++  // El conductor ofrecido sí puede aceptar, y solo él queda en BUSY.
++  const assignment = waitFor(passengerSocket, 'tripStatusUpdated', {
++    predicate: payload => payload.tripId === 'trip_oferta',
++    label: 'asignación al conductor ofrecido'
++  });
++  offeredSocket.emit('rideAccepted', { tripId: 'trip_oferta' });
++  const assigned = await assignment;
++  await pause(200);
++
++  const usersAfterAssignment = await (await asJson(`${url}/api/users`, adminToken)).json();
++  assert.equal(findUser(usersAfterAssignment, offered.user.id).status, 'BUSY');
++  assert.equal(findUser(usersAfterAssignment, outsider.user.id).status, 'AVAILABLE');
++
++  // El estado difundido coincide con el estado persistido.
++  const persisted = await (await asJson(`${url}/api/trips`, adminToken)).json();
++  const persistedTrip = persisted.find(trip => trip.id === 'trip_oferta');
++  assert.equal(assigned.canonicalStatus, persistedTrip.status);
++  assert.equal(persistedTrip.status, 'DRIVER_ASSIGNED');
++  assert.equal(persistedTrip.driverId, offered.user.id);
++
++  // El perfil que viaja al pasajero es el resumen seguro, sin datos privados.
++  assert.equal(assigned.driver.id, offered.user.id);
++  assert.equal(assigned.driver.email, undefined);
++  assert.equal(assigned.driver.passwordHash, undefined);
++  assert.equal(assigned.driver.cedula, undefined);
++  assert.equal(assigned.driver.documents, undefined);
++  assert.equal(assigned.driver.walletBalance, undefined);
++
++  // Y una segunda aceptación sobre el mismo viaje ya no procede.
++  const secondAttempt = waitFor(offeredSocket, 'rideAcceptanceFailed', {
++    predicate: payload => payload.tripId === 'trip_oferta',
++    label: 'rechazo de doble aceptación'
++  });
++  offeredSocket.emit('rideAccepted', { tripId: 'trip_oferta' });
++  assert.equal((await secondAttempt).reason, 'NO_ACTIVE_OFFER');
++});
++
++test('los eventos malformados o sobre viajes cerrados no detienen el servidor', async (t) => {
++  const { url, child } = await startServer(t);
++  const adminToken = await login(url, 'admin@58express.com', 'admin', 'admin');
++  const passenger = await registerPassenger(url, { email: 'basura@58express.com', phone: '+584120033333', firstName: 'Ana' });
++  const driver = await createDriver(url, adminToken, { email: 'robusto@58express.com', phone: '+584140033333', firstName: 'Robusto', plate: 'RBS001' });
++
++  const driverSocket = await connectDriver(url, driver.token, { lat: 10.6428, lng: -71.6126 });
++  const passengerSocket = io(url, { auth: { token: passenger.token } });
++  t.after(() => [driverSocket, passengerSocket].forEach(socket => socket.close()));
++  await waitFor(passengerSocket, 'connect', { label: 'connect pasajero' });
++
++  // Un viaje completado de verdad, para atacarlo después de cerrado.
++  const offerReceived = waitFor(driverSocket, 'rideRequested', { predicate: payload => payload.id === 'trip_cerrado' });
++  await createTripByRest(url, passenger.token, 'trip_cerrado');
++  await offerReceived;
++  const assigned = waitFor(passengerSocket, 'tripStatusUpdated', { predicate: payload => payload.tripId === 'trip_cerrado' });
++  driverSocket.emit('rideAccepted', { tripId: 'trip_cerrado' });
++  await assigned;
++  for (const status of ['ARRIVED', 'IN_PROGRESS', 'COMPLETED']) {
++    const step = waitFor(passengerSocket, 'tripStatusUpdated', {
++      predicate: payload => payload.tripId === 'trip_cerrado' && payload.status === status
++    });
++    driverSocket.emit('tripStatusUpdated', { tripId: 'trip_cerrado', status });
++    await step;
++  }
++
++  const hostileAcceptances = [
++    { tripId: 'no_existe_en_absoluto' },
++    { tripId: 'trip_cerrado' },
++    { tripId: '' },
++    { tripId: null },
++    { tripId: 12345 },
++    { tripId: { $ne: null } },
++    { tripId: ['trip_cerrado'] },
++    { tripId: '../../etc/passwd' },
++    { tripId: "'; DROP TABLE trips; --" },
++    {},
++    null,
++    'texto plano',
++    42
++  ];
++  for (const payload of hostileAcceptances) {
++    driverSocket.emit('rideAccepted', payload);
++    await pause(40);
++  }
++
++  const hostileTransitions = [
++    { tripId: 'trip_cerrado', status: 'COMPLETED' },
++    { tripId: 'trip_cerrado', status: 'SEARCHING' },
++    { tripId: 'trip_cerrado', status: null },
++    { tripId: 'trip_cerrado', status: { evil: true } },
++    { tripId: 'no_existe', status: 'COMPLETED' },
++    { tripId: null, status: null },
++    {},
++    null,
++    'texto plano'
++  ];
++  for (const payload of hostileTransitions) {
++    driverSocket.emit('tripStatusUpdated', payload);
++    await pause(40);
++  }
++
++  const hostileCancellations = [{ tripId: 'trip_cerrado' }, { tripId: null }, {}, null, 7];
++  for (const payload of hostileCancellations) {
++    passengerSocket.emit('rideCancelled', payload);
++    await pause(40);
++  }
++
++  await pause(300);
++
++  // El proceso sigue vivo y sirviendo peticiones.
++  assert.equal(child.exitCode, null, 'El proceso del servidor murió ante un evento malicioso');
++  assert.equal(child.signalCode, null, 'El proceso del servidor recibió una señal de terminación');
++  const health = await fetch(`${url}/api/health`);
++  assert.equal(health.status, 200);
++  assert.equal((await health.json()).status, 'ok');
++
++  // El viaje cerrado quedó exactamente como estaba.
++  const trips = await (await asJson(`${url}/api/trips`, adminToken)).json();
++  const closed = trips.find(trip => trip.id === 'trip_cerrado');
++  assert.equal(closed.status, 'COMPLETED');
++  assert.equal(closed.driverId, driver.user.id);
++
++  // Y el conductor no quedó bloqueado en BUSY por los intentos fallidos.
++  const users = await (await asJson(`${url}/api/users`, adminToken)).json();
++  assert.equal(findUser(users, driver.user.id).status, 'AVAILABLE');
++});
++
++test('un pasajero no puede crear ni redespachar viajes emitiendo rideRequested', async (t) => {
++  const { url } = await startServer(t);
++  const adminToken = await login(url, 'admin@58express.com', 'admin', 'admin');
++  const passenger = await registerPassenger(url, { email: 'emisor@58express.com', phone: '+584120044444', firstName: 'Ana' });
++  const driver = await createDriver(url, adminToken, { email: 'receptor@58express.com', phone: '+584140044444', firstName: 'Receptor', plate: 'RCP001' });
++
++  const driverSocket = await connectDriver(url, driver.token, { lat: 10.6428, lng: -71.6126 });
++  const passengerSocket = io(url, { auth: { token: passenger.token } });
++  t.after(() => [driverSocket, passengerSocket].forEach(socket => socket.close()));
++  await waitFor(passengerSocket, 'connect', { label: 'connect pasajero' });
++
++  const driverOffers = collect(driverSocket, 'rideRequested');
++
++  // Intento de crear un viaje directamente por socket.
++  const failure = waitFor(passengerSocket, 'rideRequestFailed', {
++    predicate: payload => payload.tripId === 'trip_fantasma',
++    label: 'rechazo de creación por socket'
++  });
++  passengerSocket.emit('rideRequested', {
++    id: 'trip_fantasma',
++    pickup: PICKUP,
++    destination: DESTINATION,
++    fareUSD: 5,
++    paymentMethod: 'efectivo'
++  });
++  assert.equal((await failure).reason, 'USE_REST_API');
++  await pause(300);
++
++  // No se creó nada y ningún conductor fue molestado.
++  const tripsAfterGhost = await (await asJson(`${url}/api/trips`, adminToken)).json();
++  assert.equal(tripsAfterGhost.find(trip => trip.id === 'trip_fantasma'), undefined);
++  assert.deepEqual(driverOffers, [], 'No debió despacharse ninguna oferta');
++
++  // Ahora un viaje legítimo por REST, y un intento de redespacharlo por socket.
++  const offerReceived = waitFor(driverSocket, 'rideRequested', { predicate: payload => payload.id === 'trip_legitimo' });
++  await createTripByRest(url, passenger.token, 'trip_legitimo');
++  await offerReceived;
++  const offersBefore = driverOffers.length;
++  const snapshotBefore = (await (await asJson(`${url}/api/trips`, adminToken)).json()).find(trip => trip.id === 'trip_legitimo');
++
++  const redispatchFailure = waitFor(passengerSocket, 'rideRequestFailed', {
++    predicate: payload => payload.tripId === 'trip_legitimo',
++    label: 'rechazo de redespacho'
++  });
++  passengerSocket.emit('rideRequested', {
++    id: 'trip_legitimo',
++    pickup: { lat: 11.0, lng: -72.0 },
++    destination: { lat: 11.1, lng: -72.1 },
++    fareUSD: 999,
++    paymentMethod: 'wallet',
++    status: 'COMPLETED'
++  });
++  assert.equal((await redispatchFailure).reason, 'USE_REST_API');
++  await pause(400);
++
++  // El viaje no fue modificado ni redespachado.
++  const snapshotAfter = (await (await asJson(`${url}/api/trips`, adminToken)).json()).find(trip => trip.id === 'trip_legitimo');
++  assert.equal(driverOffers.length, offersBefore, 'No debió emitirse una nueva oferta');
++  assert.equal(snapshotAfter.status, snapshotBefore.status);
++  assert.equal(snapshotAfter.fareUSD, snapshotBefore.fareUSD);
++  assert.deepEqual(snapshotAfter.pickup, snapshotBefore.pickup);
++  assert.deepEqual(snapshotAfter.destination, snapshotBefore.destination);
++});
++
++test('tripStatusUpdated difunde un payload canónico sin campos del cliente', async (t) => {
++  const { url } = await startServer(t);
++  const adminToken = await login(url, 'admin@58express.com', 'admin', 'admin');
++  const passenger = await registerPassenger(url, { email: 'canonico@58express.com', phone: '+584120055555', firstName: 'Ana' });
++  const driver = await createDriver(url, adminToken, { email: 'emisor.estado@58express.com', phone: '+584140055555', firstName: 'Emisor', plate: 'CAN001' });
++
++  const driverSocket = await connectDriver(url, driver.token, { lat: 10.6428, lng: -71.6126 });
++  const passengerSocket = io(url, { auth: { token: passenger.token } });
++  const adminSocket = io(url, { auth: { token: adminToken } });
++  t.after(() => [driverSocket, passengerSocket, adminSocket].forEach(socket => socket.close()));
++  await Promise.all([
++    waitFor(passengerSocket, 'connect', { label: 'connect pasajero' }),
++    waitFor(adminSocket, 'connect', { label: 'connect admin' })
++  ]);
++
++  const offerReceived = waitFor(driverSocket, 'rideRequested', { predicate: payload => payload.id === 'trip_canonico' });
++  await createTripByRest(url, passenger.token, 'trip_canonico');
++  await offerReceived;
++  const assigned = waitFor(passengerSocket, 'tripStatusUpdated', { predicate: payload => payload.tripId === 'trip_canonico' });
++  driverSocket.emit('rideAccepted', { tripId: 'trip_canonico' });
++  await assigned;
++
++  const passengerUpdate = waitFor(passengerSocket, 'tripStatusUpdated', {
++    predicate: payload => payload.tripId === 'trip_canonico' && payload.status === 'ARRIVED',
++    label: 'estado ARRIVED en el pasajero'
++  });
++  const adminUpdate = waitFor(adminSocket, 'tripStatusUpdated', {
++    predicate: payload => payload.tripId === 'trip_canonico' && payload.status === 'ARRIVED',
++    label: 'estado ARRIVED en administración'
++  });
++
++  // El conductor intenta colar datos suyos y de otros en la difusión.
++  driverSocket.emit('tripStatusUpdated', {
++    tripId: 'trip_canonico',
++    status: 'ARRIVED',
++    driver: { id: 'driver_falso', firstName: 'Suplantado', passwordHash: 'filtrado' },
++    passengerId: 'passenger_falso',
++    role: 'admin',
++    fareUSD: 999,
++    html: '<script>alert(1)</script>',
++    reason: 'NO_DRIVERS_AVAILABLE',
++    extra: { anidado: true }
++  });
++
++  for (const [audiencia, update] of [['pasajero', await passengerUpdate], ['administración', await adminUpdate]]) {
++    assert.deepEqual(
++      Object.keys(update).sort(),
++      ['canonicalStatus', 'status', 'tripId', 'updatedAt'],
++      `El payload difundido a ${audiencia} llevaba campos inesperados`
++    );
++    assert.equal(update.driver, undefined);
++    assert.equal(update.html, undefined);
++    assert.equal(update.role, undefined);
++    assert.equal(update.fareUSD, undefined);
++    assert.equal(update.reason, undefined);
++    assert.equal(update.extra, undefined);
++    assert.equal(update.passengerId, undefined);
++  }
++
++  // El estado difundido es exactamente el que quedó persistido.
++  const update = await passengerUpdate;
++  const trips = await (await asJson(`${url}/api/trips`, adminToken)).json();
++  const persisted = trips.find(trip => trip.id === 'trip_canonico');
++  assert.equal(update.status, persisted.status);
++  assert.equal(update.canonicalStatus, persisted.status);
++  assert.equal(update.updatedAt, persisted.updatedAt);
++  assert.equal(persisted.status, 'ARRIVED');
++  // Los campos que intentó inyectar el conductor no tocaron el viaje.
++  assert.notEqual(persisted.fareUSD, 999);
++  assert.equal(persisted.driverId, driver.user.id);
++
++  // Un estado no permitido desde el estado actual se rechaza sin difundir.
++  const rejected = waitFor(driverSocket, 'tripStatusRejected', {
++    predicate: payload => payload.tripId === 'trip_canonico',
++    label: 'rechazo de transición inválida'
++  });
++  driverSocket.emit('tripStatusUpdated', { tripId: 'trip_canonico', status: 'SEARCHING' });
++  assert.equal((await rejected).error, 'INVALID_TRIP_TRANSITION');
++});
+-- 
+2.54.0.windows.1
+

@@ -1,0 +1,72 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "motoride-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3010",
+        "--strictPort"
+      ],
+      "port": 3010,
+      "autoPort": false
+    },
+    {
+      "name": "visual-backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:/Users/Jordan/AppData/Local/Temp/claude/F--proyectos-app-web-motoRide/e03a80b6-9f92-4d53-930e-e32b0e8a8119/scratchpad/backend-local.mjs"
+      ],
+      "port": 4000,
+      "autoPort": false
+    },
+    {
+      "name": "visual-app",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "F:/proyectos app web/motoRide-harmonize/node_modules/vite/bin/vite.js",
+        "F:/proyectos app web/motoRide-harmonize",
+        "--port",
+        "3000",
+        "--strictPort"
+      ],
+      "port": 3000,
+      "autoPort": false
+    },
+    {
+      "name": "st-backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:/Users/Jordan/AppData/Local/Temp/claude/F--proyectos-app-web-motoRide/e03a80b6-9f92-4d53-930e-e32b0e8a8119/scratchpad/st-backend-local.mjs"
+      ],
+      "port": 4100,
+      "autoPort": false
+    },
+    {
+      "name": "st-web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "F:/proyectos app web/motoRide-current/node_modules/vite/bin/vite.js",
+        "F:/proyectos app web/motoRide-current",
+        "--port",
+        "3020",
+        "--strictPort"
+      ],
+      "port": 3020,
+      "autoPort": false
+    },
+    {
+      "name": "expo-web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:/Users/Jordan/AppData/Local/Temp/claude/F--proyectos-app-web-motoRide/e03a80b6-9f92-4d53-930e-e32b0e8a8119/scratchpad/expo-web.mjs"
+      ],
+      "port": 8081,
+      "autoPort": false
+    }
+  ]
+}
