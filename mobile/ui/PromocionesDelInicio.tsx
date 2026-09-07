@@ -20,10 +20,11 @@
  */
 
 import { useState } from 'react';
-import { Image, type ImageSourcePropType, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, type ImageSourcePropType, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { useTema } from '../theme/ThemeContext';
+import { useEsquema, useTema } from '../theme/ThemeContext';
 import { ARTE_DE_SERVICIO, VEHICULOS } from '../theme/marca';
+import { LIENZO_DE_IMAGEN } from '../theme/primitives';
 import { CabeceraDeSeccion } from './CabeceraDeSeccion';
 import { Icono } from './Icono';
 import { useMovimientoReducido } from './movimiento';
@@ -77,17 +78,9 @@ const ANCHO = 152;
 const ALTO = 190;
 const HUECO = 10;
 /** El velo sobre la foto, en dos capas. Igual de día que de noche. */
-/**
- * El grafito de la tarjeta y el velo sobre la imagen. Son los mismos de día
- * que de noche: debajo hay una ilustración o una foto, no una superficie del
- * tema. El velo de arriba casi no existe; el de abajo cubre la franja del
- * texto y deja el arte a la vista.
- */
-const LIENZO = Object.freeze({
-  fondo: '#15140f',
-  veloAlto: 'rgba(11, 10, 9, 0.06)',
-  veloBajo: 'rgba(11, 10, 9, 0.62)'
-});
+// El grafito y el velo son los de `LIENZO_DE_IMAGEN`: un solo sitio, el
+// mismo que usa el hero, y el que la custodia mide.
+const LIENZO = LIENZO_DE_IMAGEN;
 
 export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, onVerTodas }: {
   readonly promociones?: readonly Promocion[];
@@ -95,12 +88,13 @@ export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, 
   readonly onVerTodas: () => void;
 }) {
   const tema = useTema();
+  const esquema = useEsquema();
   const quieto = useMovimientoReducido();
-  const { width } = useWindowDimensions();
   const [indice, setIndice] = useState(0);
-  // Caben dos y media: el número de puntos es el de «pantallas» de tarjetas.
-  const visibles = Math.max(1, Math.floor((width - tema.ritmo.margenPantalla * 2) / (ANCHO + HUECO)));
-  const paginas = Math.max(1, Math.ceil(promociones.length / visibles));
+  // Un punto por tarjeta, y el índice sale del mismo paso que el snap: antes
+  // los puntos contaban «pantallas» y el desplazamiento nunca llegaba a la
+  // última, así que el segundo punto no se encendía jamás.
+  const paginas = promociones.length;
 
   if (promociones.length === 0) return null;
 
@@ -112,16 +106,20 @@ export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, 
         showsHorizontalScrollIndicator={false}
         snapToInterval={ANCHO + HUECO}
         decelerationRate="fast"
-        onMomentumScrollEnd={e => setIndice(Math.min(
+        onMomentumScrollEnd={e => setIndice(Math.max(0, Math.min(
           paginas - 1,
-          Math.round(e.nativeEvent.contentOffset.x / ((ANCHO + HUECO) * visibles))
-        ))}
+          Math.round(e.nativeEvent.contentOffset.x / (ANCHO + HUECO))
+        )))}
         style={{ marginHorizontal: -tema.ritmo.margenPantalla, marginTop: 12 }}
         contentContainerStyle={{ paddingHorizontal: tema.ritmo.margenPantalla, gap: HUECO }}
       >
         {promociones.map(promo => {
           const fondoEtiqueta = promo.tonoEtiqueta === 'exito' ? tema.color.exito : tema.color.acento;
-          const tintaEtiqueta = promo.tonoEtiqueta === 'exito' ? tema.color.sobreImagen : tema.color.sobreAcento;
+          // El verde de éxito es oscuro de día y claro de noche (ver `esquemas.ts`):
+          // encima va tinta clara o tinta oscura según el esquema. Medido en la
+          // custodia, como el resto.
+          const tintaDeExito = esquema === 'claro' ? tema.color.sobreImagen : tema.color.sobreAcento;
+          const tintaEtiqueta = promo.tonoEtiqueta === 'exito' ? tintaDeExito : tema.color.sobreAcento;
           return (
             <Pressable
               key={promo.id}
@@ -131,7 +129,7 @@ export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, 
               style={({ pressed }) => [
                 estilos.tarjeta,
                 {
-                  borderRadius: 16,
+                  borderRadius: tema.radio.tarjeta,
                   backgroundColor: LIENZO.fondo,
                   opacity: pressed ? 0.94 : 1,
                   transform: [{ scale: pressed && !quieto ? 0.985 : 1 }]
@@ -184,7 +182,7 @@ export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, 
 
       {paginas > 1 ? (
         <View style={estilos.puntos} accessibilityElementsHidden importantForAccessibility="no">
-          {Array.from({ length: paginas }, (_, i) => (
+          {promociones.map((_, i) => (
             <View
               key={i}
               style={{

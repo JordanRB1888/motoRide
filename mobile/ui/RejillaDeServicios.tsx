@@ -59,7 +59,7 @@ function PildoraPronto() {
   const tema = useTema();
   return (
     <View style={[estilos.pronto, { backgroundColor: tema.color.superficieHundida }]}>
-      <Text style={[estilos.prontoTexto, { color: tema.color.textoTenue }]}>PRONTO</Text>
+      <Text style={[estilos.prontoTexto, { color: tema.color.textoSecundario }]}>PRONTO</Text>
     </View>
   );
 }
@@ -83,7 +83,7 @@ function Casilla({ dato, ancho, onPress }: {
         estilos.casilla,
         {
           width: ancho,
-          borderRadius: 16,
+          borderRadius: tema.radio.tarjeta,
           backgroundColor: pressed ? tema.color.superficieHundida : tema.color.superficieElevada,
           borderColor: tema.color.borde,
           transform: [{ scale: pressed && !quieto ? 0.98 : 1 }]
@@ -97,14 +97,13 @@ function Casilla({ dato, ancho, onPress }: {
       ) : (
         <Image source={arte} resizeMode="cover" style={estilos.miniatura} />
       )}
-      {/* Una sola línea que encoge antes de partirse: «Comercios» no cabe a
-          trece puntos en la casilla estrecha y se partía en «Comercio / s». */}
+      {/* Hasta dos líneas: «Compra y venta» no cabe en una en ningún ancho de
+          teléfono. La casilla crece con el título (`minHeight`, no `height`)
+          y la fila entera se estira con ella. */}
       <Txt
         nivel="etiqueta"
         estilo={{ fontWeight: '700', textAlign: 'center' }}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.78}
+        numberOfLines={2}
       >
         {dato.titulo}
       </Txt>
@@ -132,7 +131,7 @@ export function ServicioDestacado({ dato, ancho, onPress }: {
         estilos.destacado,
         {
           width: ancho,
-          borderRadius: 16,
+          borderRadius: tema.radio.tarjeta,
           // El amarillo rebajado como superficie: es lo que la hace destacar
           // sin competir con el botón de pedir.
           backgroundColor: `${tema.color.acento}${pressed ? '4d' : '30'}`,
@@ -143,19 +142,13 @@ export function ServicioDestacado({ dato, ancho, onPress }: {
     >
       <View style={estilos.destacadoRotulo}>
         <Icono nombre="corona" color={tema.color.acentoTexto} tamano={14} />
-        <Text style={[estilos.destacadoRotuloTexto, { color: tema.color.acentoTexto }]} numberOfLines={1}>{dato.rotulo}</Text>
+        <Text style={[estilos.destacadoRotuloTexto, { color: tema.color.textoPrimario }]} numberOfLines={1}>{dato.rotulo}</Text>
       </View>
       <Image source={VEHICULOS.MOTO.tarjeta} resizeMode="contain" style={estilos.destacadoMoto} />
       <View style={{ gap: 2 }}>
         {/* El título va a todo el ancho; el hueco para el botón lo deja sólo
             la línea de detalle, que es la que el botón pisa. */}
-        <Txt
-          nivel="etiqueta"
-          estilo={{ fontWeight: '800', fontSize: 14 }}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.8}
-        >
+        <Txt nivel="etiqueta" estilo={{ fontWeight: '800', fontSize: 14 }} numberOfLines={2}>
           {dato.titulo}
         </Txt>
         <Text
@@ -173,7 +166,7 @@ export function ServicioDestacado({ dato, ancho, onPress }: {
         </View>
       ) : (
         <View style={[estilos.prontoDestacado, { backgroundColor: tema.color.superficieElevada }]}>
-          <Text style={[estilos.prontoTexto, { color: tema.color.textoTenue }]}>PRONTO</Text>
+          <Text style={[estilos.prontoTexto, { color: tema.color.textoSecundario }]}>PRONTO</Text>
         </View>
       )}
     </Pressable>
@@ -191,10 +184,12 @@ export function RejillaDeServicios({ servicios, destacado, onElegir }: {
   const columna = (anchoUtil - HUECO * (COLUMNAS - 1)) / COLUMNAS;
 
   // Primera fila: cuatro iguales. Segunda: tres un poco más estrechas y la
-  // destacada con el resto, como en la referencia.
+  // destacada con el resto, como en la referencia. En un teléfono de 360 dp
+  // la columna ya es estrecha de por sí: ahí no se estrecha más y la
+  // destacada ocupa una columna normal.
   const primeraFila = servicios.slice(0, COLUMNAS);
   const segundaFila = servicios.slice(COLUMNAS, COLUMNAS * 2 - 1);
-  const anchoEstrecho = Math.floor(columna * 0.86);
+  const anchoEstrecho = columna >= 84 ? Math.floor(columna * 0.86) : Math.floor(columna);
   const anchoDestacado = anchoUtil - anchoEstrecho * segundaFila.length - HUECO * segundaFila.length;
 
   return (
@@ -216,12 +211,12 @@ export function RejillaDeServicios({ servicios, destacado, onElegir }: {
 }
 
 const estilos = StyleSheet.create({
-  casilla: { height: ALTO_DE_CASILLA, borderWidth: 1, paddingHorizontal: 5, paddingVertical: 12, alignItems: 'center', gap: 6 },
+  casilla: { minHeight: ALTO_DE_CASILLA, borderWidth: 1, paddingHorizontal: 5, paddingVertical: 12, alignItems: 'center', gap: 6 },
   miniatura: { width: 50, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   detalle: { fontSize: 11, lineHeight: 14, textAlign: 'center' },
   pronto: { position: 'absolute', top: 6, right: 6, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6 },
-  prontoTexto: { fontSize: 8, fontWeight: '800', letterSpacing: 0.4 },
-  destacado: { height: ALTO_DE_CASILLA, borderWidth: 1, padding: 12, justifyContent: 'space-between', overflow: 'hidden' },
+  prontoTexto: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+  destacado: { minHeight: ALTO_DE_CASILLA, borderWidth: 1, padding: 12, justifyContent: 'space-between', overflow: 'hidden' },
   destacadoRotulo: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   destacadoRotuloTexto: { fontSize: 11, fontWeight: '700' },
   destacadoMoto: { alignSelf: 'flex-end', width: 92, height: 54, marginTop: -6, marginRight: -6 },

@@ -9,9 +9,12 @@
  */
 
 import type { ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView } from 'react-native';
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTema } from '../theme/ThemeContext';
+import { ALTO_DE_LA_BARRA } from './Navegacion';
 import { PromoCarousel, type BannerItem } from './PromoCarousel';
 import { CommercialPartners, type CommercialPartner } from './CommercialPartners';
 import { PromocionesDelInicio, type Promocion } from './PromocionesDelInicio';
@@ -44,6 +47,7 @@ export function PassengerHomeCommercial({
   onSeleccionarBanner
 }: PropiedadesPassengerHomeCommercial) {
   const tema = useTema();
+  const inferior = useSafeAreaInsets().bottom;
 
   return (
     <ScrollView
@@ -51,9 +55,9 @@ export function PassengerHomeCommercial({
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{
         paddingHorizontal: tema.ritmo.margenPantalla,
-        paddingTop: 4,
-        // La barra de abajo y su área segura.
-        paddingBottom: 132,
+        // La barra de abajo, su área segura y un bloque de aire: lo que la
+        // propia barra dice que hay que reservarle, no un número a mano.
+        paddingBottom: ALTO_DE_LA_BARRA + Math.max(inferior, 8) + tema.ritmo.entreBloques,
         gap: tema.ritmo.entreBloques
       }}
     >
@@ -72,8 +76,6 @@ export function PassengerHomeCommercial({
       <PromocionesDelInicio onAbrir={onAbrirPromocion} onVerTodas={onVerPromociones} />
 
       <RejillaDeServicios servicios={servicios} destacado={destacado} onElegir={onElegirServicio} />
-
-      <View style={{ height: 4 }} />
     </ScrollView>
   );
 }

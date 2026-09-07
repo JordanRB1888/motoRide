@@ -102,6 +102,8 @@ export interface Direccion {
     readonly tarjeta: number;
     readonly campo: number;
     readonly insignia: number;
+    /** Chips y píldoras: siempre semicircular, sea cual sea la dirección. */
+    readonly pildora: number;
   };
 
   readonly texto: {
@@ -183,7 +185,7 @@ const PREMIUM_MINIMAL: Direccion = {
     dentroDeTarjeta: ESPACIO['6'],
     entreElementos: ESPACIO['4']
   },
-  radio: { boton: 16, tarjeta: 20, campo: 14, insignia: 999 },
+  radio: { boton: 16, tarjeta: 20, campo: 14, insignia: 999, pildora: 999 },
   texto: {
     display: { tamano: 34, alto: 40, peso: '700' },
     titulo: { tamano: 26, alto: 32, peso: '700' },
@@ -240,7 +242,7 @@ const URBAN_FUNCTIONAL: Direccion = {
     dentroDeTarjeta: ESPACIO['4'],
     entreElementos: ESPACIO['3']
   },
-  radio: { boton: 12, tarjeta: 14, campo: 10, insignia: 8 },
+  radio: { boton: 12, tarjeta: 14, campo: 10, insignia: 8, pildora: 999 },
   texto: {
     display: { tamano: 28, alto: 34, peso: '800' },
     titulo: { tamano: 22, alto: 28, peso: '700' },
@@ -307,7 +309,7 @@ const SIGNATURE: Direccion = {
     dentroDeTarjeta: ESPACIO['5'],
     entreElementos: ESPACIO['3']
   },
-  radio: { boton: 14, tarjeta: 18, campo: 12, insignia: 10 },
+  radio: { boton: 14, tarjeta: 18, campo: 12, insignia: 10, pildora: 999 },
   texto: {
     display: { tamano: 32, alto: 37, peso: '800' },
     titulo: { tamano: 24, alto: 29, peso: '700' },
@@ -382,7 +384,7 @@ const SIGNATURE_REFINED: Direccion = {
     dentroDeTarjeta: ESPACIO['6'],
     entreElementos: ESPACIO['4']
   },
-  radio: { boton: 14, tarjeta: 20, campo: 12, insignia: 10 },
+  radio: { boton: 14, tarjeta: 20, campo: 12, insignia: 10, pildora: 999 },
   texto: {
     display: { tamano: 32, alto: 37, peso: '800' },
     titulo: { tamano: 24, alto: 29, peso: '700' },

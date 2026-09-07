@@ -40,6 +40,7 @@ import {
 
 import { useTema } from '../theme/ThemeContext';
 import { ARTE_DE_CAMPANA, VEHICULOS } from '../theme/marca';
+import { LIENZO_DE_IMAGEN } from '../theme/primitives';
 import { useMovimientoReducido } from './movimiento';
 
 export interface BannerItem {
@@ -58,15 +59,9 @@ export interface BannerItem {
   readonly tag?: string;
 }
 
-/**
- * El grafito del lienzo de marca y el velo sobre las fotografías. Son los
- * mismos de día que de noche: un anuncio no cambia de color con la hora.
- */
-const LIENZO = Object.freeze({
-  fondo: '#15140f',
-  veloAlto: 'rgba(11, 10, 9, 0.18)',
-  veloBajo: 'rgba(11, 10, 9, 0.62)'
-});
+// El grafito y el velo son los de `LIENZO_DE_IMAGEN`: un solo sitio para el
+// hero y las promociones, y el que la custodia mide.
+const LIENZO = LIENZO_DE_IMAGEN;
 
 const ALTO_DEL_HERO = 228;
 
@@ -118,6 +113,7 @@ export function PromoCarousel({
   const scrollRef = useRef<ScrollView>(null);
   const [indiceActivo, setIndiceActivo] = useState(0);
   const interactuandoRef = useRef(false);
+  const reanudarRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchoTarjeta = anchoPantalla - tema.ritmo.margenPantalla * 2;
   // Dos márgenes de hueco: la siguiente tarjeta empieza justo en el borde de
   // la pantalla y no asoma, y cada paso del carrusel mide exactamente el
@@ -134,7 +130,7 @@ export function PromoCarousel({
       scrollRef.current?.scrollTo({ x: siguiente * (anchoTarjeta + HUECO), animated: true });
       return siguiente;
     });
-  }, [total, quieto, anchoTarjeta]);
+  }, [total, quieto, anchoTarjeta, HUECO]);
 
   useEffect(() => {
     if (total <= 1 || quieto) return;
@@ -148,6 +144,17 @@ export function PromoCarousel({
     interactuandoRef.current = false;
   };
 
+  // Un arrastre que se suelta quieto no produce inercia y `onMomentumScrollEnd`
+  // no llega nunca: sin esto el carrusel se quedaba parado el resto de la
+  // sesión. Se reanuda solo, con un respiro para no arrancar bajo el dedo.
+  const onScrollEndDrag = () => {
+    if (reanudarRef.current !== null) clearTimeout(reanudarRef.current);
+    reanudarRef.current = setTimeout(() => { interactuandoRef.current = false; }, 1500);
+  };
+  useEffect(() => () => {
+    if (reanudarRef.current !== null) clearTimeout(reanudarRef.current);
+  }, []);
+
   if (total === 0) return null;
 
   return (
@@ -159,6 +166,7 @@ export function PromoCarousel({
         snapToInterval={anchoTarjeta + HUECO}
         decelerationRate="fast"
         onScrollBeginDrag={() => { interactuandoRef.current = true; }}
+        onScrollEndDrag={onScrollEndDrag}
         onMomentumScrollEnd={onMomentumScrollEnd}
         style={{ marginHorizontal: -tema.ritmo.margenPantalla }}
         contentContainerStyle={{ paddingHorizontal: tema.ritmo.margenPantalla, gap: HUECO }}

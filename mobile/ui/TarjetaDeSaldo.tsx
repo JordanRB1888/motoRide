@@ -41,7 +41,7 @@ export function TarjetaDeSaldo({ saldo, onPress }: {
         paddingLeft: 6,
         paddingRight: 12,
         height: 52,
-        borderRadius: tema.radio.insignia,
+        borderRadius: tema.radio.pildora,
         backgroundColor: pressed ? tema.color.superficieHundida : tema.color.superficieElevada,
         borderWidth: 1,
         borderColor: tema.color.borde
@@ -67,14 +67,18 @@ export function TarjetaDeSaldo({ saldo, onPress }: {
   );
 }
 
-/** El botón cuadrado de «mi ubicación» que la referencia pone junto al buscador. */
+/**
+ * El botón cuadrado de ubicación que la referencia pone junto al buscador.
+ * Abre Pedir, que arranca localizando a la persona: la etiqueta dice eso y no
+ * «usar mi ubicación», que prometería centrar un mapa que aquí no hay.
+ */
 export function BotonDeUbicacion({ onPress }: { readonly onPress: () => void }) {
   const tema = useTema();
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel="Usar mi ubicación actual"
+      accessibilityLabel="Pedir desde mi ubicación"
       hitSlop={6}
       style={({ pressed }) => ({
         width: 52,

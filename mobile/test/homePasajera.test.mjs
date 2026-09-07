@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { despojarComentarios } from './ayudas.mjs';
 import { ESQUEMA_CLARO, ESQUEMA_OSCURO } from '../theme/esquemas.ts';
+import { LIENZO_DE_IMAGEN } from '../theme/primitives.ts';
 import {
   ACCESOS_RAPIDOS,
   REJILLA_DEL_INICIO,
@@ -46,10 +47,19 @@ const contraste = (a, b) => {
   return (alto + 0.05) / (bajo + 0.05);
 };
 
-// El velo que va sobre las fotografías del inicio (hero y promociones). Es el
-// mismo de día que de noche porque lo que hay debajo es una imagen, no una
-// superficie del tema.
-const VELO_SOBRE_FOTO = '#1f1c17';
+/** Compone `rgba(r, g, b, a)` sobre un fondo `#rrggbb` y devuelve `#rrggbb`. */
+function componer(fondoHex, rgba) {
+  const [r, g, b, a] = rgba.match(/[\d.]+/g).map(Number);
+  const n = parseInt(fondoHex.slice(1, 7), 16);
+  const fondo = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const mezcla = [r, g, b].map((c, i) => Math.round(c * a + fondo[i] * (1 - a)));
+  return '#' + mezcla.map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+// El velo REAL que va sobre las fotografías del inicio (hero y promociones):
+// el grafito del lienzo con la capa baja encima, compuestos desde los mismos
+// valores que usan las piezas. Es el peor caso: donde el texto se escribe.
+const VELO_SOBRE_FOTO = componer(LIENZO_DE_IMAGEN.fondo, LIENZO_DE_IMAGEN.veloBajo);
 
 test('los dos esquemas declaran la tinta sobre imagen, y se lee sobre el velo', () => {
   for (const [nombre, esquema] of [['claro', ESQUEMA_CLARO], ['oscuro', ESQUEMA_OSCURO]]) {
@@ -61,6 +71,17 @@ test('los dos esquemas declaran la tinta sobre imagen, y se lee sobre el velo', 
     const amarillo = contraste(esquema.acentoSobreImagen, VELO_SOBRE_FOTO);
     assert.ok(amarillo >= 4.5, `${nombre}: acentoSobreImagen da ${amarillo.toFixed(2)}:1 sobre el velo`);
   }
+});
+
+test('la etiqueta verde de las promociones se lee en los dos esquemas', () => {
+  // El verde de éxito es oscuro de día y claro de noche, así que la tinta
+  // cambia con el esquema: clara sobre el verde oscuro, oscura sobre el claro.
+  const dia = contraste(ESQUEMA_CLARO.sobreImagen, ESQUEMA_CLARO.exito);
+  assert.ok(dia >= 4.5, `día: tinta clara sobre éxito da ${dia.toFixed(2)}:1`);
+  const noche = contraste(ESQUEMA_OSCURO.sobreAcento, ESQUEMA_OSCURO.exito);
+  assert.ok(noche >= 4.5, `noche: tinta oscura sobre éxito da ${noche.toFixed(2)}:1`);
+  const fuente = despojarComentarios(leer('ui/PromocionesDelInicio.tsx'));
+  assert.match(fuente, /esquema === 'claro' \? tema\.color\.sobreImagen : tema\.color\.sobreAcento/, 'la etiqueta no elige la tinta por esquema');
 });
 
 // ---------------------------------------------------------------------------
@@ -121,7 +142,7 @@ test('las piezas nuevas del inicio tampoco fijan ninguna tinta a mano', () => {
   // La misma guarda que `inicioPasajera.test.mjs` pone a las tres piezas
   // comerciales de antes: una tinta escrita a mano no sabe si es de día.
   for (const pieza of PIEZAS_NUEVAS) {
-    if (!fs.existsSync(path.join(raizMovil, pieza))) continue;
+    assert.ok(fs.existsSync(path.join(raizMovil, pieza)), `falta la pieza ${pieza}`);
     const codigo = despojarComentarios(leer(pieza));
     assert.deepEqual(codigo.match(/color:\s*'#[0-9a-fA-F]{3,8}'/g) ?? [], [], `${pieza} escribe la tinta a mano`);
     assert.ok(!/rgba\(\s*255\s*,\s*255\s*,\s*255/.test(codigo), `${pieza} usa blanco con alfa`);
@@ -147,7 +168,7 @@ test('el saldo no inventa una cifra cuando no la hay', () => {
 
 test('los accesos rápidos son chips, todos con nombre accesible', () => {
   const fuente = despojarComentarios(leer('ui/AccesosRapidos.tsx'));
-  assert.match(fuente, /borderRadius: tema\.radio\.insignia/);
+  assert.match(fuente, /borderRadius: tema\.radio\.pildora/);
   assert.match(fuente, /accessibilityRole="button"/);
   assert.match(fuente, /accessibilityLabel=\{acceso\.nombre\}/);
 });
@@ -191,6 +212,24 @@ test('las promociones son las tres de la referencia, con foto y palabra destacad
   // el recorte de aquéllos se quedaba con el fondo negro y el arte desaparecía.
   assert.doesNotMatch(fuente, /ARTE_DE_ALIADO/, 'los banners apaisados no valen para una tarjeta vertical');
   assert.match(fuente, /ajuste === 'contener'/, 'una ilustración se contiene; una foto se cubre');
+  // Un punto por tarjeta y el índice con el mismo paso que el snap: contar
+  // «pantallas» dejaba el último punto apagado para siempre.
+  assert.match(fuente, /promociones\.map\(\(_, i\)/, 'los puntos no van uno por tarjeta');
+  assert.match(fuente, /contentOffset\.x \/ \(ANCHO \+ HUECO\)/, 'el índice del punto no usa el paso del snap');
+  // El lienzo es el compartido, no una copia.
+  assert.match(fuente, /LIENZO_DE_IMAGEN/);
+  assert.match(despojarComentarios(leer('ui/PromoCarousel.tsx')), /LIENZO_DE_IMAGEN/);
+});
+
+test('Txt reenvía al texto nativo las props que sus usos llevan años pasándole', () => {
+  // `numberOfLines`, `adjustsFontSizeToFit`, `minimumFontScale` y
+  // `accessibilityRole` se destructuraban y se perdían: treinta y tres usos de
+  // `numberOfLines` en la aplicación no hacían nada, y un arreglo de la
+  // rejilla del inicio que dependía de ellos fue un no-op hasta que se vio.
+  const fuente = despojarComentarios(leer('ui/componentes.tsx'));
+  for (const prop of ['numberOfLines', 'adjustsFontSizeToFit', 'minimumFontScale', 'accessibilityRole']) {
+    assert.match(fuente, new RegExp(`${prop}=\\{${prop}\\}`), `Txt no reenvía ${prop}`);
+  }
 });
 
 test('la rejilla del inicio es de cuatro columnas, con ilustración, y dice lo que no está', () => {

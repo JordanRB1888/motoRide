@@ -26,7 +26,7 @@
  * es uniforme, como en la referencia.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, BackHandler, Easing, Image, PanResponder, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import Reanimated, {
   cancelAnimation,
@@ -938,15 +938,16 @@ export function C2InicioPasajera({
         ]
   }));
 
-  // Los servicios de la rejilla del inicio, en el orden de la referencia.
-  const serviciosDelInicio = REJILLA_DEL_INICIO
+  // Los servicios de la rejilla del inicio, en el orden de la referencia. Es
+  // constante: se calcula una vez.
+  const serviciosDelInicio = useMemo(() => REJILLA_DEL_INICIO
     .map(clave => SERVICIOS_DE_INICIO.find(dato => dato.clave === clave))
-    .filter((dato): dato is (typeof SERVICIOS_DE_INICIO)[number] => dato !== undefined);
+    .filter((dato): dato is (typeof SERVICIOS_DE_INICIO)[number] => dato !== undefined), []);
 
   // El bloque utilitario. Desliza con el resto; sólo la top bar queda fija.
   const encabezado = (
-    <View style={{ gap: 10 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+    <View style={{ gap: tema.ritmo.entreElementos }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: tema.ritmo.entreElementos }}>
         <TarjetaDeSaldo saldo={datos.saldo} onPress={() => ir('saldo')} />
         <BotonDeUbicacion onPress={() => ir('pedir')} />
       </View>

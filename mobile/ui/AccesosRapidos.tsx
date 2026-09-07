@@ -43,7 +43,7 @@ export function AccesosRapidos({ accesos, onElegir }: {
             gap: 8,
             height: 40,
             paddingHorizontal: 14,
-            borderRadius: tema.radio.insignia,
+            borderRadius: tema.radio.pildora,
             backgroundColor: pressed ? tema.color.superficieHundida : tema.color.superficieElevada,
             borderWidth: 1,
             borderColor: tema.color.borde

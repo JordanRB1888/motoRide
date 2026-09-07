@@ -96,3 +96,17 @@ export const AREA_TACTIL_MINIMA = 48;
  * direcciones; el número vive sólo aquí.
  */
 export const SOBRE_IMAGEN = '#faf9f6';
+
+/**
+ * El lienzo de las tarjetas con imagen del inicio (hero y promociones): el
+ * grafito de fondo y el velo en dos capas. Vive aquí, y no en cada pieza, por
+ * la misma razón que `SOBRE_IMAGEN`: la custodia mide la tinta contra el velo
+ * REAL, y dos copias de un velo acaban divergiendo.
+ */
+export const LIENZO_DE_IMAGEN = Object.freeze({
+  fondo: GRAFITO.superficie,
+  veloAlto: 'rgba(11, 10, 9, 0.08)',
+  veloBajo: 'rgba(11, 10, 9, 0.62)',
+  /** La opacidad del velo bajo, para poder componer el color real en una prueba. */
+  alfaDelVeloBajo: 0.62
+});

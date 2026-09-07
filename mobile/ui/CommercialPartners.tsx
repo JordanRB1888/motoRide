@@ -32,7 +32,7 @@ export const ALIADOS_MOCK: readonly CommercialPartner[] = Object.freeze([
   { id: 'farmatodo', name: 'Farmatodo', colorDeMarca: '#0b4ea2', tintaDeMarca: '#ffffff', inicial: 'F' },
   { id: 'automercado', name: 'Automercado', colorDeMarca: '#1d7a3a', tintaDeMarca: '#ffffff', inicial: 'A' },
   { id: 'cafe-amanecer', name: 'Café Amanecer', colorDeMarca: '#5b3a1e', tintaDeMarca: '#f7d774', inicial: 'C' },
-  { id: 'yummy', name: 'Yummy', colorDeMarca: '#2dbb8f', tintaDeMarca: '#ffffff', inicial: 'Y' },
+  { id: 'yummy', name: 'Yummy', colorDeMarca: '#2dbb8f', tintaDeMarca: '#0b3d2e', inicial: 'Y' },
   { id: 'multimax', name: 'MultiMax', colorDeMarca: '#ffffff', tintaDeMarca: '#1a2b6d', inicial: 'M' }
 ]);
 

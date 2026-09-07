@@ -27,7 +27,8 @@ export function CabeceraDeSeccion({ titulo, accion, onAccion }: {
           onPress={onAccion}
           accessibilityRole="button"
           accessibilityLabel={`${accion}: ${titulo.toLowerCase()}`}
-          hitSlop={8}
+          // Área táctil de 48: el texto mide diecisiete y el resto lo pone el hitSlop.
+          hitSlop={{ top: 16, bottom: 16, left: 12, right: 12 }}
           style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 2, opacity: pressed ? 0.6 : 1 })}
         >
           <Txt nivel="etiqueta" tono="secundario">{accion}</Txt>
