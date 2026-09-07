@@ -9,3 +9,42 @@ server/data/*.sqlite
 server/data/*.sqlite-wal
 server/data/*.sqlite-shm
 server/data/private-uploads/
+
+# --- Nada de esto puede acabar en GitHub (7 de septiembre de 2026) ---
+#
+# Antes solo estaban `.env` y `.env.local`. Faltaba TODO lo demas, y no es
+# teorico: en el disco hay `.env.staging`, dos ficheros de sesion con `token`
+# dentro y tres cuentas de servicio. Un `git add .` los habria publicado.
+#
+# La regla es por forma, no por nombre concreto: `.env.<lo que sea>` queda
+# fuera salvo los `.example`, que existen justo para poder versionarse.
+.env.*
+!.env.example
+!.env*.example
+
+# Cuentas de servicio de Google (Maps OAuth, FCM). Van por entorno, nunca
+# por fichero en el repositorio.
+*service-account*.json
+*serviceAccount*.json
+firebase-adminsdk*.json
+
+# Sesiones de las herramientas de agente: llevan correo y token de verdad.
+.codex-*-session.json
+.codex-*.log
+.codex/
+.agents/
+
+# Claves de firma de Android. Si algun dia existe una de release, que no se
+# suba por descuido: quien la pierde, pierde la aplicacion.
+*.keystore
+*.jks
+!android/app/debug.keystore
+
+# Informes de error de Android: llevan los logs completos del dispositivo.
+bugreport-*.zip
+
+# Otro proyecto que vive dentro de esta carpeta por accidente (2,2 GB).
+/Dedicatorias Digitales/
+
+# Permisos de esta maquina en concreto: no viajan a otra cuenta.
+.claude/settings.local.json
