@@ -62,7 +62,7 @@ export async function consultarProveedores(): Promise<{
   ok: boolean;
   proveedores: ProveedorDisponible[];
 }> {
-  const respuesta = await llamar<{ providers: ProveedorDisponible[] }>('/auth/social/providers', {
+  const respuesta = await llamar<{ providers: ProveedorDisponible[] }>('/api/auth/social/providers', {
     conSesion: false
   });
   if (!respuesta.ok) return { ok: false, proveedores: [] };
@@ -83,7 +83,7 @@ export async function entrarConProveedor(peticion: {
   apellido?: string;
 }): Promise<ResultadoSocial> {
   const respuesta = await llamar<RespuestaSocial>(
-    `/auth/social/${RUTA_DEL_PROVEEDOR[peticion.proveedor]}`,
+    `/api/auth/social/${RUTA_DEL_PROVEEDOR[peticion.proveedor]}`,
     {
       metodo: 'POST',
       cuerpo: {
@@ -106,7 +106,7 @@ export async function vincularProveedor(peticion: {
   token: string;
 }): Promise<ResultadoSocial> {
   const respuesta = await llamar<RespuestaSocial>(
-    `/auth/identities/link/${RUTA_DEL_PROVEEDOR[peticion.proveedor]}`,
+    `/api/auth/identities/link/${RUTA_DEL_PROVEEDOR[peticion.proveedor]}`,
     { metodo: 'POST', cuerpo: { token: peticion.token }, conSesion: true }
   );
   return interpretarEntradaSocial(respuesta, peticion.proveedor);

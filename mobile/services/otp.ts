@@ -69,7 +69,7 @@ export async function consultarCanales(): Promise<{
   sinRed: boolean;
   canales: CanalDisponible[];
 }> {
-  const respuesta = await llamar<{ channels: CanalDisponible[] }>('/auth/verification/channels', {
+  const respuesta = await llamar<{ channels: CanalDisponible[] }>('/api/auth/verification/channels', {
     conSesion: false
   });
   if (!respuesta.ok) {
@@ -95,7 +95,7 @@ export async function pedirCodigo(peticion: {
   proposito: PropositoDeVerificacion;
   conSesion?: boolean;
 }): Promise<ResultadoDeEnvio> {
-  const respuesta = await llamar<DesafioEnviado>('/auth/verification/send', {
+  const respuesta = await llamar<DesafioEnviado>('/api/auth/verification/send', {
     metodo: 'POST',
     cuerpo: { channel: peticion.canal, destination: peticion.destino, purpose: peticion.proposito },
     conSesion: peticion.conSesion === true
@@ -116,7 +116,7 @@ export async function comprobarCodigo(peticion: {
   contrasenaNueva?: string;
   conSesion?: boolean;
 }): Promise<ResultadoDeVerificacion> {
-  const respuesta = await llamar<unknown>('/auth/verification/verify', {
+  const respuesta = await llamar<unknown>('/api/auth/verification/verify', {
     metodo: 'POST',
     cuerpo: {
       challengeId: peticion.challengeId,

@@ -27,7 +27,7 @@ import {
 
 /** Con qué puede entrar esta persona. Exige sesión. */
 export async function consultarMetodos() {
-  return interpretarMetodos(await llamar<MetodosDeEntrada>('/auth/methods', { conSesion: true }));
+  return interpretarMetodos(await llamar<MetodosDeEntrada>('/api/auth/methods', { conSesion: true }));
 }
 
 /**
@@ -38,7 +38,7 @@ export async function consultarMetodos() {
 export async function desvincular(proveedor: ProveedorSocial) {
   const ruta = proveedor === 'GOOGLE' ? 'google' : 'apple';
   return interpretarDesvinculacion(
-    await llamar<unknown>(`/auth/identities/${ruta}`, { metodo: 'DELETE', conSesion: true })
+    await llamar<unknown>(`/api/auth/identities/${ruta}`, { metodo: 'DELETE', conSesion: true })
   );
 }
 
@@ -48,7 +48,7 @@ export async function desvincular(proveedor: ProveedorSocial) {
  */
 export async function eliminarCuenta(contrasena: string) {
   return interpretarBorrado(
-    await llamar<unknown>('/auth/account/delete', {
+    await llamar<unknown>('/api/auth/account/delete', {
       metodo: 'POST',
       cuerpo: { password: contrasena },
       conSesion: true
