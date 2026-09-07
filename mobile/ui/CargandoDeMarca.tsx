@@ -33,6 +33,7 @@
 
 import { Image, View } from 'react-native';
 import Animated, { useReducedMotion } from 'react-native-reanimated';
+import { cubicBezier } from 'react-native-reanimated';
 import type { CSSAnimationProperties } from 'react-native-reanimated';
 
 import { Txt } from './componentes';
@@ -74,7 +75,11 @@ export function CargandoDeMarca({ mensaje = 'Preparando tu viaje' }: {
       '100%': { transform: [{ rotateY: '360deg' }, { scale: 0.96 }] }
     },
     animationDuration: `${VOLTERETA_MS}ms`,
-    animationTimingFunction: 'cubic-bezier(0.45, 0.05, 0.2, 1)',
+    // La curva del original, como OBJETO y no como cadena: Reanimated solo
+    // admite los nombres predefinidos en texto, y `cubic-bezier(...)` escrito
+    // asi rechaza el estilo EN EJECUCION. Con esta pantalla siendo lo primero
+    // que se pinta, eso cerraba la aplicacion antes de enseñar nada.
+    animationTimingFunction: cubicBezier(0.45, 0.05, 0.2, 1),
     animationIterationCount: 'infinite'
   }) as CSSAnimationProperties | undefined;
 
