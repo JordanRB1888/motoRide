@@ -81,7 +81,7 @@ import {
   sanitizeSafeTransportPricing
 } from './services/safeTransport.js';
 import { PUSH_TYPE, createPushNotificationService, isWebPushEnabled } from './services/pushNotificationService.js';
-import { createFcmSender, cuentaDesdeElEntorno as cuentaDeFcmDesdeElEntorno } from './services/fcmSender.js';
+import { createFcmSender } from './services/fcmSender.js';
 import { crearSenderCompuesto } from './services/pushSender.js';
 import { createDispatchRanker } from './services/dispatchRanking.js';
 import { createWebPushSender } from './services/webPushSender.js';
@@ -1060,14 +1060,30 @@ function construirFcmSender() {
     return null;
   }
   try {
+    // El fichero manda: se le pasa `cuentaEnBase64: null` a proposito, porque
+    // si no la funcion tomaria la variable de entorno por su cuenta y el
+    // fichero de quien programa dejaria de tener efecto.
     const sender = hayFichero
-      ? createFcmSender({ rutaDeLaCuenta: ruta, logger: console })
-      : createFcmSender({ cuenta: cuentaDeFcmDesdeElEntorno(enBase64), logger: console });
+      ? createFcmSender({ rutaDeLaCuenta: ruta, cuentaEnBase64: null, logger: console })
+      : createFcmSender({ cuentaEnBase64: enBase64, logger: console });
     console.log(`[+58express Push] FCM configurado (${hayFichero ? 'fichero' : 'entorno'})`);
     return sender;
   } catch (error) {
-    // El codigo es escueto y nunca lleva material de la cuenta dentro.
-    console.error(`[+58express Push] cuenta de servicio de FCM invalida: ${error.message}. FCM queda DESACTIVADO.`);
+    // El codigo es escueto y nunca lleva material de la cuenta dentro. Los
+    // NOMBRES de los campos que fallan si viajan: son lo unico que permite
+    // diagnosticar «valida en mi portatil, invalida en el servidor» sin llegar
+    // a imprimir la credencial.
+    const campos = Array.isArray(error.campos) && error.campos.length > 0
+      ? ` (campos: ${error.campos.join(', ')})`
+      : '';
+    // Si fallan TODOS los campos, lo que llego no es la cuenta y hay que saber
+    // que es. Los NOMBRES de las claves presentes lo dicen sin publicar ningun
+    // valor: una cuenta de servicio real trae `type`, `project_id`, `auth_uri`…
+    const claves = Array.isArray(error.claves) && error.claves.length > 0
+      ? ` (claves recibidas: ${error.claves.join(', ')})`
+      : '';
+    const via = hayFichero ? 'fichero' : 'entorno';
+    console.error(`[+58express Push] cuenta de servicio de FCM invalida por ${via}: ${error.message}${campos}${claves}. FCM queda DESACTIVADO.`);
     return null;
   }
 }

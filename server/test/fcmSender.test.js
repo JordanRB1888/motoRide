@@ -275,7 +275,41 @@ test('el arranque admite las dos vias y prefiere el fichero', () => {
   const arranque = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
   assert.match(arranque, /const hayFichero = fs\.existsSync\(ruta\)/);
   assert.match(arranque, /FCM_SERVICE_ACCOUNT_B64/);
-  assert.match(arranque, /cuenta: cuentaDeFcmDesdeElEntorno\(enBase64\)/);
+  assert.match(arranque, /createFcmSender\(\{ cuentaEnBase64: enBase64/);
   // Y si no hay ninguna, se dice y no se cae.
   assert.match(arranque, /FCM apagado: sin cuenta de servicio/);
+});
+
+
+test('el emisor acepta la cuenta en base64 y NO la valida dos veces', () => {
+  // REGRESION DE UN FALLO REAL, visto en el arranque de staging con la
+  // credencial correcta puesta:
+  //
+  //   cuenta de servicio de FCM invalida por entorno: FCM_SERVICE_ACCOUNT_INVALID
+  //   (campos: type, project_id, client_email, private_key, token_uri)
+  //   (claves recibidas: projectId, clientEmail, privateKey, tokenUri)
+  //
+  // `cuentaDesdeElEntorno` devuelve la cuenta YA NORMALIZADA --projectId,
+  // clientEmail...-- y `validarCuentaDeServicio` espera la forma cruda de
+  // Google --project_id, client_email...--. El arranque decodificaba fuera y
+  // se la pasaba como `cuenta`, asi que se validaba dos veces y la segunda la
+  // rechazaba entera.
+  //
+  // Ofrecer la via de base64 DENTRO de la funcion que valida cierra ese camino.
+  const base64 = Buffer.from(JSON.stringify(CUENTA), 'utf8').toString('base64');
+  const sender = createFcmSender({ cuentaEnBase64: base64, fetchImpl: redFalsa().fetchImpl });
+  assert.ok(sender, 'el emisor deberia construirse con la cuenta en base64');
+});
+
+test('con fichero y base64 a la vez, manda lo que se pase explicitamente', () => {
+  // El arranque le pasa `cuentaEnBase64: null` cuando hay fichero: si no, la
+  // funcion tomaria la variable de entorno por su cuenta y el fichero de quien
+  // programa dejaria de tener efecto.
+  const base64 = Buffer.from(JSON.stringify(CUENTA), 'utf8').toString('base64');
+  const sender = createFcmSender({
+    cuenta: CUENTA,
+    cuentaEnBase64: base64,
+    fetchImpl: redFalsa().fetchImpl
+  });
+  assert.ok(sender, 'una cuenta explicita gana sobre el resto');
 });

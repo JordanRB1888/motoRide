@@ -100,14 +100,39 @@ export function cuentaDesdeElEntorno(base64) {
   return validarCuentaDeServicio(cuenta);
 }
 
+/**
+ * Qué campo de la cuenta no cumple, dicho con el NOMBRE del campo y nada más.
+ *
+ * POR QUÉ HACE FALTA SABERLO
+ *
+ * `FCM_SERVICE_ACCOUNT_INVALID` a secas deja el diagnóstico en un callejón: la
+ * credencial es válida en el portátil y el servidor la rechaza, y no hay forma
+ * de saber cuál de las cinco comprobaciones falló sin imprimir la cuenta, que
+ * es justo lo que no se puede hacer.
+ *
+ * El nombre del campo es seguro: dice `private_key`, nunca su contenido.
+ */
+export function camposInvalidosDeLaCuenta(cuenta) {
+  if (!cuenta || typeof cuenta !== 'object') return [`(no es un objeto: ${typeof cuenta})`];
+  const fallos = [];
+  if (cuenta.type !== 'service_account') fallos.push('type');
+  if (typeof cuenta.project_id !== 'string' || !cuenta.project_id) fallos.push('project_id');
+  if (typeof cuenta.client_email !== 'string' || !cuenta.client_email) fallos.push('client_email');
+  if (typeof cuenta.private_key !== 'string' || !cuenta.private_key.includes('PRIVATE KEY')) fallos.push('private_key');
+  if (typeof cuenta.token_uri !== 'string' || !cuenta.token_uri.startsWith('https://')) fallos.push('token_uri');
+  return fallos;
+}
+
 export function validarCuentaDeServicio(cuenta) {
-  const ok = cuenta
-    && cuenta.type === 'service_account'
-    && typeof cuenta.project_id === 'string' && cuenta.project_id
-    && typeof cuenta.client_email === 'string' && cuenta.client_email
-    && typeof cuenta.private_key === 'string' && cuenta.private_key.includes('PRIVATE KEY')
-    && typeof cuenta.token_uri === 'string' && cuenta.token_uri.startsWith('https://');
-  if (!ok) throw new Error(FCM_CONFIG_ERROR.INVALID);
+  const fallos = camposInvalidosDeLaCuenta(cuenta);
+  if (fallos.length > 0) {
+    // El mensaje lleva los NOMBRES de los campos que fallan. Nunca sus valores:
+    // este texto acaba en los registros de Railway.
+    const error = new Error(FCM_CONFIG_ERROR.INVALID);
+    error.campos = fallos;
+    error.claves = Object.keys(cuenta && typeof cuenta === 'object' ? cuenta : {}).slice(0, 12);
+    throw error;
+  }
   return {
     projectId: cuenta.project_id,
     clientEmail: cuenta.client_email,
@@ -199,6 +224,8 @@ export function construirMensajeFcm({ token, payload, ttlSegundos = PUSH_TTL_SEG
 
 export function createFcmSender({
   rutaDeLaCuenta = process.env.FCM_SERVICE_ACCOUNT_FILE,
+  /** La cuenta en base64, tal cual viene del entorno. Como en `crearAuthDeMaps`. */
+  cuentaEnBase64 = process.env.FCM_SERVICE_ACCOUNT_B64,
   cuenta = null,
   fetchImpl = fetch,
   firmar = jwt.sign,
@@ -207,7 +234,21 @@ export function createFcmSender({
   ttlSegundos = PUSH_TTL_SEGUNDOS,
   timeoutMs = 5_000
 } = {}) {
-  const credencial = cuenta ? validarCuentaDeServicio(cuenta) : cargarCuentaDeServicio(rutaDeLaCuenta);
+  // TRES ENTRADAS, UNA SOLA VALIDACIÓN.
+  //
+  // El base64 se resuelve AQUÍ, y no fuera, porque `cuentaDesdeElEntorno`
+  // devuelve la cuenta ya normalizada --`projectId`, `clientEmail`…-- y
+  // `validarCuentaDeServicio` espera la forma cruda de Google --`project_id`,
+  // `client_email`…--. Pasarle la normalizada la rechazaba entera: en el
+  // arranque de staging fallaban los cinco campos a la vez con la credencial
+  // correcta puesta, y sólo se vio al hacer que el error dijera QUÉ claves
+  // había recibido.
+  //
+  // Ofrecer la vía de base64 en la misma función que la valida cierra ese
+  // camino: quien la usa ya no puede validar dos veces.
+  const credencial = cuenta
+    ? validarCuentaDeServicio(cuenta)
+    : (cuentaEnBase64 ? cuentaDesdeElEntorno(cuentaEnBase64) : cargarCuentaDeServicio(rutaDeLaCuenta));
   const endpointDeEnvio = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(credencial.projectId)}/messages:send`;
 
   /** { valor, caducaEn } — un solo token para todo el proceso. */
