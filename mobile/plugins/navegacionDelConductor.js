@@ -62,10 +62,41 @@ const DESAZUCARADO = 'com.android.tools:desugar_jdk_libs_nio:2.1.5';
 const GRUPO_DUPLICADO = 'com.google.android.gms';
 const MODULO_DUPLICADO = 'play-services-maps';
 
-// El que la sustituye. La versión tiene que ser LA MISMA que trae el wrapper
-// oficial (`@googlemaps/react-native-navigation-sdk`), o acabarían dos
-// versiones del Navigation SDK en el classpath y volvemos al duplicado.
-const ARTEFACTO_DE_NAVEGACION = 'com.google.android.libraries.navigation:navigation:7.6.1';
+// El que la sustituye.
+//
+// El wrapper oficial 0.16.3 fija la 7.6.1, pero esa versión tiene un fallo
+// mortal conocido --NullPointerException dentro de `MapView.onCreate`-- que
+// Google arregló en la 7.8.0. El informe lo explica. Por eso aquí se puede
+// forzar otra versión, y quien la fije es UNA sola constante: el número
+// aparece en la sustitución y en el `force`, y dos números que tienen que
+// coincidir acaban no coincidiendo.
+const VERSION_DE_NAVEGACION = process.env.PLUS58_NAV_SDK || '7.6.1';
+const MODULO_DE_NAVEGACION = 'com.google.android.libraries.navigation:navigation';
+const ARTEFACTO_DE_NAVEGACION = `${MODULO_DE_NAVEGACION}:${VERSION_DE_NAVEGACION}`;
+
+/**
+ * POR QUÉ NO SE TOCA EL ANDROID GRADLE PLUGIN.
+ *
+ * Se intentó subir al Navigation SDK 7.9.0 --el que arregla el fallo mortal de
+ * la 7.6.1-- y hace falta AGP 8.13.2. La exigencia está ESCRITA EN EL METADATA
+ * DEL AAR, no sólo en la documentación:
+ *
+ *   Execution failed for task ':app:checkDebugAarMetadata'.
+ *   > Dependency 'com.google.android.libraries.navigation:navigation:7.9.0'
+ *     requires Android Gradle plugin 8.13.2 or higher.
+ *     This build currently uses Android Gradle plugin 8.12.0.
+ *
+ * Se probó a fijarlo: AGP 8.13.2 resuelve y la compilación avanza, pero el
+ * compilador de Kotlin 2.2.10 revienta con un error interno al tipar contra las
+ * clases de la 7.9.0. Y subiendo Kotlin a 2.3.0 --lo que Google declara como
+ * mínimo para la 7.7.0+-- el que revienta es un módulo del propio Expo,
+ * `react-native-safe-area-context`. Ahí se paró: la instrucción era no romper
+ * Expo/React Native.
+ *
+ * O sea: la versión más reciente del Navigation SDK compatible de forma segura
+ * con esta toolchain es la 7.6.1, y no hay atajo. El camino limpio es Expo SDK
+ * 58 (React Native 0.87) con el wrapper 0.17.x. Está en el informe.
+ */
 
 const MARCA = '// plugins/navegacionDelConductor.js';
 
@@ -88,7 +119,7 @@ module.exports = function navegacionDelConductor(config) {
         'el build.gradle raíz no es Groovy; este complemento no sabe editarlo'
       );
     }
-    const gradle = conf.modResults.contents;
+    let gradle = conf.modResults.contents;
     if (gradle.includes(MARCA)) return conf; // el prebuild puede pasar dos veces
 
     const ancla = 'allprojects {';
@@ -115,6 +146,10 @@ module.exports = function navegacionDelConductor(config) {
         `        using module('${ARTEFACTO_DE_NAVEGACION}') \\\n` +
         "        because 'el Navigation SDK ya trae el SDK de Mapas dentro'\n" +
         '    }\n' +
+        '    // Una sola version del Navigation SDK en todo el arbol: el wrapper\n' +
+        '    // trae la suya y la sustitucion de arriba mete otra. Si no coinciden,\n' +
+        '    // vuelven las clases duplicadas por la puerta de atras.\n' +
+        `    resolutionStrategy.force '${ARTEFACTO_DE_NAVEGACION}'\n` +
         '  }\n'
     );
     return conf;
