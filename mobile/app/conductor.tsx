@@ -319,6 +319,19 @@ export default function InicioDeConductor() {
                 titular={titularDelConductor(enCurso.viaje.estado) ?? 'Carrera en curso'}
                 origen={enCurso.viaje.origen}
                 destino={enCurso.viaje.destino}
+                // QUIÉN VA DETRÁS Y CUÁNTO SE COBRA, DE VERDAD.
+                //
+                // Estos dos no se pasaban, y el componente traía por omisión
+                // una pasajera inventada y una tarifa de ejemplo: en una
+                // carrera REAL el conductor veía «Ana Rondón · 4.98 (42
+                // viajes)» y «.50». Los dos datos estaban aquí al lado, en el
+                // propio viaje.
+                pasajero={{
+                  nombre: enCurso.viaje.pasajero || 'Tu pasajera',
+                  iniciales: inicialesDelPasajero(enCurso.viaje.pasajero)
+                }}
+                tarifa={enCurso.viaje.importe === null ? undefined : enCurso.viaje.importe.toFixed(2)}
+                metodoPago={enCurso.viaje.metodoDePago || 'Efectivo'}
                 accion={enCurso.accion}
                 fase={enCurso.fase}
                 fallo={enCurso.fallo}
@@ -368,6 +381,21 @@ export default function InicioDeConductor() {
  * Sólo lo que ya existe conectado. Lo que todavía no tiene pantalla real no se
  * enlaza: un destino que no lleva a ninguna parte se lee como una avería.
  */
+/**
+ * Las iniciales de quien va detrás, para el disco de la tarjeta.
+ *
+ * Si no hay nombre no se inventa ninguna: un punto dice «no lo sabemos», y dos
+ * letras cualesquiera dirían que sí.
+ */
+function inicialesDelPasajero(nombre: string): string {
+  const letras = String(nombre ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(parte => parte.charAt(0).toUpperCase());
+  return letras.join('') || '·';
+}
+
 function irA(clave: string) {
   if (clave === 'perfil') router.replace('/perfil');
   if (clave === 'historial') router.replace('/historial');

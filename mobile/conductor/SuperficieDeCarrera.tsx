@@ -47,18 +47,24 @@ export function SuperficieDeCarrera({
   titular,
   origen,
   destino,
-  tarifa = '.50',
+  // SIN VALORES DE DEMOSTRACIÓN, Y ES LO IMPORTANTE DE ESTE COMPONENTE.
+  //
+  // Aquí ponía `tarifa = '.50'` y una pasajera inventada —«Ana Rondón», 4.98,
+  // 42 viajes—. La pantalla que lo monta no le pasaba ninguno de los dos, así
+  // que un conductor con una carrera REAL veía el nombre de alguien que no
+  // existe y una tarifa que no era la suya. Se descubrió recorriendo una
+  // carrera de punta a punta contra staging.
+  //
+  // Un valor por omisión con pinta de dato de verdad no es un detalle de
+  // estilo: es lo que hace que el fallo no se vea. Sin él, faltar un dato se
+  // nota en la primera prueba.
+  tarifa,
   metodoPago = 'Efectivo',
   accion,
   fase,
   fallo,
   sePuede,
-  pasajero = {
-    nombre: 'Ana Rondón',
-    iniciales: 'AR',
-    calificacion: '4.98',
-    viajes: 42
-  },
+  pasajero,
   mensajesSinLeer = 0,
   tiempoEspera,
   onPulsar,
@@ -164,20 +170,27 @@ export function SuperficieDeCarrera({
       >
         <View style={[estilos.avatarContenedor, { backgroundColor: tema.color.superficieElevada }]}>
           <Text style={[estilos.avatarTexto, { color: tema.color.textoPrimario }]}>
-            {pasajero.iniciales}
+            {pasajero?.iniciales || '·'}
           </Text>
         </View>
 
         <View style={estilos.datosPasajero}>
           <Text style={[estilos.nombrePasajero, { color: tema.color.textoPrimario }]}>
-            {pasajero.nombre}
+            {pasajero?.nombre || 'Tu pasajera'}
           </Text>
-          <View style={estilos.filaEstrellas}>
-            <Icono nombre="estrella" color={tema.color.acento} tamano={13} activo />
-            <Text style={[estilos.ratingTexto, { color: tema.color.textoSecundario }]}>
-              {pasajero.calificacion || '5.0'} {pasajero.viajes ? `(${pasajero.viajes} viajes)` : ''}
-            </Text>
-          </View>
+          {/* LA CALIFICACIÓN SÓLO SI EXISTE.
+            *
+            * Antes caía a «5.0» cuando no había dato, que es peor que no
+            * enseñar nada: un conductor decide con eso, y un cinco redondo
+            * inventado dice «esta persona es de fiar» sin que nadie lo sepa. */}
+          {pasajero?.calificacion ? (
+            <View style={estilos.filaEstrellas}>
+              <Icono nombre="estrella" color={tema.color.acento} tamano={13} activo />
+              <Text style={[estilos.ratingTexto, { color: tema.color.textoSecundario }]}>
+                {pasajero.calificacion} {pasajero.viajes ? `(${pasajero.viajes} viajes)` : ''}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Botones de acción rápida: Chat y Llamada */}
