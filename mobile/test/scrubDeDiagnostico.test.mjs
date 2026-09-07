@@ -110,6 +110,24 @@ test('un evento entero sale sin nada que no deba salir', () => {
 // Cómo se enciende
 // ---------------------------------------------------------------------------
 
+test('el DSN se lee de forma ESTÁTICA, o no llega al teléfono', () => {
+  // REGRESIÓN DE UN FALLO REAL, visto al abrir la pantalla de diagnóstico en
+  // el APK: decía «el envío está APAGADO» con el DSN puesto en el `.env`.
+  //
+  // Expo sustituye `process.env.EXPO_PUBLIC_ALGO` en tiempo de compilación y
+  // sólo reconoce esa forma exacta. El código leía `entorno[VARIABLE_DSN]`, un
+  // acceso dinámico que no se sustituye: compila, instala, arranca, y en el
+  // dispositivo vale `undefined`. La misma trampa está documentada desde antes
+  // en `config/environment.ts`.
+  const modulo = leer('observabilidad/sentry.ts');
+  assert.match(modulo, /process\.env\.EXPO_PUBLIC_SENTRY_DSN/);
+  assert.doesNotMatch(
+    despojarComentarios(modulo),
+    /process\.env\[/,
+    'un acceso dinámico a process.env llega vacío al teléfono'
+  );
+});
+
 test('el diagnóstico NO se enciende en desarrollo ni sin DSN', () => {
   const modulo = leer('observabilidad/sentry.ts');
   assert.match(modulo, /if \(EN_DESARROLLO\) return \{ activo: false/);

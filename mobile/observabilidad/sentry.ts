@@ -43,6 +43,21 @@ const EN_DESARROLLO = typeof __DEV__ !== 'undefined' && __DEV__;
 
 export const VARIABLE_DSN = 'EXPO_PUBLIC_SENTRY_DSN';
 
+/**
+ * El DSN, LEÍDO DE FORMA ESTÁTICA. No es un detalle de estilo.
+ *
+ * Expo sustituye `process.env.EXPO_PUBLIC_ALGO` por su valor en tiempo de
+ * compilación, y sólo reconoce esa forma exacta. Un acceso dinámico
+ * --`entorno[VARIABLE_DSN]`, que es como estaba escrito la primera vez-- no se
+ * sustituye: compila, arranca, y en el teléfono llega `undefined`. El
+ * diagnóstico quedaba apagado en el APK sin que nada lo dijera, y sólo se vio
+ * al abrir la pantalla de diagnóstico en el dispositivo.
+ *
+ * La misma trampa está documentada en `config/environment.ts`, que la evita
+ * igual. Cualquier variable pública nueva tiene que leerse así.
+ */
+const DSN_DEL_PAQUETE = process.env.EXPO_PUBLIC_SENTRY_DSN;
+
 let encendido = false;
 
 /**
@@ -71,9 +86,10 @@ export interface ResultadoDeArranque {
  * Se llama una sola vez, lo más arriba posible, antes de montar la aplicación.
  */
 export function iniciarObservabilidad(
-  entornoDeProceso: Record<string, string | undefined> = process.env as Record<string, string | undefined>
+  /** Sólo las pruebas pasan otro: en la aplicación manda el valor incrustado. */
+  dsnInyectado: string | undefined = DSN_DEL_PAQUETE
 ): ResultadoDeArranque {
-  const dsn = entornoDeProceso[VARIABLE_DSN];
+  const dsn = dsnInyectado;
   const ambiente = configuracion.ok ? configuracion.entorno : 'development';
   const version = versionDeLaAplicacion();
 
