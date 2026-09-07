@@ -76,10 +76,13 @@ test('Inicio → Pedir resuelve a app/pedir.tsx, no al laboratorio', () => {
   assert.equal(/diseno/.test(inicio), false, 'el inicio real navega al laboratorio');
   assert.equal(/diseno/.test(shell), false, 'el shell navega al laboratorio');
 
-  // El campo conserva la puerta directa al flujo real. El disco central ahora
-  // despliega el catálogo sobre el mapa y la card Viajes mantiene la otra puerta.
+  // El campo conserva la puerta directa al flujo real, y ahora abre el
+  // BUSCADOR: se toca un campo de texto, así que se escribe. El buscador entra
+  // en Pedir con el destino ya elegido. El disco central despliega el catálogo
+  // sobre el mapa y la card Viajes mantiene la otra puerta.
   const hub = sinComentarios('preview/pantallaInicioPasajera.tsx');
-  assert.match(hub, /<CampoDeDestino onPress=\{\(\) => ir\('pedir'\)\} \/>/);
+  assert.match(hub, /<CampoDeDestino onPress=\{\(\) => ir\('buscar-destino'\)\} \/>/);
+  assert.match(shell, /case 'buscar-destino':\s*router\.push\('\/destino'\)/);
   assert.match(hub, /abierto=\{hojaAbierta\}/);
   assert.match(hub, /onAlternar=\{hojaAbierta \? cerrarHoja : abrirHoja\}/);
   const barra = sinComentarios('ui/Navegacion.tsx');

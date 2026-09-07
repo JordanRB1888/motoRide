@@ -21,7 +21,7 @@ export interface LugarEncontrado {
 }
 
 /** Por qué no hay resultados. Cada motivo se enseña distinto. */
-export type FalloDeBusqueda = 'SIN_RED' | 'CORTA' | 'NO_DISPONIBLE' | 'ERROR';
+export type FalloDeBusqueda = 'SIN_RED' | 'CORTA' | 'NO_DISPONIBLE' | 'SIN_VERIFICAR' | 'ERROR';
 
 export type ResultadoDeBusqueda =
   | { readonly ok: true; readonly lugares: readonly LugarEncontrado[] }
@@ -61,6 +61,10 @@ export async function buscarLugares(
     // 503: el servidor no tiene con qué buscar. No es culpa de quien escribe y
     // se dice distinto, porque insistir no lo va a arreglar.
     if (respuesta.estadoHttp === 503) return { ok: false, motivo: 'NO_DISPONIBLE' };
+    // Buscar cuesta dinero, así que el servidor no deja buscar a quien todavía
+    // no ha demostrado que el correo o el teléfono son suyos. Insistir tampoco
+    // lo arregla: hay que ir a verificar, y por eso se dice aparte.
+    if (respuesta.codigo === 'CONTACT_NOT_VERIFIED') return { ok: false, motivo: 'SIN_VERIFICAR' };
     return { ok: false, motivo: 'ERROR' };
   }
 

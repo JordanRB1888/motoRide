@@ -106,3 +106,21 @@ test('el alfiler del mapa es rojo y se ve', () => {
   // el sitio es su centro o su borde.
   assert.match(marcadores, /El tallo, que baja hasta el punto exacto/);
 });
+
+test('el «¿A dónde vas?» del inicio abre el teclado, no el mapa', () => {
+  // Es el primer campo que se toca al abrir la aplicación. Llevaba a Pedir, y
+  // allí había que tocar OTRO campo para poder escribir: dos toques para lo que
+  // se pide con uno, y el primero abría un mapa que nadie había pedido.
+  const inicio = leer('preview/pantallaInicioPasajera.tsx');
+  assert.match(inicio, /<CampoDeDestino onPress=\{\(\) => ir\('buscar-destino'\)\} \/>/);
+
+  const shell = leer('navegacion/shellDePasajero.tsx');
+  assert.match(shell, /case 'buscar-destino':/);
+  assert.match(shell, /router\.push\('\/destino'\)/);
+
+  // Y el buscador sabe volver: elegir entra en Pedir con el destino puesto,
+  // cancelar deshace el push.
+  const buscador = leer('app/destino.tsx');
+  assert.match(buscador, /pathname: '\/pedir'/);
+  assert.match(buscador, /onPress=\{\(\) => router\.back\(\)\}/);
+});

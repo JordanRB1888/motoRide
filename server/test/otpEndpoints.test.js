@@ -125,9 +125,42 @@ test('SIGNUP: el codigo bueno demuestra posesion y no crea ninguna cuenta', asyn
   const envio = await pedir({ channel: 'WHATSAPP', destination: '04141234567', purpose: 'SIGNUP' });
   const r = await verificar({ challengeId: envio.cuerpo.challengeId, code: ultimoCodigo(), purpose: 'SIGNUP' });
   assert.equal(r.status, 200);
-  assert.deepEqual(r.cuerpo, { status: 'verified', purpose: 'SIGNUP', channel: 'WHATSAPP' });
+  // `contactVerified: false` es «no habia a quien marcar», que es distinto de
+  // un fallo: el codigo era bueno y la posesion quedo demostrada.
+  assert.deepEqual(r.cuerpo, {
+    status: 'verified', purpose: 'SIGNUP', channel: 'WHATSAPP', contactVerified: false
+  });
   assert.equal(database.users.length, 0);
   assert.equal(database.verifiedContacts.length, 0, 'sin User no hay a quien atribuir el contacto');
+});
+
+test('SIGNUP: si la cuenta YA existe, le marca el contacto', async t => {
+  // El fallo que encontro el dueno. La aplicacion registra PRIMERO y verifica
+  // despues, asi que cuando llega el codigo la cuenta ya existe. Antes se daba
+  // el codigo por bueno y no se marcaba a nadie: quien acababa de escribir su
+  // codigo seguia figurando sin verificar, no podia pedir una carrera, y no
+  // habia forma de salir de ahi.
+  const { database, pedir, verificar, ultimoCodigo } = await montar(t);
+
+  database.users.push({
+    id: 'passenger_ya_registrada',
+    role: 'passenger',
+    phone: '+584141234567',
+    email: 'alguien@ejemplo.com',
+    accountStatus: 'ACTIVE',
+    emailVerified: false,
+    phoneVerified: false
+  });
+
+  const envio = await pedir({ channel: 'WHATSAPP', destination: '04141234567', purpose: 'SIGNUP' });
+  const r = await verificar({ challengeId: envio.cuerpo.challengeId, code: ultimoCodigo(), purpose: 'SIGNUP' });
+
+  assert.equal(r.status, 200);
+  assert.equal(r.cuerpo.contactVerified, true, 'no dijo que hubiera marcado a nadie');
+
+  const usuaria = database.users[0];
+  assert.equal(usuaria.phoneVerified, true, 'el telefono siguio sin verificar');
+  assert.equal(database.verifiedContacts.length, 1, 'el contacto no quedo atribuido');
 });
 
 test('un codigo equivocado descuenta intentos, el quinto agota, y el vencido dice que vencio', async t => {

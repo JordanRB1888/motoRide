@@ -392,6 +392,7 @@ export type EstadoDeFallo =
   | 'RATE_LIMITED'
   | 'ACTIVE_TRIP_EXISTS'
   | 'SESION_CADUCADA'
+  | 'SIN_VERIFICAR'
   | 'ROUTE_ERROR'
   | 'PRICING_ERROR';
 
@@ -406,12 +407,28 @@ export function estadoDelFallo(fallo: {
   // Sin red no se crea nada local: no hay viaje falso esperando a subir.
   if (fallo.motivo === 'SIN_RED' || fallo.motivo === 'TIEMPO_AGOTADO') return 'OFFLINE';
   if (fallo.estadoHttp === 429) return 'RATE_LIMITED';
+  // El servidor no deja pedir --ni ver el precio-- a quien todavía no ha
+  // demostrado que el correo o el teléfono son suyos. Es lo único de esta lista
+  // que no se arregla reintentando: hay que ir a verificar.
+  if (fallo.codigo === 'CONTACT_NOT_VERIFIED') return 'SIN_VERIFICAR';
   // El recorrido no se pudo medir: los dos puntos no valen o el servidor no
   // supo trazar entre ellos.
   if (fallo.codigo === 'VALID_GPS_COORDINATES_REQUIRED' || fallo.codigo === 'INVALID_ROUTE_METRICS') {
     return 'ROUTE_ERROR';
   }
   return 'PRICING_ERROR';
+}
+
+/**
+ * Un código de error del backend, tal cual sale de la red.
+ *
+ * `services/api.ts` deja el código en `mensaje` cuando el servidor no manda
+ * texto —que es siempre: el contrato de error es `{ error: CÓDIGO }`—. Ese
+ * valor sirve para diagnosticar, no para leerlo: en la pantalla de pedir viaje
+ * se llegó a ver «CONTACT_NOT_VERIFIED» en rojo debajo de las motos.
+ */
+function esUnCodigo(texto: string): boolean {
+  return /^[A-Z][A-Z0-9_]*$/.test(texto.trim());
 }
 
 /** Qué decirle a la persona, según lo que pasó de verdad. */
@@ -423,12 +440,18 @@ export function mensajeDelFallo(estado: EstadoDeFallo, mensajeDelServidor: strin
       return 'Demasiados intentos seguidos. Espera un momento y vuelve a probar.';
     case 'SESION_CADUCADA':
       return 'Tu sesión caducó. Entra otra vez.';
+    case 'SIN_VERIFICAR':
+      return 'Confirma tu correo para pedir viajes. Te mandamos un código y en un minuto estás.';
     case 'ROUTE_ERROR':
       return 'No pudimos calcular el recorrido. Revisa el destino en el mapa.';
     case 'ACTIVE_TRIP_EXISTS':
       return 'Ya tienes un viaje en marcha.';
     default:
-      return mensajeDelServidor;
+      // Un código sin traducir no se le enseña a nadie: se dice lo que se sabe
+      // de verdad, que es que no se pudo, y se deja el código para el registro.
+      return esUnCodigo(mensajeDelServidor)
+        ? 'No pudimos completar la operación. Inténtalo de nuevo en un momento.'
+        : mensajeDelServidor;
   }
 }
 

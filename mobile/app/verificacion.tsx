@@ -51,6 +51,8 @@ import {
   type DestinoCanalOTP
 } from '../ui/VerificacionOTP';
 import { consultarCanales, comprobarCodigo, pedirCodigo } from '../services/otp';
+import { pedirPerfil } from '../services/perfil';
+import { useSesion } from '../context/AuthContext';
 import {
   aparienciaDeLaCasilla,
   canalPreferido,
@@ -96,8 +98,42 @@ export default function Verificacion() {
   // oscuro y un texto sin color se pinta negro sobre negro.
   const tema = useTema();
   const proposito = (parametros.proposito ?? 'SIGNUP') as PropositoDeVerificacion;
-  const telefono = typeof parametros.telefono === 'string' ? parametros.telefono : '';
-  const correo = typeof parametros.correo === 'string' ? parametros.correo : '';
+  const { sesion } = useSesion();
+
+  /**
+   * A DÓNDE SE MANDA EL CÓDIGO
+   *
+   * Normalmente lo trae quien navega hasta aquí: el registro acaba de escribir
+   * el correo y lo pasa. Pero también se llega desde dentro de la aplicación
+   * —«confirma tu correo para pedir viajes»—, y allí no hay ningún formulario
+   * del que sacarlo: el dato lo tiene el servidor.
+   *
+   * Así que, con sesión y sin parámetro, se pregunta. Sin esto la pantalla
+   * respondía «no tenemos un correo al que enviarte el código» a una cuenta
+   * cuyo correo el servidor conoce perfectamente.
+   */
+  const [contacto, setContacto] = useState({
+    telefono: typeof parametros.telefono === 'string' ? parametros.telefono : '',
+    correo: typeof parametros.correo === 'string' ? parametros.correo : ''
+  });
+  const { telefono, correo } = contacto;
+  const faltaContacto = telefono === '' || correo === '';
+  const haySesion = sesion.estado === 'AUTENTICADO';
+
+  useEffect(() => {
+    if (!faltaContacto || !haySesion) return;
+    let vigente = true;
+    void pedirPerfil().then(respuesta => {
+      if (!vigente || !respuesta.ok) return;
+      // Lo que ya venía por parámetro manda: es lo que la persona acaba de
+      // escribir, y puede ser más nuevo que lo que hay guardado.
+      setContacto(actual => ({
+        telefono: actual.telefono || respuesta.datos.phone,
+        correo: actual.correo || respuesta.datos.email
+      }));
+    });
+    return () => { vigente = false; };
+  }, [faltaContacto, haySesion]);
   /** Los propósitos que exigen sesión: el servidor los rechaza sin ella. */
   const conSesion = ['CHANGE_PHONE', 'CHANGE_EMAIL', 'ACCOUNT_LINK', 'SENSITIVE_ACTION'].includes(proposito);
 

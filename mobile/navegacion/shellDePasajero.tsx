@@ -78,6 +78,17 @@ export function crearNavegacionDePasajero({ enPedir = false } = {}) {
         else router.replace({ pathname: '/pasajero', params: { [ABRIR_SERVICIOS]: '1' } });
         return;
 
+      // «¿A dónde vas?» del inicio: se toca un campo de texto, así que se abre
+      // el TECLADO. Antes llevaba a Pedir y allí había que tocar otro campo
+      // para poder escribir: dos toques para lo que se pide con uno, y el
+      // primero abría un mapa que nadie había pedido.
+      //
+      // El buscador sabe volver solo: al elegir un sitio entra en Pedir con el
+      // destino puesto, y cancelar deshace el `push` y devuelve aquí.
+      case 'buscar-destino':
+        router.push('/destino');
+        return;
+
       // La casilla «Viajes» de la hoja es la puerta real a pedir una carrera.
       // El resto de casillas todavía no llevan a ningún sitio, y por eso no
       // hacen nada: mandar a una pantalla vacía sería peor.

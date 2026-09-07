@@ -212,6 +212,14 @@ export default function PantallaDePedir() {
   const claveDelIntento = useRef<string | null>(null);
   const [estimacion, setEstimacion] = useState<Estimacion | null>(null);
   const [problema, setProblema] = useState<string | null>(null);
+  /**
+   * El problema es que la cuenta no ha verificado su contacto.
+   *
+   * Va aparte del texto porque cambia lo que se PUEDE hacer, no sólo lo que se
+   * lee: aquí no hay nada que reintentar, y la pantalla tiene que ofrecer la
+   * puerta a la verificación en vez de dejar a la persona mirando un aviso.
+   */
+  const [faltaVerificar, setFaltaVerificar] = useState(false);
 
   /**
    * El origen sale del GPS.
@@ -253,6 +261,7 @@ export default function PantallaDePedir() {
   useEffect(() => {
     setEstimacion(null);
     setProblema(null);
+    setFaltaVerificar(false);
     claveDelIntento.current = null;
     setFase(previa => (previa === 'PIDIENDO' ? previa : 'ELIGIENDO'));
   }, [huella]);
@@ -266,11 +275,14 @@ export default function PantallaDePedir() {
 
     setFase('ESTIMANDO');
     setProblema(null);
+    setFaltaVerificar(false);
 
     const respuesta = await pedirEstimacion(tipo, origen, destino);
     if (!respuesta.ok) {
+      const estado = estadoDelFallo(respuesta);
       setFase('RECHAZADO');
-      setProblema(mensajeDelFallo(estadoDelFallo(respuesta), respuesta.mensaje));
+      setProblema(mensajeDelFallo(estado, respuesta.mensaje));
+      setFaltaVerificar(estado === 'SIN_VERIFICAR');
       return;
     }
 
@@ -331,6 +343,7 @@ export default function PantallaDePedir() {
       // en vez de crear otro.
       setFase('RECHAZADO');
       setProblema(mensajeDelFallo(estado, respuesta.mensaje));
+      setFaltaVerificar(estado === 'SIN_VERIFICAR');
       return;
     }
 
@@ -401,6 +414,20 @@ export default function PantallaDePedir() {
       }
     } as never);
   }, [origen, destino]);
+
+  /**
+   * A verificar el contacto, y de vuelta aquí.
+   *
+   * Sin correo ni teléfono en los parámetros: la pantalla de verificación se
+   * los pregunta al servidor, que es quien los tiene. Desde aquí no hay ningún
+   * formulario del que sacarlos.
+   */
+  const irAVerificar = useCallback(() => {
+    router.push({
+      pathname: '/verificacion',
+      params: { proposito: 'SIGNUP', volverA: '/pedir' }
+    } as never);
+  }, []);
 
   const abrirElMapa = useCallback(() => {
     setEligiendoEnMapa(true);
@@ -635,6 +662,18 @@ export default function PantallaDePedir() {
               <>
                 <View style={{ height: tema.ritmo.entreElementos }} />
                 <Txt nivel="etiqueta" tono="peligro">{problema}</Txt>
+                {/* Sin esto el aviso era un muro: decía que hace falta
+                    verificar y no había desde aquí manera de hacerlo. */}
+                {faltaVerificar && (
+                  <>
+                    <View style={{ height: tema.ritmo.entreElementos }} />
+                    <Boton
+                      titulo="Verificar mi cuenta"
+                      onPress={irAVerificar}
+                      testID="pedir-ir-a-verificar"
+                    />
+                  </>
+                )}
               </>
             )}
 

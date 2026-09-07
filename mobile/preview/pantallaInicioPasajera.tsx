@@ -945,7 +945,7 @@ export function C2InicioPasajera({
           }}>
             <Cabecera datos={datos} />
             <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
-              <CampoDeDestino onPress={() => ir('pedir')} />
+              <CampoDeDestino onPress={() => ir('buscar-destino')} />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Volver al inicio comercial"
@@ -986,7 +986,7 @@ export function C2InicioPasajera({
           }}>
             <Cabecera datos={datos} />
             <View style={{ paddingHorizontal: tema.ritmo.margenPantalla }}>
-              <CampoDeDestino onPress={() => ir('pedir')} />
+              <CampoDeDestino onPress={() => ir('buscar-destino')} />
               {avisoPostulacion ? (
                 <View style={{ marginTop: 8 }}>
                   <AvisoPostulacionDriver {...avisoPostulacion} />

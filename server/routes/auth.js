@@ -171,8 +171,40 @@ export function createAuthRouter({
 
     // A partir de aqui la posesion esta demostrada: se aplica el proposito.
     if (purpose === 'SIGNUP') {
+      // SI LA CUENTA YA EXISTE, SE LE MARCA EL CONTACTO.
+      //
+      // Este proposito nacio para verificar ANTES de crear la cuenta: en ese
+      // momento no hay usuario a quien marcar, y por eso aqui no se marcaba a
+      // nadie. Pero el registro de la aplicacion crea la cuenta primero y
+      // verifica despues, y con la version anterior el codigo se daba por
+      // bueno y la cuenta seguia figurando SIN verificar: quien acababa de
+      // meter su codigo no podia pedir una carrera y no habia forma de salir
+      // de ahi.
+      //
+      // Se cubren los dos caminos: si hay cuenta, se marca; si no la hay
+      // --verificar antes de registrarse-- se responde como siempre.
+      const registrada = usuarioPorDestino(tipo, destino);
+      if (registrada) {
+        const marcado = identidad.contactos.marcarVerificado({
+          userId: registrada.id, type: tipo, valueNormalized: destino
+        });
+        if (!marcado.ok) {
+          if (!await persistir(res)) return;
+          return res.status(409).json({ error: 'CONTACT_TAKEN' });
+        }
+        if (tipo === 'PHONE') registrada.phoneVerified = true;
+        if (tipo === 'EMAIL') registrada.emailVerified = true;
+        registrada.updatedAt = new Date().toISOString();
+      }
       if (!await persistir(res)) return;
-      return res.json({ status: 'verified', purpose, channel: desafio.channel });
+      return res.json({
+        status: 'verified',
+        purpose,
+        channel: desafio.channel,
+        // Para que la aplicacion sepa que ya puede seguir, sin tener que
+        // adivinarlo pidiendo el perfil otra vez.
+        contactVerified: Boolean(registrada)
+      });
     }
 
     if (purpose === 'LOGIN' || purpose === 'PASSWORD_RESET') {

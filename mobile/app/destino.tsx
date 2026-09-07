@@ -42,6 +42,7 @@ const MOTIVOS: Readonly<Record<FalloDeBusqueda, string>> = {
   SIN_RED: 'Sin conexión. Revisa tus datos o el wifi.',
   CORTA: '',
   NO_DISPONIBLE: 'La búsqueda no está disponible ahora mismo. Puedes elegir el sitio en el mapa.',
+  SIN_VERIFICAR: 'Confirma tu correo para poder buscar sitios. Te mandamos un código y en un minuto estás.',
   ERROR: 'No pudimos buscar. Inténtalo otra vez.'
 };
 
@@ -121,6 +122,20 @@ export default function Destino() {
     router.replace({ pathname: '/pedir', params: { volverAlGps: '1' } } as never);
   }, []);
 
+  /**
+   * A verificar el contacto, y de vuelta a pedir.
+   *
+   * No se le pasa ni correo ni teléfono: aquí no hay formulario del que
+   * sacarlos, y la pantalla de verificación se los pregunta al servidor cuando
+   * llega con sesión y sin ellos.
+   */
+  const irAVerificar = useCallback(() => {
+    router.replace({
+      pathname: '/verificacion',
+      params: { proposito: 'SIGNUP', volverA: '/pedir' }
+    } as never);
+  }, []);
+
   return (
     <Pantalla>
       <View style={{ flex: 1, padding: 20, gap: 14 }} testID="pantalla-destino">
@@ -171,8 +186,13 @@ export default function Destino() {
           ) : null}
 
           {!buscando && fallo && MOTIVOS[fallo] ? (
-            <View style={{ paddingVertical: 18 }} accessibilityRole="alert" testID="fallo-busqueda">
+            <View style={{ paddingVertical: 18, gap: 14 }} accessibilityRole="alert" testID="fallo-busqueda">
               <Txt nivel="cuerpo" tono="secundario">{MOTIVOS[fallo]}</Txt>
+              {/* Un aviso que sólo dice lo que falta deja a la persona parada.
+                  Éste lleva a donde se arregla. */}
+              {fallo === 'SIN_VERIFICAR' ? (
+                <Boton titulo="Verificar mi cuenta" onPress={irAVerificar} testID="ir-a-verificar" />
+              ) : null}
             </View>
           ) : null}
 
