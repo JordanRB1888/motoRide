@@ -85,6 +85,8 @@ export interface Direccion {
     readonly rutaDelMapa: string;
     /** Texto sobre fotografía con velo. Igual en los dos esquemas. Ver `esquemas.ts`. */
     readonly sobreImagen: string;
+    /** El amarillo como texto sobre fotografía con velo. Ver `esquemas.ts`. */
+    readonly acentoSobreImagen: string;
   };
 
   /** Cuánto aire respira la interfaz. */
@@ -172,7 +174,8 @@ const PREMIUM_MINIMAL: Direccion = {
     fondoDelMapa: GRAFITO.superficie,
     calleDelMapa: TEXTO.tenue,
     rutaDelMapa: RUTA_VERDE,
-    sobreImagen: SOBRE_IMAGEN
+    sobreImagen: SOBRE_IMAGEN,
+    acentoSobreImagen: AMARILLO.base
   },
   ritmo: {
     margenPantalla: ESPACIO['6'],
@@ -228,7 +231,8 @@ const URBAN_FUNCTIONAL: Direccion = {
     fondoDelMapa: GRAFITO.superficie,
     calleDelMapa: TEXTO.tenue,
     rutaDelMapa: RUTA_VERDE,
-    sobreImagen: SOBRE_IMAGEN
+    sobreImagen: SOBRE_IMAGEN,
+    acentoSobreImagen: AMARILLO.base
   },
   ritmo: {
     margenPantalla: ESPACIO['4'],
@@ -294,7 +298,8 @@ const SIGNATURE: Direccion = {
     fondoDelMapa: GRAFITO.superficie,
     calleDelMapa: TEXTO.tenue,
     rutaDelMapa: RUTA_VERDE,
-    sobreImagen: SOBRE_IMAGEN
+    sobreImagen: SOBRE_IMAGEN,
+    acentoSobreImagen: AMARILLO.base
   },
   ritmo: {
     margenPantalla: ESPACIO['5'],

@@ -214,7 +214,7 @@ export function PromoCarousel({
                 <View style={estilos.cuerpo}>
                   <Text style={[estilos.titular, { color: tema.color.sobreImagen }]} numberOfLines={2}>
                     {banner.title}
-                    {banner.tituloDestacado ? <Text style={{ color: tema.color.acento }}>{' '}{banner.tituloDestacado}</Text> : null}
+                    {banner.tituloDestacado ? <Text style={{ color: tema.color.acentoSobreImagen }}>{' '}{banner.tituloDestacado}</Text> : null}
                   </Text>
                   <Text style={[estilos.apoyo, { color: tema.color.sobreImagen }]} numberOfLines={2}>{banner.subtitle}</Text>
                   {banner.ctaLabel ? (

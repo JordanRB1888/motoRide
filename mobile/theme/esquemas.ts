@@ -121,6 +121,16 @@ export interface EsquemaDeColor {
    * cambie en un solo sitio.
    */
   readonly sobreImagen: string;
+  /**
+   * El amarillo de marca como TEXTO, sólo sobre fotografía con velo oscuro.
+   *
+   * `acento` no vale como tinta de día (1,27:1 sobre marfil) y por eso existe
+   * `acentoTexto`, que baja a ámbar. Pero sobre un velo oscuro el ámbar se
+   * ensucia y el amarillo de marca se lee de sobra: es la palabra destacada
+   * del hero y de las promociones. Es el mismo valor en los dos esquemas,
+   * como `sobreImagen`, y por la misma razón.
+   */
+  readonly acentoSobreImagen: string;
 }
 
 /**
@@ -149,7 +159,8 @@ export const ESQUEMA_OSCURO: EsquemaDeColor = {
   calleDelMapa: TEXTO.tenue,
   // Sobre grafito el verde puede subir un punto sin deslumbrar.
   rutaDelMapa: '#22C55E',
-  sobreImagen: SOBRE_IMAGEN
+  sobreImagen: SOBRE_IMAGEN,
+  acentoSobreImagen: AMARILLO.base
 };
 
 /**
@@ -189,7 +200,8 @@ export const ESQUEMA_CLARO: EsquemaDeColor = {
   // Un punto mas profundo que en noche: sobre marfil y calles blancas, el
   // #22C55E puro empieza a lavarse.
   rutaDelMapa: '#15A34A',
-  sobreImagen: SOBRE_IMAGEN
+  sobreImagen: SOBRE_IMAGEN,
+  acentoSobreImagen: AMARILLO.base
 };
 
 /**

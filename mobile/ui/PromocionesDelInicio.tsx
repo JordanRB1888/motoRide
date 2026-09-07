@@ -128,7 +128,7 @@ export function PromocionesDelInicio({ promociones = PROMOCIONES_MOCK, onAbrir, 
               <View style={estilos.cuerpo}>
                 <Text style={[estilos.titulo, { color: tema.color.sobreImagen }]} numberOfLines={3}>
                   {promo.titulo}
-                  {promo.tituloDestacado ? <Text style={{ color: tema.color.acento }}>{' '}{promo.tituloDestacado}</Text> : null}
+                  {promo.tituloDestacado ? <Text style={{ color: tema.color.acentoSobreImagen }}>{' '}{promo.tituloDestacado}</Text> : null}
                 </Text>
                 <Text style={[estilos.detalle, { color: tema.color.sobreImagen }]} numberOfLines={2}>{promo.detalle}</Text>
               </View>
