@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -328,4 +329,21 @@ test('reconectar durante la oferta no regala tiempo nuevo', async t => {
     ['NO_ACTIVE_OFFER', 'NOT_CURRENT_OFFER', 'TRIP_NOT_SEARCHING'].includes(motivo),
     `la ventana debía haber vencido pese a la reconexión; el servidor dijo ${motivo}`
   );
+});
+
+test('el aviso de nueva carrera no promete un plazo escrito a mano', () => {
+  // Decia «Responde antes de 15 segundos» y la ventana paso a 30, ademas de
+  // ser configurable con DRIVER_OFFER_TIMEOUT_MS: cualquier numero ahi es una
+  // promesa que el servidor puede dejar de cumplir sin que nadie lo note. El
+  // aviso lo componen DOS sitios --servidor y movil-- y los dos se vigilan.
+  const fuentes = [
+    fs.readFileSync(new URL('../services/pushNotificationService.js', import.meta.url), 'utf8'),
+    fs.readFileSync(new URL('../../mobile/domain/notificaciones.ts', import.meta.url), 'utf8')
+  ];
+  for (const fuente of fuentes) {
+    const desde = fuente.indexOf('ride_request:');
+    assert.ok(desde > 0, 'no se encontro el aviso de nueva carrera');
+    const aviso = fuente.slice(desde, desde + 220);
+    assert.doesNotMatch(aviso, /\d+\s*segundos/, `el aviso de carrera promete un plazo concreto: ${aviso}`);
+  }
 });

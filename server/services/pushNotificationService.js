@@ -92,7 +92,7 @@ const PAYLOAD_VERSION = 1;
  * otra --la prueba del móvil compara las dos.
  */
 export const TEXTO_DE_AVISO = Object.freeze({
-  ride_request: { title: 'Nueva carrera', body: 'Tienes una solicitud cerca de ti. Responde antes de 15 segundos.' },
+  ride_request: { title: 'Nueva carrera', body: 'Tienes una solicitud cerca de ti. Respóndela antes de que se agote.' },
   scheduled_offer: { title: 'Transporte Seguro', body: 'Te proponen un traslado programado.' },
   scheduled_pickup_due: { title: 'Transporte Seguro', body: 'Es hora de ir a buscar tu traslado programado.' },
   scheduled_cancelled: { title: 'Transporte Seguro', body: 'Un traslado programado se canceló.' },
