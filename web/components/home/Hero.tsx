@@ -153,24 +153,18 @@ export default function Hero() {
 
             {/* La moto entra por delante: es el plano más cercano */}
             <div
-              className="pointer-events-none absolute -bottom-[2%] -left-[62%] z-10 w-[104%] sm:-left-[64%] sm:w-[106%]"
+              className="pointer-events-none absolute -bottom-[4%] -left-[54%] z-10 w-[92%] sm:-left-[56%] sm:w-[94%]"
               style={{
                 transform:
                   "translate3d(calc(var(--px) * -34px), calc(var(--py) * -14px), 0)",
               }}
             >
               <Image
-                src="/brand/rider.png"
+                src="/brand/moto.webp"
                 alt=""
-                width={1081}
-                height={819}
-                className="h-auto w-full drop-shadow-[0_30px_40px_rgba(0,0,0,.75)]"
-                style={{
-                  maskImage:
-                    "linear-gradient(90deg, transparent 0%, #000 18%, #000 100%)",
-                  WebkitMaskImage:
-                    "linear-gradient(90deg, transparent 0%, #000 18%, #000 100%)",
-                }}
+                width={1106}
+                height={1199}
+                className="h-auto w-full drop-shadow-[0_36px_44px_rgba(0,0,0,.8)]"
               />
             </div>
           </div>
