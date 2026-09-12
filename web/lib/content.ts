@@ -71,13 +71,13 @@ export const SERVICES: Service[] = [
     id: "envios",
     name: "Envíos",
     line: "Manda algo al otro lado de la ciudad.",
-    screen: "history",
+    screen: "home",
   },
   {
     id: "encomiendas",
     name: "Encomiendas",
     line: "Paquetes que llegan cuando dices.",
-    screen: "history",
+    screen: "home",
   },
   {
     id: "comercios",
@@ -95,17 +95,24 @@ export const SERVICES: Service[] = [
     id: "seguro",
     name: "Transporte seguro",
     line: "Conductor identificado y viaje registrado.",
-    screen: "offer",
+    screen: "driver",
   },
 ];
 
-/** Pantallas reales de la aplicación. Ninguna es una maqueta dibujada. */
+/**
+ * Pantallas reales de la aplicación, verificadas una por una contra la captura.
+ *
+ * Solo entran aquí las que muestran producto. Quedan fuera `c-oferta2.png` y
+ * `c-tras-aceptar.png`: pese a su nombre son el historial VACÍO del conductor
+ * («Todavía no has hecho ningún viaje») y no sirven para mostrar el servicio.
+ *
+ * PENDIENTE: faltan los estados intermedios del viaje (buscando conductor,
+ * conductor asignado, viaje en curso). Se capturan levantando la app real.
+ */
 export const PHONE_SCREENS = [
-  { id: "home", src: "/app/passenger-home.png", alt: "Inicio del pasajero en +58Express" },
-  { id: "offer", src: "/app/driver-offer.png", alt: "Solicitud de viaje que recibe el conductor" },
-  { id: "history", src: "/app/trip-history.png", alt: "Historial de viajes del pasajero" },
+  { id: "home", src: "/app/passenger-home.png", alt: "Pantalla de inicio del pasajero en +58Express" },
+  { id: "driver", src: "/app/driver-profile.png", alt: "Perfil del conductor verificado" },
   { id: "earnings", src: "/app/driver-earnings.png", alt: "Ganancias del conductor" },
-  { id: "profile", src: "/app/driver-profile.png", alt: "Perfil del conductor" },
 ];
 
 /**

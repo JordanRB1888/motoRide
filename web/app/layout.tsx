@@ -60,8 +60,11 @@ export const metadata: Metadata = {
       "Movilidad y servicios bajo demanda en Venezuela. Tu ciudad, más cerca.",
   },
   icons: {
-    icon: "/brand/app-icon.png",
-    apple: "/brand/app-icon.png",
+    icon: [
+      { url: "/brand/app-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/brand/app-icon.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/brand/apple-touch-icon.png",
   },
   robots: { index: true, follow: true },
 };
