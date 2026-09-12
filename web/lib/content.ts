@@ -128,6 +128,13 @@ export const PHONE_SCREENS = [
   },
 ];
 
+/** Devuelve solo las pantallas pedidas: cada teléfono carga lo que muestra. */
+export function screensById(...ids: string[]) {
+  return ids
+    .map((id) => PHONE_SCREENS.find((s) => s.id === id))
+    .filter((s): s is (typeof PHONE_SCREENS)[number] => Boolean(s));
+}
+
 /**
  * Los pasos siguen la máquina de estados real del backend:
  * DRAFT → SEARCHING → DRIVER_ASSIGNED → DRIVER_EN_ROUTE → IN_TRIP → COMPLETED

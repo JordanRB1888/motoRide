@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef } from "react";
 import InteractivePhone from "@/components/phone/InteractivePhone";
 import { ButtonLink } from "@/components/ui/Button";
-import { PHONE_SCREENS } from "@/lib/content";
+import { screensById } from "@/lib/content";
 import { prefersReducedMotion } from "@/lib/motion";
 
 export default function Hero() {
@@ -144,7 +144,7 @@ export default function Hero() {
 
             <div className="origin-center scale-[0.74] sm:scale-[0.84] lg:scale-[0.82] xl:scale-[0.92]">
               <InteractivePhone
-                screens={PHONE_SCREENS}
+                screens={screensById("map")}
                 initialScreen="map"
                 width={320}
                 priority

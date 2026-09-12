@@ -2,6 +2,7 @@ import SmoothScroll from "@/components/motion/SmoothScroll";
 import Navbar from "@/components/site/Navbar";
 import Hero from "@/components/home/Hero";
 import RideScene from "@/components/home/RideScene";
+import Servicios from "@/components/home/Servicios";
 import Zonas from "@/components/home/Zonas";
 
 export default function Home() {
@@ -12,6 +13,7 @@ export default function Home() {
       <main id="contenido">
         <Hero />
         <RideScene />
+        <Servicios />
         <Zonas />
       </main>
     </>

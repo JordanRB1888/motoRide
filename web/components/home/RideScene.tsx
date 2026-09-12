@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 import InteractivePhone from "@/components/phone/InteractivePhone";
-import { PHONE_SCREENS, HOW_IT_WORKS } from "@/lib/content";
+import { screensById, HOW_IT_WORKS } from "@/lib/content";
 import { EASE, prefersReducedMotion } from "@/lib/motion";
 
 /** Trazado de la carrera. Serpentea como una calle, no como un arco decorativo. */
@@ -224,7 +224,7 @@ export default function RideScene() {
 
           <div className="hidden justify-end lg:flex">
             <div className="scale-[0.84] xl:scale-95">
-              <InteractivePhone screens={PHONE_SCREENS} initialScreen="home" width={310} />
+              <InteractivePhone screens={screensById("map", "driver", "home")} initialScreen="map" width={310} />
             </div>
           </div>
         </div>

@@ -14,6 +14,12 @@ type Props = {
   screens: PhoneScreen[];
   /** Pantalla visible en el render inicial. El resto se cruzan con GSAP. */
   initialScreen?: string;
+  /**
+   * Modo controlado: el componente cruza las pantallas por CSS.
+   * Se usa donde manda React (hover de una lista). Donde manda GSAP —la escena
+   * de scroll— se omite, para que no compitan dos motores por la misma opacidad.
+   */
+  activeScreen?: string;
   /** Ancho del cuerpo del teléfono en píxeles CSS. */
   width?: number;
   className?: string;
@@ -33,10 +39,11 @@ type Props = {
  *   [data-phone-glare]  — el reflejo se desplaza al girar
  */
 const InteractivePhone = forwardRef<HTMLDivElement, Props>(function InteractivePhone(
-  { screens, initialScreen, width = 300, className = "", priority = false },
+  { screens, initialScreen, activeScreen, width = 300, className = "", priority = false },
   ref,
 ) {
-  const active = initialScreen ?? screens[0]?.id;
+  const controlado = activeScreen !== undefined;
+  const active = activeScreen ?? initialScreen ?? screens[0]?.id;
   const height = Math.round(width * 2.03);
 
   return (
@@ -77,13 +84,20 @@ const InteractivePhone = forwardRef<HTMLDivElement, Props>(function InteractiveP
                 key={screen.id}
                 data-phone-screen={screen.id}
                 className="absolute inset-0"
-                style={{ opacity: screen.id === active ? 1 : 0 }}
+                style={{
+                  opacity: screen.id === active ? 1 : 0,
+                  transition: controlado ? "opacity .42s ease" : undefined,
+                }}
               >
                 <Image
                   src={screen.src}
                   alt={screen.alt}
                   fill
-                  sizes={`${width}px`}
+                  /* Son capturas de interfaz: el texto fino se deshace con la
+                     recompresión por defecto de Next (calidad 75). Ya vienen
+                     optimizadas a WebP, así que se sirven tal cual. */
+                  unoptimized
+                  sizes={`${Math.round(width * 1.2)}px`}
                   className="object-cover object-top"
                   priority={priority && screen.id === active}
                 />
