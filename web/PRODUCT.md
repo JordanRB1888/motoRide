@@ -51,8 +51,19 @@ y la web se construye así.
 
 ## Dónde
 
-Maracaibo (centro por defecto del mapa) y la campaña de lanzamiento activa en
-**Santa Cruz de Mara → Municipio Mara**, estado Zulia.
+Tres plazas de enfoque, confirmadas por el dueño (2026-09-12):
+
+| Zona                   | Referencia                | Papel                                             |
+| ---------------------- | ------------------------- | ------------------------------------------------- |
+| **Santa Cruz de Mara** | Plaza Bolívar             | Zona de lanzamiento de la campaña activa          |
+| **El Moján**           | San Rafael de El Moján    | Capital del Municipio Mara                        |
+| **Maracaibo**          | Basílica de La Chinita    | `DEFAULT_CENTER` del mapa de la aplicación        |
+
+Fotografías propias, tratadas con un duotono grafito común para que las tres lean
+como una sola familia (`web/public/zonas/`). Originales en `Downloads`.
+La de El Moján es de baja resolución (335×597 nativa): solo admite tarjeta pequeña.
+
+No se afirma cobertura operativa ni número de zonas activas: son puntos de enfoque.
 
 ## Pagos
 

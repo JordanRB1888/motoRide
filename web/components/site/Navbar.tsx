@@ -60,9 +60,11 @@ export default function Navbar() {
         </ul>
 
         <div className="flex items-center gap-3">
-          <ButtonLink href="/#descargar" className="hidden sm:inline-flex">
-            Descargar app
-          </ButtonLink>
+          <div className="hidden sm:block">
+            <ButtonLink href="/#descargar" className="whitespace-nowrap">
+              Descargar app
+            </ButtonLink>
+          </div>
 
           <button
             type="button"
