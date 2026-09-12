@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+@theme {
+  /* ---- Superficies: grafito profundo, no negro plano ---- */
+  --color-ink-950: #08080a;
+  --color-ink-900: #0b0b0c;
+  --color-ink-850: #0f0f12;
+  --color-ink-800: #121214;
+  --color-ink-700: #17171b;
+  --color-ink-600: #1e1e24;
+  --color-ink-500: #2a2a32;
+
+  /* ---- Señal: el amarillo nunca es fondo, es dirección ---- */
+  --color-signal: #fcb000;
+  --color-signal-bright: #ffc633;
+  --color-signal-deep: #c98700;
+
+  /* ---- Texto: blanco cálido, grises tintados del grafito ---- */
+  --color-paper: #f7f6f3;
+  --color-paper-dim: #b9b7b1;
+  --color-paper-mute: #8d8b87;
+
+  --font-display: var(--font-display-brand);
+  --font-sans: var(--font-body-brand);
+
+  /* ---- Ritmo ---- */
+  --radius-card: 18px;
+  --radius-pill: 999px;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+:root {
+  color-scheme: dark;
+  --shell-x: clamp(20px, 5vw, 72px);
+}
+
+* {
+  min-width: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-ink-900);
+  color: var(--color-paper);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+/* ============================================================
+   Superficies del navegador — también son diseño
+   ============================================================ */
+::selection {
+  background: var(--color-signal);
+  color: var(--color-ink-900);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink-950);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-500);
+  border-radius: 99px;
+  border: 3px solid var(--color-ink-950);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a45;
+}
+* {
+  scrollbar-color: var(--color-ink-500) var(--color-ink-950);
+}
+
+input,
+textarea {
+  caret-color: var(--color-signal);
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: color-mix(in srgb, var(--color-signal) 24%, transparent);
+}
+
+/* Cifras alineadas en datos y precios */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ============================================================
+   Tipografía de titulares — condensada, muy apretada
+   ============================================================ */
+.display {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 700;
+  line-height: 0.88;
+  letter-spacing: -0.018em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.prose-measure {
+  max-width: 68ch;
+  text-wrap: pretty;
+}
+
+/* ============================================================
+   Movimiento — un solo temperamento en todo el sitio
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Estado inicial de los elementos que el scroll revela.
+   Sin JS o con reduced-motion, quedan visibles: el contenido nunca depende del motion. */
+.reveal-ready [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-ready [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}
