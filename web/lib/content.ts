@@ -100,19 +100,32 @@ export const SERVICES: Service[] = [
 ];
 
 /**
- * Pantallas reales de la aplicación, verificadas una por una contra la captura.
+ * Pantallas reales de la aplicación, ya terminadas.
  *
- * Solo entran aquí las que muestran producto. Quedan fuera `c-oferta2.png` y
- * `c-tras-aceptar.png`: pese a su nombre son el historial VACÍO del conductor
- * («Todavía no has hecho ningún viaje») y no sirven para mostrar el servicio.
- *
- * PENDIENTE: faltan los estados intermedios del viaje (buscando conductor,
- * conductor asignado, viaje en curso). Se capturan levantando la app real.
+ * `map-select` y `login` venían con marco de iPhone: se recortó el marco para
+ * que el componente 3D aporte el suyo y no quede un teléfono dentro de otro.
  */
 export const PHONE_SCREENS = [
-  { id: "home", src: "/app/passenger-home.png", alt: "Pantalla de inicio del pasajero en +58Express" },
-  { id: "driver", src: "/app/driver-profile.png", alt: "Perfil del conductor verificado" },
-  { id: "earnings", src: "/app/driver-earnings.png", alt: "Ganancias del conductor" },
+  {
+    id: "home",
+    src: "/app/home.webp",
+    alt: "Inicio de +58Express con los servicios disponibles",
+  },
+  {
+    id: "map",
+    src: "/app/map-select.webp",
+    alt: "Mapa con la ruta trazada y el precio del viaje antes de confirmar",
+  },
+  {
+    id: "login",
+    src: "/app/login.webp",
+    alt: "Pantalla de acceso a +58Express",
+  },
+  {
+    id: "driver",
+    src: "/app/driver-onboarding.webp",
+    alt: "Los conductores eligen sus horas de actividad",
+  },
 ];
 
 /**

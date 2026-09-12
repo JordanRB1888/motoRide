@@ -145,7 +145,7 @@ export default function Hero() {
             <div className="origin-center scale-[0.74] sm:scale-[0.84] lg:scale-[0.82] xl:scale-[0.92]">
               <InteractivePhone
                 screens={PHONE_SCREENS}
-                initialScreen="home"
+                initialScreen="map"
                 width={320}
                 priority
               />
@@ -153,18 +153,24 @@ export default function Hero() {
 
             {/* La moto entra por delante: es el plano más cercano */}
             <div
-              className="pointer-events-none absolute bottom-[2%] -left-[42%] z-10 w-[86%] sm:-left-[44%] sm:w-[88%]"
+              className="pointer-events-none absolute -bottom-[2%] -left-[62%] z-10 w-[104%] sm:-left-[64%] sm:w-[106%]"
               style={{
                 transform:
                   "translate3d(calc(var(--px) * -34px), calc(var(--py) * -14px), 0)",
               }}
             >
               <Image
-                src="/brand/moto.png"
+                src="/brand/rider.png"
                 alt=""
-                width={1024}
-                height={1024}
+                width={1081}
+                height={819}
                 className="h-auto w-full drop-shadow-[0_30px_40px_rgba(0,0,0,.75)]"
+                style={{
+                  maskImage:
+                    "linear-gradient(90deg, transparent 0%, #000 18%, #000 100%)",
+                  WebkitMaskImage:
+                    "linear-gradient(90deg, transparent 0%, #000 18%, #000 100%)",
+                }}
               />
             </div>
           </div>

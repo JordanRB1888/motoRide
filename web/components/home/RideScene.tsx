@@ -35,7 +35,7 @@ export default function RideScene() {
       gsap.set(q("[data-route-line]"), { strokeDashoffset: 0 });
       gsap.set(q("[data-step]"), { autoAlpha: 1, y: 0 });
       gsap.set(q("[data-phone-screen]"), { autoAlpha: 0 });
-      gsap.set(q('[data-phone-screen="home"]'), { autoAlpha: 1 });
+      gsap.set(q('[data-phone-screen="map"]'), { autoAlpha: 1 });
       gsap.set(q("[data-rider]"), { autoAlpha: 1 });
       return;
     }
@@ -88,7 +88,7 @@ export default function RideScene() {
 
       /* 2 · SEARCHING — el pulso sale a buscar */
       show(1, 0.22);
-      screen("home", 0.22);
+      screen("map", 0.22);
       tl.fromTo(q("[data-pulse]"), { scale: 0.2, autoAlpha: 0.85 }, { scale: 1, autoAlpha: 0, duration: 0.16 }, 0.22);
 
       /* 3 · DRIVER_ASSIGNED — alguien la toma */
