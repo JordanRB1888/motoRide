@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Pool, type QueryResultRow } from "pg";
+import { CA_SUPABASE } from "./supabase-ca";
 import type {
   EstadoLead,
   EstadoWaitlist,
@@ -163,14 +164,18 @@ export function poolWeb(url: string = process.env.WEB_DATABASE_URL ?? ""): Pool 
   if (!url) throw new Error("WEB_DATABASE_URL_AUSENTE");
   if (globalThis.__poolWeb) return globalThis.__poolWeb;
 
-  /* TLS verificado de verdad. `rejectUnauthorized: false` es lo que se copia de
-     los tutoriales y lo que convierte el cifrado en decoración: cifra contra
-     quien sea, incluido quien se ponga en medio. Si la cadena de conexión trae
-     su propio `sslmode`, `pg` le da prioridad sobre esto —así que quien quiera
-     relajarlo tiene que escribirlo, no heredarlo por descuido. */
+  /* TLS verificado de verdad, contra la CA de Supabase.
+     El pooler presenta un certificado firmado por la autoridad propia de
+     Supabase, que Node no conoce. La salida fácil sería `rejectUnauthorized:
+     false`, y convierte el cifrado en decoración: cifra contra quien sea,
+     incluido quien se ponga en medio. Anclando la raíz se comprueban las dos
+     cosas que importan — la cadena y el nombre del servidor.
+     Si la cadena de conexión trae su propio `sslmode`, `pg` le da prioridad
+     sobre esto: quien quiera relajarlo tiene que escribirlo, no heredarlo por
+     descuido. */
   const pool = new Pool({
     connectionString: url,
-    ssl: { rejectUnauthorized: true },
+    ssl: { ca: CA_SUPABASE, rejectUnauthorized: true },
     /* Tres conexiones por instancia. El pooler de Supabase reparte un número
        finito entre TODAS las instancias vivas; ser generoso aquí es quedarse sin
        conexiones en el primer pico. */
@@ -453,7 +458,12 @@ export function crearRepositorioPostgres(
          previos y pasan las cincuenta. No hay nada que las serialice.
          `ON CONFLICT ... DO UPDATE` sí: toma cerrojo sobre la fila, la segunda
          petición espera a la primera, y `RETURNING n` devuelve el valor ya
-         incrementado. Dos simultáneas reciben 1 y 2, nunca 1 y 1. */
+         incrementado. Dos simultáneas reciben 1 y 2, nunca 1 y 1.
+
+         OJO AL REUTILIZAR UNA CLAVE: el cubo sale de dividir el instante entre
+         el tamaño de la ventana, así que la misma clave con dos límites de
+         tamaño distinto lleva dos cuentas separadas. Es lo correcto —dos límites
+         distintos son dos límites—, pero conviene saberlo. */
       const ventana = new Date(Math.floor(ahora / ventanaMs) * ventanaMs).toISOString();
       const filas = await consulta<{ n: number }>(
         `INSERT INTO ${TABLA_INTENTOS} (clave, ventana, n, ultimo_en)

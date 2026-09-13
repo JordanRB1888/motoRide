@@ -21,24 +21,9 @@
  */
 import { readFileSync } from "node:fs";
 import pg from "pg";
+import { cargarEnvLocal, conexion } from "./comun.mjs";
 
 const { Pool } = pg;
-
-function cargarEnvLocal() {
-  try {
-    const texto = readFileSync(new URL("../.env.local", import.meta.url), "utf8");
-    for (const linea of texto.split(/\r?\n/)) {
-      const limpia = linea.trim();
-      if (!limpia || limpia.startsWith("#")) continue;
-      const corte = limpia.indexOf("=");
-      if (corte < 1) continue;
-      const clave = limpia.slice(0, corte).trim();
-      if (!(clave in process.env)) process.env[clave] = limpia.slice(corte + 1).trim();
-    }
-  } catch {
-    /* No hay fichero. */
-  }
-}
 
 cargarEnvLocal();
 
@@ -78,13 +63,7 @@ if (!deVerdad) {
   process.exit(0);
 }
 
-const pool = new Pool({
-  connectionString: process.env.WEB_DATABASE_URL,
-  ssl: { rejectUnauthorized: true },
-  max: 1,
-  connectionTimeoutMillis: 15_000,
-  application_name: "mas58express-web-esquema",
-});
+const pool = new Pool(conexion("esquema"));
 
 /* Todas o ninguna: si el `revoke` fallara después de crear la tabla, quedaría una
    tabla accesible desde el navegador. */

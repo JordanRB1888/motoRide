@@ -18,8 +18,8 @@
  * No la imprime nunca, ni entera ni a trozos. Lo único que enseña al terminar es
  * el puerto y si el anfitrión es el pooler.
  */
-import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -85,10 +85,56 @@ function revisar(cadena) {
   return { fallos, avisos, url };
 }
 
-const cadena = await preguntar(
-  "Pega la URI del Transaction Pooler de «+58Express Web» (no se verá): ",
-  { oculto: true },
-);
+/**
+ * Tres maneras de dar la cadena, y ninguna la enseña por pantalla.
+ *
+ * La de teclado no siempre funciona: hay terminales empotradas que no dejan
+ * pegar en un aviso en modo crudo, y como el eco está tapado no se distingue
+ * «no ha entrado» de «ha entrado y no se ve». Por eso hay dos salidas más.
+ *
+ *   --del-portapapeles   la lee de donde ya está tras copiarla de Supabase.
+ *                        No se teclea, no se muestra, no toca el disco.
+ *   --desde <fichero>    la lee de un fichero —pegado con el Bloc de notas, que
+ *                        siempre deja pegar— y lo BORRA al terminar.
+ */
+function delPortapapeles() {
+  const ordenes =
+    process.platform === "win32"
+      ? ["powershell", ["-NoProfile", "-Command", "Get-Clipboard -Raw"]]
+      : process.platform === "darwin"
+        ? ["pbpaste", []]
+        : ["xclip", ["-selection", "clipboard", "-o"]];
+  return execFileSync(ordenes[0], ordenes[1], { encoding: "utf8" });
+}
+
+const argumentos = process.argv.slice(2);
+const iDesde = argumentos.indexOf("--desde");
+const ficheroTemporal = iDesde > -1 ? argumentos[iDesde + 1] : null;
+
+let cadena;
+if (argumentos.includes("--del-portapapeles")) {
+  try {
+    cadena = delPortapapeles().trim();
+  } catch (error) {
+    console.error(`No he podido leer el portapapeles: ${error.message}`);
+    process.exit(2);
+  }
+  console.log(`Leída del portapapeles (${cadena.length} caracteres). No se muestra.`);
+} else if (ficheroTemporal) {
+  try {
+    cadena = readFileSync(ficheroTemporal, "utf8").trim();
+  } catch (error) {
+    console.error(`No he podido leer ${ficheroTemporal}: ${error.message}`);
+    process.exit(2);
+  }
+  console.log(`Leída de ${ficheroTemporal} (${cadena.length} caracteres). No se muestra.`);
+} else {
+  cadena = await preguntar(
+    "Pega la URI del Transaction Pooler de «+58Express Web».\n" +
+      "No verás nada al pegar: el eco está tapado a propósito. Pega y pulsa Enter.\n> ",
+    { oculto: true },
+  );
+}
 
 if (!cadena) {
   console.error("No has pegado nada. No se ha tocado nada.");
@@ -231,6 +277,17 @@ if (sal) {
     `  IP_HASH_SALT    : ${s.codigo === 0 ? "✅" : "❌"} ` +
       (s.salida.replace(sal, "«oculta»").split("\n").filter(Boolean).pop() ?? "").trim(),
   );
+}
+
+/* El fichero de paso no puede sobrevivir a esto: es la cadena en claro, sin
+   cifrar, en una ruta que nadie va a recordar borrar. */
+if (ficheroTemporal) {
+  try {
+    unlinkSync(ficheroTemporal);
+    console.log(`  Borrado ${ficheroTemporal}.`);
+  } catch (error) {
+    console.log(`  ATENCIÓN: no he podido borrar ${ficheroTemporal} (${error.message}). Bórralo tú.`);
+  }
 }
 
 console.log(

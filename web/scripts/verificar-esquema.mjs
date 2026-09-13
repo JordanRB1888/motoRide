@@ -13,35 +13,10 @@
  * es el pooler, y el nombre de la base. Ni usuario, ni contraseña, ni el
  * identificador del proyecto.
  */
-import { readFileSync } from "node:fs";
 import pg from "pg";
+import { cargarEnvLocal, conexion } from "./comun.mjs";
 
 const { Pool } = pg;
-
-/* Carga de `.env.local` a mano. `--env-file` existe, pero depende de la versión
-   de Node que tenga cada máquina y este guion tiene que correr en todas. */
-function cargarEnvLocal() {
-  try {
-    const texto = readFileSync(new URL("../.env.local", import.meta.url), "utf8");
-    for (const linea of texto.split(/\r?\n/)) {
-      const limpia = linea.trim();
-      if (!limpia || limpia.startsWith("#")) continue;
-      const corte = limpia.indexOf("=");
-      if (corte < 1) continue;
-      const clave = limpia.slice(0, corte).trim();
-      let valor = limpia.slice(corte + 1).trim();
-      if (
-        (valor.startsWith('"') && valor.endsWith('"')) ||
-        (valor.startsWith("'") && valor.endsWith("'"))
-      ) {
-        valor = valor.slice(1, -1);
-      }
-      if (!(clave in process.env)) process.env[clave] = valor;
-    }
-  } catch {
-    /* No existe: se usará lo que haya en el entorno. */
-  }
-}
 
 cargarEnvLocal();
 
@@ -86,7 +61,7 @@ const ESPERADO = {
     "ip_hash",
     "creado_en",
   ],
-  intentos_web: ["clave", "ocurrido_en"],
+  intentos_web: ["clave", "ventana", "n", "ultimo_en"],
 };
 
 function describirSinSecretos(cadena) {
@@ -108,30 +83,15 @@ function describirSinSecretos(cadena) {
 }
 
 async function conectar() {
-  /* Se intenta primero con verificación completa del certificado. Si el servidor
-     no la supera hay que saberlo y decirlo, no bajarla en silencio: un `ssl` sin
-     verificar cifra igual de bien contra quien se ponga en medio. */
-  for (const [etiqueta, ssl] of [
-    ["verificado", { rejectUnauthorized: true }],
-    ["SIN verificar", { rejectUnauthorized: false }],
-  ]) {
-    const pool = new Pool({
-      connectionString: URL_BASE,
-      ssl,
-      max: 1,
-      connectionTimeoutMillis: 15_000,
-      application_name: "mas58express-web-verificacion",
-    });
-    try {
-      const { rows } = await pool.query("select version() as v, current_user as u, current_database() as d");
-      return { pool, etiqueta, info: rows[0] };
-    } catch (error) {
-      await pool.end().catch(() => {});
-      if (etiqueta === "SIN verificar") throw error;
-      console.log(`   TLS verificado: NO  (${error.message})`);
-    }
-  }
-  throw new Error("inalcanzable");
+  /* Verificado contra la CA anclada, sin red de seguridad. Antes esto probaba
+     primero verificado y caía a no verificado si fallaba; eso estaba bien para
+     AVERIGUAR qué certificado presentaba el servidor, y está mal ahora que ya se
+     sabe: una comprobación que se apaga sola cuando falla no comprueba nada. */
+  const pool = new Pool(conexion("verificacion"));
+  const { rows } = await pool.query(
+    "select version() as v, current_user as u, current_database() as d",
+  );
+  return { pool, etiqueta: "verificado contra la CA de Supabase", info: rows[0] };
 }
 
 const destino = describirSinSecretos(URL_BASE);

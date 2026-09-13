@@ -328,13 +328,19 @@ test.describe("adaptador Postgres contra Supabase", () => {
 
   test("H · el límite persiste en la base, no en el proceso", async () => {
     const clave = `${PREFIJO}limite-${Date.now()}`;
-    const ahora = dentroDelCubo();
+    /* La MISMA ventana que usan las rutas. Mezclar tamaños de ventana sobre una
+       clave no tendría sentido aquí: el cubo se calcula a partir del tamaño, así
+       que cada límite lleva su propio contador —ver la prueba H-quinquies—. */
+    const limite = LIMITES.waitlistPorIp;
+    const ahora = dentroDelCubo(limite.ventanaMs);
 
     const cuentas: number[] = [];
     for (let i = 0; i < 6; i += 1) {
       /* Un repositorio NUEVO en cada vuelta: así se parece a lo que pasa de
          verdad, donde cada petición puede caer en una instancia recién creada. */
-      cuentas.push(await crearRepositorioPostgres().contarIntentos(clave, 60_000, ahora + i));
+      cuentas.push(
+        await crearRepositorioPostgres().contarIntentos(clave, limite.ventanaMs, ahora + i),
+      );
     }
     expect(cuentas).toEqual([1, 2, 3, 4, 5, 6]);
 
@@ -345,8 +351,23 @@ test.describe("adaptador Postgres contra Supabase", () => {
     );
     expect(rows[0].n).toBe(6);
 
-    // El umbral de verdad, tal y como lo usan las rutas.
-    expect(await superaLimite(repo(), clave, LIMITES.waitlistPorIp, ahora + 10)).toBe(true);
+    // El umbral de verdad, tal y como lo usan las rutas: el séptimo se pasa de 5.
+    expect(await superaLimite(repo(), clave, limite, ahora + 10)).toBe(true);
+  });
+
+  test("H-quinquies · dos límites sobre la misma clave no comparten contador", async () => {
+    /* Consecuencia de la ventana fija, y queda escrita aquí para que no
+       sorprenda: el cubo sale de dividir el instante entre el tamaño de la
+       ventana, así que una clave sometida a dos límites distintos lleva dos
+       cuentas separadas. Es lo correcto —dos límites distintos son dos límites—,
+       pero hay que saberlo antes de reutilizar una clave. */
+    const clave = `${PREFIJO}dos-ventanas-${Date.now()}`;
+    const r = repo();
+
+    expect(await r.contarIntentos(clave, 60_000, dentroDelCubo(60_000))).toBe(1);
+    expect(await r.contarIntentos(clave, 60_000, dentroDelCubo(60_000))).toBe(2);
+    // Otra ventana, otro cubo, otra cuenta.
+    expect(await r.contarIntentos(clave, 3_600_000, dentroDelCubo(3_600_000))).toBe(1);
   });
 
   test("H-0 · una ráfaga SIMULTÁNEA no se salta el límite", async () => {
