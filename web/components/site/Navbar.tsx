@@ -164,9 +164,11 @@ export default function Navbar() {
         aria-label="Menú"
         className="fixed inset-x-0 top-[72px] bottom-0 z-[90] overflow-y-auto bg-ink-900 lg:hidden"
       >
-        {/* Los enlaces llevan la voz tipográfica de la marca, no una lista de sistema. */}
+        {/* Los enlaces llevan la voz tipográfica de la marca, no una lista de sistema.
+            En el móvil se añade Contacto, que en la barra de escritorio no entra para
+            no apretarla: aquí es donde alguien lo busca, y el pie queda muy abajo. */}
         <ul className="flex flex-col px-[var(--shell-x)] pt-6">
-          {NAV.map((item, i) => (
+          {[...NAV, { label: "Contacto", href: "/contacto" }].map((item, i) => (
             <li key={item.href} className="border-b border-white/8">
               <Link
                 href={item.href}

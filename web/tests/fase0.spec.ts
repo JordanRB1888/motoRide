@@ -200,8 +200,14 @@ test.describe("móvil", () => {
   test("el menú móvil lleva a Contacto", async ({ page }) => {
     await page.goto("/");
     await listo(page);
+    // En el pie, que está en todas las páginas…
     await page.locator("footer").scrollIntoViewIfNeeded();
     await expect(page.locator('footer a[href="/contacto"]')).toBeVisible();
+    // …y en el propio menú, que es donde se busca desde un teléfono.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByRole("button", { name: "Abrir menú" }).click();
+    await page.waitForTimeout(600);
+    await expect(page.locator('#menu-movil a[href="/contacto"]')).toBeVisible();
   });
 });
 
