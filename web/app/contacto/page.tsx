@@ -3,7 +3,8 @@ import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
-import { EMAIL, WHATSAPP, correo, whatsapp, type Intencion } from "@/lib/contact";
+import EnlaceCorreo from "@/components/site/EnlaceCorreo";
+import { WHATSAPP, whatsapp, type Intencion } from "@/lib/contact";
 
 export const metadata: Metadata = metaPagina({
   titulo: "Contacto",
@@ -94,12 +95,12 @@ export default function Page() {
                     >
                       {p.rotulo}
                     </BotonWhatsApp>
-                    <a
-                      href={correo(p.intencion)}
+                    <EnlaceCorreo
+                      intencion={p.intencion}
                       className="inline-flex h-12 items-center justify-center rounded-full px-4 text-[15px] font-bold text-paper-dim transition-colors duration-150 hover:text-signal"
                     >
                       o escríbenos por correo
-                    </a>
+                    </EnlaceCorreo>
                   </div>
                 </div>
               </Reveal>
@@ -131,12 +132,7 @@ export default function Page() {
               <div>
                 <dt className="text-[15px] text-paper-mute">Correo</dt>
                 <dd className="mt-2">
-                  <a
-                    href={correo("general")}
-                    className="text-[clamp(1.05rem,2.2vw,1.3rem)] font-bold break-all text-paper transition-colors duration-150 hover:text-signal"
-                  >
-                    {EMAIL.direccion}
-                  </a>
+                  <EnlaceCorreo className="text-[clamp(1.05rem,2.2vw,1.3rem)] font-bold break-all text-paper transition-colors duration-150 hover:text-signal" />
                 </dd>
               </div>
             </dl>

@@ -1,7 +1,8 @@
 import Link from "next/link";
+import EnlaceCorreo from "@/components/site/EnlaceCorreo";
 import Logo from "@/components/ui/Logo";
 import { PIE_GRUPOS, PAYMENTS } from "@/lib/content";
-import { EMAIL, WHATSAPP, correo, whatsapp } from "@/lib/contact";
+import { EMAIL, WHATSAPP, whatsapp } from "@/lib/contact";
 
 const LEGAL = [
   { label: "Privacidad", href: "/privacidad" },
@@ -52,12 +53,7 @@ export default function Footer() {
                 </a>
               )}
               {EMAIL.activo && (
-                <a
-                  href={correo("general")}
-                  className="w-fit break-all text-[16px] text-paper-dim transition-colors duration-150 hover:text-signal"
-                >
-                  {EMAIL.direccion}
-                </a>
+                <EnlaceCorreo className="w-fit break-all text-[16px] text-paper-dim transition-colors duration-150 hover:text-signal" />
               )}
             </div>
           </div>

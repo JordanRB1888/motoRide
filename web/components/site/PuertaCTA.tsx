@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import EnlaceCorreo from "@/components/site/EnlaceCorreo";
 import Reveal from "@/components/motion/Reveal";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
-import { correo, type Intencion } from "@/lib/contact";
+import { type Intencion } from "@/lib/contact";
 
 /**
  * El bloque con el que termina una página en vez de terminar en una pared.
@@ -38,12 +39,12 @@ export default function PuertaCTA({
           <BotonWhatsApp intencion={intencion} size="lg">
             {rotulo}
           </BotonWhatsApp>
-          <a
-            href={correo(intencion)}
+          <EnlaceCorreo
+            intencion={intencion}
             className="inline-flex h-14 items-center justify-center rounded-full border border-white/22 px-8 text-base font-bold text-paper transition-colors duration-150 hover:border-white/45 hover:bg-white/[0.06]"
           >
             Escribir por correo
-          </a>
+          </EnlaceCorreo>
         </div>
         {nota && <p className="mt-6 text-[15px] leading-relaxed text-paper-mute">{nota}</p>}
       </div>
