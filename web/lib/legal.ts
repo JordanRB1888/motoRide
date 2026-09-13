@@ -17,10 +17,13 @@
 export const EMPRESA = {
   razonSocial: "+58 EXPRESS, C.A.",
 
-  /* Se escribe exactamente como lo facilitó el dueño. La forma habitual de
-     presentar un RIF venezolano lleva guiones —J-50872360-0—, pero separar un
-     identificador oficial es una suposición sobre dónde van los grupos, y
-     equivocarse ahí en un documento legal es peor que no separarlo. */
+  /* CONFIRMADO CONTRA EL DOCUMENTO OFICIAL el 13 de septiembre de 2026: el RIF
+     figura exactamente así, sin separadores.
+
+     NO añadir guiones. Es tentador «normalizarlo» a J-50872360-0 porque es la
+     forma en que suele verse, pero eso sería inferir dónde van los grupos de un
+     identificador oficial, y una inferencia en un documento legal no es un
+     detalle de estilo: es un dato distinto del que consta en el documento. */
   rif: "J508723600",
 
   domicilio:

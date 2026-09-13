@@ -130,6 +130,43 @@ export function crearRepositorioEnMemoria(): RepositorioWeb {
       return lead;
     },
 
+    async purgarPorRetencion(ahora) {
+      // Los mismos plazos y los mismos criterios que en Postgres. Si las dos
+      // implementaciones divergieran, las pruebas de unidad dejarían de decir
+      // nada sobre lo que ocurre de verdad.
+      const dias = (n: number) => n * 24 * 60 * 60 * 1000;
+      const SIN_CONFIRMAR = new Set(["pendiente", "caducado", "rebotado"]);
+
+      let esperaEliminadas = 0;
+      for (const [id, r] of [...espera.entries()]) {
+        if (!SIN_CONFIRMAR.has(r.estado)) continue;
+        if (new Date(r.creadoEn).getTime() >= ahora - dias(30)) continue;
+        espera.delete(id);
+        esperaEliminadas += 1;
+      }
+
+      let aliadosEliminados = 0;
+      for (let i = leads.length - 1; i >= 0; i -= 1) {
+        if (new Date(leads[i].creadoEn).getTime() < ahora - dias(365)) {
+          leads.splice(i, 1);
+          aliadosEliminados += 1;
+        }
+      }
+
+      let intentosEliminados = 0;
+      for (const [clave, marcas] of [...intentos.entries()]) {
+        const vivas = marcas.filter((t) => t > ahora - dias(1));
+        if (vivas.length === 0) {
+          intentos.delete(clave);
+          intentosEliminados += 1;
+        } else if (vivas.length !== marcas.length) {
+          intentos.set(clave, vivas);
+        }
+      }
+
+      return { esperaEliminadas, aliadosEliminados, intentosEliminados };
+    },
+
     async contarIntentos(clave, ventanaMs, ahora) {
       const desde = ahora - ventanaMs;
       const previos = (intentos.get(clave) ?? []).filter((t) => t > desde);

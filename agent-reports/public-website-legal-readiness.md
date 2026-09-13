@@ -4,13 +4,14 @@
 **Privacy Policy = PUBLICADA**
 **Terms = PUBLICADOS**
 **Driver sensitive documents on web = NO**
+**Automatic retention cleanup = IMPLEMENTADO / CERTIFICADO**
 **WAITLIST_ENABLED = false**
 **PARTNER_LEADS_ENABLED = false**
 
 | | |
 |---|---|
 | **Rama** | `feat/public-marketing-site` |
-| **Producción** | `plus58express-2uf59a9md` → <https://mas58express.com/privacidad> y <https://mas58express.com/terminos> |
+| **Producción** | `plus58express-ajfh6vmdv` → <https://mas58express.com/privacidad> y <https://mas58express.com/terminos> |
 | **Fecha** | 13 de septiembre de 2026 |
 | **Versión de los documentos** | 1.0 |
 | **Alcance** | Sitio web público. **No** la aplicación móvil |
@@ -253,7 +254,7 @@ mensaje va escrito de antemano y **no se envía hasta que la persona lo envía**
 |---|---|
 | TypeScript | limpio |
 | Build | correcto |
-| Playwright | **167/167 contra producción** · 164 en local (3 saltadas: la analítica sólo existe en un despliegue) |
+| Playwright | **178/178 contra producción** · 164 en local (3 saltadas: la analítica sólo existe en un despliegue) |
 | axe (WCAG 2.1 AA) | 27 análisis, **0 infracciones** |
 | `WAITLIST_ENABLED` · `PARTNER_LEADS_ENABLED` | **`false`** · **`false`** |
 | Campos de formulario | **0** |
@@ -276,18 +277,148 @@ mensaje va escrito de antemano y **no se envía hasta que la persona lo envía**
 
 No se ha encendido nada, y quedan cosas que hacer primero.
 
-1. **Implementar el borrado automático por retención.** La política se
-   compromete a eliminar las inscripciones sin confirmar a los 30 días y los
-   contactos de comercios a los 12 meses. Hoy **sólo está implementado** el
-   barrido de los registros contra el abuso (24 h). Mientras no haya datos, nada
-   se incumple; el día que los haya, sí. **Es el bloqueo técnico principal.**
+1. ~~**Implementar el borrado automático por retención.**~~ ✅ **Hecho y
+   certificado el 13 de septiembre de 2026** — sección 9.
 2. **Revisión por un abogado venezolano**, en particular de las secciones 10
    (tratamiento fuera del país), 13 (plazo) y 17 (marco legal).
 3. **Confirmar la entrega real de Resend**, pendiente desde la ronda anterior.
-4. **Comprobar el RIF.** Se publica exactamente como lo facilitó el dueño,
-   `J508723600`. La forma habitual de presentarlo lleva guiones
-   —`J-50872360-0`— pero separar un identificador oficial es una suposición sobre
-   dónde van los grupos, y equivocarse en un documento legal es peor que no
-   separarlo. **Confírmalo y lo formateo.**
+4. ~~**Comprobar el RIF.**~~ ✅ **Confirmado el 13 de septiembre de 2026** contra
+   el documento oficial: figura exactamente como `J508723600`, sin separadores, y
+   así se publica. Queda anotado en el código que **no debe «normalizarse»** a
+   `J-50872360-0`: eso sería inferir dónde van los grupos de un identificador
+   oficial, y en un documento legal una inferencia no es un detalle de estilo,
+   es un dato distinto del que consta.
 5. Encender `WAITLIST_ENABLED` y `PARTNER_LEADS_ENABLED`, desplegar y certificar
    el flujo completo con Turnstile visible.
+
+---
+
+## 9. Borrado automático por retención
+
+**Automatic retention cleanup = IMPLEMENTADO / CERTIFICADO**
+
+Añadido el 13 de septiembre de 2026. Una promesa de borrado que nadie ejecuta es
+peor que no haberla hecho: convierte un documento legal en una declaración falsa.
+Esto la cumple.
+
+### 9.1 Qué se elige, y por qué no otra cosa
+
+**Un cron job de Vercel**, que ya viene con el proyecto: ni un servicio nuevo, ni
+un coste añadido.
+
+La alternativa seria era **`pg_cron` dentro de Supabase**, y tiene una ventaja
+real —no expondría ninguna ruta que proteger—. Se descartó porque dejaría la
+lógica de borrado en SQL, fuera del repositorio y fuera del alcance de las
+pruebas. Con el cron de Vercel, el borrado vive en el mismo sitio que el resto
+del código, se prueba con fechas simuladas contra la base real, y la ruta es sólo
+el disparador.
+
+| | |
+|---|---|
+| Disparador | `web/vercel.json` → `/api/cron/retencion` |
+| Frecuencia | `0 4 * * *` — **una vez al día, 04:00 UTC** (medianoche en Venezuela) |
+| Ejecución | Servidor, runtime Node. Nunca el navegador |
+| Registrado | Confirmado con `vercel crons ls` |
+
+> **Dónde vive el fichero, y por qué importa.** Los tres proyectos de la cuenta
+> declaran `Root Directory: .`, y en la raíz del repositorio ya hay un
+> `vercel.json` que es el *rewrite* de SPA del proyecto Vite. Tocarlo habría
+> afectado a ese otro proyecto. `plus58express-web` no tiene Git conectado —se
+> despliega por CLI desde `web/`—, así que su configuración es `web/vercel.json`
+> y no alcanza a nadie más. **Si algún día se conecta Git a este proyecto, habrá
+> que revisarlo**: con `Root Directory: .` se leería el de la raíz.
+
+### 9.2 Los tres plazos, y a quién NO tocan
+
+| Qué | Plazo | Criterio exacto |
+|---|---|---|
+| Altas **sin confirmar** | 30 días | `estado IN ('pendiente','caducado','rebotado')` y `creado_en` anterior al corte |
+| Contactos de comercios | 12 meses | `creado_en` anterior al corte |
+| Registros del limitador | 24 horas | `ultimo_en` anterior al corte |
+
+**Lo que no se borra nunca por antigüedad:**
+
+- **Las confirmadas.** Hay consentimiento: la política no promete borrarlas por
+  el paso del tiempo, sino 30 días después del aviso de lanzamiento o cuando la
+  persona se dé de baja.
+- **Las dadas de baja.** Es la constancia de que alguien pidió no recibir más
+  correos. Borrarla llevaría a volver a escribirle — justo lo contrario de lo que
+  pidió.
+
+`creado_en` y no `actualizado_en`, deliberadamente: la política dice «el registro
+se elimina a los 30 días», y la antigüedad se cuenta desde el alta. Con
+`actualizado_en`, una fila tocada el día 29 sobreviviría hasta el 59, que es más
+de lo prometido.
+
+### 9.3 Cómo está protegida la única ruta que borra datos
+
+Vercel envía `Authorization: Bearer $CRON_SECRET` en cada ejecución. La ruta lo
+comprueba con **comparación en tiempo constante**, y:
+
+- **sin `CRON_SECRET` configurada no se ejecuta nada.** Una configuración a
+  medias no puede convertirse en una puerta abierta para provocar borrados;
+- quien no acierte recibe **404, no 401**. Un 401 confirmaría que la ruta existe;
+  un 404 no dice nada;
+- el secreto **no lleva el prefijo `NEXT_PUBLIC_`**, así que jamás viaja al
+  navegador, y la ruta se ejecuta en Node;
+- no está en el sitemap ni enlazada desde ninguna parte.
+
+El valor lo generó la propia máquina (32 bytes aleatorios) y se subió a Vercel
+por la entrada estándar, como Secret y sólo en Production.
+
+### 9.4 Lo que se registra en los logs
+
+Tres números:
+
+```
+[retencion] espera=0 aliados=0 intentos=0
+```
+
+Ni un correo, ni un identificador, ni una IP.
+
+### 9.5 Certificación
+
+**Siete pruebas con fechas simuladas, contra Supabase real.** Las filas se
+envejecen de verdad en la base en lugar de adelantar el reloj del programa: si se
+llamara a la purga con un «ahora» treinta días en el futuro, miraría también las
+filas reales con ese futuro por delante. Envejecer sólo las de prueba deja el
+experimento acotado.
+
+| Caso | Esperado | Resultado |
+|---|---|---|
+| 29 días sin confirmar | conserva | ✅ |
+| 31 días sin confirmar | elimina | ✅ |
+| Confirmada y dada de baja, con 400 días | **no se tocan** | ✅ |
+| 11 meses de un comercio | conserva | ✅ |
+| 13 meses de un comercio | elimina | ✅ |
+| Ejecutarla dos veces | segunda pasada en cero | ✅ |
+| Fila recién creada | sigue ahí tras barrer | ✅ |
+
+Más tres de paridad sobre el almacén de memoria, para que las dos
+implementaciones del contrato no se separen con el tiempo, y una que comprueba
+que la ruta responde **404 sin cabecera, con `Bearer` vacío, con un secreto
+equivocado y con `Basic`** — y **405** ante un POST.
+
+### 9.6 Un hueco que esto cerró de paso
+
+Hasta hoy **el adaptador de Postgres nunca se había ejecutado dentro de una
+función de Vercel**: todas las pruebas contra Supabase corrían desde una máquina
+local. Si la conexión al pooler fallara desde el runtime de producción —egress,
+TLS, tiempos—, no nos habríamos enterado hasta el día de encender los
+formularios.
+
+Se cerró disparando el cron de verdad contra producción, con un secreto generado
+al efecto:
+
+```
+HTTP 200 {"ok":true,"esperaEliminadas":0,"aliadosEliminados":0,"intentosEliminados":0}
+HTTP 200 {"ok":true,"esperaEliminadas":0,"aliadosEliminados":0,"intentosEliminados":0}
+```
+
+Dos ejecuciones seguidas, idénticas. Eso prueba de una vez: la comprobación de la
+cabecera con el formato exacto que envía Vercel, la construcción del adaptador en
+el runtime, **la conexión desde Vercel a Supabase con la CA anclada**, los tres
+borrados y la idempotencia.
+
+Terminado, **el secreto se rotó** a un valor que nadie conserva, y se comprobó que
+el anterior ya no abre nada. La base quedó en cero filas en las tres tablas.

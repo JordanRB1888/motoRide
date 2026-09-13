@@ -448,6 +448,55 @@ export function crearRepositorioPostgres(
       return aLead(filas[0]);
     },
 
+    async purgarPorRetencion(ahora) {
+      /* Tres borrados, cada uno con el plazo que la política publicada promete.
+         Van en sentencias separadas y no en una transacción a propósito: son
+         independientes entre sí, y si una fallara preferimos que las otras dos
+         hayan hecho su trabajo a que no lo haga ninguna.
+
+         `creado_en` y no `actualizado_en` para la lista de espera: la política
+         dice «el registro se elimina a los 30 días», y la antigüedad se cuenta
+         desde el alta. Con `actualizado_en` una fila tocada el día 29 viviría
+         hasta el 59, que es más de lo prometido. */
+      const corte = (intervalo: string) =>
+        `$1::timestamptz - interval '${intervalo}'`;
+      const instante = new Date(ahora).toISOString();
+
+      /* Sólo lo que NUNCA llegó a confirmarse. `confirmado` se queda —hay
+         consentimiento— y `baja` también: es la constancia de que alguien pidió
+         no recibir más correos, y borrarla llevaría a volver a escribirle por
+         error, justo lo contrario de lo que pidió. */
+      const espera = await consulta<{ id: string }>(
+        `DELETE FROM ${TABLA_ESPERA}
+          WHERE estado IN ('pendiente', 'caducado', 'rebotado')
+            AND creado_en < ${corte("30 days")}
+          RETURNING id`,
+        [instante],
+      );
+
+      const aliados = await consulta<{ id: string }>(
+        `DELETE FROM ${TABLA_ALIADOS}
+          WHERE creado_en < ${corte("12 months")}
+          RETURNING id`,
+        [instante],
+      );
+
+      /* El mismo barrido que ya hacía el limitador de forma oportunista, ahora
+         también en un horario fijo: así no depende de que haya tráfico. */
+      const intentos = await consulta<{ clave: string }>(
+        `DELETE FROM ${TABLA_INTENTOS}
+          WHERE ultimo_en < ${corte("24 hours")}
+          RETURNING clave`,
+        [instante],
+      );
+
+      return {
+        esperaEliminadas: espera.length,
+        aliadosEliminados: aliados.length,
+        intentosEliminados: intentos.length,
+      };
+    },
+
     async contarIntentos(clave, ventanaMs, ahora) {
       /* LA CUENTA SALE DE LA ESCRITURA, NO DE UNA LECTURA APARTE.
          Ésta es la diferencia entre un límite que se cumple y uno que sólo lo

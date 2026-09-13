@@ -163,6 +163,26 @@ test.describe("seguridad", () => {
     expect(await page.locator('iframe[src*="challenges.cloudflare.com"]').count()).toBe(0);
   });
 
+  test("la ruta del cron no se puede disparar desde fuera", async ({ request }) => {
+    /* Es la única ruta del sitio que BORRA datos. Sin la cabecera correcta no
+       puede responder nada distinto de 404 — y 404 y no 401 a propósito: un 401
+       confirmaría que la ruta existe, y no hay ninguna razón para confirmárselo
+       a quien está probando a ver qué encuentra. */
+    const intentos: Record<string, string>[] = [
+      {},
+      { authorization: "Bearer" },
+      { authorization: "Bearer equivocado" },
+      { authorization: "Basic YWRtaW46YWRtaW4=" },
+    ];
+    for (const cabeceras of intentos) {
+      const r = await request.get("/api/cron/retencion", { headers: cabeceras });
+      expect(r.status(), `cabecera ${JSON.stringify(cabeceras)}`).toBe(404);
+    }
+
+    // Y tampoco por POST, por si alguien prueba otro verbo.
+    expect((await request.post("/api/cron/retencion")).status()).toBe(405);
+  });
+
   test("un cuerpo enorme no se procesa", async ({ request }) => {
     const r = await request.post("/api/waitlist", {
       data: { email: "a@ejemplo.com", consentimiento: true, mensaje: "x".repeat(200_000) },

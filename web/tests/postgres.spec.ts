@@ -482,6 +482,166 @@ test.describe("adaptador Postgres contra Supabase", () => {
     expect(rows[0].n).toBe(0);
   });
 
+  // ---- Retención: lo que la política promete borrar -----------------------
+
+  test.describe("borrado por retención", () => {
+    /**
+     * Envejece una fila de verdad en la base en vez de adelantar el reloj.
+     *
+     * Se podría llamar a `purgarPorRetencion` con un `ahora` treinta días en el
+     * futuro, y sería más corto — pero entonces la purga miraría TODAS las filas
+     * con ese futuro por delante y podría llevarse datos reales. Envejecer sólo
+     * las filas de prueba deja el experimento acotado a lo que creó la prueba.
+     */
+    async function envejecer(tabla: string, columna: string, email: string, dias: number) {
+      await poolWeb().query(
+        `UPDATE public.${tabla}
+            SET ${columna} = now() - ($2 || ' days')::interval
+          WHERE email = $1`,
+        [email, String(dias)],
+      );
+    }
+
+    test("29 días sin confirmar: se conserva", async () => {
+      const email = correo("ret-29d");
+      await repo().altaEnEspera(altaDePrueba(email));
+      await envejecer("lista_de_espera", "creado_en", email, 29);
+
+      await repo().purgarPorRetencion(Date.now());
+
+      const { rows } = await poolWeb().query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM public.lista_de_espera WHERE email = $1`,
+        [email],
+      );
+      expect(rows[0].n, "una inscripción de 29 días todavía no toca borrarla").toBe(1);
+    });
+
+    test("31 días sin confirmar: se elimina", async () => {
+      const email = correo("ret-31d");
+      await repo().altaEnEspera(altaDePrueba(email));
+      await envejecer("lista_de_espera", "creado_en", email, 31);
+
+      const r = await repo().purgarPorRetencion(Date.now());
+      expect(r.esperaEliminadas).toBeGreaterThanOrEqual(1);
+
+      const { rows } = await poolWeb().query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM public.lista_de_espera WHERE email = $1`,
+        [email],
+      );
+      expect(rows[0].n, "pasados 30 días sin confirmar, la política obliga a borrar").toBe(0);
+    });
+
+    test("confirmada y dada de baja: NO se tocan por viejas que sean", async () => {
+      /* La política conserva las confirmadas —hay consentimiento— y la constancia
+         de la baja: borrarla llevaría a volver a escribirle a quien pidió
+         justamente lo contrario. */
+      const confirmada = correo("ret-confirmada");
+      const dadaDeBaja = correo("ret-baja");
+
+      const a = await repo().altaEnEspera(altaDePrueba(confirmada));
+      await repo().confirmarEnEspera(a.registro.id);
+      const b = await repo().altaEnEspera(altaDePrueba(dadaDeBaja));
+      await repo().darDeBajaEnEspera(b.registro.id);
+
+      await envejecer("lista_de_espera", "creado_en", confirmada, 400);
+      await envejecer("lista_de_espera", "creado_en", dadaDeBaja, 400);
+
+      await repo().purgarPorRetencion(Date.now());
+
+      const { rows } = await poolWeb().query<{ email: string; estado: string }>(
+        `SELECT email, estado FROM public.lista_de_espera WHERE email = ANY($1)`,
+        [[confirmada, dadaDeBaja]],
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.estado).sort()).toEqual(["baja", "confirmado"]);
+    });
+
+    test("11 meses de un comercio: se conserva", async () => {
+      const email = correo("ret-11m");
+      await repo().crearLeadAliado({
+        nombre: "Once Meses",
+        negocio: "Bodega QA",
+        telefono: "04120000000",
+        email,
+        municipio: "mara",
+        tipoComercio: "bodega",
+        mensaje: null,
+        consentimientoEn: new Date().toISOString(),
+        ipHash: "qa-huella-ficticia",
+      });
+      await envejecer("contactos_aliados", "creado_en", email, 334); // ~11 meses
+
+      await repo().purgarPorRetencion(Date.now());
+
+      const { rows } = await poolWeb().query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM public.contactos_aliados WHERE email = $1`,
+        [email],
+      );
+      expect(rows[0].n).toBe(1);
+    });
+
+    test("13 meses de un comercio: se elimina", async () => {
+      const email = correo("ret-13m");
+      await repo().crearLeadAliado({
+        nombre: "Trece Meses",
+        negocio: "Bodega QA",
+        telefono: "04120000000",
+        email,
+        municipio: "mara",
+        tipoComercio: "bodega",
+        mensaje: null,
+        consentimientoEn: new Date().toISOString(),
+        ipHash: "qa-huella-ficticia",
+      });
+      await envejecer("contactos_aliados", "creado_en", email, 396); // ~13 meses
+
+      const r = await repo().purgarPorRetencion(Date.now());
+      expect(r.aliadosEliminados).toBeGreaterThanOrEqual(1);
+
+      const { rows } = await poolWeb().query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM public.contactos_aliados WHERE email = $1`,
+        [email],
+      );
+      expect(rows[0].n).toBe(0);
+    });
+
+    test("ejecutarla dos veces da el mismo resultado", async () => {
+      /* Idempotencia. Un cron puede dispararse dos veces —un reintento, un
+         despliegue a mitad— y la segunda pasada no puede hacer nada distinto. */
+      const email = correo("ret-doble");
+      await repo().altaEnEspera(altaDePrueba(email));
+      await envejecer("lista_de_espera", "creado_en", email, 45);
+
+      const primera = await repo().purgarPorRetencion(Date.now());
+      const segunda = await repo().purgarPorRetencion(Date.now());
+
+      expect(primera.esperaEliminadas).toBeGreaterThanOrEqual(1);
+      expect(segunda.esperaEliminadas, "la segunda pasada no debe encontrar nada").toBe(0);
+      expect(segunda.aliadosEliminados).toBe(0);
+
+      const { rows } = await poolWeb().query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM public.lista_de_espera WHERE email = $1`,
+        [email],
+      );
+      expect(rows[0].n).toBe(0);
+    });
+
+    test("no se lleva por delante lo que todavía está en plazo", async () => {
+      /* La prueba que importa de verdad: que la purga sea selectiva. Una fila
+         recién creada tiene que seguir ahí después de barrer. */
+      const reciente = correo("ret-reciente");
+      await repo().altaEnEspera(altaDePrueba(reciente));
+
+      await repo().purgarPorRetencion(Date.now());
+
+      const { rows } = await poolWeb().query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM public.lista_de_espera WHERE email = $1`,
+        [reciente],
+      );
+      expect(rows[0].n).toBe(1);
+    });
+  });
+
   // ---- K: limpieza --------------------------------------------------------
 
   test("K · la certificación no deja basura en la base", async () => {

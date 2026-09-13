@@ -125,4 +125,31 @@ export interface RepositorioWeb {
    * sería una protección imaginaria.
    */
   contarIntentos(clave: string, ventanaMs: number, ahora: number): Promise<number>;
+
+  // ---- Retención ----
+
+  /**
+   * Borra lo que ya no se puede conservar.
+   *
+   * La política de privacidad publicada promete tres plazos, y una promesa de
+   * borrado que nadie ejecuta es peor que no haberla hecho: se convierte en una
+   * declaración falsa en un documento legal.
+   *
+   * Recibe `ahora` en vez de mirar el reloj para poder probarse con fechas
+   * simuladas, igual que `contarIntentos`.
+   *
+   * Es **idempotente**: la segunda ejecución no encuentra nada que borrar y
+   * devuelve ceros. Borrar lo ya borrado no es un error.
+   */
+  purgarPorRetencion(ahora: number): Promise<ResultadoPurga>;
 }
+
+/** Cuántas filas se llevó cada plazo. Números, nunca datos de nadie. */
+export type ResultadoPurga = {
+  /** Altas sin confirmar con más de 30 días. */
+  esperaEliminadas: number;
+  /** Contactos de comercios con más de 12 meses. */
+  aliadosEliminados: number;
+  /** Registros del limitador con más de 24 horas. */
+  intentosEliminados: number;
+};

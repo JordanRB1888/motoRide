@@ -236,6 +236,72 @@ test.describe("almacén en memoria", () => {
   });
 });
 
+test.describe("borrado por retención", () => {
+  const DIA = 24 * 60 * 60 * 1000;
+
+  /** El mismo alta de siempre, con `creadoEn` reescrito para simular antigüedad. */
+  async function altaConEdad(repo: ReturnType<typeof crearRepositorioEnMemoria>, email: string, dias: number) {
+    const { registro } = await repo.altaEnEspera({
+      email,
+      rol: null,
+      zona: null,
+      origen: null,
+      ipHash: null,
+      tokenConfirmacion: nuevoTestigo(),
+      tokenExpiraEn: new Date(Date.now() + 10_000).toISOString(),
+      tokenBaja: nuevoTestigo(),
+    });
+    registro.creadoEn = new Date(Date.now() - dias * DIA).toISOString();
+    return registro;
+  }
+
+  test("30 días es la frontera, y sólo para lo no confirmado", async () => {
+    const repo = crearRepositorioEnMemoria();
+    await altaConEdad(repo, "joven@ejemplo.com", 29);
+    await altaConEdad(repo, "vieja@ejemplo.com", 31);
+    const confirmada = await altaConEdad(repo, "confirmada@ejemplo.com", 400);
+    await repo.confirmarEnEspera(confirmada.id);
+
+    const r = await repo.purgarPorRetencion(Date.now());
+
+    expect(r.esperaEliminadas).toBe(1);
+    expect(await repo.buscarPorTokenBaja(confirmada.tokenBaja!)).not.toBeNull();
+  });
+
+  test("es idempotente: la segunda pasada no borra nada", async () => {
+    const repo = crearRepositorioEnMemoria();
+    await altaConEdad(repo, "vieja@ejemplo.com", 45);
+
+    const primera = await repo.purgarPorRetencion(Date.now());
+    const segunda = await repo.purgarPorRetencion(Date.now());
+
+    expect(primera.esperaEliminadas).toBe(1);
+    expect(segunda.esperaEliminadas).toBe(0);
+    expect(segunda.aliadosEliminados).toBe(0);
+  });
+
+  test("los comercios se van a los 12 meses, no antes", async () => {
+    const repo = crearRepositorioEnMemoria();
+    const base = {
+      nombre: "Comercio",
+      negocio: "Bodega",
+      telefono: "04120000000",
+      municipio: "mara",
+      tipoComercio: "bodega",
+      mensaje: null,
+      consentimientoEn: new Date().toISOString(),
+      ipHash: null,
+    };
+    const joven = await repo.crearLeadAliado({ ...base, email: "once@ejemplo.com" });
+    const viejo = await repo.crearLeadAliado({ ...base, email: "trece@ejemplo.com" });
+    joven.creadoEn = new Date(Date.now() - 334 * DIA).toISOString();
+    viejo.creadoEn = new Date(Date.now() - 396 * DIA).toISOString();
+
+    const r = await repo.purgarPorRetencion(Date.now());
+    expect(r.aliadosEliminados).toBe(1);
+  });
+});
+
 test.describe("límite de peticiones", () => {
   test("corta al pasarse y olvida al salir de la ventana", async () => {
     const repo = crearRepositorioEnMemoria();
