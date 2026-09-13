@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
 import { ANALYTICS_ENABLED } from "@/lib/flags";
+import { organizacionJsonLd } from "@/lib/jsonld";
 import "./globals.css";
 
 /* Tipografías oficiales de campaña, servidas desde el propio dominio:
@@ -103,6 +104,15 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${displayBrand.variable} ${bodyBrand.variable}`}>
       <body>
+        {/* Datos estructurados de la organización.
+            Va en el layout para que esté en todas las páginas, y lleva un `@id`
+            estable para que los buscadores entiendan que es la misma empresa y
+            no una por página. Es JSON inerte —no ejecuta nada— y la CSP ya lo
+            permite con `script-src 'unsafe-inline'`: no hubo que abrir nada. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: organizacionJsonLd() }}
+        />
         <a
           href="#contenido"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-full focus:bg-signal focus:px-5 focus:py-3 focus:font-bold focus:text-ink-900"

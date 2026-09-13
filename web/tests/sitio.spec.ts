@@ -336,3 +336,89 @@ test.describe("redes sociales", () => {
     expect(texto).not.toContain("61594407713816");
   });
 });
+
+test.describe("botones sociales de extremo a extremo", () => {
+  /**
+   * Clic real, ventana real, evento real.
+   *
+   * Los tres dominios se sirven desde una respuesta falsa en vez de dejar que
+   * el navegador salga a internet: así la prueba comprueba A DÓNDE apunta el
+   * enlace sin depender de que TikTok esté de pie, ni tardar lo que tarde en
+   * cargar. La ventana emergente se abre igual y su URL es la que interesa.
+   *
+   * El evento se lee de `window.vaq`, la cola del paquete de analítica. Es el
+   * sitio exacto donde `track()` deja lo que va a enviar, así que comprobar ahí
+   * el nombre y las propiedades es más fiable que esperar una petición de red
+   * —que además Vercel no llega a enviar desde un navegador automatizado, por su
+   * detección de robots—.
+   */
+  const CASOS: { red: string; evento: string; url: string }[] = [
+    { red: "TikTok", evento: "social_tiktok", url: "https://www.tiktok.com/@58express7" },
+    { red: "Instagram", evento: "social_instagram", url: "https://www.instagram.com/58expressapp" },
+    {
+      red: "Facebook",
+      evento: "social_facebook",
+      url: "https://www.facebook.com/profile.php?id=61594407713816&sk=directory_intro",
+    },
+  ];
+
+  const PROHIBIDO = /@|58express7|61594407713816|tiktok\.com|instagram\.com|facebook\.com|http/i;
+
+  for (const { red, evento, url } of CASOS) {
+    test(`${red}: abre su URL y registra «${evento}» sin datos personales`, async ({
+      page,
+      context,
+    }) => {
+      await context.route(/tiktok\.com|instagram\.com|facebook\.com/, (ruta) =>
+        ruta.fulfill({ status: 200, contentType: "text/html", body: "<html><body>ok</body></html>" }),
+      );
+
+      await page.goto("/");
+      const enlace = page.locator(`footer a[href="${url}"]`).first();
+      await enlace.scrollIntoViewIfNeeded();
+
+      const [emergente] = await Promise.all([page.waitForEvent("popup"), enlace.click()]);
+      expect(emergente.url(), `${red} abre otra dirección`).toBe(url);
+      await emergente.close();
+
+      const encolados = await page.evaluate(() => {
+        const cola = (window as unknown as { vaq?: unknown[][] }).vaq ?? [];
+        return cola
+          .filter((e) => e[0] === "event")
+          .map((e) => e[1] as { name?: string; data?: Record<string, unknown> });
+      });
+
+      const suyo = encolados.find((e) => e.name === evento);
+      expect(suyo, `no se registró ${evento}; llegaron ${JSON.stringify(encolados)}`).toBeTruthy();
+      expect(suyo!.data).toEqual({ origen: "footer" });
+
+      /* Y que no se cuele nada más por el camino: ni el usuario de la cuenta, ni
+         el identificador de Facebook, ni la dirección completa. */
+      for (const [clave, valor] of Object.entries(suyo!.data ?? {})) {
+        expect(`${clave}=${String(valor)}`, "propiedad sospechosa").not.toMatch(PROHIBIDO);
+      }
+    });
+  }
+
+  test("desde /contacto el origen cambia, y sigue siendo lo único que viaja", async ({
+    page,
+    context,
+  }) => {
+    await context.route(/tiktok\.com/, (ruta) =>
+      ruta.fulfill({ status: 200, contentType: "text/html", body: "ok" }),
+    );
+    await page.goto("/contacto");
+    const enlace = page.locator('main a[href="https://www.tiktok.com/@58express7"]').first();
+    await enlace.scrollIntoViewIfNeeded();
+    const [emergente] = await Promise.all([page.waitForEvent("popup"), enlace.click()]);
+    await emergente.close();
+
+    const suyo = await page.evaluate(() => {
+      const cola = (window as unknown as { vaq?: unknown[][] }).vaq ?? [];
+      const e = cola.filter((x) => x[0] === "event").map((x) => x[1] as { name?: string; data?: unknown });
+      return e.find((x) => x.name === "social_tiktok") ?? null;
+    });
+    expect(suyo).toBeTruthy();
+    expect(suyo!.data).toEqual({ origen: "contacto" });
+  });
+});
