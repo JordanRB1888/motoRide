@@ -136,6 +136,33 @@ test.describe("seguridad", () => {
     expect(csp).not.toContain("*");
   });
 
+  test("no se le pide NADA a Cloudflare mientras los formularios estén apagados", async ({
+    page,
+  }) => {
+    /* Las claves reales de Turnstile ya están configuradas en producción, así que
+       la Site Key viaja incrustada en un chunk —es pública por diseño, para eso
+       existe—. Lo que no puede pasar, y es lo que vigila esta prueba, es que el
+       navegador llegue a PEDIRLE algo a Cloudflare: ni el script del widget, ni
+       el desafío, ni un marco. Mientras el interruptor esté apagado, el
+       componente devuelve `null` y no se carga nada.
+       Comprobarlo con el navegador y no con un grep del HTML es la diferencia
+       entre «no está escrito» y «no se ejecuta». */
+    const aCloudflare: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes("challenges.cloudflare.com")) aCloudflare.push(r.url());
+    });
+
+    for (const ruta of ["/", "/aliados", "/conductores"]) {
+      await page.goto(ruta);
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(600);
+    }
+
+    expect(aCloudflare, aCloudflare.join(" | ")).toHaveLength(0);
+    // Y ningún marco del desafío en el documento.
+    expect(await page.locator('iframe[src*="challenges.cloudflare.com"]').count()).toBe(0);
+  });
+
   test("un cuerpo enorme no se procesa", async ({ request }) => {
     const r = await request.post("/api/waitlist", {
       data: { email: "a@ejemplo.com", consentimiento: true, mensaje: "x".repeat(200_000) },

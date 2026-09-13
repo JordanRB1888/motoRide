@@ -28,7 +28,7 @@ despliegue.
 | Doble consentimiento | **PASA** |
 | Baja | **PASA** |
 | Correos (Resend) | **PASA** — plantillas y adaptador; envío real **NO ACTIVADO** (falta clave en el proyecto web) |
-| Turnstile | **PASA PARCIAL** — verificación de servidor completa y probada; **faltan las claves** |
+| Turnstile | **PASA PARCIAL** — verificación de servidor completa y probada; claves reales **CONFIGURADAS** en Production (§16). **LISTO, NO ACTIVADO**: el widget real no se ha ejecutado con formularios públicos |
 | Límite de peticiones | **PASA** |
 | Trampa + tiempo mínimo | **PASA** |
 | Interfaz de la lista de espera | **PASA** (construida, **NO ACTIVADA**) |
@@ -295,8 +295,8 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 |---|---|---|
 | ~~`WEB_DATABASE_URL`~~ ✅ | Almacén de la web | Las rutas responden 503 |
 | ~~`IP_HASH_SALT`~~ ✅ | Sal del HMAC de la IP | No se guarda huella; el límite por IP no actúa |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Widget en el navegador | El widget no se pinta |
-| `TURNSTILE_SECRET_KEY` | Verificación en el servidor | **No deja pasar nada** |
+| ~~`NEXT_PUBLIC_TURNSTILE_SITE_KEY`~~ ✅ | Widget en el navegador | El widget no se pinta |
+| ~~`TURNSTILE_SECRET_KEY`~~ ✅ | Verificación en el servidor | **No deja pasar nada** |
 | `RESEND_API_KEY` | Envío de correos | No se manda ninguno; el alta se guarda igual |
 | `EMAIL_FROM` | Remitente | Por omisión `hola@send.mas58express.com` |
 | `EMAIL_EQUIPO` | Aviso interno | Por omisión `58expressapp@gmail.com` |
@@ -310,7 +310,7 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 |---|---|---|
 | 1 | **Política de privacidad y responsable identificado** | Tuya. Bloquea encender cualquier formulario |
 | 2 | ~~**Provisionar la base de la web**~~ ✅ **Resuelto** | Proyecto Supabase «+58Express Web», conectado y certificado (§15) |
-| 3 | **Claves de Turnstile** | Tuya — cuenta gratuita de Cloudflare |
+| 3 | ~~**Claves de Turnstile**~~ ✅ **Resuelto** | Configuradas en Production el 13/09/2026 (§16) |
 | 4 | **`RESEND_API_KEY` en el proyecto web** | Tuya — la clave existe en Railway, pero la integración la devuelve redactada y no puedo leerla |
 | 5 | **Activar Web Analytics en el proyecto** | Tuya — un interruptor |
 
@@ -329,8 +329,9 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
    certificado desde *Project Settings → Database → SSL Configuration* y
    contrastar su huella SHA-256 con la anotada en `lib/datos/supabase-ca.ts`
    (§15.6).
-2. **Claves de Turnstile.** En el panel de Cloudflare, *Turnstile → Add site*
-   con el dominio `mas58express.com`. Pásame la **Site Key** y la **Secret Key**.
+2. ~~**Claves de Turnstile.**~~ ✅ **Hecho el 13 de septiembre de 2026.** Las dos
+   están en `plus58express-web`, sólo en Production, y verificadas con los
+   interruptores apagados — §16. **LISTO, NO ACTIVADO.**
 3. **La `RESEND_API_KEY`** que ya usa el backend, o una nueva para la web.
 4. **Activar Web Analytics** en el proyecto `plus58express-web` de Vercel
    (*Analytics → Enable*). Con eso enciendo `ANALYTICS_ENABLED`.
@@ -579,3 +580,95 @@ Comprobado en producción después de promover:
 La base queda conectada sin que ninguna ruta pública acepte un dato. Encenderla
 sigue siendo cambiar `false` por `true` en `lib/flags.ts` — y sigue bloqueado
 por la política de privacidad.
+
+---
+
+## 16. Turnstile real
+
+Añadido el 13 de septiembre de 2026.
+
+**Turnstile keys = CONFIGURADAS**
+**Turnstile real = LISTO, NO ACTIVADO**
+
+No está certificado de extremo a extremo, y no se declarará hasta que lo esté:
+el widget real no se ha ejecutado nunca con un formulario público, porque no hay
+ninguno publicado. Lo que sí está probado es todo lo demás.
+
+### 16.1 Las claves
+
+| Variable | Tipo en Vercel | Entornos |
+|---|---|---|
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Config | **Production** |
+| `TURNSTILE_SECRET_KEY` | Secret | **Production** |
+
+Sólo Production, a propósito: el widget únicamente autoriza `mas58express.com`,
+así que una clave real en una vista previa daría un desafío que nunca podría
+resolverse. Y eso **no abre un agujero**, porque sin clave
+`verificarTurnstile` devuelve `SIN_CONFIGURAR` y **no deja pasar**: una vista
+previa no puede aceptar un envío aunque alguien encienda los interruptores ahí.
+
+La Site Key va como `Config` y no como Secret deliberadamente. Es pública por
+diseño —viaja incrustada en el JavaScript que descarga cualquier visitante, que
+es su función—, así que marcarla como secreta sería teatro y la haría ilegible
+sin ganar nada. La Secret Key sí es Secret: Vercel la entrega al despliegue y no
+permite volver a leerla.
+
+Ninguna de las dos aparece en este informe, en el repositorio ni en ningún
+registro.
+
+> **Dos tropiezos por el camino, por si se repiten.** La Site Key se configuró
+> primero como `TURNSTILE_SITE_KEY`, sin el prefijo `NEXT_PUBLIC_`. Next sólo
+> entrega al navegador las variables con ese prefijo, así que el widget habría
+> recibido `undefined` y no se habría pintado nunca — un fallo que no se habría
+> visto hasta el día de encenderlo. Se volvió a crear con el nombre correcto y
+> se borró la huérfana.
+>
+> Y una alarma mía que era falsa: en `vercel env ls` el valor aparece como
+> `eyJ2IjoidjIiLCJjIj…`, que no tiene forma de clave de Turnstile. Es cómo Vercel
+> representa el valor en el listado, no el valor. El valor guardado sí tiene la
+> forma correcta: 24 caracteres empezando por `0x`, comprobado sin imprimirlo.
+
+### 16.2 Verificado en producción, con los interruptores apagados
+
+Despliegue `plus58express-nvk8jq558`, ya con las dos claves configuradas.
+
+| Comprobación | Resultado |
+|---|---|
+| TypeScript | limpio |
+| Build de producción | correcto |
+| Turnstile en el HTML de `/`, `/aliados`, `/conductores`, `/contacto` | **0** en las cuatro |
+| Site Key en el HTML servido | **no aparece** |
+| `challenges.cloudflare.com` en la CSP | **no aparece** |
+| `frame-src` | `'none'` |
+| `script-src` / `connect-src` | `'self' 'unsafe-inline'` / `'self'` |
+| Peticiones del navegador a Cloudflare al recorrer las tres páginas | **ninguna** |
+| Marcos del desafío en el documento | **0** |
+| `POST /api/waitlist` · `POST /api/leads/partners` | **404** · **404** |
+| `GET /api/waitlist/confirmar` · `/baja` | **404** · **404** |
+| `Set-Cookie` | ninguna |
+| Suite completa | **162/162** |
+
+La última fila del bloque de comprobaciones es nueva: `fase1b.spec.ts` incluye
+ahora una prueba que recorre las tres páginas con un navegador de verdad y exige
+cero peticiones a `challenges.cloudflare.com`. Comprobarlo con el navegador y no
+con un grep del HTML es la diferencia entre «no está escrito» y «no se ejecuta».
+
+### 16.3 Un matiz que conviene no redondear
+
+`challenges.cloudflare.com` **sí aparece** en uno de los chunks de JavaScript que
+descarga la portada, y desde este despliegue también la Site Key. No es una fuga:
+las dos cosas son públicas por definición —la URL del cargador de Cloudflare y
+una clave que está pensada para ir en el HTML—. Pero la afirmación «no aparece»
+sólo es cierta del HTML y de la cabecera CSP, no de un grep de todo lo servido, y
+conviene decirlo así.
+
+El motivo es que las páginas importan los componentes de formulario
+(`app/aliados/page.tsx` y `components/home/Descarga.tsx`), y esos importan
+`Turnstile.tsx`. Aunque el interruptor apagado hace que devuelvan `null`, el
+módulo entra en el paquete. La URL del cargador ya estaba ahí antes de configurar
+ninguna clave — se comprobó construyendo sin ellas.
+
+**Consecuencia real:** cada visitante descarga código muerto que no puede
+ejecutarse. No es un problema de seguridad; es peso. Se arregla cargando los
+formularios de forma diferida, para que vivan en un chunk que nunca se pide. **No
+se ha hecho**, porque excede lo que pedía esta ronda; queda propuesto.
