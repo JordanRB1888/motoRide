@@ -32,18 +32,32 @@ export async function GET(peticion: Request): Promise<Response> {
 
   if (!token || !hayAlmacen()) return aBaja("invalido", url);
 
-  const repo = repositorioWeb();
-  const registro = await repo.buscarPorTokenBaja(token);
-  if (!registro) return aBaja("invalido", url);
+  let registro;
+  try {
+    const repo = repositorioWeb();
+    registro = await repo.buscarPorTokenBaja(token);
+    if (!registro) return aBaja("invalido", url);
 
-  if (registro.estado === "baja") return aBaja("ya_baja", url);
+    if (registro.estado === "baja") return aBaja("ya_baja", url);
 
-  await repo.darDeBajaEnEspera(registro.id);
+    await repo.darDeBajaEnEspera(registro.id);
+  } catch (error) {
+    /* Aquí `error` en vez de `invalido` pesa todavía más que al confirmar:
+       decirle «este enlace no vale» a quien intenta dejar de recibir correos es
+       la forma más rápida de que marque el siguiente como spam. */
+    console.error("[baja] almacén:", (error as Error).message);
+    return aBaja("error", url);
+  }
 
   /* Un acuse de la baja. Es el último correo que se le manda, y existe para que
      quede constancia por si la baja no la pidió quien tiene el buzón. */
-  if (correoConfigurado()) {
-    await enviarCorreo(registro.email, correoBaja());
+  try {
+    if (correoConfigurado()) {
+      await enviarCorreo(registro.email, correoBaja());
+    }
+  } catch (error) {
+    // La baja está hecha, que es lo que pidió. El acuse es cortesía.
+    console.error("[baja] correo:", (error as Error).message);
   }
 
   return aBaja("baja", url);

@@ -58,31 +58,47 @@ export async function POST(peticion: Request): Promise<Response> {
   }
 
   if (!hayAlmacen()) return json({ error: "NO_DISPONIBLE" }, 503);
-  const repo = repositorioWeb();
 
   const ip = ipDeLaPeticion(peticion.headers);
   const ipHash = huellaDeIp(ip, process.env.IP_HASH_SALT);
 
-  if (ipHash && (await superaLimite(repo, `waitlist:${ipHash}`, LIMITES.waitlistPorIp, ahora))) {
-    return json({ error: "DEMASIADAS_PETICIONES" }, 429);
-  }
+  /* A PARTIR DE AQUÍ SE HABLA CON LA BASE, Y LA BASE PUEDE FALLAR.
+     El almacén de memoria no podía rechazar nunca; el de Postgres sí —el pooler
+     cierra una conexión ociosa, una consulta agota su plazo—. Sin este envoltorio
+     un tropiezo de la base saldría como el 500 de Next, y eso rompería lo que
+     este fichero defiende: un 500 justo después del alta, pero durante el envío,
+     le diría a quien prueba direcciones que ésa llegó a tocar el almacén. */
+  let alta;
+  let repo;
+  try {
+    repo = repositorioWeb();
 
-  const turnstile = await verificarTurnstile(datos.turnstileToken, ip || null);
-  if (!turnstile.valido) {
-    const estado = turnstile.motivo === "SIN_CONFIGURAR" ? 503 : 400;
-    return json({ error: estado === 503 ? "NO_DISPONIBLE" : "TURNSTILE_INVALIDO" }, estado);
-  }
+    if (ipHash && (await superaLimite(repo, `waitlist:${ipHash}`, LIMITES.waitlistPorIp, ahora))) {
+      return json({ error: "DEMASIADAS_PETICIONES" }, 429);
+    }
 
-  const alta = await repo.altaEnEspera({
-    email: datos.email,
-    rol: datos.rol,
-    zona: datos.zona,
-    origen: datos.origen,
-    ipHash,
-    tokenConfirmacion: nuevoTestigo(),
-    tokenExpiraEn: new Date(ahora + VIGENCIA_CONFIRMACION_MS).toISOString(),
-    tokenBaja: nuevoTestigo(),
-  });
+    const turnstile = await verificarTurnstile(datos.turnstileToken, ip || null);
+    if (!turnstile.valido) {
+      const estado = turnstile.motivo === "SIN_CONFIGURAR" ? 503 : 400;
+      return json({ error: estado === 503 ? "NO_DISPONIBLE" : "TURNSTILE_INVALIDO" }, estado);
+    }
+
+    alta = await repo.altaEnEspera({
+      email: datos.email,
+      rol: datos.rol,
+      zona: datos.zona,
+      origen: datos.origen,
+      ipHash,
+      tokenConfirmacion: nuevoTestigo(),
+      tokenExpiraEn: new Date(ahora + VIGENCIA_CONFIRMACION_MS).toISOString(),
+      tokenBaja: nuevoTestigo(),
+    });
+  } catch (error) {
+    /* 503 y no 500: es una caída temporal, y quien lo intente dentro de un rato
+       lo conseguirá. La respuesta no depende de la dirección enviada. */
+    console.error("[waitlist] almacén:", (error as Error).message);
+    return json({ error: "NO_DISPONIBLE" }, 503);
+  }
 
   /* Se manda el correo de confirmación en dos casos: cuando el alta es nueva, y
      cuando ya existía pero sigue sin confirmar —ahí el correo anterior pudo
@@ -91,14 +107,21 @@ export async function POST(peticion: Request): Promise<Response> {
   const meritaCorreo =
     alta.creado || alta.registro.estado === "pendiente" || alta.registro.estado === "caducado";
 
-  if (meritaCorreo && correoConfigurado() && !(await envioDemasiadoReciente(repo, datos.email, ahora))) {
-    const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mas58express.com";
-    const correo = correoConfirmacion(
-      `${base}/api/waitlist/confirmar?token=${encodeURIComponent(alta.registro.tokenConfirmacion ?? "")}`,
-      `${base}/api/waitlist/baja?token=${encodeURIComponent(alta.registro.tokenBaja ?? "")}`,
-    );
-    const envio = await enviarCorreo(datos.email, correo);
-    if (envio.enviado) await repo.registrarEnvioDeConfirmacion(datos.email, new Date(ahora).toISOString());
+  try {
+    if (meritaCorreo && correoConfigurado() && !(await envioDemasiadoReciente(repo, datos.email, ahora))) {
+      const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mas58express.com";
+      const correo = correoConfirmacion(
+        `${base}/api/waitlist/confirmar?token=${encodeURIComponent(alta.registro.tokenConfirmacion ?? "")}`,
+        `${base}/api/waitlist/baja?token=${encodeURIComponent(alta.registro.tokenBaja ?? "")}`,
+      );
+      const envio = await enviarCorreo(datos.email, correo);
+      if (envio.enviado) await repo.registrarEnvioDeConfirmacion(datos.email, new Date(ahora).toISOString());
+    }
+  } catch (error) {
+    /* El alta YA está hecha. Que falle el correo no puede convertirla en un
+       error para quien se apuntó: está en la lista, y el enlace se le puede
+       reenviar. Volver a apuntarse manda uno nuevo. */
+    console.error("[waitlist] correo:", (error as Error).message);
   }
 
   /* UNA SOLA RESPUESTA, siempre la misma.

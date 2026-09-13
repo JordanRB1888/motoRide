@@ -40,6 +40,14 @@ const ESTADOS: Record<string, { titulo: string; acento: string; cuerpo: string }
     cuerpo:
       "Puede que el correo se copiara a medias. Si sigues recibiendo mensajes nuestros y no los quieres, escríbenos y te sacamos de la lista a mano.",
   },
+  /* Quien pulsa «darme de baja» y se encuentra un «no vale» marca el siguiente
+     correo como spam, y con razón. Si el fallo es nuestro, se dice. */
+  error: {
+    titulo: "No hemos podido",
+    acento: "hacerlo ahora",
+    cuerpo:
+      "Ha sido un fallo nuestro, no del enlace: sigue valiendo. Vuelve a pulsarlo dentro de un rato. Si prefieres, escríbenos y te sacamos de la lista a mano.",
+  },
 };
 
 export default async function Page({

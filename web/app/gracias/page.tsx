@@ -63,6 +63,16 @@ const ESTADOS: Record<
       "Puede que ya se hubiera usado o que el correo se copiara a medias. Vuelve a apuntarte desde la web y te mandamos otro.",
     accion: "reintentar",
   },
+  /* Cuando el fallo es nuestro se dice que es nuestro. Mandar a alguien con un
+     enlace perfecto a «apuntarme otra vez» porque la base tuvo un mal minuto lo
+     haría rendirse por un problema que no es suyo — y el enlace sigue intacto. */
+  error: {
+    titulo: "No hemos podido",
+    acento: "comprobarlo ahora",
+    cuerpo:
+      "Ha sido un fallo nuestro, no del enlace: sigue valiendo y no lo hemos gastado. Vuelve a pulsarlo dentro de un rato y quedará confirmado.",
+    accion: "inicio",
+  },
 };
 
 export default async function Page({

@@ -13,6 +13,12 @@ const nextConfig: NextConfig = {
      parte del peso y conserva la nitidez. */
   images: { qualities: [75, 92] },
 
+  /* `pg` se carga tal cual, sin pasar por el empaquetador. Trae un módulo nativo
+     opcional (`pg-native`) que el empaquetador intenta resolver y no encuentra;
+     además, una librería de conexiones no gana nada con ser empaquetada. Sólo
+     afecta al servidor: ninguna página la importa. */
+  serverExternalPackages: ["pg"],
+
   /* `www` y el dominio apex servían los dos el sitio completo con 200. Los dos
      declaran el mismo canonical, así que Google consolida igual, pero dos
      orígenes vivos para el mismo contenido es una duplicidad innecesaria.

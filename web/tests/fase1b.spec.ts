@@ -82,6 +82,9 @@ test.describe("páginas de confirmación y de baja", () => {
     ["ya_confirmado", /ya estabas/i],
     ["expirado", /caduc/i],
     ["invalido", /no vale/i],
+    // El fallo nuestro se dice que es nuestro, y no se manda a nadie con un
+    // enlace bueno a empezar de cero.
+    ["error", /no hemos podido/i],
   ];
 
   for (const [estado, esperado] of ESTADOS_GRACIAS) {
@@ -96,6 +99,7 @@ test.describe("páginas de confirmación y de baja", () => {
     ["baja", /listo/i],
     ["ya_baja", /ya estabas/i],
     ["invalido", /no vale/i],
+    ["error", /no hemos podido/i],
   ] as [string, RegExp][]) {
     test(`/baja muestra el estado «${estado}»`, async ({ page }) => {
       const r = await page.goto(`/baja?estado=${estado}`);

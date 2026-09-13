@@ -46,50 +46,65 @@ export async function POST(peticion: Request): Promise<Response> {
   }
 
   if (!hayAlmacen()) return json({ error: "NO_DISPONIBLE" }, 503);
-  const repo = repositorioWeb();
 
   const ip = ipDeLaPeticion(peticion.headers);
   const ipHash = huellaDeIp(ip, process.env.IP_HASH_SALT);
 
-  if (ipHash && (await superaLimite(repo, `aliados:${ipHash}`, LIMITES.aliadosPorIp, ahora))) {
-    return json({ error: "DEMASIADAS_PETICIONES" }, 429);
+  // Mismo envoltorio y mismo motivo que en la lista de espera: la base puede
+  // fallar, y un 500 de Next no es una respuesta que este formulario pueda dar.
+  let lead;
+  try {
+    const repo = repositorioWeb();
+
+    if (ipHash && (await superaLimite(repo, `aliados:${ipHash}`, LIMITES.aliadosPorIp, ahora))) {
+      return json({ error: "DEMASIADAS_PETICIONES" }, 429);
+    }
+
+    const turnstile = await verificarTurnstile(datos.turnstileToken, ip || null);
+    if (!turnstile.valido) {
+      const estado = turnstile.motivo === "SIN_CONFIGURAR" ? 503 : 400;
+      return json({ error: estado === 503 ? "NO_DISPONIBLE" : "TURNSTILE_INVALIDO" }, estado);
+    }
+
+    lead = await repo.crearLeadAliado({
+      nombre: datos.nombre,
+      negocio: datos.negocio,
+      telefono: datos.telefono,
+      email: datos.email,
+      municipio: datos.municipio,
+      tipoComercio: datos.tipoComercio,
+      mensaje: datos.mensaje,
+      // CUÁNDO consintió. Un booleano no prueba nada el día que haga falta.
+      consentimientoEn: new Date(ahora).toISOString(),
+      ipHash,
+    });
+  } catch (error) {
+    console.error("[aliados] almacén:", (error as Error).message);
+    return json({ error: "NO_DISPONIBLE" }, 503);
   }
 
-  const turnstile = await verificarTurnstile(datos.turnstileToken, ip || null);
-  if (!turnstile.valido) {
-    const estado = turnstile.motivo === "SIN_CONFIGURAR" ? 503 : 400;
-    return json({ error: estado === 503 ? "NO_DISPONIBLE" : "TURNSTILE_INVALIDO" }, estado);
-  }
-
-  const lead = await repo.crearLeadAliado({
-    nombre: datos.nombre,
-    negocio: datos.negocio,
-    telefono: datos.telefono,
-    email: datos.email,
-    municipio: datos.municipio,
-    tipoComercio: datos.tipoComercio,
-    mensaje: datos.mensaje,
-    // CUÁNDO consintió. Un booleano no prueba nada el día que haga falta.
-    consentimientoEn: new Date(ahora).toISOString(),
-    ipHash,
-  });
-
-  if (correoConfigurado()) {
-    // Acuse al comercio y aviso al equipo. El aviso NO lleva la IP: para
-    // atender a alguien no hace falta saber desde dónde escribió.
-    await enviarCorreo(lead.email, correoAcuseAliado(lead.nombre, lead.negocio));
-    await enviarCorreo(
-      process.env.EMAIL_EQUIPO || EMAIL.direccion,
-      correoAvisoInterno({
-        nombre: lead.nombre,
-        negocio: lead.negocio,
-        telefono: lead.telefono,
-        email: lead.email,
-        municipio: lead.municipio,
-        tipoComercio: lead.tipoComercio,
-        mensaje: lead.mensaje,
-      }),
-    );
+  try {
+    if (correoConfigurado()) {
+      // Acuse al comercio y aviso al equipo. El aviso NO lleva la IP: para
+      // atender a alguien no hace falta saber desde dónde escribió.
+      await enviarCorreo(lead.email, correoAcuseAliado(lead.nombre, lead.negocio));
+      await enviarCorreo(
+        process.env.EMAIL_EQUIPO || EMAIL.direccion,
+        correoAvisoInterno({
+          nombre: lead.nombre,
+          negocio: lead.negocio,
+          telefono: lead.telefono,
+          email: lead.email,
+          municipio: lead.municipio,
+          tipoComercio: lead.tipoComercio,
+          mensaje: lead.mensaje,
+        }),
+      );
+    }
+  } catch (error) {
+    /* El interés quedó guardado, que es lo que importa: el equipo lo verá en la
+       tabla aunque el aviso por correo no haya salido. */
+    console.error("[aliados] correo:", (error as Error).message);
   }
 
   return json({ estado: "recibido" }, 201);

@@ -30,7 +30,25 @@ export function crearRepositorioEnMemoria(): RepositorioWeb {
   return {
     async altaEnEspera(datos): Promise<ResultadoAlta> {
       const existente = porEmail(datos.email);
-      if (existente) return { creado: false, registro: existente };
+      if (existente) {
+        /* El mismo criterio que en Postgres, y por las mismas dos razones: si el
+           testigo anterior ya no sirve hay que dar uno nuevo —si no, quien dejó
+           caducar el enlace no podría confirmarse nunca más—, pero si sigue vivo
+           no se toca, porque entonces cualquiera podría anular el enlace de otra
+           persona escribiendo su dirección en el formulario. */
+        const caducado =
+          !existente.tokenConfirmacion ||
+          !existente.tokenExpiraEn ||
+          new Date(existente.tokenExpiraEn).getTime() < Date.now();
+
+        if ((existente.estado === "pendiente" || existente.estado === "caducado") && caducado) {
+          existente.tokenConfirmacion = datos.tokenConfirmacion;
+          existente.tokenExpiraEn = datos.tokenExpiraEn;
+          existente.estado = "pendiente";
+          existente.actualizadoEn = new Date().toISOString();
+        }
+        return { creado: false, registro: existente };
+      }
 
       const ahora = new Date().toISOString();
       const registro: RegistroWaitlist = {

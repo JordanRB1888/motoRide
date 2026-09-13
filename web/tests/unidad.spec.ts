@@ -128,6 +128,55 @@ test.describe("almacén en memoria", () => {
     expect(dos.registro.id).toBe(uno.registro.id);
   });
 
+  test("un testigo vencido se renueva; uno vivo no se toca", async () => {
+    const repo = crearRepositorioEnMemoria();
+    const base = {
+      email: "f@ejemplo.com",
+      rol: null,
+      zona: null,
+      origen: null,
+      ipHash: null,
+      tokenBaja: nuevoTestigo(),
+    };
+
+    const vivo = nuevoTestigo();
+    await repo.altaEnEspera({
+      ...base,
+      tokenConfirmacion: vivo,
+      tokenExpiraEn: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    /* Con el enlace vivo no se rota: si se rotara, cualquiera podría anular el
+       enlace de otra persona escribiendo su dirección en el formulario. */
+    const igual = await repo.altaEnEspera({
+      ...base,
+      tokenConfirmacion: nuevoTestigo(),
+      tokenExpiraEn: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(igual.registro.tokenConfirmacion).toBe(vivo);
+
+    /* Vencido sí se renueva. Sin esto, quien dejara caducar el enlace recibiría
+       para siempre un correo con el enlace vacío: esa dirección no podría
+       confirmarse nunca más. */
+    const otro = crearRepositorioEnMemoria();
+    await otro.altaEnEspera({
+      ...base,
+      tokenConfirmacion: nuevoTestigo(),
+      tokenExpiraEn: new Date(Date.now() - 1000).toISOString(),
+    });
+    const nuevo = nuevoTestigo();
+    const renovado = await otro.altaEnEspera({
+      ...base,
+      tokenConfirmacion: nuevo,
+      tokenExpiraEn: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(renovado.creado).toBe(false);
+    expect(renovado.registro.estado).toBe("pendiente");
+    expect(renovado.registro.tokenConfirmacion).toBe(nuevo);
+    // El de baja no se toca: el que ya salió por correo tiene que seguir valiendo.
+    expect(renovado.registro.tokenBaja).toBe(base.tokenBaja);
+  });
+
   test("confirmar quema el testigo: el enlace vale una vez", async () => {
     const repo = crearRepositorioEnMemoria();
     const token = nuevoTestigo();

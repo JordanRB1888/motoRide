@@ -30,25 +30,34 @@ export async function GET(peticion: Request): Promise<Response> {
 
   if (!token || !hayAlmacen()) return aGracias("invalido", url);
 
-  const repo = repositorioWeb();
-  const registro = await repo.buscarPorTokenConfirmacion(token);
+  try {
+    const repo = repositorioWeb();
+    const registro = await repo.buscarPorTokenConfirmacion(token);
 
-  /* Sin registro pueden estar pasando dos cosas: el enlace es falso, o ya se
-     usó —al confirmar, el testigo se quema—. Se responde igual en los dos casos:
-     distinguirlos diría a un desconocido si ese testigo existió alguna vez. */
-  if (!registro) return aGracias("invalido", url);
+    /* Sin registro pueden estar pasando dos cosas: el enlace es falso, o ya se
+       usó —al confirmar, el testigo se quema—. Se responde igual en los dos casos:
+       distinguirlos diría a un desconocido si ese testigo existió alguna vez. */
+    if (!registro) return aGracias("invalido", url);
 
-  if (registro.estado === "confirmado") return aGracias("ya_confirmado", url);
-  if (registro.estado === "baja") return aGracias("invalido", url);
+    if (registro.estado === "confirmado") return aGracias("ya_confirmado", url);
+    if (registro.estado === "baja") return aGracias("invalido", url);
 
-  const caducado =
-    !registro.tokenExpiraEn || new Date(registro.tokenExpiraEn).getTime() < Date.now();
+    const caducado =
+      !registro.tokenExpiraEn || new Date(registro.tokenExpiraEn).getTime() < Date.now();
 
-  if (caducado) {
-    await repo.caducarEnEspera(registro.id);
-    return aGracias("expirado", url);
+    if (caducado) {
+      await repo.caducarEnEspera(registro.id);
+      return aGracias("expirado", url);
+    }
+
+    await repo.confirmarEnEspera(registro.id);
+    return aGracias("confirmado", url);
+  } catch (error) {
+    /* Si la base tropieza, el estado es `error` y NO `invalido`. La diferencia
+       importa: «este enlace no vale» le dice a alguien con un enlace perfecto
+       que se rinda, cuando lo único que pasa es que hay que volver a pulsarlo
+       dentro de un rato. Y el testigo no se ha gastado. */
+    console.error("[confirmar] almacén:", (error as Error).message);
+    return aGracias("error", url);
   }
-
-  await repo.confirmarEnEspera(registro.id);
-  return aGracias("confirmado", url);
 }
