@@ -184,6 +184,10 @@ test.describe("seguridad", () => {
 
 test.describe("analítica sin datos personales", () => {
   test("el script de la analítica carga de verdad, no da 404", async ({ page }) => {
+    /* Sólo tiene sentido contra un despliegue: el script de la analítica lo
+       sirve la propia infraestructura de Vercel, y en un `next start` local esa
+       ruta no existe. Comprobarlo ahí daría un fallo que no dice nada. */
+    test.skip(!process.env.SITIO, "la analítica sólo existe en un despliegue de Vercel");
     /* Esta es la comprobación que hizo falta para poder encenderla. Mientras Web
        Analytics no estaba activada en el proyecto, ese script devolvía un 404 con
        tipo `text/plain` que `nosniff` se negaba a ejecutar: un error en la
@@ -209,6 +213,9 @@ test.describe("analítica sin datos personales", () => {
   });
 
   test("no hay errores de CSP ni de tipo MIME en la portada", async ({ page }) => {
+    // Mismo motivo: en local falta el script de la analítica y su ausencia
+    // produce justo el tipo de error que esta prueba vigila.
+    test.skip(!process.env.SITIO, "la analítica sólo existe en un despliegue de Vercel");
     const errores: string[] = [];
     page.on("console", (m) => {
       if (m.type() === "error" && /Content Security Policy|Refused to|nosniff|MIME/i.test(m.text())) {
