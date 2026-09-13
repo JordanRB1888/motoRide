@@ -13,56 +13,51 @@ import Image from "next/image";
  * cada una al tamaño que toca. Tres imágenes con su pie se ven igual de juntas y
  * funcionan en los dos sitios.
  *
- * EL RECORTE. Las tres vienen con proporciones distintas —una apaisada, una
- * vertical, una casi cuadrada—. Se encuadran todas en 4:5 con `object-cover`, que
- * recorta por los bordes y deja el motivo centrado: la estatua, la iglesia y el
- * monumento quedan dentro en los tres casos.
+ * EL RECORTE. Las tres vienen ya en 4:5 —1122×1402—, que es justo la proporción
+ * de la tarjeta, así que `object-cover` no llega a recortar nada. Se mantiene por
+ * seguridad: el día que alguien sustituya una por otra de proporción distinta, se
+ * encuadrará sola en vez de deformarse.
  */
 
 const SITIOS = [
   {
     id: "santa-cruz-de-mara",
-    src: "/zulia/santa-cruz-de-mara.jpg",
+    src: "/zulia/santa-cruz-de-mara.webp",
     nombre: "Santa Cruz de Mara",
-    nota: "La plaza, con su estatua al Libertador.",
-    alt: "La plaza de Santa Cruz de Mara, con la estatua de Simón Bolívar sobre su pedestal y las palmas alrededor.",
+    nota: "La plaza, con su estatua y la iglesia al fondo.",
+    alt: "La plaza de Santa Cruz de Mara, con su estatua ecuestre sobre el pedestal y la iglesia al fondo entre palmeras.",
     /* La única de las tres con resolución de sobra: se pide con prioridad y a
        mayor tamaño porque es la que más se amplía en escritorio. */
-    ancho: 1600,
-    alto: 900,
+    ancho: 1122,
+    alto: 1402,
   },
   {
     id: "el-mojan",
-    /* La versión de 720×960 que ya vivía en el repositorio, y que sirve la misma
-       fotografía al doble de resolución: la de `/zulia` topa en 335 px y se veía
-       blanda en una tarjeta de 285. Esto NO resuelve su procedencia, que sigue
-       sin documentar — sólo la nitidez. */
-    src: "/zonas/el-mojan.webp",
+    src: "/zulia/el-mojan.webp",
     nombre: "El Moján",
     nota: "La iglesia y la plaza, con el lago detrás.",
     alt: "Vista aérea de la iglesia de El Moján y su plaza, con el lago de Maracaibo al fondo.",
-    ancho: 720,
-    alto: 960,
+    ancho: 1122,
+    alto: 1402,
   },
   {
     id: "maracaibo",
-    src: "/zulia/maracaibo.jpg",
+    src: "/zulia/maracaibo.webp",
     nombre: "Maracaibo",
     nota: "El monumento a la Chinita y sus fuentes.",
-    alt: "El monumento a la Virgen de Chiquinquirá en Maracaibo, con las fuentes de la plaza en primer plano.",
-    ancho: 1080,
-    alto: 795,
+    alt: "La basílica de Maracaibo con el monumento a la Chinita y las fuentes de la plaza en primer plano.",
+    ancho: 1122,
+    alto: 1402,
   },
 ];
 
 export default function ZonasIniciales() {
-  /* Ancho acotado, y no por gusto: la foto de El Moján sólo mide 335 px de ancho
-     en origen. Estirada a lo ancho de la página se vería blanda, y una imagen
-     borrosa en un sitio que se presenta como premium se nota más que no tenerla.
-     A este tamaño cada tarjeta ronda los 285 px y la foto llega justa pero
-     entera. El día que haya una de más resolución, se quita este límite. */
+  /* El ancho ya no lo limita la calidad: las tres fuentes miden 1122×1402 y dan
+     de sobra. Se acota por proporción — `/nosotros` es una página de texto, y un
+     tríptico a sangre completa se comería lo que se está contando. A 1100 px
+     cada tarjeta ronda los 355, que llena el hueco sin robar el protagonismo. */
   return (
-    <figure className="m-0 max-w-[900px]">
+    <figure className="m-0 max-w-[1100px]">
       <ul className="grid gap-4 sm:grid-cols-3 sm:gap-5">
         {SITIOS.map((s) => (
           <li key={s.id}>
@@ -75,7 +70,7 @@ export default function ZonasIniciales() {
                 /* El ancho real al que se pinta, no una fracción aproximada:
                    con «33vw» el navegador calculaba 422 px en una pantalla de
                    1280 y pedía un recorte distinto del que iba a usar. */
-                sizes="(max-width: 640px) 100vw, 300px"
+                sizes="(max-width: 640px) 100vw, 360px"
                 className="h-full w-full object-cover"
                 /* Sin `quality`: `next.config.ts` sólo admite 75 y 92 —el 92
                    existe para las capturas de la app, cuyo texto fino se
