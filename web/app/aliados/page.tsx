@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import PuertaCTA from "@/components/site/PuertaCTA";
+import FormularioAliados from "@/components/forms/FormularioAliados";
+import { PARTNER_LEADS_ENABLED } from "@/lib/flags";
 import Reveal from "@/components/motion/Reveal";
 
 export const metadata: Metadata = metaPagina({
@@ -33,6 +35,10 @@ export default function Page() {
           ))}
         </div>
         <div className="mt-14">
+          {PARTNER_LEADS_ENABLED ? <FormularioAliados /> : null}
+        </div>
+
+        <div className={PARTNER_LEADS_ENABLED ? "hidden" : "mt-14"}>
           <PuertaCTA
             titulo={<>Cuéntanos sobre <span className="text-signal">tu comercio</span></>}
             cuerpo="El alta de comercios todavía no es automática. Escríbenos qué vendes y dónde estás, y nuestro equipo se pone en contacto contigo para explicarte cómo entrar."

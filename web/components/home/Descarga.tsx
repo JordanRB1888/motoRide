@@ -3,7 +3,8 @@ import InteractivePhone from "@/components/phone/InteractivePhone";
 import Reveal from "@/components/motion/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
 import { screensById, STORES } from "@/lib/content";
-import { WAITLIST_ENABLED } from "@/lib/contact";
+import { WAITLIST_ENABLED } from "@/lib/flags";
+import FormularioWaitlist from "@/components/forms/FormularioWaitlist";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
 
 /**
@@ -84,7 +85,11 @@ export default function Descarga() {
                 confirmar por correo, ni declarar en una política de privacidad qué
                 hace con el dato, engañaría a quien lo rellena. Se dice lo que hay y
                 se ofrece la puerta que sí existe. */}
-            {WAITLIST_ENABLED ? null : (
+            {WAITLIST_ENABLED ? (
+              <div className="mt-10">
+                <FormularioWaitlist origen="descarga" />
+              </div>
+            ) : (
               <div className="mt-10 rounded-[var(--radius-card)] border border-white/10 bg-white/[0.03] p-6 sm:p-7">
                 <p className="text-[17px] font-bold text-paper">
                   ¿Quieres que te avisemos cuando esté disponible?

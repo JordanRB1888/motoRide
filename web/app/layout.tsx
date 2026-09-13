@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { Analytics } from "@vercel/analytics/next";
+import { ANALYTICS_ENABLED } from "@/lib/flags";
 import "./globals.css";
 
 /* Tipografías oficiales de campaña, servidas desde el propio dominio:
@@ -108,6 +110,11 @@ export default function RootLayout({
           Saltar al contenido
         </a>
         {children}
+        {/* Analítica sin cookies y sin datos personales. Se sirve desde el
+            propio dominio (/_vercel/insights), así que la CSP no necesita
+            abrirse a ningún origen externo — que fue la razón por la que se
+            eligió frente a las alternativas. */}
+        {ANALYTICS_ENABLED && <Analytics />}
       </body>
     </html>
   );

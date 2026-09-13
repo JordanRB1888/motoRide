@@ -1,5 +1,16 @@
+"use client";
+
 import { ButtonLink } from "@/components/ui/Button";
 import { WHATSAPP, whatsapp, type Intencion } from "@/lib/contact";
+import { medir, type Evento } from "@/lib/analitica";
+
+/** Un evento por intención: así el embudo distingue quién viene a qué. */
+const EVENTO: Record<Intencion, Evento> = {
+  general: "whatsapp_general",
+  conductor: "whatsapp_conductor",
+  aliado: "whatsapp_aliado",
+  soporte: "whatsapp_soporte",
+};
 
 type Props = {
   intencion: Intencion;
@@ -38,6 +49,11 @@ export default function BotonWhatsApp({
       className={className}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() =>
+        medir(EVENTO[intencion], {
+          origen: typeof window === "undefined" ? undefined : window.location.pathname,
+        })
+      }
     >
       <svg width="19" height="19" viewBox="0 0 24 24" aria-hidden className="shrink-0">
         <path

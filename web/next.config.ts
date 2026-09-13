@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+// Los mismos interruptores que usan los componentes: la CSP se abre a Turnstile
+// SÓLO si algún formulario puede llegar a pintarse. Mientras estén apagados, la
+// política no concede un permiso que nadie va a usar.
+import { PARTNER_LEADS_ENABLED, WAITLIST_ENABLED } from "./lib/flags";
 
 const nextConfig: NextConfig = {
   // El repositorio raíz tiene su propio lockfile (la app Vite). Sin esto, Next
@@ -29,6 +33,11 @@ const nextConfig: NextConfig = {
        excepciones, `npm run dev` deja de funcionar. Jamás se aplican al build
        de producción. */
     const dev = process.env.NODE_ENV !== "production";
+    /* Turnstile necesita tres permisos: cargar su script, abrir su marco y
+       hablar con Cloudflare para resolver el desafío. Se conceden juntos y sólo
+       cuando hacen falta. Dominio exacto, nunca un comodín. */
+    const TURNSTILE = "https://challenges.cloudflare.com";
+    const conFormularios = WAITLIST_ENABLED || PARTNER_LEADS_ENABLED;
     const csp = [
       "default-src 'self'",
       "base-uri 'self'",
@@ -50,8 +59,9 @@ const nextConfig: NextConfig = {
       // exige un «nonce» por petición, y eso obligaría a renderizar cada página
       // en el servidor: el sitio dejaría de ser estático a cambio de muy poco,
       // porque no acepta entradas de usuario ni ejecuta código de terceros.
-      `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}`,
-      `connect-src 'self'${dev ? " ws: http://127.0.0.1:* http://localhost:*" : ""}`,
+      `script-src 'self' 'unsafe-inline'${conFormularios ? ` ${TURNSTILE}` : ""}${dev ? " 'unsafe-eval'" : ""}`,
+      `connect-src 'self'${conFormularios ? ` ${TURNSTILE}` : ""}${dev ? " ws: http://127.0.0.1:* http://localhost:*" : ""}`,
+      `frame-src ${conFormularios ? TURNSTILE : "'none'"}`,
       "manifest-src 'self'",
       "upgrade-insecure-requests",
     ].join("; ");

@@ -153,7 +153,10 @@ test.describe("cabeceras de seguridad", () => {
     page.on("console", (m) => {
       const t = m.text();
       if (m.type() !== "error") return;
-      if (!/Content Security Policy|Refused to/i.test(t)) return;
+      /* Sólo violaciones de CSP de verdad. «Refused to» a secas también lo dice
+         `nosniff` cuando un recurso llega con el tipo equivocado, que es otra
+         cosa y tiene su propia prueba. */
+      if (!/Content Security Policy/i.test(t)) return;
       // La barra de vista previa de Vercel (`vercel.live`) sólo se inyecta en los
       // despliegues de vista previa, nunca en producción. Que la CSP la bloquee es
       // lo correcto: no vamos a abrir el sitio público a un script de terceros

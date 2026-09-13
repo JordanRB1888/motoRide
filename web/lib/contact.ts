@@ -99,14 +99,7 @@ export function correo(intencion: Intencion = "general"): string {
 }
 
 /**
- * Lista de espera del lanzamiento.
- *
- * Apagada a propósito. Pedir un correo exige, antes: política de privacidad
- * válida, responsable identificado, dónde se guarda, doble confirmación,
- * protección antibot y límite de peticiones. Nada de eso existe todavía, así que
- * el sitio NO pinta ningún campo: un formulario que no puede cumplir lo que
- * promete es peor que no tenerlo.
- *
- * Cuando esté todo, esto pasa a `true` y aparece el formulario.
+ * El interruptor de la lista de espera vive ahora en `lib/flags.ts`, junto a los
+ * demás. Se reexporta aquí para no romper lo que ya lo importaba de este módulo.
  */
-export const WAITLIST_ENABLED = false;
+export { WAITLIST_ENABLED } from "@/lib/flags";

@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { ZONAS } from "@/lib/zonas";
+import { medir } from "@/lib/analitica";
 
 // El mapa solo existe en el navegador y no debe entrar en el bundle inicial.
 const MapaZonas = dynamic(() => import("@/components/map/MapaZonas"), {
@@ -67,7 +68,13 @@ export default function Cobertura() {
         const visible = entradas
           .filter((e) => e.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (visible) setActiva((visible.target as HTMLElement).dataset.zona!);
+        if (!visible) return;
+        const zona = (visible.target as HTMLElement).dataset.zona!;
+        setActiva((previa) => {
+          // Sólo se mide el cambio, no cada sacudida del observador.
+          if (previa !== zona) medir("zona_consultada", { zona, modo: "scroll" });
+          return zona;
+        });
       },
       { rootMargin: "-38% 0px -38% 0px", threshold: [0.1, 0.5, 1] },
     );
@@ -116,7 +123,10 @@ export default function Cobertura() {
                     <h3>
                       <button
                         type="button"
-                        onClick={() => setActiva(z.id)}
+                        onClick={() => {
+                          setActiva(z.id);
+                          medir("zona_consultada", { zona: z.id, modo: "pulsacion" });
+                        }}
                         aria-current={on}
                         className="group block w-full cursor-pointer text-left"
                       >
