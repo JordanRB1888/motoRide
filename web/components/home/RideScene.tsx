@@ -30,7 +30,10 @@ export default function RideScene() {
 
     const q = gsap.utils.selector(el);
 
-    // Sin motion: la escena se queda en su estado final, legible y completa.
+    /* Sin motion no hay escena: los cinco pasos dejan de estar superpuestos en
+       la misma caja y se leen como una lista en flujo normal, con la seccion a
+       su altura natural. El cambio de maquetacion lo hace CSS (bloque
+       prefers-reduced-motion en globals.css); aqui solo se dejan visibles. */
     if (prefersReducedMotion()) {
       gsap.set(q("[data-route-line]"), { strokeDashoffset: 0 });
       gsap.set(q("[data-step]"), { autoAlpha: 1, y: 0 });
@@ -123,11 +126,16 @@ export default function RideScene() {
   return (
     <section
       ref={root}
+      data-ride-scene
       aria-labelledby="carrera-titulo"
-      className="relative bg-ink-950"
-      style={{ height: "440vh" }}
+      /* En movil el telefono no se pinta: cobrar 4,4 pantallas de scroll por
+         cinco bloques de texto es un peaje sin contrapartida. */
+      className="relative h-[260vh] bg-ink-950 lg:h-[440vh]"
     >
-      <div className="sticky top-0 flex h-[100svh] items-center overflow-hidden">
+      <div
+        data-ride-sticky
+        className="sticky top-0 flex h-[100svh] items-center overflow-hidden"
+      >
         {/* Mapa: la ciudad como trazado, no como textura */}
         <div data-map aria-hidden className="absolute inset-0">
           <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" className="h-full w-full">
@@ -202,7 +210,7 @@ export default function RideScene() {
 
         {/* Palabra + teléfono */}
         <div className="relative mx-auto grid w-full max-w-[1440px] grid-cols-1 items-center gap-10 px-[var(--shell-x)] lg:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="relative min-h-[280px] max-w-[540px] sm:min-h-[240px]">
+          <div data-ride-pasos className="relative min-h-[280px] max-w-[540px] sm:min-h-[240px]">
             <h2 id="carrera-titulo" className="sr-only">
               Cómo funciona una carrera en +58Express
             </h2>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import InteractivePhone from "@/components/phone/InteractivePhone";
 import Reveal from "@/components/motion/Reveal";
 import { screensById } from "@/lib/content";
@@ -24,12 +25,16 @@ function Lado({
   puntos,
   pantalla,
   acento,
+  href,
+  enlace,
 }: {
   titulo: string;
   entradilla: string;
   puntos: string[];
   pantalla: string;
   acento: boolean;
+  href: string;
+  enlace: string;
 }) {
   return (
     <div className="flex flex-col gap-7">
@@ -77,6 +82,23 @@ function Lado({
           </li>
         ))}
       </ul>
+
+      <Link
+        href={href}
+        className="group inline-flex items-center gap-2 self-start text-[15px] font-bold text-signal transition-colors duration-150 hover:text-signal-bright"
+      >
+        {enlace}
+        <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden className="shrink-0">
+          <path
+            d="M2.6 7.5h9.2M8.4 4.1l3.4 3.4-3.4 3.4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </Link>
     </div>
   );
 }
@@ -128,6 +150,8 @@ export default function DosLados() {
               puntos={PASAJERO}
               pantalla="map"
               acento={false}
+              href="/pasajeros"
+              enlace="Todo para quien pide"
             />
           </Reveal>
 
@@ -138,6 +162,8 @@ export default function DosLados() {
               puntos={CONDUCTOR}
               pantalla="driver"
               acento
+              href="/conductores"
+              enlace="Todo para quien conduce"
             />
           </Reveal>
         </div>

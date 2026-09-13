@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 
-export const metadata: Metadata = {
-  title: "Nosotros",
-  description: "+58Express es una plataforma venezolana de movilidad y servicios bajo demanda, nacida en el Zulia.",
-  alternates: { canonical: "/nosotros" },
-};
+export const metadata: Metadata = metaPagina({
+  titulo: "Nosotros",
+  descripcion:
+    "+58Express es una plataforma venezolana de movilidad y servicios bajo demanda, nacida en el Zulia.",
+  ruta: "/nosotros",
+});
 
 export default function Page() {
   return (

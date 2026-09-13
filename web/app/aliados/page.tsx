@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque, Pendiente } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 
-export const metadata: Metadata = {
-  title: "Crece con +58Express",
-  description: "Lleva tu negocio a +58Express: presencia en la aplicación y entregas a domicilio en tu zona.",
-  alternates: { canonical: "/aliados" },
-};
+export const metadata: Metadata = metaPagina({
+  titulo: "Crece con +58Express",
+  descripcion:
+    "Lleva tu negocio a +58Express: presencia en la aplicación y entregas a domicilio en tu zona.",
+  ruta: "/aliados",
+});
 
 export default function Page() {
   const PUNTOS: [string, string][] = [

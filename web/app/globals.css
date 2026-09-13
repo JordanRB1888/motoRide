@@ -134,6 +134,38 @@ button {
   }
 }
 
+/* El destino del salto de contenido recibe el foco por JS (SmoothScroll
+   cancela el ancla nativo). No es un control operable con teclado, asi que no
+   lleva indicador: la confirmacion del salto es que el siguiente tabulador cae
+   ya dentro del contenido. */
+main[tabindex="-1"]:focus,
+main[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
+/* La escena de la carrera solo existe como escena si hay movimiento. Sin el,
+   deja de ser un sticky de 4,4 pantallas con cinco titulares apilados en la
+   misma caja y pasa a ser una lista legible a su altura natural. */
+@media (prefers-reduced-motion: reduce) {
+  [data-ride-scene] {
+    height: auto !important;
+  }
+  [data-ride-sticky] {
+    position: static;
+    height: auto;
+    padding-block: clamp(4rem, 12vw, 8rem);
+  }
+  [data-ride-pasos] {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.5rem, 6vw, 3.5rem);
+  }
+  [data-ride-pasos] [data-step] {
+    position: static;
+  }
+}
+
 /* Estado inicial de los elementos que el scroll revela.
    Sin JS o con reduced-motion, quedan visibles: el contenido nunca depende del motion. */
 .reveal-ready [data-reveal] {

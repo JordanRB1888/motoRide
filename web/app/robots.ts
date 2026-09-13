@@ -5,12 +5,10 @@ const SITE = "https://mas58express.com";
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
-      {
-        userAgent: "*",
-        allow: "/",
-        // Sin documento legal redactado, estas páginas no deben indexarse.
-        disallow: ["/privacidad", "/terminos"],
-      },
+      // Nada bloqueado: /privacidad y /terminos se desindexan con su propia
+      // etiqueta `noindex`, y un Disallow impedía descargarlas —el rastreador
+      // nunca llegaba a leer la etiqueta y la URL podía seguir apareciendo.
+      { userAgent: "*", allow: "/" },
     ],
     sitemap: `${SITE}/sitemap.xml`,
     host: SITE,

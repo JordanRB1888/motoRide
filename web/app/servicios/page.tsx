@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 import { SERVICES } from "@/lib/content";
 
-export const metadata: Metadata = {
-  title: "Servicios",
-  description: "Mototaxi, viajes, delivery, comida, mercado, envíos, encomiendas, comercios, compra y venta y transporte seguro.",
-  alternates: { canonical: "/servicios" },
-};
+export const metadata: Metadata = metaPagina({
+  titulo: "Servicios",
+  descripcion:
+    "Mototaxi, viajes, delivery, comida, mercado, envíos, encomiendas, comercios, compra y venta y transporte seguro.",
+  ruta: "/servicios",
+});
 
 export default function Page() {
   return (

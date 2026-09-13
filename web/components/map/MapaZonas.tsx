@@ -52,7 +52,9 @@ export default function MapaZonas({ activa }: { activa: string }) {
         iconSize: [18, 18],
         iconAnchor: [9, 9],
       });
-      L.marker(z.coords, { icon: icono, title: z.nombre, alt: z.nombre })
+      // Sin foco de teclado: el recorrido por las zonas ya lo dan los botones
+      // de la lista, y tres paradas mudas en el tabulador solo estorban.
+      L.marker(z.coords, { icon: icono, title: z.nombre, alt: z.nombre, keyboard: false })
         .addTo(m)
         .bindTooltip(z.nombre, { direction: "top", offset: [0, -14], className: "mz-tip" });
     }
@@ -83,7 +85,10 @@ export default function MapaZonas({ activa }: { activa: string }) {
       <div
         ref={cont}
         className="h-full w-full bg-ink-850"
-        role="img"
+        /* No es role="img": el contenedor de Leaflet recibe foco y contiene los
+           enlaces de atribución, y ARIA convierte en decorativo todo lo que cuelga
+           de una imagen — la atribución obligatoria dejaba de existir. */
+        role="region"
         aria-label="Mapa de las zonas donde opera +58Express: Santa Cruz de Mara, El Moján y Maracaibo"
       />
       {!listo && (

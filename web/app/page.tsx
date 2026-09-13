@@ -14,7 +14,7 @@ export default function Home() {
     <>
       <SmoothScroll />
       <Navbar />
-      <main id="contenido">
+      <main id="contenido" tabIndex={-1}>
         <Hero />
         <RideScene />
         <Servicios />

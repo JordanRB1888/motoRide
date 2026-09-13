@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 
-export const metadata: Metadata = {
-  title: "Ayuda",
-  description: "Preguntas frecuentes sobre +58Express: disponibilidad, precios, pagos y cómo ser conductor.",
-  alternates: { canonical: "/ayuda" },
-};
+export const metadata: Metadata = metaPagina({
+  titulo: "Ayuda",
+  descripcion:
+    "Preguntas frecuentes sobre +58Express: disponibilidad, precios, pagos y cómo ser conductor.",
+  ruta: "/ayuda",
+});
 
 export default function Page() {
   const FAQ: [string, string][] = [

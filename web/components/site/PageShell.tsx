@@ -23,7 +23,7 @@ export default function PageShell({
     <>
       <SmoothScroll />
       <Navbar />
-      <main id="contenido">
+      <main id="contenido" tabIndex={-1}>
         <header className="relative isolate overflow-hidden border-b border-white/8 pt-[152px] pb-16 sm:pt-[190px] sm:pb-24">
           <div
             aria-hidden

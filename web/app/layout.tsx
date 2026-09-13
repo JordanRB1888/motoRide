@@ -3,9 +3,14 @@ import localFont from "next/font/local";
 import "./globals.css";
 
 /* Tipografías oficiales de campaña, servidas desde el propio dominio:
-   Big Shoulders para titulares condensados, Outfit para texto. */
+   Big Shoulders para titulares condensados, Outfit para texto.
+
+   Los .ttf originales pesaban 205 KB (110 KB con brotli) y competían con la
+   imagen LCP en el arranque. Se sirven como WOFF2 subseteado a latín —su
+   compresión de contornos va mucho más allá de lo que brotli saca de un TTF
+   plano—: 49 KB los tres, sin perder ni un glifo que el sitio escriba. */
 const displayBrand = localFont({
-  src: [{ path: "./fonts/BigShoulders-Bold.ttf", weight: "700", style: "normal" }],
+  src: [{ path: "./fonts/BigShoulders-Bold.woff2", weight: "700", style: "normal" }],
   variable: "--font-display-brand",
   display: "swap",
   preload: true,
@@ -13,8 +18,8 @@ const displayBrand = localFont({
 
 const bodyBrand = localFont({
   src: [
-    { path: "./fonts/Outfit-Regular.ttf", weight: "400", style: "normal" },
-    { path: "./fonts/Outfit-Bold.ttf", weight: "700", style: "normal" },
+    { path: "./fonts/Outfit-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/Outfit-Bold.woff2", weight: "700", style: "normal" },
   ],
   variable: "--font-body-brand",
   display: "swap",
@@ -52,12 +57,21 @@ export const metadata: Metadata = {
     title: "+58Express — Muévete. Pide. Recibe.",
     description:
       "Movilidad y servicios bajo demanda en Venezuela. Tu ciudad, más cerca.",
+    images: [
+      {
+        url: "/brand/og.jpg",
+        width: 1200,
+        height: 630,
+        alt: "+58Express — Muévete. Pide. Recibe.",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "+58Express — Muévete. Pide. Recibe.",
     description:
       "Movilidad y servicios bajo demanda en Venezuela. Tu ciudad, más cerca.",
+    images: ["/brand/og.jpg"],
   },
   icons: {
     icon: [

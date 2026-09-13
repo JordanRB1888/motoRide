@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
 
-export const metadata: Metadata = {
-  title: "Para quien pide",
-  description: "Pide tu moto en Maracaibo y el Municipio Mara. Conoce el precio antes de confirmar y sigue el viaje en el mapa.",
-  alternates: { canonical: "/pasajeros" },
-};
+export const metadata: Metadata = metaPagina({
+  titulo: "Para quien pide",
+  descripcion:
+    "Pide tu moto en Maracaibo y el Municipio Mara. Conoce el precio antes de confirmar y sigue el viaje en el mapa.",
+  ruta: "/pasajeros",
+});
 
 export default function Page() {
   const PUNTOS: [string, string][] = [

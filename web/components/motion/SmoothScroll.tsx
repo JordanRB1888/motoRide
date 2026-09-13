@@ -41,10 +41,15 @@ export default function SmoothScroll() {
       if (!anchor) return;
       const id = anchor.getAttribute("href");
       if (!id || id === "#") return;
-      const target = document.querySelector(id);
+      const target = document.querySelector(id) as HTMLElement | null;
       if (!target) return;
       event.preventDefault();
-      lenis.scrollTo(target as HTMLElement, { offset: -80 });
+      lenis.scrollTo(target, { offset: -80 });
+      /* Cancelar el salto nativo también cancela el movimiento del foco: sin
+         esto, «Saltar al contenido» desplazaba la página pero dejaba el foco en
+         el propio enlace, y el siguiente tabulador volvía al menú. */
+      if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+      target.focus({ preventScroll: true });
     };
     document.addEventListener("click", onAnchorClick);
 

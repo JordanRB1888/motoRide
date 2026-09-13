@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import InteractivePhone from "@/components/phone/InteractivePhone";
-import { SERVICES, PHONE_SCREENS } from "@/lib/content";
+import { SERVICES, screensById } from "@/lib/content";
 
 /**
  * Todo en una app.
@@ -73,7 +73,10 @@ export default function Servicios() {
           <div className="flex justify-center lg:justify-end">
             <div className="scale-[0.8] sm:scale-90 lg:scale-100">
               <InteractivePhone
-                screens={PHONE_SCREENS}
+                /* Solo las dos pantallas que este teléfono llega a mostrar:
+                   pasar las cuatro descargaba login.webp y map-select.webp en la
+                   portada para dejarlas a opacidad 0 para siempre. */
+                screens={screensById("home", "driver")}
                 activeScreen={servicio.screen}
                 width={300}
               />

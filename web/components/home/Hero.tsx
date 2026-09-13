@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef } from "react";
 import InteractivePhone from "@/components/phone/InteractivePhone";
 import { ButtonLink } from "@/components/ui/Button";
-import { screensById } from "@/lib/content";
+import { screensById, STORES } from "@/lib/content";
 import { prefersReducedMotion } from "@/lib/motion";
 
 export default function Hero() {
@@ -78,9 +78,9 @@ export default function Hero() {
         }}
       />
 
-      <div className="mx-auto grid w-full max-w-[1440px] grid-cols-1 items-center gap-14 px-[var(--shell-x)] py-16 lg:grid-cols-[1fr_auto] lg:gap-10 lg:py-0">
+      <div className="mx-auto grid w-full max-w-[1440px] grid-cols-1 items-center gap-14 px-[var(--shell-x)] py-16 lg:grid-cols-[1fr_auto] lg:gap-16 lg:py-0 xl:gap-10">
         {/* ---------------- Palabra ---------------- */}
-        <div className="max-w-[640px]">
+        <div className="relative z-20 max-w-[640px]">
           <h1 className="display text-[clamp(3.4rem,11vw,7.2rem)] text-paper">
             Muévete.
             <br />
@@ -97,7 +97,7 @@ export default function Hero() {
 
           <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
             <ButtonLink href="/#descargar" size="lg">
-              Descargar +58Express
+              {STORES.available ? "Descargar +58Express" : "Conoce la app"}
             </ButtonLink>
             <ButtonLink href="/conductores" size="lg" variant="outline">
               Quiero conducir
@@ -152,8 +152,11 @@ export default function Hero() {
             </div>
 
             {/* La moto entra por delante: es el plano más cercano */}
+            {/* El desplazamiento hacia la izquierda solo cabe en xl: por debajo,
+                la columna de texto llega hasta el teléfono y la moto se comía el
+                párrafo (o se salía media foto por el borde en móvil). */}
             <div
-              className="pointer-events-none absolute -bottom-[4%] -left-[54%] z-10 w-[92%] sm:-left-[56%] sm:w-[94%]"
+              className="pointer-events-none absolute -bottom-[4%] -left-[10%] w-[82%] sm:-left-[13%] sm:w-[86%] lg:-bottom-[7%] lg:-left-[15%] lg:w-[70%] xl:-left-[56%] xl:w-[94%]"
               style={{
                 transform:
                   "translate3d(calc(var(--px) * -34px), calc(var(--py) * -14px), 0)",
@@ -164,6 +167,7 @@ export default function Hero() {
                 alt=""
                 width={1106}
                 height={1199}
+                sizes="300px"
                 className="h-auto w-full drop-shadow-[0_36px_44px_rgba(0,0,0,.8)]"
               />
             </div>

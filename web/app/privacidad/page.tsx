@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque, Pendiente } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 
-export const metadata: Metadata = {
-  title: "Privacidad",
-  description: "Política de privacidad de +58Express.",
-  alternates: { canonical: "/privacidad" },
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = metaPagina({
+  titulo: "Privacidad",
+  descripcion:
+    "Política de privacidad de +58Express.",
+  ruta: "/privacidad",
+  indexar: false,
+});
 
 export default function Page() {
   return (

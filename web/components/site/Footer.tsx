@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Logo from "@/components/ui/Logo";
-import { NAV, PAYMENTS } from "@/lib/content";
+import { NAV_PIE, PAYMENTS } from "@/lib/content";
 
 const LEGAL = [
   { label: "Privacidad", href: "/privacidad" },
@@ -29,7 +29,7 @@ export default function Footer() {
                 Navegación
               </h2>
               <ul className="mt-5 flex flex-col gap-3">
-                {NAV.map((item) => (
+                {NAV_PIE.map((item) => (
                   <li key={item.href}>
                     <Link
                       href={item.href}

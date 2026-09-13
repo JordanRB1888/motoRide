@@ -86,6 +86,11 @@ const InteractivePhone = forwardRef<HTMLDivElement, Props>(function InteractiveP
                 className="absolute inset-0"
                 style={{
                   opacity: screen.id === active ? 1 : 0,
+                  /* Una pantalla a opacidad 0 seguía anunciándose: el lector
+                     leía las cuatro capturas donde solo se ve una. `visibility`
+                     la saca del árbol de accesibilidad, y es justo lo que GSAP
+                     mueve con autoAlpha, así que ambos modos coinciden. */
+                  visibility: screen.id === active ? "visible" : "hidden",
                   transition: controlado ? "opacity .42s ease" : undefined,
                 }}
               >
@@ -93,10 +98,11 @@ const InteractivePhone = forwardRef<HTMLDivElement, Props>(function InteractiveP
                   src={screen.src}
                   alt={screen.alt}
                   fill
-                  /* Son capturas de interfaz: el texto fino se deshace con la
-                     recompresión por defecto de Next (calidad 75). Ya vienen
-                     optimizadas a WebP, así que se sirven tal cual. */
-                  unoptimized
+                  /* Son capturas de interfaz y el texto fino se deshace con la
+                     calidad por defecto (75). Con 92 el optimizador conserva la
+                     nitidez y aun así emite las variantes de `sizes`: servirlas
+                     sin optimizar costaba 808 KB de originales a 941 px. */
+                  quality={92}
                   sizes={`${Math.round(width * 1.2)}px`}
                   className="object-cover object-top"
                   priority={priority && screen.id === active}

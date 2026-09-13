@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque, Pendiente } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 
-export const metadata: Metadata = {
-  title: "Conduce con +58Express",
-  description: "Conduce con +58Express: eliges tus horas, decides qué viajes aceptas y cobras a través de la plataforma.",
-  alternates: { canonical: "/conductores" },
-};
+export const metadata: Metadata = metaPagina({
+  titulo: "Conduce con +58Express",
+  descripcion:
+    "Conduce con +58Express: eliges tus horas, decides qué viajes aceptas y cobras a través de la plataforma.",
+  ruta: "/conductores",
+});
 
 export default function Page() {
   const PUNTOS: [string, string][] = [

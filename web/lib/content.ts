@@ -16,6 +16,21 @@ export const NAV = [
   { label: "Ayuda", href: "/ayuda" },
 ] as const;
 
+/**
+ * El pie lista además /pasajeros. En la barra no cabe sin apretar las demás,
+ * pero la página no puede quedar sin ningún enlace que lleve a ella: estaba en
+ * el sitemap y no se alcanzaba desde ninguna parte del sitio.
+ */
+export const NAV_PIE = [
+  { label: "Servicios", href: "/servicios" },
+  { label: "Pasajeros", href: "/pasajeros" },
+  { label: "Conductores", href: "/conductores" },
+  { label: "Seguridad", href: "/seguridad" },
+  { label: "Aliados", href: "/aliados" },
+  { label: "Nosotros", href: "/nosotros" },
+  { label: "Ayuda", href: "/ayuda" },
+] as const;
+
 export type ServiceId =
   | "mototaxi"
   | "viajes"

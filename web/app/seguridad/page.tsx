@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 import { SAFETY } from "@/lib/content";
 
-export const metadata: Metadata = {
-  title: "Seguridad",
-  description: "Conductor verificado, viaje registrado y ubicación en vivo: así cuida +58Express cada carrera.",
-  alternates: { canonical: "/seguridad" },
-};
+export const metadata: Metadata = metaPagina({
+  titulo: "Seguridad",
+  descripcion:
+    "Conductor verificado, viaje registrado y ubicación en vivo: así cuida +58Express cada carrera.",
+  ruta: "/seguridad",
+});
 
 export default function Page() {
   return (
