@@ -9,7 +9,8 @@ import {
 import { huellaDeIp, nuevoTestigo, testigosIguales } from "@/lib/seguridad/testigos";
 import { LIMITES, envioDemasiadoReciente, superaLimite } from "@/lib/seguridad/limites";
 import { verificarTurnstile } from "@/lib/seguridad/turnstile";
-import { correoAcuseAliado, correoConfirmacion, escapar } from "@/lib/correo/plantillas";
+import { correoAcuseAliado, correoBaja, correoConfirmacion, escapar } from "@/lib/correo/plantillas";
+import { DOMINIO_REMITENTE, correoConfigurado, enviarCorreo } from "@/lib/correo/enviar";
 import { limpiarPropiedades } from "@/lib/analitica";
 
 /**
@@ -263,6 +264,65 @@ test.describe("límite de peticiones", () => {
     await repo.registrarEnvioDeConfirmacion("e@ejemplo.com", new Date(t0).toISOString());
     expect(await envioDemasiadoReciente(repo, "e@ejemplo.com", t0 + 60_000)).toBe(true);
     expect(await envioDemasiadoReciente(repo, "e@ejemplo.com", t0 + 11 * 60_000)).toBe(false);
+  });
+});
+
+test.describe("envío de correo", () => {
+  /** Deja el entorno como estaba: estas pruebas lo tocan a propósito. */
+  function conEntorno<T>(cambios: Record<string, string | undefined>, hacer: () => T): T {
+    const previo: Record<string, string | undefined> = {};
+    for (const [k, v] of Object.entries(cambios)) {
+      previo[k] = process.env[k];
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      return hacer();
+    } finally {
+      for (const [k, v] of Object.entries(previo)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  }
+
+  test("sin clave no se manda nada, y se dice", async () => {
+    await conEntorno({ RESEND_API_KEY: undefined }, async () => {
+      expect(correoConfigurado()).toBe(false);
+      const r = await enviarCorreo("alguien@example.com", correoBaja());
+      expect(r.enviado).toBe(false);
+      if (!r.enviado) expect(r.motivo).toBe("SIN_CONFIGURAR");
+    });
+  });
+
+  test("el remitente sale del dominio verificado, nunca del de rebotes", async () => {
+    /* `send.mas58express.com` es el Return-Path de Resend: tiene SPF y MX, pero
+       NO tiene DKIM. El dominio dado de alta es el apex, y poner en el `From:`
+       cualquier otro haría que Resend rechazara el envío. Esta prueba fija esa
+       decisión para que nadie la deshaga sin darse cuenta. */
+    await conEntorno({ RESEND_API_KEY: "re_ficticia_de_prueba", EMAIL_FROM: undefined }, async () => {
+      let enviado: { from?: string } | null = null;
+      const falso = (async (_url: string | URL | Request, init?: RequestInit) => {
+        enviado = JSON.parse(String(init?.body ?? "{}"));
+        return new Response(JSON.stringify({ id: "prueba" }), { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const r = await enviarCorreo("alguien@example.com", correoBaja(), falso);
+      expect(r.enviado).toBe(true);
+      const de = String((enviado as { from?: string } | null)?.from ?? "");
+      expect(de).toContain(`@${DOMINIO_REMITENTE}`);
+      expect(de).not.toContain("send.mas58express.com");
+    });
+  });
+
+  test("un rechazo de Resend no se disfraza de éxito", async () => {
+    await conEntorno({ RESEND_API_KEY: "re_ficticia_de_prueba" }, async () => {
+      const falso = (async () =>
+        new Response("{}", { status: 422 })) as unknown as typeof fetch;
+      const r = await enviarCorreo("alguien@example.com", correoBaja(), falso);
+      expect(r.enviado).toBe(false);
+      if (!r.enviado) expect(r.motivo).toBe("RECHAZADO");
+    });
   });
 });
 

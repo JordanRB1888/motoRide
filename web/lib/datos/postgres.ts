@@ -150,7 +150,6 @@ function aLead(fila: FilaAliado): LeadAliado {
    caliente reevalúa el módulo a cada guardado, y un pool nuevo por recarga deja
    conexiones colgando hasta agotar el pooler. */
 declare global {
-  // eslint-disable-next-line no-var
   var __poolWeb: Pool | undefined;
 }
 
