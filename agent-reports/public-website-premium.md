@@ -342,13 +342,16 @@ apuntando a Vercel, igual que antes.
 `api-staging.mas58express.com` responde **404 con `x-railway-fallback: true`**,
 es decir, el borde de Railway contesta pero no hay servicio detrás.
 
-**No lo causó nada de este trabajo, y la fecha lo demuestra:** el último
-despliegue del servicio `motoRide` en Railway es del **7 de septiembre**, quedó
-en estado `FAILED` y falló en la etapa `HEALTHCHECK` (`/api/health`), sobre el
-commit `e6cb218`. El DNS de `api-staging` nunca se tocó y sigue apuntando al
-mismo destino de Railway.
+**No lo causó nada de este trabajo.** El DNS de `api-staging` nunca se tocó y
+sigue apuntando al mismo destino de Railway.
 
-Se deja anotado, sin actuar: es backend y queda fuera del cierre de la web.
+> **Corregido el 12 de septiembre.** Aquí se atribuyó la caída al despliegue que
+> falló en el healthcheck el 7 de septiembre. Eso es cierto para el entorno
+> *production*, pero **`api-staging` lo sirve el entorno *staging***, que es otro
+> despliegue y cayó por otra razón: **el trial de Railway expiró** y la
+> plataforma detuvo los contenedores de los dos entornos el 8 de septiembre a las
+> 05:05 UTC. Diagnóstico completo, con pruebas, en
+> [`staging-recovery.md`](./staging-recovery.md).
 
 ---
 
