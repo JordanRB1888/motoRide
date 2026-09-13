@@ -7,7 +7,7 @@ import Reveal from "@/components/motion/Reveal";
 export const metadata: Metadata = metaPagina({
   titulo: "Ayuda",
   descripcion:
-    "Preguntas frecuentes sobre +58Express: disponibilidad, precios, pagos y cómo ser conductor.",
+    "Preguntas frecuentes sobre +58Express: cuándo llega a tu zona, cómo funcionan los pagos, en qué municipios del Zulia empieza y cómo ser conductor.",
   ruta: "/ayuda",
 });
 

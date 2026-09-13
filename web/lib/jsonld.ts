@@ -33,7 +33,6 @@ function organizacion(): Nodo {
   const sitio = `https://${EMPRESA.dominio}`;
 
   return {
-    "@context": "https://schema.org",
     "@type": "Organization",
     /* Un identificador estable para que, apareciendo en todas las páginas, los
        buscadores entiendan que es la MISMA organización y no una por página. */
@@ -70,6 +69,29 @@ function organizacion(): Nodo {
 }
 
 /**
+ * El sitio, como entidad distinta de la empresa.
+ *
+ * Son dos cosas: la organización es quien opera, el sitio es la publicación.
+ * Declararlo permite que el buscador sepa que este dominio lo publica esa
+ * empresa, y es lo que sostiene el nombre del sitio en los resultados.
+ *
+ * NO lleva `potentialAction` de búsqueda: esta web no tiene buscador interno, y
+ * declarar uno inexistente es la forma más común de que un buscador deje de
+ * fiarse del resto del bloque.
+ */
+function sitioWeb(): Nodo {
+  const sitio = `https://${EMPRESA.dominio}`;
+  return {
+    "@type": "WebSite",
+    "@id": `${sitio}/#sitio`,
+    url: sitio,
+    name: "+58Express",
+    inLanguage: "es-VE",
+    publisher: { "@id": `${sitio}/#organizacion` },
+  };
+}
+
+/**
  * El JSON listo para incrustar.
  *
  * Cada `<` se sustituye por su forma escapada `<`, aunque todos los valores
@@ -79,5 +101,12 @@ function organizacion(): Nodo {
  * Cuesta una línea y elimina la categoría entera de problema.
  */
 export function organizacionJsonLd(): string {
-  return JSON.stringify(organizacion()).replace(/</g, "\\u003c");
+  /* Un `@graph` y no dos etiquetas sueltas: así los dos nodos se declaran
+     relacionados entre sí —el sitio lo publica la organización— en vez de como
+     dos hechos independientes que el buscador tiene que adivinar si van juntos. */
+  const grafo = {
+    "@context": "https://schema.org",
+    "@graph": [organizacion(), sitioWeb()],
+  };
+  return JSON.stringify(grafo).replace(/</g, "\\u003c");
 }

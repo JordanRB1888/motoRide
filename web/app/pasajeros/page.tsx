@@ -5,9 +5,9 @@ import Reveal from "@/components/motion/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
 
 export const metadata: Metadata = metaPagina({
-  titulo: "Para quien pide",
+  titulo: "Pedir moto en Maracaibo y Mara",
   descripcion:
-    "Pide tu moto en Maracaibo y el Municipio Mara. Conoce el precio antes de confirmar y sigue el viaje en el mapa.",
+    "Pide tu moto en Maracaibo y el Municipio Mara: precio antes de confirmar, seguimiento en el mapa y pagos locales. Próximamente en tu teléfono.",
   ruta: "/pasajeros",
 });
 

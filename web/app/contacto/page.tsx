@@ -4,8 +4,9 @@ import PageShell, { Bloque } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
 import EnlaceCorreo from "@/components/site/EnlaceCorreo";
+import EnlaceWhatsApp from "@/components/site/EnlaceWhatsApp";
 import RedesSociales from "@/components/site/RedesSociales";
-import { WHATSAPP, whatsapp, type Intencion } from "@/lib/contact";
+import { type Intencion } from "@/lib/contact";
 
 export const metadata: Metadata = metaPagina({
   titulo: "Contacto",
@@ -120,14 +121,7 @@ export default function Page() {
               <div>
                 <dt className="text-[15px] text-paper-mute">WhatsApp</dt>
                 <dd className="mt-2">
-                  <a
-                    href={whatsapp("general")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="display text-[clamp(1.5rem,3vw,2rem)] text-paper transition-colors duration-150 hover:text-signal"
-                  >
-                    {WHATSAPP.visible}
-                  </a>
+                  <EnlaceWhatsApp className="display text-[clamp(1.5rem,3vw,2rem)] text-paper transition-colors duration-150 hover:text-signal" />
                 </dd>
               </div>
               <div>

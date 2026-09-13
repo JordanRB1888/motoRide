@@ -34,11 +34,14 @@ const SITE = "https://mas58express.com";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: {
-    default: "+58Express — Muévete. Pide. Recibe.",
+    /* El título de la portada nombra la categoría y el sitio, no sólo la marca.
+       «+58Express» todavía no lo busca nadie: lo que se busca es «mototaxi
+       Maracaibo». La promesa de marca sigue viva en el H1 de la página. */
+    default: "+58Express — Mototaxi, delivery y envíos en Maracaibo",
     template: "%s · +58Express",
   },
   description:
-    "Movilidad y servicios bajo demanda en Venezuela. Pide tu moto, sigue tu viaje en tiempo real y conoce el precio antes de confirmar.",
+    "Movilidad y servicios bajo demanda en el Zulia: mototaxi, viajes, delivery y envíos en Maracaibo y el Municipio Mara. Próximamente — conoce cómo va a funcionar.",
   applicationName: "+58Express",
   authors: [{ name: "+58Express" }],
   keywords: [
@@ -57,9 +60,9 @@ export const metadata: Metadata = {
     locale: "es_VE",
     url: SITE,
     siteName: "+58Express",
-    title: "+58Express — Muévete. Pide. Recibe.",
+    title: "+58Express — Mototaxi, delivery y envíos en Maracaibo",
     description:
-      "Movilidad y servicios bajo demanda en Venezuela. Tu ciudad, más cerca.",
+      "Movilidad y servicios bajo demanda en Maracaibo y el Municipio Mara. Próximamente en tu zona.",
     images: [
       {
         url: "/brand/og.jpg",
@@ -71,9 +74,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "+58Express — Muévete. Pide. Recibe.",
+    title: "+58Express — Mototaxi, delivery y envíos en Maracaibo",
     description:
-      "Movilidad y servicios bajo demanda en Venezuela. Tu ciudad, más cerca.",
+      "Movilidad y servicios bajo demanda en Maracaibo y el Municipio Mara. Próximamente en tu zona.",
     images: ["/brand/og.jpg"],
   },
   icons: {

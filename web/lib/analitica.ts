@@ -34,6 +34,21 @@ export type Evento =
   | "waitlist_confirmada"
   | "lead_aliado_enviado";
 
+/**
+ * Un evento por intención de WhatsApp.
+ *
+ * Vive aquí y no en el componente porque hay DOS superficies que abren WhatsApp
+ * —el botón de las llamadas a la acción y el enlace de texto del pie y de
+ * `/contacto`— y tener el mapa dos veces era exactamente lo que hizo que el del
+ * pie se quedara sin medir durante tres rondas.
+ */
+export const EVENTO_WHATSAPP = {
+  general: "whatsapp_general",
+  conductor: "whatsapp_conductor",
+  aliado: "whatsapp_aliado",
+  soporte: "whatsapp_soporte",
+} as const satisfies Record<string, Evento>;
+
 /** Lo único que se puede adjuntar. Todo son categorías, jamás identidades. */
 export type Propiedades = {
   /** Ruta desde la que se disparó: `/`, `/conductores`… */

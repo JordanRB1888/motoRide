@@ -7,9 +7,9 @@ import { PARTNER_LEADS_ENABLED } from "@/lib/flags";
 import Reveal from "@/components/motion/Reveal";
 
 export const metadata: Metadata = metaPagina({
-  titulo: "Crece con +58Express",
+  titulo: "Comercios aliados en Maracaibo y Mara · +58Express",
   descripcion:
-    "Lleva tu negocio a +58Express: presencia en la aplicación y entregas a domicilio en tu zona.",
+    "Lleva tu comercio a +58Express: presencia en la aplicación y entregas a domicilio en Maracaibo y el Municipio Mara, sin flota propia.",
   ruta: "/aliados",
 });
 

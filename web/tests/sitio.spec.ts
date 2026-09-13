@@ -422,3 +422,75 @@ test.describe("botones sociales de extremo a extremo", () => {
     expect(suyo!.data).toEqual({ origen: "contacto" });
   });
 });
+
+test.describe("datos estructurados", () => {
+  test("el grafo es válido y no declara nada que no se pueda sostener", async ({ page }) => {
+    await page.goto("/");
+    const crudo = await page.locator('script[type="application/ld+json"]').first().textContent();
+    expect(crudo, "no hay JSON-LD").toBeTruthy();
+
+    const grafo = JSON.parse(crudo!);
+    expect(grafo["@context"]).toBe("https://schema.org");
+
+    const nodos: Record<string, unknown>[] = grafo["@graph"];
+    const org = nodos.find((n) => n["@type"] === "Organization")!;
+    const sitio = nodos.find((n) => n["@type"] === "WebSite")!;
+    expect(org, "falta Organization").toBeTruthy();
+    expect(sitio, "falta WebSite").toBeTruthy();
+
+    expect(org.name).toBe("+58Express");
+    expect(org.legalName).toBe("+58 EXPRESS, C.A.");
+    expect(org.url).toBe("https://mas58express.com");
+    expect(org.sameAs).toEqual([
+      "https://www.tiktok.com/@58express7",
+      "https://www.instagram.com/58expressapp",
+      "https://www.facebook.com/profile.php?id=61594407713816&sk=directory_intro",
+    ]);
+    // El sitio declara a la empresa como editora, por el mismo identificador.
+    expect((sitio.publisher as Record<string, string>)["@id"]).toBe(org["@id"]);
+
+    /* Lo que NUNCA puede aparecer: son afirmaciones comerciales que hoy no se
+       pueden sostener, y un buscador que pilla una inventada descuenta el resto. */
+    const texto = JSON.stringify(grafo);
+    for (const prohibido of [
+      "aggregateRating",
+      "review",
+      "ratingValue",
+      "offers",
+      "price",
+      "openingHours",
+      "numberOfEmployees",
+      "branchOf",
+      "LocalBusiness",
+    ]) {
+      expect(texto, `declara «${prohibido}», que no se puede sostener`).not.toContain(prohibido);
+    }
+  });
+});
+
+test("el WhatsApp del pie también se mide", async ({ page, context }) => {
+  /* Deuda que venía de tres rondas: el botón de las llamadas a la acción medía y
+     el enlace del pie no, porque era un <a> suelto. Se veía igual, así que nadie
+     lo notaba — y el embudo perdía justo las conversaciones que empiezan desde
+     el pie. */
+  await context.route(/wa\.me/, (r) =>
+    r.fulfill({ status: 200, contentType: "text/html", body: "ok" }),
+  );
+  await page.goto("/");
+  const enlace = page.locator('footer a[href*="wa.me"]').first();
+  await enlace.scrollIntoViewIfNeeded();
+  const [emergente] = await Promise.all([page.waitForEvent("popup"), enlace.click()]);
+  await emergente.close();
+
+  const evento = await page.evaluate(() => {
+    const cola = (window as unknown as { vaq?: unknown[][] }).vaq ?? [];
+    return (
+      cola
+        .filter((e) => e[0] === "event")
+        .map((e) => e[1] as { name?: string; data?: Record<string, unknown> })
+        .find((e) => e.name === "whatsapp_general") ?? null
+    );
+  });
+  expect(evento, "el WhatsApp del pie no registró whatsapp_general").toBeTruthy();
+  expect(evento!.data).toEqual({ origen: "/" });
+});

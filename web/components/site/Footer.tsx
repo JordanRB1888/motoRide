@@ -1,9 +1,10 @@
 import Link from "next/link";
 import EnlaceCorreo from "@/components/site/EnlaceCorreo";
+import EnlaceWhatsApp from "@/components/site/EnlaceWhatsApp";
 import RedesSociales from "@/components/site/RedesSociales";
 import Logo from "@/components/ui/Logo";
 import { PIE_GRUPOS, PAYMENTS } from "@/lib/content";
-import { EMAIL, WHATSAPP, whatsapp } from "@/lib/contact";
+import { EMAIL, WHATSAPP } from "@/lib/contact";
 
 const LEGAL = [
   { label: "Privacidad", href: "/privacidad" },
@@ -37,12 +38,7 @@ export default function Footer() {
                 alguien busca en un pie cuando no ha encontrado cómo escribir. */}
             <div className="mt-8 flex flex-col gap-3">
               {WHATSAPP.activo && (
-                <a
-                  href={whatsapp("general")}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex w-fit items-center gap-2.5 text-[16px] font-bold text-paper transition-colors duration-150 hover:text-signal"
-                >
+                <EnlaceWhatsApp className="inline-flex w-fit items-center gap-2.5 text-[16px] font-bold text-paper transition-colors duration-150 hover:text-signal">
                   <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden className="shrink-0">
                     <path
                       fill="currentColor"
@@ -50,8 +46,7 @@ export default function Footer() {
                     />
                   </svg>
                   {WHATSAPP.visible}
-                  <span className="sr-only"> (abre WhatsApp)</span>
-                </a>
+                </EnlaceWhatsApp>
               )}
               {EMAIL.activo && (
                 <EnlaceCorreo className="w-fit break-all text-[16px] text-paper-dim transition-colors duration-150 hover:text-signal" />

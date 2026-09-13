@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
+import SiguienteLectura from "@/components/site/SiguienteLectura";
 import Reveal from "@/components/motion/Reveal";
 import { SERVICES } from "@/lib/content";
 
 export const metadata: Metadata = metaPagina({
-  titulo: "Servicios",
+  titulo: "Servicios: mototaxi, delivery y envíos",
   descripcion:
-    "Mototaxi, viajes, delivery, comida, mercado, envíos, encomiendas, comercios, compra y venta y transporte seguro.",
+    "Mototaxi, viajes, delivery, comida, mercado, envíos y encomiendas en Maracaibo y el Municipio Mara, estado Zulia. Disponibilidad sujeta al lanzamiento.",
   ruta: "/servicios",
 });
 
@@ -30,6 +31,33 @@ export default function Page() {
             </Reveal>
           ))}
         </ul>
+
+        <div className="mt-16">
+          <SiguienteLectura
+            enlaces={[
+              {
+                href: "/pasajeros",
+                rotulo: "Cómo funciona para quien pide",
+                nota: "Precio antes de confirmar, seguimiento en el mapa y pagos locales.",
+              },
+              {
+                href: "/conductores",
+                rotulo: "Cómo funciona para quien conduce",
+                nota: "Tus horas, tus viajes y el cobro por la plataforma.",
+              },
+              {
+                href: "/seguridad",
+                rotulo: "Transporte seguro, en detalle",
+                nota: "Qué queda registrado en cada carrera y por qué.",
+              },
+              {
+                href: "/aliados",
+                rotulo: "Comercios aliados",
+                nota: "Entregas a domicilio en Maracaibo y el Municipio Mara sin flota propia.",
+              },
+            ]}
+          />
+        </div>
       </Bloque>
     </PageShell>
   );

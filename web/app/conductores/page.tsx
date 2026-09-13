@@ -5,9 +5,9 @@ import PuertaCTA from "@/components/site/PuertaCTA";
 import Reveal from "@/components/motion/Reveal";
 
 export const metadata: Metadata = metaPagina({
-  titulo: "Conduce con +58Express",
+  titulo: "Conduce con +58Express en Maracaibo y Mara",
   descripcion:
-    "Conduce con +58Express: eliges tus horas, decides qué viajes aceptas y cobras a través de la plataforma.",
+    "Conduce en moto por Maracaibo y el Municipio Mara: eliges tus horas, decides qué viajes aceptas y cobras por la plataforma. Inscripciones abiertas para el lanzamiento.",
   ruta: "/conductores",
 });
 

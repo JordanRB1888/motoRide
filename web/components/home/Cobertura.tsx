@@ -96,6 +96,16 @@ export default function Cobertura() {
           Dónde nos vas <span className="text-signal">a ver primero</span>
         </h2>
 
+        {/* Dicho con todas las letras, y no insinuado: son zonas PREVISTAS de
+            lanzamiento. Una web pre-lanzamiento que enseña un mapa con zonas
+            marcadas invita a leer «ya operamos aquí», y eso todavía no es
+            cierto. */}
+        <p className="prose-measure mt-6 text-[17px] leading-relaxed text-paper-dim">
+          Estas son las <strong className="font-bold text-paper">zonas iniciales previstas
+          para el lanzamiento</strong> en el estado Zulia. No son cobertura definitiva: la
+          disponibilidad en cada una dependerá de cómo avance la puesta en marcha.
+        </p>
+
         <div className="mt-14 grid gap-10 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:gap-16">
           {/* El mapa: arriba en móvil, fijo al costado en escritorio */}
           <div
