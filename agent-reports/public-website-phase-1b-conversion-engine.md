@@ -29,7 +29,7 @@ privacidad)
 | `POST /api/waitlist` | **PASA** (404 mientras el interruptor esté apagado) |
 | Doble consentimiento | **PASA** |
 | Baja | **PASA** |
-| Correos (Resend) | **PASA** — plantillas y adaptador; envío real **NO ACTIVADO** (falta clave en el proyecto web) |
+| Correos (Resend) | **PASA** — plantillas y adaptador; clave **CONFIGURADA** y remitente verificado (§18). **Entrega real NO PROBADA**: no se ha enviado ningún correo |
 | Turnstile | **PASA PARCIAL** — verificación de servidor completa y probada; claves reales **CONFIGURADAS** en Production (§16). **LISTO, NO ACTIVADO**: el widget real no se ha ejecutado con formularios públicos |
 | Límite de peticiones | **PASA** |
 | Trampa + tiempo mínimo | **PASA** |
@@ -299,10 +299,10 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 | ~~`IP_HASH_SALT`~~ ✅ | Sal del HMAC de la IP | No se guarda huella; el límite por IP no actúa |
 | ~~`NEXT_PUBLIC_TURNSTILE_SITE_KEY`~~ ✅ | Widget en el navegador | El widget no se pinta |
 | ~~`TURNSTILE_SECRET_KEY`~~ ✅ | Verificación en el servidor | **No deja pasar nada** |
-| `RESEND_API_KEY` | Envío de correos | No se manda ninguno; el alta se guarda igual |
-| `EMAIL_FROM` | Remitente | Por omisión `hola@send.mas58express.com` |
-| `EMAIL_EQUIPO` | Aviso interno | Por omisión `58expressapp@gmail.com` |
-| `NEXT_PUBLIC_SITE_URL` | Base de los enlaces del correo | Por omisión `https://mas58express.com` |
+| ~~`RESEND_API_KEY`~~ ✅ | Envío de correos | No se manda ninguno; el alta se guarda igual |
+| ~~`EMAIL_FROM`~~ ✅ | Remitente | Por omisión `no-reply@mas58express.com` (§18.2) |
+| `EMAIL_EQUIPO` | Aviso interno | Por omisión `58expressapp@gmail.com` — **no hace falta crearla** (§18.1) |
+| `NEXT_PUBLIC_SITE_URL` | Base de los enlaces del correo | Por omisión `https://mas58express.com` — **no hace falta crearla** (§18.1) |
 
 ---
 
@@ -313,7 +313,7 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 | 1 | **Política de privacidad y responsable identificado** | Tuya. Bloquea encender cualquier formulario |
 | 2 | ~~**Provisionar la base de la web**~~ ✅ **Resuelto** | Proyecto Supabase «+58Express Web», conectado y certificado (§15) |
 | 3 | ~~**Claves de Turnstile**~~ ✅ **Resuelto** | Configuradas en Production el 13/09/2026 (§16) |
-| 4 | **`RESEND_API_KEY` en el proyecto web** | Tuya — la clave existe en Railway, pero la integración la devuelve redactada y no puedo leerla |
+| 4 | ~~**`RESEND_API_KEY` en el proyecto web**~~ ✅ **Resuelto** | Clave propia de la web configurada el 13/09/2026 (§18) |
 | 5 | ~~**Activar Web Analytics en el proyecto**~~ ✅ **Resuelto** | Activada el 13/09/2026; page views certificados (§17) |
 
 ---
@@ -334,7 +334,10 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 2. ~~**Claves de Turnstile.**~~ ✅ **Hecho el 13 de septiembre de 2026.** Las dos
    están en `plus58express-web`, sólo en Production, y verificadas con los
    interruptores apagados — §16. **LISTO, NO ACTIVADO.**
-3. **La `RESEND_API_KEY`** que ya usa el backend, o una nueva para la web.
+3. ~~**La `RESEND_API_KEY`.**~~ ✅ **Hecho el 13 de septiembre de 2026.** Clave
+   nueva y propia de la web, con permiso *Sending access* restringido a
+   `mas58express.com`. **Entrega real NO PROBADA**: no se ha enviado ningún
+   correo y no se enviará sin autorización — §18.
 4. ~~**Activar Web Analytics.**~~ ✅ **Hecho el 13 de septiembre de 2026.**
    `ANALYTICS_ENABLED = true`, page views y eventos certificados con carga útil
    interceptada: cero cookies y cero datos personales — §17.
@@ -815,3 +818,111 @@ tercero en el flujo de confirmación, que sigue apagado.
 Dos pruebas nuevas vigilan lo que costó descubrir: que el script de la analítica
 cargue de verdad y no dé 404, y que la portada no registre ni un error de CSP o
 de tipo MIME.
+
+---
+
+## 18. Resend
+
+Añadido el 13 de septiembre de 2026.
+
+**Resend API key = CONFIGURADA**
+**Sending access = mas58express.com**
+**Templates = LISTAS**
+**Entrega real = NO PROBADA**
+
+### 18.1 Variables, verificadas una a una
+
+| Variable | Estado | Tipo | Entornos |
+|---|---|---|---|
+| `RESEND_API_KEY` | ✅ configurada | Secret | Production |
+| `EMAIL_FROM` | ✅ `+58Express <no-reply@mas58express.com>` | Config | Production |
+| `EMAIL_EQUIPO` | **no existe** — y es correcto | — | — |
+| `NEXT_PUBLIC_SITE_URL` | **no existe** — y es correcto | — | — |
+
+La clave va como Secret: Vercel la entrega al despliegue y no permite volver a
+leerla, ni desde el panel ni con `vercel env pull`. **No se ha leído ni impreso
+en ningún momento**, aquí tampoco.
+
+`EMAIL_FROM` sí es legible a propósito —una dirección de remitente no es un
+secreto y conviene poder consultarla— y se ha verificado leyéndola de vuelta.
+
+**Las dos que faltan no faltan.** Ausentes, el código cae en valores que ya son
+los correctos, y crearlas sólo añadiría un sitio donde pueden desincronizarse:
+
+- `EMAIL_EQUIPO` → `app/api/leads/partners/route.ts:92` usa
+  `process.env.EMAIL_EQUIPO || EMAIL.direccion`, es decir
+  `58expressapp@gmail.com`, que es justo el destino interno acordado.
+- `NEXT_PUBLIC_SITE_URL` → `app/api/waitlist/route.ts:112` cae en
+  `https://mas58express.com` para los enlaces del correo. Su otro uso está en
+  `lib/seguridad/peticion.ts:30`, dentro de la comprobación de origen, y **su
+  ausencia no la debilita**: los dos orígenes canónicos están escritos a mano en
+  la lista y el valor ausente lo descarta un `.filter(Boolean)`.
+
+El despliegue de producción vivo (`plus58express-4zahh26jp`) es **posterior** a
+las dos variables, así que ya las incorpora. No hizo falta redesplegar.
+
+### 18.2 El remitente: decidido por el DNS, no por costumbre
+
+El encargo pedía determinar el remitente técnicamente correcto y no inventarlo.
+Esto es lo que dice el DNS, que es donde Resend deja su huella:
+
+| Registro | Valor |
+|---|---|
+| `resend._domainkey.mas58express.com` | clave DKIM presente |
+| `resend._domainkey.send.mas58express.com` | **no existe** |
+| `send.mas58express.com` TXT | `v=spf1 include:amazonses.com ~all` |
+| `send.mas58express.com` MX | `feedback-smtp.eu-west-1.amazonses.com` |
+| `mas58express.com` TXT | `v=spf1 -all` |
+
+El dominio dado de alta en Resend es **el apex**, y `send.` es sólo su
+*Return-Path* —por donde vuelven los rebotes—: tiene SPF y MX, pero **ningún
+DKIM**. Eso coincide exactamente con el dominio al que está restringida la clave
+nueva. De ahí `no-reply@mas58express.com`.
+
+Y el `v=spf1 -all` del apex no estorba: SPF se evalúa contra el remitente del
+sobre, que es `send.mas58express.com`, no contra el `From:` que ve la persona. La
+alineación de DMARC la da el DKIM, que firma como el apex.
+
+### 18.3 Un fallo latente que esto destapó
+
+El código enviaba desde `hola@send.mas58express.com`, con un comentario que
+afirmaba que ese subdominio «ya tiene SPF y DKIM verificados». **Era falso.**
+Resend habría rechazado cada envío, porque el dominio del `From:` no está
+verificado — y no se habría notado hasta el día de encender los formularios,
+cuando el primer correo no llegara.
+
+Corregido, con los registros reales escritos en el comentario para que no vuelva
+a deducirse de memoria, y atado con tres pruebas: sin clave no se manda nada y se
+dice, el remitente sale del dominio verificado y nunca del de rebotes, y un
+rechazo de Resend no se disfraza de éxito.
+
+### 18.4 Por qué «Entrega real = NO PROBADA»
+
+Porque no se ha mandado ni un correo, y no se mandará sin autorización expresa.
+Lo que sí está probado es todo lo anterior: las plantillas, el adaptador, el
+remitente y el comportamiento ante el fallo.
+
+Queda un guion para comprobar una clave **sin enviar nada**:
+`scripts/probar-clave-resend.mjs` manda a `POST /emails` un cuerpo deliberadamente
+incompleto —sin `from`, sin `to`, sin `subject`— que Resend no puede convertir en
+un correo, y mira quién contesta: `401` la clave no vale, `403` le falta permiso,
+`422` autentica y el permiso es el correcto. La clave se lee del portapapeles o
+de un fichero y **no se imprime**.
+
+### 18.5 Las plantillas
+
+Cuatro, todas listas y probadas: confirmación de alta, acuse de baja, acuse al
+comercio y aviso interno al equipo. Estilos en línea, una sola columna de 600 px
+y **sin píxel de rastreo** — hay una prueba que falla si aparece un `<img>`. El
+aviso interno **no lleva la IP**: para atender a alguien no hace falta saber
+desde dónde escribió.
+
+### 18.6 Verificación
+
+| | |
+|---|---|
+| TypeScript | limpio |
+| Build de producción | correcto |
+| Pruebas de correo | **8/8** |
+| `WAITLIST_ENABLED` · `PARTNER_LEADS_ENABLED` | **`false`** · **`false`** |
+| Correos enviados | **ninguno** |
