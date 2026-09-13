@@ -20,9 +20,12 @@ export function metaPagina({
   ruta: string;
   indexar?: boolean;
 }): Metadata {
-  const completo = `${titulo} · +58Express`;
+  // Un título que ya nombra la marca no debe pasar por la plantilla del layout:
+  // «Conduce con +58Express · +58Express» dice la marca dos veces.
+  const yaNombraLaMarca = titulo.includes("+58Express");
+  const completo = yaNombraLaMarca ? titulo : `${titulo} · +58Express`;
   return {
-    title: titulo,
+    title: yaNombraLaMarca ? { absolute: titulo } : titulo,
     description: descripcion,
     alternates: { canonical: ruta },
     openGraph: {

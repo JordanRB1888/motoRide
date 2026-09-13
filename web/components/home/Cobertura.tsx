@@ -118,12 +118,14 @@ export default function Cobertura() {
                         type="button"
                         onClick={() => setActiva(z.id)}
                         aria-current={on}
-                        className="block w-full text-left"
+                        className="group block w-full cursor-pointer text-left"
                       >
                         <span className="flex items-center gap-4">
                           <span
                             className={`relative block h-[62px] w-[62px] shrink-0 overflow-hidden rounded-xl transition-all duration-500 ${
-                              on ? "opacity-100 grayscale-0" : "opacity-45 grayscale"
+                              on
+                                ? "opacity-100 grayscale-0"
+                                : "opacity-45 grayscale group-hover:opacity-75"
                             }`}
                           >
                             <Image
@@ -146,7 +148,7 @@ export default function Cobertura() {
                         </span>
                         <span
                           className={`display mt-4 block text-[clamp(2rem,5vw,3.2rem)] transition-colors duration-300 ${
-                            on ? "text-paper" : "text-paper-mute"
+                            on ? "text-paper" : "text-paper-mute group-hover:text-paper-dim"
                           }`}
                         >
                           {z.nombre}

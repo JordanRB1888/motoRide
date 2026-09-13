@@ -103,7 +103,7 @@ export default function Navbar() {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className="rounded-full px-4 py-2.5 text-[15px] text-paper-dim transition-colors duration-150 hover:bg-white/[0.07] hover:text-paper"
+                  className="inline-flex min-h-[44px] items-center rounded-full px-4 text-[15px] text-paper-dim transition-colors duration-150 hover:bg-white/[0.07] hover:text-paper"
                 >
                   {item.label}
                 </Link>

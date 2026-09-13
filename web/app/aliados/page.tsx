@@ -33,9 +33,8 @@ export default function Page() {
         </div>
         <div className="mt-12">
           <Pendiente>
-            El alta de comercios aliados todavía no tiene un formulario público; el contacto
-            se coordina directamente con el equipo. Aquí no se muestran logotipos de negocios
-            como aliados mientras no exista el acuerdo.
+            El alta de comercios aliados todavía no tiene un formulario público: el
+            contacto se coordina directamente con el equipo de +58Express.
           </Pendiente>
         </div>
       </Bloque>

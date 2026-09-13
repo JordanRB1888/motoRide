@@ -51,9 +51,12 @@ export default function Servicios() {
                     >
                       {s.name}
                     </span>
+                    {/* `invisible` en vez de texto transparente: el color
+                        transparente seguía anunciándose, y el lector leía las
+                        nueve descripciones dentro del nombre de cada botón. */}
                     <span
-                      className={`hidden text-[15px] leading-snug transition-colors duration-200 sm:block ${
-                        on ? "text-paper-dim" : "text-transparent"
+                      className={`hidden text-[15px] leading-snug text-paper-dim transition-opacity duration-200 sm:block ${
+                        on ? "opacity-100" : "invisible opacity-0"
                       }`}
                     >
                       {s.line}

@@ -40,8 +40,21 @@ export default function Hero() {
         : 0;
     };
 
-    window.addEventListener("pointermove", onMove, { passive: true });
+    // El parallax solo trabaja con el hero en pantalla: seguir escuchando el
+    // puntero veinte secciones más abajo es gasto puro.
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) {
+        window.addEventListener("pointermove", onMove, { passive: true });
+      } else {
+        window.removeEventListener("pointermove", onMove);
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+      }
+    });
+    io.observe(el);
+
     return () => {
+      io.disconnect();
       window.removeEventListener("pointermove", onMove);
       if (raf) cancelAnimationFrame(raf);
     };
