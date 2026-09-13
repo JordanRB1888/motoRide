@@ -197,11 +197,44 @@ Revisado en producción, todo correcto por parte del sitio:
 | Indexables | Nueve |
 | `/privacidad` y `/terminos` | `noindex, nofollow` **a propósito** y fuera del sitemap |
 
-**No hay etiqueta de verificación** en el sitio y **no me la invento**. Es la acción
-manual nº 1 de la última sección.
+### ✅ ETIQUETA PUBLICADA — 13 de septiembre de 2026
 
-En cuanto me pases la etiqueta: la integro en el `<head>`, despliego, verifico la
-propiedad y envío el sitemap.
+| | |
+|---|---|
+| **Commit** | `8a7dcbd` — *feat(web): verificacion de Google Search Console* |
+| **Vista previa** | `plus58express-n6dtf4fb9-delivery58.vercel.app` |
+| **Despliegue de producción** | `plus58express-8vqpbb8u3-delivery58.vercel.app` → `mas58express.com` |
+
+**Cómo se integró:** por la API de metadatos de Next
+(`metadata.verification.google` en `app/layout.tsx`), **no como HTML escrito a mano**.
+Así vive junto al resto de los metadatos y no se pierde en un retoque del `<head>`.
+
+**Servida en producción, tal cual sale del servidor:**
+
+```html
+<meta name="google-site-verification" content="7Gnxi9z4ffm6oHBCOFvQ3BkTH4OBjk9phLxqoPOcEYw"/>
+```
+
+*(La barra final es cómo React serializa un elemento vacío; es el mismo elemento HTML que
+el que pide Google.)*
+
+Al estar en el layout raíz, **viaja en las once rutas**, no sólo en la portada.
+
+**Comprobado después de promover:**
+
+| | |
+|---|---|
+| TypeScript · build | limpios |
+| Playwright contra producción | **82 / 82** (una guarda nueva vigila el valor exacto del testigo) |
+| Canonical | correcto en las once rutas |
+| `robots.txt` | `Allow: /`, con `Sitemap:` y `Host:` |
+| `sitemap.xml` | 9 rutas |
+| CSP y las demás cabeceras | intactas |
+| `/contacto` · 404 · `www` → apex | 200 · 404 · 308 |
+| **DNS, SPF, DMARC, MX, Resend** | **sin tocar** — verificados de nuevo tras el despliegue |
+
+**Pendiente:** que el dueño pulse **«Verificar»** en Search Console. Después: enviar el
+sitemap y revisar la cobertura de indexación.
 
 ---
 
@@ -521,10 +554,9 @@ cierra todo lo demás.
 
 ## 12. ACCIONES MANUALES DEL DUEÑO
 
-1. **Etiqueta de Search Console.** Entra en <https://search.google.com/search-console>,
-   añade una propiedad **«Prefijo de URL»** con `https://mas58express.com`, elige el
-   método **«Etiqueta HTML»** y pásame la línea `<meta name="google-site-verification" …>`.
-   La integro, despliego, verifico y envío el sitemap.
+1. **Pulsar «Verificar» en Search Console.** La etiqueta **ya está publicada en
+   producción** (§4). Sólo queda que confirmes la propiedad desde el panel; en cuanto lo
+   hagas, envío el sitemap y reviso la indexación.
 2. **Elegir proveedor de correo: A (Google Workspace) o B (Zoho)** — §2. Sin esto no se
    puede publicar ninguna dirección `@mas58express.com`.
 3. **Dentro de un mes: revisar los informes DMARC** que lleguen a `58expressapp@gmail.com`
