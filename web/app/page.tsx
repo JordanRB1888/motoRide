@@ -5,7 +5,7 @@ import Hero from "@/components/home/Hero";
 import RideScene from "@/components/home/RideScene";
 import Servicios from "@/components/home/Servicios";
 import DosLados from "@/components/home/DosLados";
-import Zonas from "@/components/home/Zonas";
+import Cobertura from "@/components/home/Cobertura";
 import Seguridad from "@/components/home/Seguridad";
 import Descarga from "@/components/home/Descarga";
 
@@ -19,7 +19,7 @@ export default function Home() {
         <RideScene />
         <Servicios />
         <DosLados />
-        <Zonas />
+        <Cobertura />
         <Seguridad />
         <Descarga />
       </main>
