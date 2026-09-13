@@ -252,6 +252,16 @@ test.describe("metadatos", () => {
     expect(r.headers()["location"]).toBe("https://mas58express.com/conductores");
   });
 
+  test("la verificación de Search Console viaja en el HTML", async ({ page }) => {
+    await page.goto("/");
+    const contenido = await page
+      .locator('meta[name="google-site-verification"]')
+      .getAttribute("content");
+    // El testigo lo emite Google y no se inventa ni se cambia: si desaparece o se
+    // altera, la propiedad deja de estar verificada sin que nadie se entere.
+    expect(contenido).toBe("7Gnxi9z4ffm6oHBCOFvQ3BkTH4OBjk9phLxqoPOcEYw");
+  });
+
   test("robots.txt no bloquea nada", async ({ request }) => {
     const r = await request.get("/robots.txt");
     const texto = await r.text();

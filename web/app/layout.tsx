@@ -81,6 +81,11 @@ export const metadata: Metadata = {
     apple: "/brand/apple-touch-icon.png",
   },
   robots: { index: true, follow: true },
+  /* Verificación de la propiedad en Google Search Console.
+     Se declara por la API de metadatos de Next —no como HTML a mano— para que
+     viva junto al resto de los metadatos y no se pierda en un retoque del
+     <head>. Next la renderiza como <meta name="google-site-verification">. */
+  verification: { google: "7Gnxi9z4ffm6oHBCOFvQ3BkTH4OBjk9phLxqoPOcEYw" },
 };
 
 export const viewport: Viewport = {
