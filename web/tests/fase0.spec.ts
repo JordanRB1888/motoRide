@@ -151,9 +151,15 @@ test.describe("cabeceras de seguridad", () => {
   test("la CSP no rompe el mapa, el motion ni los teléfonos", async ({ page }) => {
     const violaciones: string[] = [];
     page.on("console", (m) => {
-      if (m.type() === "error" && /Content Security Policy|Refused to/i.test(m.text())) {
-        violaciones.push(m.text());
-      }
+      const t = m.text();
+      if (m.type() !== "error") return;
+      if (!/Content Security Policy|Refused to/i.test(t)) return;
+      // La barra de vista previa de Vercel (`vercel.live`) sólo se inyecta en los
+      // despliegues de vista previa, nunca en producción. Que la CSP la bloquee es
+      // lo correcto: no vamos a abrir el sitio público a un script de terceros
+      // para que funcione una herramienta interna.
+      if (t.includes("vercel.live")) return;
+      violaciones.push(t);
     });
     await page.goto("/");
     await listo(page);
