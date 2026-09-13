@@ -4,6 +4,7 @@ import PageShell, { Bloque } from "@/components/site/PageShell";
 import Reveal from "@/components/motion/Reveal";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
 import EnlaceCorreo from "@/components/site/EnlaceCorreo";
+import RedesSociales from "@/components/site/RedesSociales";
 import { WHATSAPP, whatsapp, type Intencion } from "@/lib/contact";
 
 export const metadata: Metadata = metaPagina({
@@ -141,6 +142,15 @@ export default function Page() {
               horario de atención comprometido: preferimos no prometer un plazo antes
               de poder cumplirlo.
             </p>
+
+            {/* Las redes cierran la tarjeta, separadas por una línea: son otra
+                forma de seguirnos, no otro canal por el que escribirnos, y
+                mezclarlas con WhatsApp y el correo confundiría las dos cosas. */}
+            <RedesSociales
+              origen="contacto"
+              titulo="También estamos en"
+              className="mt-9 border-t border-white/10 pt-8"
+            />
           </div>
         </Reveal>
       </Bloque>

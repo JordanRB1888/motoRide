@@ -43,16 +43,48 @@ export const EMAIL = {
  *
  * Se quedan apagadas hasta tener la URL exacta. Encenderlas es cambiar `activo`.
  */
-export const SOCIALS: ReadonlyArray<{
-  activo: boolean;
-  red: string;
-  url: string;
-  usuario: string;
-}> = [
-  { activo: false, red: "Instagram", url: "", usuario: "" },
-  { activo: false, red: "TikTok", url: "", usuario: "" },
-  { activo: false, red: "Facebook", url: "", usuario: "" },
-];
+/**
+ * Las redes oficiales, en UN solo sitio.
+ *
+ * Las direcciones no se repiten en ningún componente: el pie y `/contacto` leen
+ * de aquí. Tres copias de una URL son tres oportunidades de que una se quede
+ * vieja el día que la cuenta cambie de nombre, y la que quedaría mal sería
+ * justamente la que alguien pulse.
+ *
+ * La clave de cada entrada es además el sufijo del evento de analítica
+ * (`social_tiktok`…), de modo que añadir una red nueva sin medirla —o medir una
+ * que no existe— deja de compilar.
+ *
+ * El orden es el que se pinta, y es deliberado: TikTok primero porque es donde
+ * hay más movimiento.
+ */
+export type RedSocial = "tiktok" | "instagram" | "facebook";
+
+export const REDES_SOCIALES: Record<
+  RedSocial,
+  { activa: boolean; nombre: string; url: string }
+> = {
+  tiktok: {
+    activa: true,
+    nombre: "TikTok",
+    url: "https://www.tiktok.com/@58express7",
+  },
+  instagram: {
+    activa: true,
+    nombre: "Instagram",
+    url: "https://www.instagram.com/58expressapp",
+  },
+  facebook: {
+    activa: true,
+    nombre: "Facebook",
+    url: "https://www.facebook.com/profile.php?id=61594407713816&sk=directory_intro",
+  },
+};
+
+/** Las que se pintan hoy, en orden. */
+export const REDES_ACTIVAS = (Object.keys(REDES_SOCIALES) as RedSocial[]).filter(
+  (red) => REDES_SOCIALES[red].activa,
+);
 
 /** Las cuatro intenciones con las que alguien escribe a +58Express. */
 export type Intencion = "conductor" | "aliado" | "soporte" | "general";

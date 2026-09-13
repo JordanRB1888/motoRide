@@ -23,6 +23,13 @@ export type Evento =
   | "whatsapp_aliado"
   | "whatsapp_soporte"
   | "zona_consultada"
+  /* Redes sociales. Se mide QUÉ red y DESDE DÓNDE, y nada más: ni el usuario de
+     la cuenta, ni el identificador de Facebook, ni la dirección completa. Saber
+     que alguien pulsó «Instagram» desde el pie es todo lo que hace falta para
+     decidir dónde publicar; lo demás sería recoger por recoger. */
+  | "social_tiktok"
+  | "social_instagram"
+  | "social_facebook"
   | "waitlist_iniciada"
   | "waitlist_confirmada"
   | "lead_aliado_enviado";

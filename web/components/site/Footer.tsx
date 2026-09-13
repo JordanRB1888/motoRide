@@ -1,5 +1,6 @@
 import Link from "next/link";
 import EnlaceCorreo from "@/components/site/EnlaceCorreo";
+import RedesSociales from "@/components/site/RedesSociales";
 import Logo from "@/components/ui/Logo";
 import { PIE_GRUPOS, PAYMENTS } from "@/lib/content";
 import { EMAIL, WHATSAPP, whatsapp } from "@/lib/contact";
@@ -56,6 +57,11 @@ export default function Footer() {
                 <EnlaceCorreo className="w-fit break-all text-[16px] text-paper-dim transition-colors duration-150 hover:text-signal" />
               )}
             </div>
+
+            {/* Las redes, justo debajo de los canales directos y no en una
+                columna aparte: quien baja hasta aquí busca «cómo les escribo», y
+                WhatsApp, correo y redes son respuestas a la misma pregunta. */}
+            <RedesSociales origen="footer" className="mt-8" />
           </div>
 
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">

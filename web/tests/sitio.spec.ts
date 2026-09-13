@@ -286,3 +286,53 @@ test.describe("metadatos", () => {
     }
   });
 });
+
+test.describe("redes sociales", () => {
+  const REDES: [string, string][] = [
+    ["TikTok", "https://www.tiktok.com/@58express7"],
+    ["Instagram", "https://www.instagram.com/58expressapp"],
+    ["Facebook", "https://www.facebook.com/profile.php?id=61594407713816&sk=directory_intro"],
+  ];
+
+  for (const ruta of ["/", "/contacto"]) {
+    test(`${ruta} enlaza las tres con la dirección exacta`, async ({ page }) => {
+      await page.goto(ruta);
+      for (const [nombre, url] of REDES) {
+        const enlace = page.locator(`a[href="${url}"]`).first();
+        await expect(enlace, `${nombre} en ${ruta}`).toHaveAttribute("target", "_blank");
+        await expect(enlace).toHaveAttribute("rel", "noopener noreferrer");
+        /* Sin texto visible, el nombre accesible lo da el aria-label. Sin él,
+           un lector de pantalla anunciaría «enlace» y nada más. */
+        const etiqueta = await enlace.getAttribute("aria-label");
+        expect(etiqueta, `${nombre} sin aria-label`).toContain(nombre);
+      }
+    });
+  }
+
+  test("el pulgar las alcanza en el móvil", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    await page.goto("/");
+    for (const [nombre, url] of REDES) {
+      const caja = await page.locator(`footer a[href="${url}"]`).first().boundingBox();
+      expect(caja, `${nombre} no se pinta en el pie`).not.toBeNull();
+      // 44 px es el mínimo cómodo con el pulgar.
+      expect(caja!.width, `${nombre} demasiado estrecho`).toBeGreaterThanOrEqual(44);
+      expect(caja!.height, `${nombre} demasiado bajo`).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("no se enseñan los usuarios ni el identificador de Facebook", async ({ page }) => {
+    /* El rótulo de marca es «+58Express». Los identificadores internos no
+       aportan nada a quien lee y envejecen mal.
+
+       Ojo con la comprobación: el correo público es `58expressapp@gmail.com`, así
+       que buscar la cadena suelta «58expressapp» daría un falso positivo sobre
+       una dirección que SÍ debe verse. Lo que no puede aparecer es el usuario en
+       forma de arroba, ni el identificador numérico de Facebook. */
+    await page.goto("/contacto");
+    const texto = await page.locator("body").innerText();
+    expect(texto).not.toContain("58express7");
+    expect(texto).not.toMatch(/@58express(app)?\b/);
+    expect(texto).not.toContain("61594407713816");
+  });
+});
