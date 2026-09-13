@@ -14,7 +14,10 @@ implementar. **No se activó nada.**
 
 **Sigue apagado, a propósito:** `WAITLIST_ENABLED = false` · cero formularios · cero
 campos · cero cookies · cero analítica · sin base de datos · sin Turnstile · sin CORS
-aplicado · sin cambios en DNS.
+aplicado.
+
+**Lo único aplicado en esta ronda, con autorización expresa:** los dos registros DNS de
+SPF y DMARC del apex (§3). Ni una línea del sitio ha cambiado.
 
 ---
 
@@ -38,13 +41,18 @@ responsable, correo de privacidad, jurisdicción y plazo de respuesta.
 
 ## 2. Correo corporativo
 
-**DNS revisado hoy, sin modificar:**
+**Estado del DNS tras esta ronda:**
 
 | Registro | Estado |
 |---|---|
-| `mas58express.com` MX · TXT · `_dmarc` | **los tres SIN REGISTRO** |
+| `mas58express.com` MX | **SIN REGISTRO** — sigue sin proveedor de buzón |
+| `mas58express.com` TXT (SPF) | **`v=spf1 -all`** — aplicado hoy (§3) |
+| `_dmarc.mas58express.com` | **`v=DMARC1; p=none; …`** — aplicado hoy (§3) |
 | `send.mas58express.com` MX + SPF · `resend._domainkey` | presentes e **intactos** |
 | Servidores de nombres | `ns1.vercel-dns.com`, `ns2.vercel-dns.com` |
+
+> Al contratar proveedor, el SPF del apex pasa de `-all` a incluirlo. **Ese cambio no se
+> hace ahora.**
 
 Buzones objetivo: `hola@` · `soporte@` · `aliados@` · `conductores@`
 
@@ -120,7 +128,60 @@ proveedor (§2).
 **Por qué corre prisa:** hoy cualquiera puede enviar correo firmando como
 `@mas58express.com` y ningún receptor lo rechazará. Justo mientras se construye la marca.
 
-> **No aplicados**: tocar DNS requiere tu permiso.
+### ✅ APLICADOS — 13 de septiembre de 2026, 13:06 UTC
+
+Con autorización explícita y acotada a estos dos registros.
+
+**Antes.** Se leyó el estado autoritativo en Vercel y se comprobaron las dos condiciones
+de seguridad que pediste:
+
+| Comprobación | Resultado |
+|---|---|
+| ¿Existía ya un SPF TXT en el apex? | **No.** Los únicos TXT eran `_railway-verify.api-staging`, `resend._domainkey` y `send` |
+| ¿Existía ya `_dmarc.mas58express.com`? | **No** |
+
+Registros que había antes (siete, ninguno tocado):
+`_railway-verify.api-staging` TXT · `resend._domainkey` TXT · `send` TXT · `send` MX ·
+`api-staging` CNAME · tres CAA · el ALIAS comodín del sitio.
+
+**Cambios aplicados — exactamente dos, ninguno más:**
+
+| id de Vercel | Nombre | Tipo | Valor |
+|---|---|---|---|
+| `rec_eba4fc85078d045af05d51ce` | `@` (apex) | TXT | `v=spf1 -all` |
+| `rec_45c908cfdfb9b6b861c5cc39` | `_dmarc` | TXT | `v=DMARC1; p=none; rua=mailto:58expressapp@gmail.com; fo=1` |
+
+**Certificación en DNS público** — resueltos en los dos resolutores, sin propagación
+pendiente:
+
+```
+mas58express.com          TXT   1.1.1.1 → v=spf1 -all
+                                8.8.8.8 → v=spf1 -all
+_dmarc.mas58express.com   TXT   1.1.1.1 → v=DMARC1; p=none; rua=mailto:58expressapp@gmail.com; fo=1
+                                8.8.8.8 → v=DMARC1; p=none; rua=mailto:58expressapp@gmail.com; fo=1
+```
+
+**Resend y DKIM, intactos** — mismos valores en ambos resolutores:
+
+```
+send.mas58express.com               MX    pref 10 feedback-smtp.eu-west-1.amazonses.com
+send.mas58express.com               TXT   v=spf1 include:amazonses.com ~all
+resend._domainkey.mas58express.com  TXT   p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDtFg/vnuOqJa…  (218 caracteres)
+mas58express.com                    MX    SIN REGISTRO   ← correcto: no hay proveedor de buzón todavía
+```
+
+**Nada más se movió:** el sitio responde 200, `www` sigue en 308 hacia el apex,
+`admin-staging` en 200 y `api-staging/api/health` en 200 con su cuerpo de siempre.
+
+**Propagación:** ninguna pendiente. Los dos resolutores ya devuelven los valores nuevos.
+Los informes `rua` de DMARC empezarán a llegar a `58expressapp@gmail.com` en un plazo de
+24–48 h, según cuándo los generen los receptores.
+
+> **`p=none` se queda en `none`.** No se sube a `quarantine` ni a `reject`: primero hay
+> que leer un mes de informes y confirmar que el correo de Resend pasa la alineación.
+>
+> **Cuando se contrate Google Workspace o Zoho**, el SPF del apex tendrá que pasar de
+> `-all` a incluir al proveedor (§2). **No se hace ahora.**
 
 ---
 
@@ -440,7 +501,7 @@ traen cookies, consentimiento y transferencias que hoy no compensan.
 
 ## 11. Orden recomendado de implementación
 
-1. **SPF + DMARC** (§3) — coste cero, no depende de nada y el dominio hoy es suplantable.
+1. ~~**SPF + DMARC** (§3)~~ — **HECHO el 13/09/2026.** El dominio ya no es suplantable.
 2. **Deployment Protection en admin-staging** (§5) — un interruptor.
 3. **Search Console** (§4) — en cuanto llegue la etiqueta.
 4. **Proveedor de correo** (§2) y creación de los cuatro buzones.
@@ -464,10 +525,11 @@ cierra todo lo demás.
    añade una propiedad **«Prefijo de URL»** con `https://mas58express.com`, elige el
    método **«Etiqueta HTML»** y pásame la línea `<meta name="google-site-verification" …>`.
    La integro, despliego, verifico y envío el sitemap.
-2. **Autorizar los dos registros DNS de §3** (`v=spf1 -all` y el DMARC en `p=none`). Coste
-   cero, no rompen Resend y cierran la suplantación del dominio. Dime que sí y los aplico.
-3. **Elegir proveedor de correo: A (Google Workspace) o B (Zoho)** — §2. Sin esto no se
+2. **Elegir proveedor de correo: A (Google Workspace) o B (Zoho)** — §2. Sin esto no se
    puede publicar ninguna dirección `@mas58express.com`.
+3. **Dentro de un mes: revisar los informes DMARC** que lleguen a `58expressapp@gmail.com`
+   y decirme si el correo de Resend pasa la alineación, para subir la política de `p=none`
+   a `quarantine`. ~~Autorizar SPF y DMARC~~ — **hecho el 13/09/2026** (§3).
 4. **Activar Deployment Protection en `mas58express-admin-staging`** desde el panel de
    Vercel, o autorizarme a hacerlo — §5.
 5. **Los siete datos legales de §0 del documento de privacidad**: razón social,
