@@ -1,7 +1,7 @@
 # Sitio público de +58Express
 
 **Estado:** publicado y verificado en <https://mas58express.com>
-**Rama:** `feat/public-marketing-site` · **HEAD:** `9209404`
+**Rama:** `feat/public-marketing-site` · **HEAD:** `11489d0`
 **Fecha del informe:** 12 de septiembre de 2026
 
 ---
@@ -435,16 +435,17 @@ teléfonos, ni mapa, ni estructura. Solo cierre técnico.
 ## 12. Historial de la rama
 
 ```
-9209404  perf(web): iconos de 435 KB a 149 KB y fuera el componente Zonas muerto
-c56c7e2  fix(web): detalles menores de la auditoria y barrido axe en las diez rutas
-9a3647b  fix(web): los veinte hallazgos confirmados de la auditoria del sitio
-bf1ebce  feat(web): mapa interactivo de cobertura, sin claves de API
-7a5a6c3  feat(web): las nueve paginas internas, sitemap y robots
-fd00400  feat(web): dos lados, seguridad, descarga y pie
-0e7946d  feat(web): la moto real de +58Express en el hero
-52f79ce  fix(web): calidad de imagen premium en las pantallas de la app
-5f4b35e  feat(web): pantallas terminadas de la app y motorizado sin marca de terceros
-055412a  feat(web): scrollytelling de la carrera y catalogo de pantallas verificado
-f9cb7e7  feat(web): seccion de zonas con las tres plazas de enfoque
-b778b70  feat(web): cimientos del sitio publico premium
+11489d0 chore(web): cierre tecnico — www al apex, limpieza de public y plan del basemap
+9100ff0 docs: informe del sitio publico premium
+9209404 perf(web): iconos de 435 KB a 149 KB y fuera el componente Zonas muerto
+c56c7e2 fix(web): detalles menores de la auditoria y barrido axe en las diez rutas
+9a3647b fix(web): los veinte hallazgos confirmados de la auditoria del sitio
+bf1ebce feat(web): mapa interactivo de cobertura, sin claves de API
+7a5a6c3 feat(web): las nueve paginas internas, sitemap y robots
+fd00400 feat(web): dos lados, seguridad, descarga y pie
+0e7946d feat(web): la moto real de +58Express en el hero
+52f79ce fix(web): calidad de imagen premium en las pantallas de la app
+5f4b35e feat(web): pantallas terminadas de la app y motorizado sin marca de terceros
+055412a feat(web): scrollytelling de la carrera y catalogo de pantallas verificado
+f9cb7e7 feat(web): seccion de zonas con las tres plazas de enfoque
 ```
