@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
+import PuertaCTA from "@/components/site/PuertaCTA";
 import Reveal from "@/components/motion/Reveal";
 
 export const metadata: Metadata = metaPagina({
@@ -34,6 +35,15 @@ export default function Page() {
             </Reveal>
           ))}
         </dl>
+
+        <div className="mt-14">
+          <PuertaCTA
+            titulo={<>¿No está <span className="text-signal">tu pregunta</span>?</>}
+            cuerpo="Escríbenos y te responde alguien del equipo. Si es algo que preguntan varias personas, acaba en esta misma página."
+            intencion="soporte"
+            rotulo="Pedir ayuda"
+          />
+        </div>
       </Bloque>
     </PageShell>
   );

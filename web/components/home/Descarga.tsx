@@ -3,6 +3,8 @@ import InteractivePhone from "@/components/phone/InteractivePhone";
 import Reveal from "@/components/motion/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
 import { screensById, STORES } from "@/lib/content";
+import { WAITLIST_ENABLED } from "@/lib/contact";
+import BotonWhatsApp from "@/components/site/BotonWhatsApp";
 
 /**
  * Descarga.
@@ -76,6 +78,28 @@ export default function Descarga() {
                 </span>
               </div>
             </div>
+
+            {/* Aquí irá la lista de espera. Mientras el interruptor esté apagado no
+                se pinta ningún campo: un formulario que no puede guardar nada, ni
+                confirmar por correo, ni declarar en una política de privacidad qué
+                hace con el dato, engañaría a quien lo rellena. Se dice lo que hay y
+                se ofrece la puerta que sí existe. */}
+            {WAITLIST_ENABLED ? null : (
+              <div className="mt-10 rounded-[var(--radius-card)] border border-white/10 bg-white/[0.03] p-6 sm:p-7">
+                <p className="text-[17px] font-bold text-paper">
+                  ¿Quieres que te avisemos cuando esté disponible?
+                </p>
+                <p className="mt-2 max-w-[52ch] text-[15px] leading-relaxed text-paper-dim">
+                  Todavía no tenemos lista de espera. Escríbenos y te avisamos en
+                  cuanto la aplicación se publique en tu zona.
+                </p>
+                <div className="mt-6">
+                  <BotonWhatsApp intencion="general" size="md">
+                    Avísenme cuando salga
+                  </BotonWhatsApp>
+                </div>
+              </div>
+            )}
 
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
               <ButtonLink href="/conductores" size="lg">

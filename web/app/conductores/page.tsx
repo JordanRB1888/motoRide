@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { metaPagina } from "@/lib/seo";
-import PageShell, { Bloque, Pendiente } from "@/components/site/PageShell";
+import PageShell, { Bloque } from "@/components/site/PageShell";
+import PuertaCTA from "@/components/site/PuertaCTA";
 import Reveal from "@/components/motion/Reveal";
 
 export const metadata: Metadata = metaPagina({
@@ -57,11 +58,14 @@ export default function Page() {
             </Reveal>
           ))}
         </ol>
-        <div className="mt-12">
-          <Pendiente>
-            El formulario de postulación vive dentro de la aplicación, que todavía no está
-            publicada. Cuando exista un punto de entrada web, el botón llevará ahí.
-          </Pendiente>
+        <div className="mt-14">
+          <PuertaCTA
+            titulo={<>Empieza por <span className="text-signal">una conversación</span></>}
+            cuerpo="Todavía no hay formulario de postulación en la web. Mientras llega, escríbenos y el equipo te dice qué documentación necesitas y cómo sigue el proceso — sin esperar a que la aplicación se publique."
+            intencion="conductor"
+            rotulo="Hablar con el equipo"
+            nota="Te responde una persona, no un robot."
+          />
         </div>
       </Bloque>
     </PageShell>

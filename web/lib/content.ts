@@ -17,18 +17,35 @@ export const NAV = [
 ] as const;
 
 /**
- * El pie lista además /pasajeros. En la barra no cabe sin apretar las demás,
- * pero la página no puede quedar sin ningún enlace que lleve a ella: estaba en
- * el sitemap y no se alcanzaba desde ninguna parte del sitio.
+ * El pie es el centro institucional del sitio: recoge todo lo que no cabe en la
+ * barra sin apretarla, agrupado por para quién es cada cosa. Aquí viven además
+ * /pasajeros y /contacto, que no están en la navegación principal y no pueden
+ * quedar sin ningún enlace que lleve a ellas.
  */
-export const NAV_PIE = [
-  { label: "Servicios", href: "/servicios" },
-  { label: "Pasajeros", href: "/pasajeros" },
-  { label: "Conductores", href: "/conductores" },
-  { label: "Seguridad", href: "/seguridad" },
-  { label: "Aliados", href: "/aliados" },
-  { label: "Nosotros", href: "/nosotros" },
-  { label: "Ayuda", href: "/ayuda" },
+export const PIE_GRUPOS = [
+  {
+    titulo: "Producto",
+    enlaces: [
+      { label: "Servicios", href: "/servicios" },
+      { label: "Pasajeros", href: "/pasajeros" },
+      { label: "Seguridad", href: "/seguridad" },
+    ],
+  },
+  {
+    titulo: "Trabaja con nosotros",
+    enlaces: [
+      { label: "Conductores", href: "/conductores" },
+      { label: "Aliados", href: "/aliados" },
+    ],
+  },
+  {
+    titulo: "Empresa",
+    enlaces: [
+      { label: "Nosotros", href: "/nosotros" },
+      { label: "Ayuda", href: "/ayuda" },
+      { label: "Contacto", href: "/contacto" },
+    ],
+  },
 ] as const;
 
 export type ServiceId =

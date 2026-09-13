@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { metaPagina } from "@/lib/seo";
-import PageShell, { Bloque, Pendiente } from "@/components/site/PageShell";
+import PageShell, { Bloque } from "@/components/site/PageShell";
+import PuertaCTA from "@/components/site/PuertaCTA";
 import Reveal from "@/components/motion/Reveal";
 
 export const metadata: Metadata = metaPagina({
@@ -31,11 +32,13 @@ export default function Page() {
             </Reveal>
           ))}
         </div>
-        <div className="mt-12">
-          <Pendiente>
-            El alta de comercios aliados todavía no tiene un formulario público: el
-            contacto se coordina directamente con el equipo de +58Express.
-          </Pendiente>
+        <div className="mt-14">
+          <PuertaCTA
+            titulo={<>Cuéntanos sobre <span className="text-signal">tu comercio</span></>}
+            cuerpo="El alta de comercios todavía no es automática. Escríbenos qué vendes y dónde estás, y nuestro equipo se pone en contacto contigo para explicarte cómo entrar."
+            intencion="aliado"
+            rotulo="Quiero ser aliado"
+          />
         </div>
       </Bloque>
     </PageShell>

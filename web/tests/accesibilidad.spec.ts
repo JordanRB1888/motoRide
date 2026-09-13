@@ -17,6 +17,7 @@ const RUTAS = [
   "/aliados",
   "/nosotros",
   "/ayuda",
+  "/contacto",
   "/privacidad",
   "/terminos",
 ];

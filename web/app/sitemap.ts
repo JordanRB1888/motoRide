@@ -15,6 +15,7 @@ const RUTAS = [
   { path: "/aliados", priority: 0.8 },
   { path: "/nosotros", priority: 0.6 },
   { path: "/ayuda", priority: 0.6 },
+  { path: "/contacto", priority: 0.8 },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
