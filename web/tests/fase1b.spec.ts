@@ -218,8 +218,14 @@ test.describe("analítica sin datos personales", () => {
     test.skip(!process.env.SITIO, "la analítica sólo existe en un despliegue de Vercel");
     const errores: string[] = [];
     page.on("console", (m) => {
-      if (m.type() === "error" && /Content Security Policy|Refused to|nosniff|MIME/i.test(m.text())) {
-        errores.push(m.text());
+      const t = m.text();
+      /* `vercel.live` es la barra de vista previa de Vercel, que sólo se inyecta
+         en los despliegues de preview. Que la CSP la bloquee es exactamente lo
+         que debe pasar —no está en la lista de orígenes permitidos— y no es un
+         defecto del sitio: en producción esa barra no existe. */
+      if (t.includes("vercel.live")) return;
+      if (m.type() === "error" && /Content Security Policy|Refused to|nosniff|MIME/i.test(t)) {
+        errores.push(t);
       }
     });
     await page.goto("/");

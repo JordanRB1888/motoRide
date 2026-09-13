@@ -366,6 +366,24 @@ export default function Page() {
                 hace falta escribirnos.
               </Item>
             </ListaLegal>
+
+            <SubLegal>Si no te atendemos</SubLegal>
+            <P>
+              La vía judicial existe y conviene que la conozcas. La{" "}
+              <strong className="font-bold text-paper">
+                Ley Orgánica del Tribunal Supremo de Justicia
+              </strong>{" "}
+              (Gaceta Oficial N.º 6.684 Extraordinario, del 19 de enero de 2022) regula la demanda
+              de <em>habeas data</em> en sus artículos 167 y siguientes. Procede cuando quien
+              administra la base de datos no responde al requerimiento previo dentro de los{" "}
+              <strong className="font-bold text-paper">veinte días hábiles</strong> siguientes, o
+              responde negativamente.
+            </P>
+            <P>
+              Se presenta ante el Tribunal de Municipio con competencia en lo Contencioso
+              Administrativo de tu domicilio. Preferimos decírtelo a que lo descubras por tu
+              cuenta: un derecho que no se conoce no se ejerce.
+            </P>
           </SeccionLegal>
 
           <SeccionLegal id="ejercer" numero={13} titulo="Cómo ejercerlos">
@@ -387,6 +405,15 @@ export default function Page() {
               dirigido a las autoridades y a los funcionarios públicos, no a una empresa privada.
               Preferimos decirlo así —y obligarnos igual— antes que atribuirle a la ley una
               exigencia que no hace.
+            </P>
+            <P>
+              Elegimos quince y no más por una razón concreta: son{" "}
+              <strong className="font-bold text-paper">
+                menos de los veinte días hábiles
+              </strong>{" "}
+              que el artículo 167 de la Ley Orgánica del Tribunal Supremo de Justicia manda dejar
+              transcurrir antes de poder demandar por <em>habeas data</em>. Queremos haberte
+              respondido antes de que esa puerta llegue siquiera a abrirse.
             </P>
             <P>
               Para atender una solicitud puede que necesitemos comprobar que la dirección de
@@ -476,9 +503,45 @@ export default function Page() {
                 Venezuela no cuenta con una ley general de protección de datos personales
                 equiparable al Reglamento europeo
               </strong>
-              , ni con una autoridad de control en la materia. No vamos a invocar normas que no
-              nos resultan aplicables para aparentar rigor. Los compromisos de este documento los
-              asumimos nosotros y son exigibles a nosotros.
+              , ni con una autoridad administrativa de control en la materia. No vamos a invocar
+              normas que no nos resultan aplicables para aparentar rigor.
+            </P>
+            <P>
+              Sí existe, en cambio, un criterio vinculante. En la{" "}
+              <strong className="font-bold text-paper">
+                sentencia N.º 1318 del 4 de agosto de 2011
+              </strong>
+              , la Sala Constitucional del Tribunal Supremo de Justicia fijó los principios que
+              rigen el tratamiento de datos personales mientras no haya ley especial. Son los que
+              seguimos:
+            </P>
+            <ListaLegal>
+              <Item>
+                <strong className="font-bold text-paper">Autonomía de la voluntad</strong> — el
+                consentimiento debe ser previo, libre, informado, inequívoco y revocable.
+              </Item>
+              <Item>
+                <strong className="font-bold text-paper">Autodeterminación informativa</strong> —
+                decides tú sobre tus datos.
+              </Item>
+              <Item>
+                <strong className="font-bold text-paper">Finalidad y calidad</strong> — se usan
+                sólo para lo que se anunció, y no para otra cosa.
+              </Item>
+              <Item>
+                <strong className="font-bold text-paper">Temporalidad</strong> — no se conservan
+                más allá de lo necesario.
+              </Item>
+              <Item>
+                <strong className="font-bold text-paper">Seguridad y confidencialidad</strong>,{" "}
+                <strong className="font-bold text-paper">exactitud</strong> y{" "}
+                <strong className="font-bold text-paper">responsabilidad</strong> sobre lo que se
+                trata.
+              </Item>
+            </ListaLegal>
+            <P>
+              El resto de los compromisos de este documento los asumimos nosotros, por escrito, y
+              son exigibles a nosotros.
             </P>
           </SeccionLegal>
 

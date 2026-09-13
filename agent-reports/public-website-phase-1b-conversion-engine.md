@@ -310,7 +310,7 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 
 | # | Bloqueo | Depende de |
 |---|---|---|
-| 1 | **Política de privacidad y responsable identificado** | Tuya. Bloquea encender cualquier formulario |
+| 1 | ~~**Política de privacidad y responsable identificado**~~ ✅ **Resuelto** | Identidad legal completa y ambos documentos publicados el 13/09/2026 — ver `public-website-legal-readiness.md` |
 | 2 | ~~**Provisionar la base de la web**~~ ✅ **Resuelto** | Proyecto Supabase «+58Express Web», conectado y certificado (§15) |
 | 3 | ~~**Claves de Turnstile**~~ ✅ **Resuelto** | Configuradas en Production el 13/09/2026 (§16) |
 | 4 | ~~**`RESEND_API_KEY` en el proyecto web**~~ ✅ **Resuelto** | Clave propia de la web configurada el 13/09/2026 (§18) |
@@ -341,8 +341,15 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 4. ~~**Activar Web Analytics.**~~ ✅ **Hecho el 13 de septiembre de 2026.**
    `ANALYTICS_ENABLED = true`, page views y eventos certificados con carga útil
    interceptada: cero cookies y cero datos personales — §17.
-5. **Los siete datos legales** de `web-privacy-draft-input.md` §0. Es lo único que
-   bloquea encender los formularios.
+5. ~~**Los siete datos legales.**~~ ✅ **Hecho el 13 de septiembre de 2026.**
+   Razón social, RIF, domicilio fiscal, responsable, correo de privacidad,
+   jurisdicción y plazo de respuesta. `/privacidad` y `/terminos` son ya
+   documentos reales e indexables — ver `public-website-legal-readiness.md`.
+
+   **Queda un bloqueo técnico antes de encender los formularios**: implementar el
+   borrado automático por retención que la política promete (30 días para las
+   inscripciones sin confirmar, 12 meses para los contactos de comercios). Hoy
+   sólo se barren los registros contra el abuso, a las 24 horas.
 
 > **No contraté ni creé nada.** Los planes gratuitos de Neon y Cloudflare bastan
 > para esta fase; ninguno exige tarjeta.
