@@ -287,12 +287,14 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 
 ## 11. Variables de entorno que hará falta crear
 
-Ninguna existe todavía en el proyecto web. **No se inventó ninguna clave.**
+> **Actualizado el 13 de septiembre de 2026 (§15):** las dos primeras ya están
+> configuradas como Secret en Preview y Production. Las cuatro restantes siguen
+> sin existir, y **no se inventó ninguna clave.**
 
 | Variable | Para qué | Sin ella |
 |---|---|---|
-| `WEB_DATABASE_URL` | Almacén de la web | Las rutas responden 503 |
-| `IP_HASH_SALT` | Sal del HMAC de la IP | No se guarda huella; el límite por IP no actúa |
+| ~~`WEB_DATABASE_URL`~~ ✅ | Almacén de la web | Las rutas responden 503 |
+| ~~`IP_HASH_SALT`~~ ✅ | Sal del HMAC de la IP | No se guarda huella; el límite por IP no actúa |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Widget en el navegador | El widget no se pinta |
 | `TURNSTILE_SECRET_KEY` | Verificación en el servidor | **No deja pasar nada** |
 | `RESEND_API_KEY` | Envío de correos | No se manda ninguno; el alta se guarda igual |
@@ -307,7 +309,7 @@ Ninguna existe todavía en el proyecto web. **No se inventó ninguna clave.**
 | # | Bloqueo | Depende de |
 |---|---|---|
 | 1 | **Política de privacidad y responsable identificado** | Tuya. Bloquea encender cualquier formulario |
-| 2 | **Provisionar la base de la web** | Tuya (§13) |
+| 2 | ~~**Provisionar la base de la web**~~ ✅ **Resuelto** | Proyecto Supabase «+58Express Web», conectado y certificado (§15) |
 | 3 | **Claves de Turnstile** | Tuya — cuenta gratuita de Cloudflare |
 | 4 | **`RESEND_API_KEY` en el proyecto web** | Tuya — la clave existe en Railway, pero la integración la devuelve redactada y no puedo leerla |
 | 5 | **Activar Web Analytics en el proyecto** | Tuya — un interruptor |
@@ -316,11 +318,17 @@ Ninguna existe todavía en el proyecto web. **No se inventó ninguna clave.**
 
 ## 13. ACCIONES MANUALES DEL DUEÑO
 
-1. **Crear la base de datos de la web.** Recomiendo **Neon** (Postgres, plan
-   gratuito con 0,5 GB y suficiente para una lista de espera; no pide tarjeta).
-   Alternativa igual de válida: **un proyecto Supabase NUEVO** — nuevo, no el de
-   la aplicación. Sólo necesito la cadena de conexión para `WEB_DATABASE_URL`;
-   las dos tablas las creo yo.
+1. ~~**Crear la base de datos de la web.**~~ ✅ **Hecho el 13 de septiembre de
+   2026.** Proyecto Supabase **«+58Express Web»**, separado del de la
+   aplicación. Las dos tablas ya existían y se verificaron contra el esquema
+   declarado; se añadió una tercera para el limitador, que no guarda datos
+   personales. Conectado por el Transaction Pooler, con TLS verificado y
+   certificado punto por punto — §15.
+
+   *Queda una comprobación opcional de treinta segundos:* descargar el
+   certificado desde *Project Settings → Database → SSL Configuration* y
+   contrastar su huella SHA-256 con la anotada en `lib/datos/supabase-ca.ts`
+   (§15.6).
 2. **Claves de Turnstile.** En el panel de Cloudflare, *Turnstile → Add site*
    con el dominio `mas58express.com`. Pásame la **Site Key** y la **Secret Key**.
 3. **La `RESEND_API_KEY`** que ya usa el backend, o una nueva para la web.
@@ -341,3 +349,233 @@ aplicación, el Admin, el DNS, el CORS de Railway. Sin cookies, sin GA4, sin GTM
 sin píxeles, sin CMS, sin SEO local. Hero, scrollytelling, mapa, barra, pie,
 `/contacto` y la 404 siguen exactamente igual — y las pruebas heredadas lo
 comprueban.
+
+---
+
+## 15. Supabase Web Database
+
+Añadido el 13 de septiembre de 2026. La web ya no habla con un almacén de
+memoria: escribe en Postgres de verdad, y está certificado contra la base real.
+
+### 15.1 A qué se conecta
+
+| | |
+|---|---|
+| Proyecto | **+58Express Web** — exclusivo de la web pública |
+| Servidor | PostgreSQL 17.6 |
+| Acceso | Transaction Pooler (Supavisor), `***.pooler.supabase.com:6543/postgres` |
+| Rol | `postgres` |
+| TLS | **Verificado** contra `Supabase Root 2021 CA` — cadena y nombre de servidor |
+| Cliente | `pg` 8.23, adaptador en `lib/datos/postgres.ts` |
+
+No se tocó ningún proyecto Supabase de la aplicación móvil. El guion de
+configuración lleva un cortafuegos que aborta si encuentra tablas de la
+aplicación (`usuarios`, `viajes`, `conductores`, `wallet`…): no saltó.
+
+### 15.2 El esquema real, verificado antes de escribir una fila
+
+`scripts/verificar-esquema.mjs` lee el catálogo y compara contra
+`lib/datos/esquema.sql`. No escribe nada. Resultado:
+
+- **`lista_de_espera`** — las 14 columnas esperadas, con los tipos esperados.
+- **`contactos_aliados`** — las 12 columnas esperadas.
+- **Los `CHECK` coinciden exactamente con las uniones de TypeScript**: `estado`
+  admite `pendiente | confirmado | caducado | baja | rebotado`; `rol`,
+  `pasajero | conductor | comercio`; `zona`, las tres zonas. Ningún estado
+  alcanzable por código puede ser rechazado por la base, y ninguno que la base
+  acepte queda fuera del tipo.
+- **Índices únicos** sobre `email`, `token_confirmacion` y `token_baja`. El de
+  `email` no es un detalle de rendimiento: es lo que hace idempotente el alta.
+- **RLS activado en las tres tablas, con cero políticas**, y ni `anon` ni
+  `authenticated` conservan permiso alguno. Eso es lo correcto y no un descuido:
+  el navegador no debe consultar estas tablas nunca. Todo el acceso ocurre desde
+  el servidor.
+
+**Una diferencia, reportada antes de aplicarla.** Faltaba una tercera tabla. El
+límite de peticiones tiene que contar *intentos*, no filas: quien prueba mil
+veces el mismo correo crea una sola fila y haría mil intentos invisibles, y los
+envíos hay que espaciarlos aunque no cambien ninguna fila. Se creó
+`public.intentos_web` con las mismas cuatro sentencias que declara
+`esquema.sql`, en una transacción, desde `scripts/crear-intentos-web.mjs` (que
+por defecto sólo las enseña; ejecuta con `--de-verdad`). **No guarda ni un dato
+personal**: la clave es `waitlist:<hmac de la ip>`, `aliados:<hmac>` o
+`envio:<id de la fila>` — ni correos, ni IPs, ni nombres. RLS activado y
+permisos revocados, igual que las otras dos.
+
+### 15.3 Compatibilidad con el pooler en modo transacción
+
+Ahí una conexión de servidor se recicla entre transacciones, así que no existe
+el estado de sesión. Tres consecuencias, las tres respetadas:
+
+- **Ninguna sentencia preparada con nombre.** `pg` sólo las crea si se le pasa
+  `name`; todas las consultas pasan por un único ayudante que no se lo pasa
+  nunca, de modo que la garantía es estructural. Hay una prueba que lo comprueba
+  contra `pg_prepared_statements`.
+- **Ningún parámetro de arranque.** El plazo de las consultas es
+  `query_timeout`, del lado del cliente, en vez de `statement_timeout`, que
+  viajaría en el arranque.
+- **Pool diminuto y reutilizado.** `max: 3`, cacheado en `globalThis` para que
+  sobreviva a las recargas en caliente y a las invocaciones sucesivas de la misma
+  instancia. El pooler reparte un número finito de conexiones entre todas las
+  instancias vivas; ser generoso aquí es quedarse sin ninguna en el primer pico.
+
+### 15.4 Concurrencia: resuelta en la base, no en JavaScript
+
+Dos peticiones a la vez son el caso normal, no el raro — la gente pulsa dos
+veces y los clientes de correo pre-visitan los enlaces. Cada operación sensible
+es **una sentencia atómica con su guarda en el `WHERE`**:
+
+| Operación | Cómo se protege | Certificado por |
+|---|---|---|
+| Alta duplicada | `ON CONFLICT (email)` sobre el índice único | C, C-bis (5 simultáneas → 1 fila) |
+| Doble confirmación | `UPDATE … WHERE token_confirmacion IS NOT NULL` | E-bis (sólo una surte efecto) |
+| Baja repetida | `UPDATE … WHERE estado <> 'baja'` | F+G (la fecha no se mueve) |
+| Reconfirmar tras baja | `AND estado <> 'baja'` | G-bis |
+| Contar intentos | `ON CONFLICT … DO UPDATE SET n = n + 1 RETURNING n` | H-0 (10 simultáneas → 1..10) |
+
+### 15.5 Tres defectos encontrados por revisión adversarial, y arreglados
+
+Antes de certificar, quince agentes revisaron el adaptador desde cinco lentes
+independientes y cada hallazgo pasó por una fase de refutación. Tres
+sobrevivieron. Los tres eran reales.
+
+**1 · El limitador no limitaba.** La primera versión contaba filas dentro de la
+misma sentencia que las insertaba, con un comentario afirmando que eso evitaba
+la carrera. Era falso: cada sentencia ve la instantánea que tomó al empezar, así
+que cincuenta peticiones simultáneas cuentan las cincuenta *cero intentos
+previos* y pasan las cincuenta. Frenaba sólo a quien iba despacio. Ahora es una
+fila-contador con `ON CONFLICT DO UPDATE`, que sí toma cerrojo de fila.
+
+*El precio, dicho claramente:* la ventana pasa a ser fija en vez de deslizante,
+así que en el cambio de cubo caben hasta el doble de intentos. Se paga con
+gusto: un límite aproximado que se cumple siempre vale más que uno exacto que se
+rompe justo cuando lo atacan. Y como el cubo sale del tamaño de la ventana, una
+clave sometida a dos límites distintos lleva dos cuentas separadas — está
+documentado en el código y hay una prueba (H-quinquies) para que no sorprenda.
+
+**2 · Un callejón sin salida permanente.** Al caducar un enlace se pone el
+testigo a `NULL`. Con `ON CONFLICT DO NOTHING`, quien volvía a apuntarse recibía
+un correo con el enlace **vacío**, que la ruta rechaza siempre: esa dirección no
+podía confirmarse nunca más. Ahora el testigo se renueva, pero **sólo si el
+anterior ya no sirve** — si siguiera vivo, cualquiera podría anular el enlace de
+otra persona escribiendo su dirección en el formulario. A quien ya confirmó no
+se le toca; a quien se dio de baja no se le resucita. Mismo criterio en el
+almacén de memoria, que tenía el mismo fallo.
+
+**3 · Un tropiezo de la base era una página de error.** El almacén de memoria no
+podía rechazar nunca y las cuatro rutas estaban escritas contra eso. El de
+Postgres sí puede. Dos consecuencias, y la segunda es la grave: quien pulsaba un
+enlace del correo veía un 500 en lugar de `/gracias`; y **un 500 tras el alta
+pero durante el envío delataba que esa dirección llegó a tocar el almacén** —
+justo la enumeración que el fichero dice en mayúsculas que no permite. Las
+cuatro rutas tienen ahora la caída que cada una tenía diseñada (503 en los
+formularios, `invalido` en los enlaces), y se añadió un estado `error` a
+`/gracias` y `/baja`: decirle «este enlace no vale» a alguien con un enlace
+perfecto lo hace rendirse por un problema que no es suyo, y en la baja es la
+forma más rápida de que marque el siguiente correo como spam.
+
+### 15.6 TLS: por qué hay un certificado en el repositorio
+
+El pooler presenta un certificado firmado por la autoridad propia de Supabase,
+que no está en el almacén de confianza de Node: con verificación estricta
+fallaba con `SELF_SIGNED_CERT_IN_CHAIN`, y con ella toda consulta.
+
+La salida fácil es `rejectUnauthorized: false`. Convierte el cifrado en
+decoración: se sigue cifrando, pero contra cualquiera que se ponga en medio,
+porque ya no se comprueba con quién se habla. En una conexión que va a llevar
+direcciones de correo de personas, eso no vale.
+
+Se ancla la raíz `Supabase Root 2021 CA` en `lib/datos/supabase-ca.ts`, y con
+ella la verificación es completa: `authorized: true` frente a
+`*.pooler.supabase.com`. Es un certificado **público**: no abre nada ni
+autentica a nadie.
+
+> **Su procedencia tiene un límite.** Se extrajo de la cadena que presenta el
+> propio servidor, porque Supabase sólo publica el fichero desde el panel
+> autenticado (su antigua descarga pública responde 404). Cerrar el círculo
+> cuesta una comprobación que se hace una vez: *Project Settings → Database →
+> SSL Configuration → Download certificate*, y comparar con la huella SHA-256
+> anotada en la cabecera del fichero. Caduca el 26 de abril de 2031.
+
+### 15.7 Certificación contra la base real
+
+Las 20 pruebas de `tests/postgres.spec.ts` se ejecutaron contra Supabase. **20
+de 20.** Se saltan solas si no hay `WEB_DATABASE_URL`, de modo que un clon
+recién hecho sigue pasando la suite sin credenciales de nadie.
+
+| Punto del encargo | Prueba | Resultado |
+|---|---|---|
+| A · Insertar en la lista | A+B | ✅ |
+| B · Leerla | A+B (con otro repositorio) | ✅ |
+| C · El duplicado no crea segunda fila | C, C-bis | ✅ |
+| D · `pendiente` → `confirmado` | D+E | ✅ |
+| E · El testigo queda consumido | D+E, E-bis, E-ter | ✅ |
+| F · La baja funciona | F+G | ✅ |
+| G · La segunda baja es idempotente | F+G, G-bis | ✅ |
+| H · El límite persiste | H, H-0, H-bis, H-ter, H-quater, H-quinquies | ✅ |
+| I · Insertar lead de comercio | I+J | ✅ |
+| J · Estado inicial `nuevo` | I+J | ✅ |
+| K · Limpieza | K + auditoría independiente | ✅ |
+
+Extras que no pedía el encargo y que el almacén de memoria no puede demostrar:
+renovación condicional del testigo (C-ter, C-quater, C-quinquies), ráfaga
+simultánea contra el límite (H-0) y ausencia de sentencias preparadas con
+nombre.
+
+**Suite completa: 161 pruebas.** Verdes en local, contra la vista previa
+`plus58express-1fe00kybp` y contra producción `plus58express-fvg4olz9i`.
+TypeScript limpio.
+
+### 15.8 Limpieza de QA
+
+Todo lo escrito llevó el prefijo `qa.web.` y direcciones `@example.com`. Se borra
+en la propia prueba K y otra vez en el cierre, por prefijo y no por lista, para
+que un fallo a mitad no deje restos. Auditoría independiente después de las tres
+pasadas completas:
+
+```
+lista_de_espera      filas=0  restos_qa=0
+contactos_aliados    filas=0  restos_qa=0
+intentos_web         filas=0  restos_qa=0
+envios sueltos       0
+```
+
+### 15.9 Variables configuradas
+
+En `plus58express-web`, como **Secret** (Vercel las entrega al despliegue y no
+permite volver a leerlas, ni desde el panel ni con `vercel env pull`), en
+**Preview y Production**:
+
+| Variable | Tipo | Entornos |
+|---|---|---|
+| `WEB_DATABASE_URL` | Secret | Preview, Production |
+| `IP_HASH_SALT` | Secret | Preview, Production |
+
+Se subieron por la entrada estándar, nunca como argumento de la línea de
+órdenes. La cadena no aparece en el repositorio, ni en este informe, ni en
+ningún registro. En local vive sólo en `web/.env.local`, que `.gitignore`
+excluye.
+
+`IP_HASH_SALT` no estaba prevista para esta ronda: el proyecto web tenía **cero**
+variables, y sin esa sal `huellaDeIp` devuelve `null` y el límite por IP no
+llega a actuar nunca. Se generó aleatoria en la misma ejecución.
+
+### 15.10 Los formularios siguen invisibles
+
+Comprobado en producción después de promover:
+
+| Comprobación | Resultado |
+|---|---|
+| `WAITLIST_ENABLED`, `PARTNER_LEADS_ENABLED` | `false` |
+| Campos en `/`, `/aliados`, `/conductores`, `/contacto` | **0** |
+| `POST /api/waitlist` | **404** |
+| `POST /api/leads/partners` | **404** |
+| `GET /api/waitlist/confirmar` y `/baja` | **404** |
+| `Set-Cookie` | ninguna |
+| `challenges.cloudflare.com` en la CSP | no aparece |
+| `frame-src` | `'none'` |
+| `www` → apex | 308 |
+
+La base queda conectada sin que ninguna ruta pública acepte un dato. Encenderla
+sigue siendo cambiar `false` por `true` en `lib/flags.ts` — y sigue bloqueado
+por la política de privacidad.
