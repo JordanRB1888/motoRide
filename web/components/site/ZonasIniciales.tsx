@@ -22,6 +22,7 @@ import Image from "next/image";
 const SITIOS = [
   {
     id: "santa-cruz-de-mara",
+    src: "/zulia/santa-cruz-de-mara.jpg",
     nombre: "Santa Cruz de Mara",
     nota: "La plaza, con su estatua al Libertador.",
     alt: "La plaza de Santa Cruz de Mara, con la estatua de Simón Bolívar sobre su pedestal y las palmas alrededor.",
@@ -32,14 +33,20 @@ const SITIOS = [
   },
   {
     id: "el-mojan",
+    /* La versión de 720×960 que ya vivía en el repositorio, y que sirve la misma
+       fotografía al doble de resolución: la de `/zulia` topa en 335 px y se veía
+       blanda en una tarjeta de 285. Esto NO resuelve su procedencia, que sigue
+       sin documentar — sólo la nitidez. */
+    src: "/zonas/el-mojan.webp",
     nombre: "El Moján",
     nota: "La iglesia y la plaza, con el lago detrás.",
     alt: "Vista aérea de la iglesia de El Moján y su plaza, con el lago de Maracaibo al fondo.",
-    ancho: 335,
-    alto: 597,
+    ancho: 720,
+    alto: 960,
   },
   {
     id: "maracaibo",
+    src: "/zulia/maracaibo.jpg",
     nombre: "Maracaibo",
     nota: "El monumento a la Chinita y sus fuentes.",
     alt: "El monumento a la Virgen de Chiquinquirá en Maracaibo, con las fuentes de la plaza en primer plano.",
@@ -61,7 +68,7 @@ export default function ZonasIniciales() {
           <li key={s.id}>
             <div className="relative aspect-[4/5] overflow-hidden rounded-[var(--radius-card)] border border-white/10">
               <Image
-                src={`/zulia/${s.id}.jpg`}
+                src={s.src}
                 alt={s.alt}
                 width={s.ancho}
                 height={s.alto}
@@ -70,7 +77,12 @@ export default function ZonasIniciales() {
                    1280 y pedía un recorte distinto del que iba a usar. */
                 sizes="(max-width: 640px) 100vw, 300px"
                 className="h-full w-full object-cover"
-                quality={82}
+                /* Sin `quality`: `next.config.ts` sólo admite 75 y 92 —el 92
+                   existe para las capturas de la app, cuyo texto fino se
+                   deshace—. Un valor fuera de esa lista NO sube la calidad: Next
+                   lo descarta y sirve el 75 por defecto, así que declararlo sólo
+                   servía para aparentar un ajuste que no ocurría. Para una
+                   fotografía a 285 px, 75 es de sobra. */
               />
               {/* Un velo desde abajo: sin él, el nombre en blanco sobre el cielo
                   claro de dos de las tres fotos no se leería. */}
