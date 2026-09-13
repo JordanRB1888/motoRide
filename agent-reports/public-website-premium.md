@@ -92,10 +92,12 @@ Leaflet con teselas de OpenStreetMap y el aspecto grafito conseguido con un
 filtro CSS sobre las teselas. La lista de zonas manda la cámara: al recorrer
 Santa Cruz de Mara → El Moján → Maracaibo, el mapa vuela a cada una.
 
-> **CARTO dejó de servir basemaps sin clave.** Sus teselas vuelven estampadas con
-> «API KEY REQUIRED». La aplicación móvil usa exactamente esa URL en
-> `src/utils/constants.js:5` y tiene, por tanto, el mismo fallo en producción. No
-> se tocó, por la restricción de no modificar Mobile para construir la landing.
+> **CARTO dejó de servir basemaps sin clave.** Devuelve HTTP 200 con una tesela
+> estampada con «API KEY REQUIRED», así que el fallo no levanta ningún error.
+> **La aplicación tiene exactamente el mismo problema en cuatro mapas vivos** —el
+> del pasajero, el del conductor, el de flota y el del panel de operaciones—. No
+> se tocó nada de `src/`: el plan completo, con archivos, líneas, reemplazo e
+> impacto, está en [`plan-basemap-carto.md`](./plan-basemap-carto.md).
 
 ---
 
@@ -103,12 +105,27 @@ Santa Cruz de Mara → El Moján → Maracaibo, el mapa vuela a cada una.
 
 Se auditó el sitio **ya publicado** con seis auditores independientes
 (accesibilidad, responsive, rendimiento, SEO, veracidad de contenido y craft
-visual). Cada hallazgo pasó por dos verificadores adversariales antes de darse
-por bueno: 20 confirmados, 2 refutados.
+visual). Cada hallazgo de severidad alta o media pasó por dos verificadores
+adversariales antes de darse por bueno.
 
-### Confirmados y corregidos
+Los tres grupos van separados a propósito: no tienen el mismo peso probatorio.
 
-**Accesibilidad**
+| Origen | Hallazgos | Corregidos | Dónde |
+|---|---|---|---|
+| Confirmados por verificación adversarial | 20 | **20** | §4.1, nº 1–20 |
+| Refutados por los verificadores | 2 | — (no eran fallos) | §4.4 |
+| Baja severidad, sin verificación adversarial | 15 | **8** | §4.2, nº 21–28 |
+| Encontrados después, midiendo | — | **3** | §4.3, nº 29–31 |
+| **Total de correcciones aplicadas** | | **31** | |
+
+De los quince de baja severidad, ocho se corrigieron (§4.2), dos ya quedaban
+cubiertos por correcciones confirmadas —la tarjeta social sin imagen y las
+descripciones en texto transparente— y **cinco** siguen abiertos: son deuda de
+forma sin efecto visible, enumerados en §10.5.
+
+### 4.1 Los veinte confirmados
+
+**Accesibilidad (7)**
 
 1. **El menú móvil medía cero de alto en todos los teléfonos.** Vivía dentro del
    `<header>`, que al abrirse recibe `backdrop-blur`; un `backdrop-filter`
@@ -130,48 +147,75 @@ por bueno: 20 confirmados, 2 refutados.
    el `alt` de la miniatura duplicando el texto visible.
 7. Las tres pantallas ocultas del teléfono seguían en el árbol de accesibilidad
    (opacidad 0 no basta).
-8. Las descripciones inactivas de Servicios se ocultaban con texto transparente:
-   invisibles y, aun así, dentro del nombre accesible de cada botón.
-9. Los enlaces de la barra medían 39 px de alto, por debajo del mínimo de 44 px.
-10. `<dl> > div > div > dt` en `/seguridad` y `/ayuda`.
 
-**Responsive**
+**Responsive (3)**
 
-11. La moto del hero pisaba el párrafo entre 1024 px y ~1250 px (solape real de
-    139 × 105 px).
-12. En móvil la moto se cortaba ~50 % fuera del viewport.
-13. `RideScene` cobraba 4,4 pantallas de scroll en móvil con el teléfono oculto.
+8. La moto del hero pisaba el párrafo entre 1024 px y ~1250 px (solape real de
+   139 × 105 px).
+9. En móvil la moto se cortaba ~50 % fuera del viewport.
+10. `RideScene` cobraba 4,4 pantallas de scroll en móvil con el teléfono oculto.
 
-**Rendimiento**
+**Rendimiento (5)**
 
-14. Las cuatro capturas de la app se servían sin optimizar: 808 KB de originales
+11. Las cuatro capturas de la app se servían sin optimizar: 808 KB de originales
     a 941 px, sin variantes responsive. Vuelven al optimizador con calidad 92,
     que conserva la nitidez del texto fino.
-15. `login.webp` (122 KB) se descargaba en la portada para quedar invisible.
-16. La moto se pedía a 3840 px de ancho para un cuadro de 294 px CSS.
-17. Leaflet, su CSS y las teselas se cargaban al hidratar, con el mapa a 7.500 px
+12. `login.webp` (122 KB) se descargaba en la portada para quedar invisible.
+13. La moto se pedía a 3840 px de ancho para un cuadro de 294 px CSS.
+14. Leaflet, su CSS y las teselas se cargaban al hidratar, con el mapa a 7.500 px
     de scroll.
-18. Las tres tipografías se servían en TTF sin subsetear: 205 KB (110 KB con
+15. Las tres tipografías se servían en TTF sin subsetear: 205 KB (110 KB con
     brotli) → **49 KB** en WOFF2 subseteado a latín.
-19. Los tres PNG de icono venían en color verdadero: 435 KB → 149 KB.
 
-**SEO y veracidad**
+**SEO (3)**
 
-20. Ninguna página tenía `og:image`: al compartir cualquier enlace no se veía
+16. Ninguna página tenía `og:image`: al compartir cualquier enlace no se veía
     ninguna imagen, con `twitter:card` declarada como imagen grande. Se creó una
     imagen social 1200 × 630 con la identidad de campaña.
-21. Open Graph idéntico en las diez rutas, con `og:url` siempre a la portada, en
+17. Open Graph idéntico en las diez rutas, con `og:url` siempre a la portada, en
     contradicción con el canonical de cada página.
-22. `robots.txt` bloqueaba `/privacidad` y `/terminos`, impidiendo que el
+18. `robots.txt` bloqueaba `/privacidad` y `/terminos`, impidiendo que el
     rastreador llegara a leer su propio `noindex`: las dos directivas se anulaban.
-23. `/pasajeros` estaba en el sitemap y no se enlazaba desde ninguna parte.
-24. El botón principal decía «Descargar app» mientras el propio sitio explica que
+
+**Veracidad (2)**
+
+19. `/pasajeros` estaba en el sitemap y no se enlazaba desde ninguna parte.
+20. El botón principal decía «Descargar app» mientras el propio sitio explica que
     la aplicación no está publicada. Ahora lee de `STORES.available`, así que el
     texto cambiará solo cuando la app salga.
-25. «Conduce con +58Express · +58Express»: la marca dicha dos veces en el title.
-26. `/aliados` publicaba al visitante una nota editorial interna.
 
-### Refutados
+### 4.2 Los ocho menores corregidos
+
+Sin verificación adversarial —eran de baja severidad— pero comprobados uno a uno
+antes de tocarlos.
+
+21. Las descripciones inactivas de Servicios se ocultaban con texto transparente:
+    invisibles y, aun así, dentro del nombre accesible de cada botón.
+22. Los enlaces de la barra medían 39 px de alto, por debajo del mínimo de 44 px.
+23. `<dl> > div > div > dt` en `/seguridad` y `/ayuda`: el modelo de contenido de
+    las listas de definición admite un `div` por grupo, no dos.
+24. «Conduce con +58Express · +58Express»: la marca dicha dos veces en el title.
+25. `/aliados` publicaba al visitante una nota editorial interna.
+26. Las tarjetas de zona de Cobertura eran pulsables y no lo parecían.
+27. El parallax del hero seguía escuchando el puntero veinte secciones más abajo.
+28. **`www` servía el sitio completo con 200 en vez de redirigir al apex.**
+    Cerrado en la ronda final — ver §9.
+
+### 4.3 Los tres que aparecieron midiendo
+
+No salieron de la auditoría, sino de leer el informe de Lighthouse y el
+inventario de `public/` con calma.
+
+29. Los tres PNG de icono venían en color verdadero: **435 KB → 149 KB**
+    cuantizados a 256 colores con difuminado, sin diferencia visible. El favicon
+    de 192 px se descarga en cada visita.
+30. Cinco SVG de la plantilla de Next (`next.svg`, `vercel.svg`, `file.svg`,
+    `globe.svg`, `window.svg`) se servían públicamente sin que nada los
+    enlazara — incluidos dos logotipos de terceros. Retirados.
+31. `components/home/Zonas.tsx` quedó muerto al fundir zonas y mapa en
+    `Cobertura`. Retirado.
+
+### 4.4 Los dos refutados
 
 - «La moto del hero es el LCP y se sirve con `lazy`» — el LCP es el párrafo del
   hero, no la moto.
@@ -187,14 +231,14 @@ Lighthouse sobre <https://mas58express.com>, build de producción:
 | | Rendimiento | Accesibilidad | Buenas prácticas | SEO |
 |---|---|---|---|---|
 | Escritorio | **100** | **100** | **100** | **100** |
-| Móvil | **92** | **100** | **100** | **100** |
+| Móvil | **93** | **100** | **100** | **100** |
 
-Núcleo de métricas web (móvil, 4G lento simulado): **LCP 3,1 s · CLS 0 · TBT
-40 ms**. En escritorio, LCP 0,5 s.
+Núcleo de métricas web (móvil, 4G lento simulado): **LCP 3,2 s · CLS 0 · TBT
+90 ms**. En escritorio: **LCP 0,6 s · CLS 0 · TBT 0 ms**.
 
 Peso total de la portada: **514 KB**. El LCP móvil es el párrafo del hero y su
 retraso viene del intercambio de tipografía bajo el estrangulamiento simulado de
-Lighthouse; con CLS 0 y TBT 40 ms, en red real el margen es mucho mayor.
+Lighthouse; con CLS 0, en red real el margen es mucho mayor.
 
 ---
 
@@ -213,9 +257,11 @@ contraste de texto sobre las superficies de grafito y área táctil de 44 px.
 
 ## 7. Pruebas
 
-`npm test` — 62 pruebas de Playwright sobre el build de producción.
-`SITIO=https://mas58express.com npm test` corre la misma suite contra el sitio
-publicado; **las 62 pasan en producción**.
+`npm test` — 63 pruebas de Playwright: 42 de comportamiento y 21 de
+accesibilidad. Contra el build local pasan 62 y se omite una (la redirección de
+`www`, que solo existe en el dominio real). Con
+`SITIO=https://mas58express.com npm test` la suite entera corre contra el sitio
+publicado: **las 63 pasan en producción**.
 
 Cada guarda nace de un fallo real de la auditoría:
 
@@ -234,6 +280,8 @@ Cada guarda nace de un fallo real de la auditoría:
 - Metadatos: `og:image` y `twitter:image` en las diez rutas, `og:url` igual al
   canonical, `robots.txt` sin bloqueos, y **toda ruta del sitemap alcanzable
   desde el sitio**.
+- `www` responde **308** hacia el apex conservando la ruta (solo contra el sitio
+  publicado).
 
 ---
 
@@ -255,10 +303,52 @@ conductor) se retiraron.
 
 El dominio se asignó tras comprobar que el apex estaba libre (404) y que
 `resend._domainkey` (DKIM), el TXT de `send` (SPF) + MX, `api-staging` → Railway
-y `admin-staging` viven en registros separados. Tras el cambio: las diez rutas
-responden 200, y `admin-staging` y `www` siguen en 200. **No se tocó nada del
-correo, de Railway ni de los subdominios existentes.** Tampoco se modificó
-Mobile, Admin ni Backend.
+y `admin-staging` viven en registros separados. **No se tocó nada del correo, de
+Railway ni de los subdominios existentes.** Tampoco se modificó Mobile, Admin ni
+Backend.
+
+### `www` → dominio apex
+
+`www` y el apex servían los dos el sitio completo con 200. Se resolvió **sin
+tocar DNS**: una regla de redirección en `next.config.ts` que mira la cabecera
+`Host`, de modo que solo se dispara para `www.mas58express.com`.
+
+```
+https://www.mas58express.com/conductores
+  → 308 Permanent Redirect
+    Location: https://mas58express.com/conductores   → 200
+```
+
+La ruta se conserva en el salto. Se eligió la regla de aplicación en vez de
+cambiar el registro DNS precisamente para no rozar la zona: `www` sigue
+apuntando a Vercel, igual que antes.
+
+### Estado verificado tras el cambio
+
+| Comprobación | Resultado |
+|---|---|
+| Las diez rutas del apex | **200** |
+| `www` (raíz y ruta profunda) | **308** → apex, y el apex responde 200 |
+| `canonical` en las diez rutas | apunta al apex, coincide con `og:url` |
+| `admin-staging.mas58express.com` | **200** |
+| `api-staging` → CNAME `j3zhwhkt.up.railway.app` | intacto |
+| MX de `send` → `feedback-smtp.eu-west-1.amazonses.com` | intacto |
+| SPF de `send` (`v=spf1 include:amazonses.com ~all`) | intacto |
+| DKIM `resend._domainkey` | intacto |
+| Apex → A de Vercel · `www` → A de Vercel | intactos |
+
+### Hallazgo aparte: el API de staging está caído
+
+`api-staging.mas58express.com` responde **404 con `x-railway-fallback: true`**,
+es decir, el borde de Railway contesta pero no hay servicio detrás.
+
+**No lo causó nada de este trabajo, y la fecha lo demuestra:** el último
+despliegue del servicio `motoRide` en Railway es del **7 de septiembre**, quedó
+en estado `FAILED` y falló en la etapa `HEALTHCHECK` (`/api/health`), sobre el
+commit `e6cb218`. El DNS de `api-staging` nunca se tocó y sigue apuntando al
+mismo destino de Railway.
+
+Se deja anotado, sin actuar: es backend y queda fuera del cierre de la web.
 
 ---
 
@@ -266,33 +356,83 @@ Mobile, Admin ni Backend.
 
 **Decisiones tuyas**
 
-1. **Las dos fotos de campaña que pasaste.** La segunda muestra un **logotipo
-   SUZUKI legible y una placa visible** —el mismo problema de marca por el que
-   se quitó la Bera— y su conductor lleva **pasamontañas**, que contradice de
-   plano un mensaje de «Transporte Seguro». No están en el sitio, esperando tu
-   decisión.
+1. **La segunda foto de campaña.** Muestra un **logotipo SUZUKI legible y una
+   placa visible** —el mismo problema de marca por el que se quitó la Bera— y su
+   conductor lleva **pasamontañas**, que contradice de plano un mensaje de
+   «Transporte Seguro». **No está en el repositorio ni publicada**, y así sigue.
+   La primera sí está en `public/photo/campaign-hero.jpg`: no tiene ninguna de
+   las tres cosas —sin marca de terceros legible, sin placa, sin pasamontañas—,
+   ninguna página la enlaza, y se conserva por si se usa más adelante.
 2. **Textos legales.** `/privacidad` y `/terminos` existen con su estructura y
    declaran abiertamente que el texto no está redactado. Necesitan redacción real
    antes de publicar la app en las tiendas.
 
 **Técnico**
 
-3. **La app móvil tiene el mismo fallo de mapa.** `src/utils/constants.js:5`
-   apunta a las teselas de CARTO, que ya no se sirven sin clave. Es la misma
-   corrección de una línea que se aplicó aquí.
-4. **`www` sirve el sitio con 200 en vez de redirigir al apex.** Ambos declaran
-   el mismo canonical, así que Google consolidará, pero lo limpio es una
-   redirección permanente en la configuración de dominios de Vercel.
-5. **Cookies y analítica.** No hay banner porque no hay analítica ni cookies de
-   terceros. En cuanto se añada cualquier medición, hace falta consentimiento.
-6. **Deuda de forma menor**, ya identificada y sin urgencia: la altura de la barra
-   (72 px) está escrita a mano en tres archivos; el gris `#3a3a45` del hover de la
-   barra de desplazamiento está fuera de la rampa de tokens; `Button` arrastra una
-   variante muerta y estados `disabled` que `ButtonLink` no puede aplicar.
+3. **El basemap de la aplicación.** Cuatro mapas vivos siguen pidiendo teselas a
+   CARTO y reciben la marca de agua. Plan completo, sin ejecutar, en
+   [`plan-basemap-carto.md`](./plan-basemap-carto.md): archivos, líneas exactas,
+   reemplazo sin clave, impacto y orden de verificación. **No requiere ninguna
+   credencial nueva.**
+4. **El API de staging lleva caído desde el 7 de septiembre** por un despliegue
+   fallido en el healthcheck (§9). Ajeno a la web, pero conviene mirarlo.
+5. **Deuda de forma menor**, sin efecto visible y sin urgencia: catorce peticiones
+   de prefetch RSC compiten con el arranque; la etiqueta de sección se repite a
+   mano en siete sitios con tres valores de `tracking` distintos; la altura de la
+   barra (72 px) está escrita a mano en tres archivos; el gris `#3a3a45` del hover
+   de la barra de desplazamiento está fuera de la rampa de tokens; `Button`
+   arrastra una variante muerta y estados `disabled` que `ButtonLink` no puede
+   aplicar.
+
+**Decidido y cerrado**
+
+- **Sin analítica ni cookies.** Verificado sobre el HTML servido: cero scripts de
+  terceros, cero cookies, cero identificadores. Por eso no hay banner de
+  consentimiento — no habría nada que consentir. En cuanto se añada cualquier
+  medición, hará falta.
 
 ---
 
-## 11. Historial de la rama
+## 11. Ronda de cierre
+
+Última pasada, sin tocar diseño: ni Hero, ni escena de scroll, ni movimiento, ni
+teléfonos, ni mapa, ni estructura. Solo cierre técnico.
+
+1. **Recuento del informe corregido.** Decía «20 confirmados» y enumeraba 26
+   correcciones sin distinguir su origen. Ahora §4 separa los tres grupos con una
+   tabla que cuadra: 20 confirmados + 8 menores + 3 encontrados midiendo = 31.
+2. **`www` → apex con 308**, por regla de aplicación y sin tocar DNS (§9).
+3. **Plan del basemap de CARTO** documentado sin ejecutar, en
+   [`plan-basemap-carto.md`](./plan-basemap-carto.md). Ni un archivo de `src/`
+   modificado.
+4. **Sin analítica ni cookies**, verificado sobre el HTML servido.
+5. **Sin imágenes con logotipo SUZUKI, placa visible ni pasamontañas**: ninguna
+   está en el repositorio (§10.1).
+6. **Limpieza:** cinco SVG de la plantilla de Next que se servían públicamente
+   —incluidos los logotipos de Next y de Vercel— y el componente `Zonas.tsx`
+   muerto.
+
+### Verificación final, toda contra el sitio publicado
+
+| Comprobación | Resultado |
+|---|---|
+| `npm run build` (producción) | trece rutas estáticas, sin avisos |
+| `tsc --noEmit` | limpio |
+| Playwright, 63 pruebas contra `mas58express.com` | **63 pasan** |
+| axe WCAG 2.1 AA — 10 rutas × 2 tamaños + menú abierto | **21 análisis, 0 infracciones** |
+| Lighthouse escritorio | **100 / 100 / 100 / 100** |
+| Lighthouse móvil | **93 / 100 / 100 / 100** |
+| Las diez rutas del apex | **200** |
+| `www` raíz y rutas profundas | **308** → apex, ruta conservada |
+| `canonical` == `og:url` en las diez rutas | coinciden, todas al apex |
+| DNS: apex, `www`, `admin-staging`, `api-staging` | intactos |
+| Correo: MX, SPF y DKIM de `send` / `resend._domainkey` | intactos |
+| `admin-staging` | **200** |
+| Scripts de terceros en el HTML | **ninguno** |
+
+---
+
+## 12. Historial de la rama
 
 ```
 9209404  perf(web): iconos de 435 KB a 149 KB y fuera el componente Zonas muerto

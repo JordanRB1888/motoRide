@@ -243,6 +243,15 @@ test.describe("metadatos", () => {
     });
   }
 
+  test("www redirige permanentemente al dominio apex", async ({ request }) => {
+    test.skip(!process.env.SITIO, "solo comprobable contra el sitio publicado");
+    const r = await request.get("https://www.mas58express.com/conductores", {
+      maxRedirects: 0,
+    });
+    expect(r.status()).toBe(308);
+    expect(r.headers()["location"]).toBe("https://mas58express.com/conductores");
+  });
+
   test("robots.txt no bloquea nada", async ({ request }) => {
     const r = await request.get("/robots.txt");
     const texto = await r.text();
