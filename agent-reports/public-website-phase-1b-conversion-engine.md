@@ -42,7 +42,7 @@ privacidad)
 | Pruebas | **PASA** — 138 al cerrar la fase; **167** hoy (§15, §16, §17) |
 | axe | **PASA** — 27 análisis, 0 infracciones |
 | Lighthouse | **PASA** |
-| **Provisionar la base** | **BLOQUEADO** — decisión del dueño |
+| **Provisionar la base** | **PASA / RESUELTO** — Supabase «+58Express Web» conectado, esquema verificado y persistencia certificada (§15) |
 
 ---
 
