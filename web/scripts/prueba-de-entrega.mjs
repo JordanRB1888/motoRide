@@ -51,33 +51,64 @@ const valorDe = (bandera) => {
   return i > -1 ? argv[i + 1] : null;
 };
 
+/**
+ * `--desde-env` es la vía buena: pensado para
+ *
+ *   vercel env run -e production -- node scripts/prueba-de-entrega.mjs --desde-env
+ *
+ * Así la clave la pone el entorno y no pasa por el portapapeles, ni por un
+ * fichero temporal, ni por la línea de órdenes. De ella **no se imprime nada**:
+ * ni un fragmento, ni el prefijo, ni la longitud.
+ *
+ * OJO: `vercel env run` NO entrega los valores marcados como Secret —avisa con
+ * «Secret values cannot be pulled»—, pero SÍ fusiona lo que haya en `.env.local`.
+ * De modo que esto funciona si la clave está en ese fichero, que git ignora.
+ */
 let clave;
-if (argv.includes("--del-portapapeles")) clave = delPortapapeles().trim();
-else if (valorDe("--desde")) clave = readFileSync(valorDe("--desde"), "utf8").trim();
-else {
+let remitente = valorDe("--de") ?? REMITENTE_POR_DEFECTO;
+
+if (argv.includes("--desde-env")) {
+  clave = process.env.RESEND_API_KEY ?? "";
+  if (process.env.EMAIL_FROM && !valorDe("--de")) remitente = process.env.EMAIL_FROM;
+  if (!clave) {
+    console.error(
+      "RESEND_API_KEY no está en el entorno.\n\n" +
+        "Si has llegado aquí con `vercel env run -e production`, la causa es que\n" +
+        "la variable está guardada como Secret y Vercel no la entrega nunca al\n" +
+        "CLI —eso es lo que se quiso al guardarla así—. `vercel env run` sí\n" +
+        "fusiona lo que haya en web/.env.local, que git ignora.",
+    );
+    process.exit(2);
+  }
+} else if (argv.includes("--del-portapapeles")) {
+  clave = delPortapapeles().trim();
+} else if (valorDe("--desde")) {
+  clave = readFileSync(valorDe("--desde"), "utf8").trim();
+} else {
   console.error(
     "Dime de dónde leer la clave, sin escribirla en la línea de órdenes:\n" +
-      "  --del-portapapeles   |   --desde <fichero>",
+      "  --desde-env   (con `vercel env run`)\n" +
+      "  --del-portapapeles\n" +
+      "  --desde <fichero>",
   );
   process.exit(2);
 }
 
 if (!clave) {
-  console.error("No he leído nada.");
+  console.error("No he leído ninguna clave.");
   process.exit(2);
 }
 if (!clave.startsWith("re_")) {
-  console.error(`Eso no parece una clave de Resend (${clave.length} car., no empieza por «re_»).`);
+  /* Ni siquiera aquí se dice cuánto mide ni cómo empieza. */
+  console.error("Lo que he leído no tiene forma de clave de Resend.");
   process.exit(2);
 }
-
-const remitente = valorDe("--de") ?? REMITENTE_POR_DEFECTO;
 
 console.log("Enviando UN correo:");
 console.log(`   de     : ${remitente}`);
 console.log(`   para   : ${DESTINO}`);
 console.log(`   asunto : ${ASUNTO}`);
-console.log(`   clave  : ${clave.length} caracteres, empieza por «re_» (no se muestra)`);
+console.log(`   clave  : leída, no se muestra`);
 
 const respuesta = await fetch("https://api.resend.com/emails", {
   method: "POST",
