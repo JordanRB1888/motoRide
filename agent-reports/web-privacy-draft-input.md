@@ -161,6 +161,70 @@ Ninguno está activo. Cada uno debe entrar en la política **antes** de encender
 
 ---
 
+## 3 bis. Lo que la Fase 1-B dejó CONSTRUIDO (y apagado) — 13/09/2026
+
+La infraestructura ya existe en el código y está probada. **Nada de esto recoge
+todavía un solo dato**: los interruptores lo impiden y hay pruebas que lo vigilan
+en cada despliegue. Cuando se enciendan, estos son los hechos exactos que la
+política tendrá que declarar.
+
+### Encargados del tratamiento, definitivos
+
+| Encargado | Para qué | Qué recibe | Dónde está |
+|---|---|---|---|
+| **Vercel** | Servir el sitio y ejecutar las rutas de API | IP, cabeceras, ruta | EE. UU. |
+| **OpenStreetMap** | Teselas del mapa — **ya activo hoy** | IP del visitante | Reino Unido |
+| **Resend** | Correos de confirmación, baja y acuse | Dirección y contenido | UE (`eu-west-1`) |
+| **Cloudflare (Turnstile)** | Comprobar que no es un robot | IP y señales del navegador | Global |
+| **Vercel Web Analytics** | Medir el uso — **sin cookies ni datos personales** | Evento, ruta, país, dispositivo | EE. UU. |
+| **Almacén de la web** | Guardar la lista y los contactos | Ver abajo | **Por decidir** |
+
+> El almacén es **distinto** del de la aplicación a propósito: los datos de la web
+> no comparten credenciales ni ciclo de vida con los viajes ni con las cuentas.
+
+### Qué se guarda exactamente
+
+**Lista de espera** — `lista_de_espera`: correo (normalizado) · rol y zona
+(opcionales, de una lista cerrada) · estado · **dos testigos distintos**, uno para
+confirmar y otro para darse de baja · caducidad del primero · fechas de
+confirmación y de baja · origen de campaña (saneado) · **`ip_hash`** · creado y
+actualizado.
+
+**Comercios** — `contactos_aliados`: nombre · negocio · teléfono · correo ·
+municipio · tipo de comercio · mensaje (opcional) · **`consentimiento_en`, con
+fecha y hora** · estado del contacto · `ip_hash` · creado.
+
+### Tres decisiones técnicas con consecuencia legal
+
+1. **La IP nunca se guarda en claro.** Se almacena un HMAC-SHA256 con sal
+   secreta: sirve para saber si dos peticiones vienen del mismo sitio y para nada
+   más, y sin la sal no se puede revertir. La política puede afirmar con verdad
+   que **no se conserva la dirección IP**.
+2. **El consentimiento se guarda con fecha y hora**, no como un sí/no. Un
+   booleano no prueba nada el día que alguien pregunte cuándo aceptó.
+3. **Los correos no llevan rastreo.** Ni píxel de apertura ni enlaces envueltos
+   para contar clics — hay una prueba que falla si aparece un `<img>` en la
+   plantilla de confirmación.
+
+### Retención, ya implementable
+
+| Dato | Plazo |
+|---|---|
+| Alta **sin confirmar** | El testigo caduca a las **48 h**; el registro se borra a los 30 días — nunca hubo consentimiento |
+| Alta **confirmada** | Hasta 30 días tras el aviso de lanzamiento, o hasta la baja |
+| **Baja** | Se conserva la constancia de la baja, no el resto |
+| Contacto de comercio | Propuesta: 12 meses desde el último contacto |
+| Registro del límite de peticiones | Ventana de 1 hora |
+
+### El límite de peticiones también es un tratamiento
+
+Se guarda el `ip_hash` con marca de tiempo durante una hora para cortar el abuso:
+cinco altas por hora y por huella, y un correo de confirmación cada diez minutos
+por dirección. Base: interés legítimo en proteger el servicio. Conviene
+mencionarlo.
+
+---
+
 ## 4. Esqueleto de secciones sugerido
 
 1. Quiénes somos — `[[RAZÓN SOCIAL]]`, `[[DOMICILIO]]`, `[[CORREO DE PRIVACIDAD]]`
