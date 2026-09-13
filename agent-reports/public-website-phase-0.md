@@ -7,7 +7,7 @@ empezar todavía a pedir datos personales.
 |---|---|
 | **Rama** | `feat/public-marketing-site` |
 | **HEAD inicial** | `c80048e` |
-| **HEAD final** | `856bef4` |
+| **HEAD final** | `d1de020` |
 | **Vista previa** | <https://plus58express-2eu5lptwm-delivery58.vercel.app> |
 | **Producción** | **sin tocar** — sigue en el despliegue anterior |
 | **Fecha** | 13 de septiembre de 2026 |
