@@ -39,13 +39,17 @@ export const PARTNER_LEADS_ENABLED = false;
  * Separada de las dos anteriores a propósito: no recoge ningún dato personal ni
  * usa cookies, así que no depende de la política de privacidad.
  *
- * Apagada por otra razón, puramente técnica: Vercel Web Analytics hay que
- * activarla en los ajustes del proyecto, y mientras no lo esté,
- * `/_vercel/insights/script.js` devuelve un 404 con tipo `text/plain` que
- * `nosniff` —bien— se niega a ejecutar. Eso deja un error en la consola de cada
- * visitante a cambio de nada.
+ * Estuvo apagada por una razón puramente técnica: Web Analytics hay que
+ * activarla en los ajustes del proyecto, y mientras no lo estaba,
+ * `/_vercel/insights/script.js` devolvía un 404 con tipo `text/plain` que
+ * `nosniff` —bien— se negaba a ejecutar. Eso dejaba un error en la consola de
+ * cada visitante a cambio de nada.
  *
- * El código está entero y probado. Encenderlo es: activar Web Analytics en el
- * panel del proyecto y poner esto en `true`.
+ * Ya está activada en el proyecto: ese mismo endpoint devuelve ahora 200 con
+ * `application/javascript`. Por eso esto pasa a `true`.
+ *
+ * No hace falta tocar la CSP: tanto el script como la baliza de eventos viven en
+ * el propio dominio —`/_vercel/insights/…`—, así que `script-src 'self'` y
+ * `connect-src 'self'` ya los cubren. No se abre ni un dominio externo.
  */
-export const ANALYTICS_ENABLED = false;
+export const ANALYTICS_ENABLED = true;

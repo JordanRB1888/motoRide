@@ -14,7 +14,9 @@ despliegue.
 | **Fecha** | 13 de septiembre de 2026 |
 
 **Interruptores en producción:** `WAITLIST_ENABLED = false` ·
-`PARTNER_LEADS_ENABLED = false` · `ANALYTICS_ENABLED = false`
+`PARTNER_LEADS_ENABLED = false` · `ANALYTICS_ENABLED = **true**` (desde el
+13/09/2026, §17 — no recoge ningún dato personal y no depende de la política de
+privacidad)
 
 ---
 
@@ -35,9 +37,9 @@ despliegue.
 | Contactos de comercios | **PASA** (construido, **NO ACTIVADO**) |
 | Aviso al equipo | **PASA** — sin IP |
 | `/gracias` y `/baja` | **PASA** — en producción |
-| Analítica | **PASA PARCIAL** — código completo; apagada hasta activarla en el panel |
+| Analítica | **PASA** — Web Analytics **ACTIVADA** y certificada sin cookies ni PII (§17) |
 | CSP | **PASA** |
-| Pruebas | **PASA** — 138 |
+| Pruebas | **PASA** — 138 al cerrar la fase; **167** hoy (§15, §16, §17) |
 | axe | **PASA** — 27 análisis, 0 infracciones |
 | Lighthouse | **PASA** |
 | **Provisionar la base** | **BLOQUEADO** — decisión del dueño |
@@ -312,7 +314,7 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
 | 2 | ~~**Provisionar la base de la web**~~ ✅ **Resuelto** | Proyecto Supabase «+58Express Web», conectado y certificado (§15) |
 | 3 | ~~**Claves de Turnstile**~~ ✅ **Resuelto** | Configuradas en Production el 13/09/2026 (§16) |
 | 4 | **`RESEND_API_KEY` en el proyecto web** | Tuya — la clave existe en Railway, pero la integración la devuelve redactada y no puedo leerla |
-| 5 | **Activar Web Analytics en el proyecto** | Tuya — un interruptor |
+| 5 | ~~**Activar Web Analytics en el proyecto**~~ ✅ **Resuelto** | Activada el 13/09/2026; page views certificados (§17) |
 
 ---
 
@@ -333,8 +335,9 @@ si aparece un `*` o si Turnstile se cuela con los interruptores apagados.
    están en `plus58express-web`, sólo en Production, y verificadas con los
    interruptores apagados — §16. **LISTO, NO ACTIVADO.**
 3. **La `RESEND_API_KEY`** que ya usa el backend, o una nueva para la web.
-4. **Activar Web Analytics** en el proyecto `plus58express-web` de Vercel
-   (*Analytics → Enable*). Con eso enciendo `ANALYTICS_ENABLED`.
+4. ~~**Activar Web Analytics.**~~ ✅ **Hecho el 13 de septiembre de 2026.**
+   `ANALYTICS_ENABLED = true`, page views y eventos certificados con carga útil
+   interceptada: cero cookies y cero datos personales — §17.
 5. **Los siete datos legales** de `web-privacy-draft-input.md` §0. Es lo único que
    bloquea encender los formularios.
 
@@ -672,3 +675,143 @@ ninguna clave — se comprobó construyendo sin ellas.
 ejecutarse. No es un problema de seguridad; es peso. Se arregla cargando los
 formularios de forma diferida, para que vivan en un chunk que nunca se pide. **No
 se ha hecho**, porque excede lo que pedía esta ronda; queda propuesto.
+
+---
+
+## 17. Web Analytics
+
+Añadido el 13 de septiembre de 2026. Despliegue `plus58express-4zahh26jp`.
+
+**Web Analytics = ACTIVADA**
+**Cookies = 0**
+**PII = 0**
+**Page views = CERTIFICADOS**
+**Formularios = SIGUEN APAGADOS**
+
+### 17.1 Lo que había y lo que faltaba
+
+| | |
+|---|---|
+| `@vercel/analytics` | 2.0.1, declarado en `package.json` |
+| Componente | `import { Analytics } from "@vercel/analytics/next"` — el de App Router |
+| Integración | `app/layout.tsx:117`, bajo `{ANALYTICS_ENABLED && …}` |
+| Interruptor | `ANALYTICS_ENABLED` pasa de `false` a **`true`** |
+
+Faltaba una sola cosa, y era la que lo bloqueaba todo: **Web Analytics no estaba
+activada en el proyecto**. Mientras no lo estuvo, `/_vercel/insights/script.js`
+devolvía un 404 con tipo `text/plain` que `nosniff` —bien— se negaba a ejecutar:
+un error en la consola de cada visitante a cambio de nada. Por eso la Fase 1-B la
+dejó apagada, y por eso el orden importaba: encender la bandera antes que el
+interruptor del proyecto habría publicado justo ese error.
+
+El CLI **se niega a activarla sin confirmación interactiva** —es una aceptación
+de límites y precios— así que la ejecutó el dueño. La comprobación de que quedó
+hecha no necesitó desplegar nada: ese endpoint pasó a responder **200 con
+`application/javascript`** y 3106 bytes de JavaScript real.
+
+### 17.2 La CSP no necesitó abrirse
+
+Ni un dominio externo. El script y la baliza viven en el propio dominio, así que
+`script-src 'self'` y `connect-src 'self'` ya los cubrían. La política se sirve
+hoy exactamente igual que antes de activar nada.
+
+### 17.3 Una vuelta en falso que conviene dejar escrita
+
+La primera medición dio **cero peticiones** a `/_vercel/insights` y pareció que
+el componente no se inyectaba. Era un sesgo de la medición, no un fallo: **Vercel
+sirve el script desde una ruta ofuscada** —`/e2c643…/script.js`— para esquivar
+bloqueadores, y el filtro buscaba la cadena «insights». El script llevaba todo el
+rato cargándose con 200.
+
+Por eso la prueba permanente **no ata la ruta exacta**: comprueba que se cargue
+un `script.js` fuera de `/_next/` y que no dé error. Atar el hash haría que la
+prueba se rompiera el día que Vercel lo cambie sin que nada esté mal.
+
+### 17.4 Page views: certificados, y cómo
+
+Vercel **descarta el tráfico automatizado**: su script mira `navigator.webdriver`
+y, en un navegador de Playwright, carga pero no envía nada —el evento se queda en
+cola—. Eso es una virtud, no un obstáculo: significa que las cifras del panel no
+se contaminan con las suites de pruebas. Pero obliga a certificar desde un
+navegador de verdad.
+
+Recorrido real por `/`, `/servicios`, `/conductores`, `/aliados` y `/contacto`,
+con `navigator.webdriver === false`:
+
+```
+GET  /e2c643…/script.js  → 200      (en cada ruta)
+POST /e2c643…/view       → 200      (seis)
+POST /e2c643…/event      → 200      (dos)
+```
+
+### 17.5 Qué viaja exactamente — carga útil capturada
+
+Página vista:
+
+```json
+{"o":"https://mas58express.com/servicios","sv":"0.1.3",
+ "sdkn":"@vercel/analytics/next","sdkv":"2.0.1",
+ "ts":1789323602894,"dp":"/servicios"}
+```
+
+Evento propio:
+
+```json
+{"o":"https://mas58express.com/contacto", … ,
+ "en":"whatsapp_soporte","ed":{"origen":"/contacto"}}
+```
+
+Origen, versión del script, versión del SDK, marca de tiempo, ruta, nombre del
+evento y la ruta desde la que se disparó. **Ni un correo, ni un teléfono, ni un
+nombre, ni una IP, ni un identificador de persona.** No es una promesa del
+diseño: es la carga útil interceptada en el navegador.
+
+Y en el mismo recorrido: `document.cookie` vacío, `localStorage` con 0 entradas,
+`sessionStorage` con 0, y **cero mensajes de consola** — ninguna violación de CSP
+ni rechazo por tipo MIME.
+
+### 17.6 Los seis eventos
+
+| Evento | Dónde se dispara | Estado |
+|---|---|---|
+| `whatsapp_general` · `whatsapp_conductor` · `whatsapp_aliado` · `whatsapp_soporte` | `BotonWhatsApp`, uno por intención | ✅ `whatsapp_soporte` disparado y aceptado |
+| `zona_consultada` | `Cobertura`, al desplazar y al pulsar una zona | ✅ cableado |
+| `contacto_abierto` | `EnlaceCorreo` | ✅ disparado y aceptado |
+
+**`contacto_abierto` estaba muerto.** Declarado entre los eventos desde la Fase
+1-B y sin dispararse en ningún sitio: habría aparecido vacío en el panel para
+siempre, y nadie lo habría relacionado con un fallo. Los `whatsapp_*` sí estaban
+cableados; el único canal de contacto sin contar era el correo. Entra
+`EnlaceCorreo`, con la misma forma que `BotonWhatsApp`, sustituyendo a los cuatro
+`mailto:` sueltos (el pie, la puerta de llamada a la acción y los dos de
+`/contacto`).
+
+> **Queda una inconsistencia menor, sin resolver:** el enlace de WhatsApp del
+> **pie** es un `<a>` suelto y no pasa por `BotonWhatsApp`, así que no dispara
+> `whatsapp_general`. Los demás sí. No se ha tocado porque excede lo que pedía
+> esta ronda.
+
+Los tres restantes —`waitlist_iniciada`, `waitlist_confirmada`,
+`lead_aliado_enviado`— **no se disparan**, y no por disciplina sino por
+construcción: los dos primeros viven dentro de formularios que no se pintan, y el
+tercero en el flujo de confirmación, que sigue apagado.
+
+> **Dos eventos reales entraron en el panel durante la certificación**: un
+> `whatsapp_soporte` y un `contacto_abierto`, ambos del 13 de septiembre. No son
+> de una persona interesada: son míos.
+
+### 17.7 Verificación
+
+| | |
+|---|---|
+| TypeScript | limpio |
+| Build | correcto |
+| Playwright | **167/167** |
+| axe (WCAG 2.1 AA) | 27 análisis, **0 infracciones** |
+| `WAITLIST_ENABLED` · `PARTNER_LEADS_ENABLED` | **`false`** · **`false`** |
+| Campos de formulario en producción | **0** |
+| `/api/waitlist` · `/api/leads/partners` | **404** · **404** |
+
+Dos pruebas nuevas vigilan lo que costó descubrir: que el script de la analítica
+cargue de verdad y no dé 404, y que la portada no registre ni un error de CSP o
+de tipo MIME.

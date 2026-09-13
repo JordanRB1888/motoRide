@@ -183,6 +183,45 @@ test.describe("seguridad", () => {
 });
 
 test.describe("analítica sin datos personales", () => {
+  test("el script de la analítica carga de verdad, no da 404", async ({ page }) => {
+    /* Esta es la comprobación que hizo falta para poder encenderla. Mientras Web
+       Analytics no estaba activada en el proyecto, ese script devolvía un 404 con
+       tipo `text/plain` que `nosniff` se negaba a ejecutar: un error en la
+       consola de cada visitante a cambio de nada.
+       No se comprueba la ruta exacta a propósito: Vercel se la inventa ofuscada
+       —`/e2c643…/script.js`— para esquivar bloqueadores, y atarla aquí haría que
+       esta prueba se rompiera el día que cambie sin que nada esté mal. Lo que
+       importa es que el script exista y que no dé error. */
+    const respuestas: { url: string; estado: number }[] = [];
+    page.on("response", (r) => {
+      const u = r.url();
+      if (/\/script\.js(\?|$)/.test(u) && !u.includes("/_next/")) {
+        respuestas.push({ url: u, estado: r.status() });
+      }
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
+
+    expect(respuestas.length, "no se cargó ningún script de analítica").toBeGreaterThan(0);
+    for (const r of respuestas) expect(r.estado, r.url).toBe(200);
+  });
+
+  test("no hay errores de CSP ni de tipo MIME en la portada", async ({ page }) => {
+    const errores: string[] = [];
+    page.on("console", (m) => {
+      if (m.type() === "error" && /Content Security Policy|Refused to|nosniff|MIME/i.test(m.text())) {
+        errores.push(m.text());
+      }
+    });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
+    expect(errores, errores.join(" | ")).toHaveLength(0);
+  });
+
+
   test("ninguna petición saliente lleva correo, teléfono ni nombre", async ({ page }) => {
     const sospechosas: string[] = [];
     page.on("request", (r) => {
