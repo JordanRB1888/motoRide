@@ -4,7 +4,7 @@ import Reveal from "@/components/motion/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
 import { screensById, STORES } from "@/lib/content";
 import { WAITLIST_ENABLED } from "@/lib/flags";
-import FormularioWaitlist from "@/components/forms/FormularioWaitlist";
+import { FormularioWaitlistDiferido } from "@/components/forms/Diferidos";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
 
 /**
@@ -13,6 +13,10 @@ import BotonWhatsApp from "@/components/site/BotonWhatsApp";
  * La aplicación todavía no está publicada. Los badges no son enlaces: son una
  * declaración de dónde estará. Inventar una URL de tienda seria enviar a la
  * gente a una página que no existe.
+ *
+ * El formulario llega por `components/forms/Diferidos`, que lo mantiene en un
+ * paquete aparte: con el interruptor apagado no se descarga nada de él. El
+ * porqué, y los dos caminos que no funcionaron, están documentados allí.
  */
 export default function Descarga() {
   return (
@@ -87,7 +91,7 @@ export default function Descarga() {
                 se ofrece la puerta que sí existe. */}
             {WAITLIST_ENABLED ? (
               <div className="mt-10">
-                <FormularioWaitlist origen="descarga" />
+                <FormularioWaitlistDiferido origen="descarga" />
               </div>
             ) : (
               <div className="mt-10 rounded-[var(--radius-card)] border border-white/10 bg-white/[0.03] p-6 sm:p-7">

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import PuertaCTA from "@/components/site/PuertaCTA";
-import FormularioAliados from "@/components/forms/FormularioAliados";
+import { FormularioAliadosDiferido } from "@/components/forms/Diferidos";
 import { PARTNER_LEADS_ENABLED } from "@/lib/flags";
 import Reveal from "@/components/motion/Reveal";
 
@@ -13,6 +13,8 @@ export const metadata: Metadata = metaPagina({
   ruta: "/aliados",
 });
 
+/* El formulario viaja en un paquete aparte —ver `components/forms/Diferidos`—
+   para que no se descargue mientras el interruptor esté apagado. */
 export default function Page() {
   const PUNTOS: [string, string][] = [
     ["Presencia en la aplicación", "Tu negocio, visible para quien ya está pidiendo."],
@@ -35,7 +37,7 @@ export default function Page() {
           ))}
         </div>
         <div className="mt-14">
-          {PARTNER_LEADS_ENABLED ? <FormularioAliados /> : null}
+          {PARTNER_LEADS_ENABLED ? <FormularioAliadosDiferido /> : null}
         </div>
 
         <div className={PARTNER_LEADS_ENABLED ? "hidden" : "mt-14"}>

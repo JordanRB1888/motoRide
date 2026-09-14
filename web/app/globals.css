@@ -106,8 +106,131 @@ button {
 /* ============================================================
    Tipografía de titulares — condensada, muy apretada
    ============================================================ */
+
+/* ------------------------------------------------------------------
+   RESERVA DE LOS TITULARES, MIENTRAS BIG SHOULDERS VIAJA
+
+   EL PROBLEMA
+
+   Hasta que llegaba el .woff2, los titulares se pintaban con Arial y ocupaban
+   un 27,8% más de ancho, así que se partían en dos líneas donde Big Shoulders
+   cabe en una. Al llegar la fuente, el titular colapsaba de 158 px a 79 px y la
+   página entera saltaba 79 px hacia arriba. El defecto no era de una página:
+   96 de 1224 medidas (11 rutas × 8 anchos) cambiaban de número de líneas, y
+   siete rutas desplazaban de forma medible en escritorio.
+
+   POR QUÉ FALLABA LA RESERVA DE `next/font` — el motivo importa
+
+   Es tentador decir que `size-adjust: 88.59%` «sólo corrige la altura». Es
+   falso, y conviene dejarlo escrito: ese descriptor es EXACTAMENTE un cociente
+   de anchos de avance. `next/font` lo calcula así (se puede leer en
+   node_modules/next/dist/compiled/@next/font/dist/local/get-fallback-metrics-from-font-file.js):
+
+       size-adjust = ancho medio de la fuente ÷ ancho medio de Arial
+
+   El problema es la cadena sobre la que saca esa media:
+
+       'aaabcdeeeefghiijklmnnoopqrrssttuvwxyz      '
+
+   **Minúsculas.** Y `.display` lleva `text-transform: uppercase`. En caja baja
+   la corrección es casi perfecta —la reserva quedaba a un 0,3% de Big
+   Shoulders—; en caja alta, que es lo único que este sitio pinta en titulares,
+   Big Shoulders es mucho más estrecha respecto a Arial y el 88,59% se queda a
+   un 27,8% de más. La reserva estaba bien calculada para un texto que esta web
+   no escribe nunca.
+
+   LAS FAMILIAS, medidas COMO EL SITIO PINTA
+
+   En mayúsculas, con `letter-spacing: -0.018em` y el `size-adjust` aplicado de
+   verdad, sobre los 72 titulares reales. Mediana del ancho contra Big Shoulders
+   y cuántos caen dentro del ±2%:
+
+       Impact            94%   →  0,997   (41/72)   Windows, macOS, iOS
+       Roboto Condensed  85%   →  0,997   (52/72)   Android
+       Roboto            75%   →  1,000   (55/72)   Android, ChromeOS
+       Arial             70%   →  1,001   (44/72)   el resto
+       Arial          88,59%   →  1,278   ( 0/72)   ← la que había
+
+   Cada familia lleva SU valor. Una sola cara con varias familias dentro sería
+   un promedio que no le sirve bien a ninguna: Roboto Condensed al 94% pintaría
+   un 10% de más.
+
+   ARIAL NARROW, que fue la recomendación de la auditoría anterior, se descartó
+   midiendo: no está instalada en Windows de serie —viene con Office—, no hay
+   ARIALN.TTF ni entrada en el registro de esta máquina, y una cara cuyo único
+   `local()` no existe no casa: el titular pierde la reserva entera y con ella
+   los ajustes. Por eso empeoraba.
+   ------------------------------------------------------------------ */
+
+/* LAS MÉTRICAS VERTICALES SE RECALCULAN, NO SE COPIAN
+
+   `next/font` emitía `ascent-override: 111.25%` y `descent-override: 24.21%`,
+   y copiarlas tal cual dejaba la caja en línea del titular 6 px más alta y 3 px
+   más arriba que con la fuente real: un desplazamiento pequeño pero contable.
+
+   La razón: `size-adjust` escala TAMBIÉN estos dos valores —lo dice la
+   especificación CSS Fonts 5 y lo da por hecho el propio `next/font`, que
+   divide por el `size-adjust` al calcularlos—. Los 111,25% estaban calibrados
+   para multiplicarse por 0,8859; con otro `size-adjust` hay que rehacerlos.
+
+       suma efectiva de Big Shoulders = (111,25 + 24,21) × 0,8859 = 120,00%
+
+   Esa suma se reparte en la misma proporción sobre cada `size-adjust` nuevo.
+   Comprobado en el navegador: la caja del <span> del titular queda en
+   y=176 h=99, exactamente donde la deja la fuente real. */
+
+/* 1 · Condensada de Windows, macOS e iOS. */
+@font-face {
+  font-family: "Titulares reserva 1";
+  src: local("Impact");
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 94%;
+  ascent-override: 104.85%; /* = 120,00 / 0,94 × (111,25 / 135,46) */
+  descent-override: 22.82%;
+  line-gap-override: 0%;
+}
+
+/* 2 · Condensada de Android. */
+@font-face {
+  font-family: "Titulares reserva 2";
+  src: local("Roboto Condensed");
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 85%;
+  ascent-override: 115.95%;
+  descent-override: 25.23%;
+  line-gap-override: 0%;
+}
+
+/* 3 · La de serie de Android y ChromeOS, si no hubiera la condensada. */
+@font-face {
+  font-family: "Titulares reserva 3";
+  src: local("Roboto");
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 75%;
+  ascent-override: 131.41%;
+  descent-override: 28.6%;
+  line-gap-override: 0%;
+}
+
+/* 4 · Todo lo demás. Arial y las que comparten sus métricas por diseño. */
+@font-face {
+  font-family: "Titulares reserva 4";
+  src: local("Arial"), local("Helvetica"), local("Liberation Sans"), local("Noto Sans");
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 70%;
+  ascent-override: 140.79%;
+  descent-override: 30.64%;
+  line-gap-override: 0%;
+}
+
 .display {
-  font-family: var(--font-display), system-ui, sans-serif;
+  font-family:
+    var(--font-display), "Titulares reserva 1", "Titulares reserva 2", "Titulares reserva 3",
+    "Titulares reserva 4", system-ui, sans-serif;
   font-weight: 700;
   line-height: 0.88;
   letter-spacing: -0.018em;

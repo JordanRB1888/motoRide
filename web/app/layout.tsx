@@ -17,6 +17,14 @@ const displayBrand = localFont({
   variable: "--font-display-brand",
   display: "swap",
   preload: true,
+  /* La reserva automática la declara `globals.css`, no esta llamada.
+     `next/font` generaba una sobre Arial con `size-adjust: 88.59%`. Ese valor
+     sí iguala anchos de avance —es un cociente de anchos—, pero lo calcula
+     sobre el alfabeto en MINÚSCULAS, y `.display` pinta en mayúsculas. En caja
+     alta se quedaba a un 27,8% de más, los titulares se partían en dos líneas y
+     la página saltaba 79 px al llegar la fuente.
+     El razonamiento completo, con los números, está junto a las @font-face. */
+  adjustFontFallback: false,
 });
 
 const bodyBrand = localFont({

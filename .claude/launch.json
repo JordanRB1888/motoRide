@@ -7,6 +7,12 @@
       "runtimeArgs": ["run", "dev", "--prefix", "web"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "web-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "--prefix", "web", "--", "--port", "3210"],
+      "port": 3210
     }
   ]
 }
