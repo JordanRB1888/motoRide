@@ -10,7 +10,7 @@ import {
   Vigencia,
 } from "@/components/site/Legal";
 import EnlaceCorreo from "@/components/site/EnlaceCorreo";
-import { EMPRESA, VIGENCIA_LEGAL } from "@/lib/legal";
+import { EMPRESA, VIGENCIA_TERMINOS } from "@/lib/legal";
 
 export const metadata: Metadata = metaPagina({
   titulo: "Términos de uso",
@@ -33,9 +33,9 @@ export const metadata: Metadata = metaPagina({
 
 const SECCIONES = [
   { id: "quienes-somos", titulo: "Quiénes somos" },
-  { id: "objeto", titulo: "Qué es este sitio y qué no es" },
+  { id: "objeto", titulo: "Qué es este sitio y su alcance" },
   { id: "aceptacion", titulo: "Aceptación de estas condiciones" },
-  { id: "uso", titulo: "Uso permitido" },
+  { id: "uso", titulo: "Políticas de seguridad y usos prohibidos" },
   { id: "informacion", titulo: "La información publicada" },
   { id: "propiedad", titulo: "Propiedad intelectual" },
   { id: "disponibilidad", titulo: "Disponibilidad del sitio" },
@@ -63,7 +63,7 @@ export default function Page() {
     >
       <Bloque>
         <div className="flex flex-col gap-10">
-          <Vigencia fecha={VIGENCIA_LEGAL.fecha} version={VIGENCIA_LEGAL.version} />
+          <Vigencia fecha={VIGENCIA_TERMINOS.fecha} version={VIGENCIA_TERMINOS.version} />
 
           <IndiceLegal secciones={SECCIONES} />
 
@@ -79,7 +79,7 @@ export default function Page() {
             </P>
           </SeccionLegal>
 
-          <SeccionLegal id="objeto" numero={2} titulo="Qué es este sitio y qué no es">
+          <SeccionLegal id="objeto" numero={2} titulo="Qué es este sitio y su alcance">
             <P>
               Este sitio es <strong className="font-bold text-paper">informativo</strong>. Sirve
               para dar a conocer +58Express, explicar los servicios previstos, ofrecer canales
@@ -99,14 +99,17 @@ export default function Page() {
 
           <SeccionLegal id="aceptacion" numero={3} titulo="Aceptación de estas condiciones">
             <P>
-              Al usar el sitio aceptas estas condiciones. Si no estás de acuerdo con ellas, lo
-              coherente es no usarlo. No hace falta registrarse ni crear una cuenta para
-              navegar: no hay cuentas de usuario en esta web.
+              Al usar el sitio aceptas estas condiciones. No hace falta registrarse ni crear
+              una cuenta para navegar: no hay cuentas de usuario en esta web.
             </P>
           </SeccionLegal>
 
-          <SeccionLegal id="uso" numero={4} titulo="Uso permitido">
-            <P>Puedes leer, consultar y compartir el contenido del sitio. Lo que no puedes hacer:</P>
+          <SeccionLegal id="uso" numero={4} titulo="Políticas de seguridad y usos prohibidos">
+            <P>Puedes leer, consultar y compartir el contenido del sitio.</P>
+            <P>
+              Como parte de las políticas de seguridad de la empresa queda prohibido usar la web
+              de la siguiente manera:
+            </P>
             <ListaLegal>
               <Item>
                 Intentar acceder a partes del sitio o de sus sistemas que no estén abiertas al
@@ -126,8 +129,8 @@ export default function Page() {
               </Item>
             </ListaLegal>
             <P>
-              Si detectamos un uso así, podemos bloquear el acceso desde el origen
-              correspondiente sin aviso previo.
+              El uso de la web bajo los supuestos antes descritos nos otorga el derecho de
+              bloquear el acceso desde el origen correspondiente sin aviso previo.
             </P>
           </SeccionLegal>
 
@@ -139,9 +142,9 @@ export default function Page() {
               Describen lo que está previsto, no un compromiso contractual.
             </P>
             <P>
-              Ponemos cuidado en que lo publicado sea cierto y esté al día, pero no garantizamos
-              que esté libre de errores u omisiones. Si encuentras algo incorrecto, escríbenos y
-              lo corregimos.
+              Como empresa, cuidamos que lo publicado sea cierto y esté al día, pero no
+              garantizamos que esté libre de errores u omisiones. Si encuentras algo incorrecto,
+              puedes comunicarlo a través de los canales correspondientes.
             </P>
           </SeccionLegal>
 
@@ -219,9 +222,9 @@ export default function Page() {
 
           <SeccionLegal id="comunicaciones" numero={11} titulo="Comunicaciones que enviamos">
             <P>
-              Sólo enviamos correos que tú hayas provocado: la confirmación de tu inscripción, el
-              acuse de tu baja, el aviso de lanzamiento y las respuestas a lo que nos escribas.
-              No enviamos boletines, ni promociones, ni mensajes de terceros.
+              Sólo se envían correos que la persona usuaria haya provocado: la confirmación de
+              su inscripción, el acuse de su baja, el aviso de lanzamiento y las respuestas a lo
+              que nos escriba. No enviamos boletines, ni promociones, ni mensajes de terceros.
             </P>
           </SeccionLegal>
 
@@ -237,14 +240,18 @@ export default function Page() {
 
           <SeccionLegal id="responsabilidad" numero={13} titulo="Límites de responsabilidad">
             <P>
-              Respondemos de lo que este sitio hace: publicar información y recoger el contacto
-              que tú decides darnos. Dentro de lo que permita la ley, no respondemos de los daños
-              derivados de la imposibilidad de usar el sitio, de errores u omisiones en la
-              información publicada, ni de los servicios de los terceros que enlazamos.
+              El sitio funciona como un canal informativo y de contacto de +58Express. Procuramos
+              mantener su funcionamiento y la información publicada de forma correcta y
+              actualizada; sin embargo, pueden presentarse interrupciones, errores técnicos,
+              omisiones o indisponibilidad temporal.
             </P>
             <P>
-              Nada en estas condiciones excluye la responsabilidad que la ley venezolana no
-              permita excluir.
+              Los servicios, plataformas o enlaces de terceros se rigen por sus propias
+              condiciones y políticas.
+            </P>
+            <P>
+              Estas condiciones no pretenden limitar ni excluir las responsabilidades que
+              correspondan a {EMPRESA.razonSocial} conforme al ordenamiento jurídico venezolano.
             </P>
           </SeccionLegal>
 

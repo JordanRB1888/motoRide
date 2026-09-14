@@ -65,3 +65,22 @@ export const VIGENCIA_LEGAL = {
   fecha: "13 de septiembre de 2026",
   version: "1.0",
 } as const;
+
+/**
+ * Los términos de uso llevan su propia vigencia desde la versión 1.1.
+ *
+ * POR QUÉ SEPARADA
+ *
+ * Los dos documentos compartían fecha y versión, y eso funciona sólo mientras
+ * cambian a la vez. El 14 de septiembre de 2026 se incorporaron las observaciones
+ * jurídicas de Fernando Atencio **sobre los términos**, y la política de
+ * privacidad no se tocó. Con una vigencia compartida había que elegir entre dos
+ * mentiras: dejar los términos diciendo que son del día 13 —cuando su texto ya no
+ * lo es— o mover la fecha de la política sin que hubiera cambiado una coma.
+ *
+ * Cada documento declara la suya y ninguno miente.
+ */
+export const VIGENCIA_TERMINOS = {
+  fecha: "14 de septiembre de 2026",
+  version: "1.1",
+} as const;

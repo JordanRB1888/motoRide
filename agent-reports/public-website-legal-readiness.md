@@ -5,22 +5,30 @@
 **Terms = PUBLICADOS**
 **Driver sensitive documents on web = NO**
 **Automatic retention cleanup = IMPLEMENTADO / CERTIFICADO**
+**Legal review by lawyer = INCORPORATED**
+**Reviewer = Fernando Atencio**
+**Date = 14 de septiembre de 2026**
 **WAITLIST_ENABLED = false**
 **PARTNER_LEADS_ENABLED = false**
 
 | | |
 |---|---|
 | **Rama** | `feat/public-marketing-site` |
-| **Producción** | `plus58express-ajfh6vmdv` → <https://mas58express.com/privacidad> y <https://mas58express.com/terminos> |
-| **Fecha** | 13 de septiembre de 2026 |
-| **Versión de los documentos** | 1.0 |
+| **Producción** | `plus58express-1nrka1fsa` → <https://mas58express.com/privacidad> y <https://mas58express.com/terminos> |
+| **Fecha** | 13 de septiembre de 2026 · revisión de términos el 14 |
+| **Versión de los documentos** | Privacidad **1.0** · Términos **1.1** |
 | **Alcance** | Sitio web público. **No** la aplicación móvil |
 
 > **Esto no es asesoramiento jurídico.** Es un trabajo de ingeniería hecho con
 > una revisión documental conservadora: cada afirmación legal del texto se
-> verificó contra fuentes, y lo que no pudo verificarse no se afirmó. Antes de
-> encender los formularios conviene que un abogado venezolano lo revise —sobre
-> todo las secciones 10, 13 y 17 de la política—.
+> verificó contra fuentes, y lo que no pudo verificarse no se afirmó.
+>
+> **El 14 de septiembre de 2026 se incorporaron las observaciones jurídicas del
+> abogado Fernando Atencio sobre `/terminos`** — §10 de este informe. Son
+> observaciones incorporadas, **no una certificación del documento**: el abogado
+> revisó y señaló, y lo señalado se aplicó tal cual. La política de privacidad
+> **no** ha pasado todavía por esa revisión; siguen recomendadas sus secciones
+> 10, 13 y 17.
 
 ---
 
@@ -422,3 +430,48 @@ borrados y la idempotencia.
 
 Terminado, **el secreto se rotó** a un valor que nadie conserva, y se comprobó que
 el anterior ya no abre nada. La base quedó en cero filas en las tres tablas.
+
+---
+
+## 10. Observaciones jurídicas incorporadas — Fernando Atencio
+
+**Legal review by lawyer = INCORPORATED · Reviewer = Fernando Atencio · Date = 14
+de septiembre de 2026.**
+
+Alcance: **`/terminos` únicamente.** La política de privacidad no formó parte de
+esta revisión y **no se modificó**. Los términos pasan a **versión 1.1**; la
+política se queda en la 1.0, que es lo honesto: cambió un documento, no los dos.
+
+> Son **observaciones incorporadas**, no una certificación. El abogado revisó y
+> señaló; lo señalado se aplicó tal cual, sin reinterpretarlo y sin añadir
+> cláusulas por iniciativa propia.
+
+### Qué cambió, sección por sección
+
+| § | Observación | Aplicado |
+|---|---|---|
+| 2 | Título → «Qué es este sitio y su alcance» | Título cambiado; contenido intacto |
+| 3 | Eliminar «lo coherente es no usarlo» por tono coercitivo | Suprimida la oración completa. **No se sustituyó por otra frase de presión**: quitar sólo el predicado habría dejado un fragmento sin sentido |
+| 4 | Encabezado → política de seguridad; nuevo cierre | H2 → «Políticas de seguridad y usos prohibidos» (la variante corta que el propio abogado ofrece), con la frase completa justo debajo. Lista intacta. Cierre sustituido literalmente |
+| 5 | Nueva redacción del párrafo de cierre | Sustituido literalmente, sin duplicar el primer párrafo |
+| 11 | Evitar «tu/tus/te» por señalativos | «la persona usuaria», «su inscripción», «su baja», «lo que nos escriba» |
+| 13 | Nuevo enfoque, sin dos frases concretas | Sustituida entera por la redacción facilitada, en tres párrafos. Sin exclusiones agresivas |
+
+### Alineación de texto
+
+El abogado sugirió justificar los párrafos. **No se aplicó**, conforme a tu
+criterio de aceptación: se mantiene alineación a la izquierda en todos los
+tamaños. La justificación en columnas estrechas abre ríos de espacio y perjudica
+la lectura, y el resultado actual ya es limpio. Comprobado: no hay `justify` en
+ninguna hoja de estilo ni en los componentes legales.
+
+### Comprobado en producción
+
+- Las cinco frases retiradas devuelven **0 coincidencias**; las siete
+  incorporadas, **1 cada una**.
+- **Numeración 1–17 correcta y continua**; 17 anclas en el índice, **ninguna
+  rota**.
+- **Sin desbordamiento horizontal ni texto cortado** a 360, 390, 430, 768, 1024 y
+  1440 px.
+- El enlace interno a `/privacidad` sigue en pie.
+- **188/188** pruebas contra producción; axe sin infracciones.
