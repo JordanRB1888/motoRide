@@ -22,9 +22,13 @@ general, sin tocar diseño aprobado, ni legal, ni formularios públicos.
 
 | | Veredicto |
 |---|---|
-| **CLS de `/nosotros`** | **FIXED** — desplazamiento vertical 0,0000 en 220 cargas frías |
-| **Turnstile muerto en el paquete** | **REMOVED** — 0 peticiones, 0 scripts iniciales, CSP cerrada |
-| **Causa del LCP móvil de la portada** | **Demostrada — y no era lo que la auditoría sospechaba.** El «LCP de 3,28 s» era un artefacto del modelo de Lighthouse. Medido con estrangulamiento real, FCP y LCP son el mismo instante. Lo que retrasa ese instante es **Layout y recálculo de estilo (332 ms), no JavaScript (7 ms)** |
+| **CLS de `/nosotros`** | **FIXED** — en producción, score de 93 a **100** y CLS de **0,172 a 0,000**. Desplazamiento vertical 0,0000 en 440 cargas frías, local y en producción. Y no era sólo `/nosotros`: eran siete rutas |
+| **Turnstile muerto en el paquete** | **REMOVED** — verificado en producción: 0 de 13 scripts iniciales lo contienen, en las cinco rutas comprobadas |
+| **Causa del LCP móvil de la portada** | **Demostrada — y no era lo que la auditoría sospechaba.** El «LCP de 3,28 s» era un artefacto del modelo de Lighthouse. Medido con estrangulamiento real, FCP y LCP son el mismo instante. Lo que retrasa ese instante es **Layout y recálculo de estilo (332 ms), no JavaScript (7 ms)**. No se tocó nada |
+
+Y una cosa que empeora, declarada: **el TBT móvil sube de 4 a 6 ms** con la CPU
+estrangulada ×4 —del orden de 1 ms en un teléfono real— por resolver cuatro
+`local()` más. Está medido y aislado más abajo.
 
 Nada se optimizó por sospecha. Nada de GSAP, Lenis, ScrollTrigger, los teléfonos
 3D ni el scrollytelling se tocó.
@@ -474,6 +478,61 @@ poco.**
 después— porque ahí la tipografía llega antes del pintado. El defecto sólo se ve
 con el arnés que lo fuerza, o en producción con una conexión real. Por eso la
 auditoría lo vio en producción y el laboratorio local no lo veía.
+
+---
+
+## Verificación en producción
+
+Desplegado como `plus58express-rb8kfbha0`. Medido contra `mas58express.com` con
+la red real, no en el laboratorio.
+
+### `/nosotros` en escritorio — la página del encargo
+
+| | Score | CLS |
+|---|---|---|
+| **Antes** (la auditoría, hoy mismo) | 93 / 100 / 93 / 100 | **0,172 / 0,000 / 0,167 / 0,000** |
+| **Después** | **100 / 100 / 100 / 100** | **0,000 / 0,000 / 0,000 / 0,006** |
+
+Los siete puntos que costaba el salto han vuelto, y el CLS ya no aparece en
+ninguna de las cuatro vueltas. El peso baja de 654 a **633 KB**.
+
+### `/aliados` en escritorio — la que de verdad era la peor
+
+`100 / 100 / 100`, CLS `0,000` en las tres vueltas.
+
+### La portada en móvil — sin tocar, y se nota
+
+| | Score | LCP | TBT | Peso |
+|---|---|---|---|---|
+| Antes | 92 | 3,28 s | 55 ms | 547 KB |
+| Después | 92 / 97 / 93 | 3,2 / 2,6 / 3,2 s | 90 / 20 / 40 ms | **535 KB** |
+
+Doce kilobytes menos y nada más: es exactamente lo esperado, porque **no se tocó
+nada de la portada**. La dispersión entre vueltas —92 a 97 de score, 20 a 90 ms
+de TBT— es la del modo `simulate`, y es justo la razón por la que un solo informe
+de Lighthouse no debe leerse como un hecho.
+
+### CLS en producción, 40 cargas frías con la fuente retrasada
+
+```
+  1024 px   CLS máx 0,0219   vertical 0,0000
+  1280 px   CLS máx 0,0152   vertical 0,0000
+  1440 px   CLS máx 0,0120   vertical 0,0000
+  1920 px   CLS máx 0,0068   vertical 0,0000
+```
+
+Más alto que en local —la red real reparte peor los tiempos— pero **ni un solo
+píxel de movimiento vertical**: todos los nodos implicados conservan su `y`. Lo
+que queda es el reflujo horizontal del texto corrido por el `68ch`, ya
+documentado.
+
+### Turnstile en producción
+
+```
+  ✔ /  /aliados  /servicios  /contacto  /nosotros
+      peticiones a Cloudflare: 0   scripts con Turnstile: 0/13   CSP cerrada
+  ✔ POST /api/waitlist → 404      ✔ POST /api/leads/partners → 404
+```
 
 ---
 
