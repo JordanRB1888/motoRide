@@ -1,7 +1,321 @@
 # Launch Readiness — mas58express.com
 
-**15 de septiembre de 2026.** Auditoría final de la web pública antes de activar
-ningún formulario.
+Este documento tiene dos partes:
+
+1. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
+   lo que se corrigió para dejar `/privacidad` lista para el abogado. **Empieza
+   por aquí.**
+2. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
+   hallazgos que la motivaron.
+
+---
+
+# Ronda factual — 15 de septiembre
+
+**Despliegue:** `plus58express-q6i4bs81m` · commit `a7a4e94` + `1c0a8f5`.
+Encargo: corregir **sólo inconsistencias demostradas** entre lo que la web hace
+y lo que declara, sin activar formularios, sin enviar correo y sin introducir
+ninguna opinión jurídica nueva.
+
+## Los once estados que pediste
+
+| | |
+|---|---|
+| **PRIVACY FACTUAL ALIGNMENT** | **COMPLETE** |
+| **ANALYTICS URL SANITIZATION** | **PASS** |
+| **GMAIL DISCLOSURE** | **COMPLETE** |
+| **RETENTION TEXT VS CODE** | **MATCH** |
+| **OLD GOOGLE IMAGES** | **REMOVED** |
+| **HOMEPAGE IMAGES** | **NEW** |
+| **NO-JS PRODUCT STEPS** | **PASS** |
+| **SCREEN READER PRODUCT STEPS** | **PASS** |
+| **ESLINT** | **PASS** |
+| **RESEND DOMAIN STATUS** | **UNKNOWN** — ver §14 |
+| **RESEND REAL DELIVERY** | **NOT YET CERTIFIED** |
+
+**`/privacidad` pasa de 1.0 a 1.1 (15 de septiembre de 2026).** No está aprobada
+por ningún abogado: está lista para que Fernando Atencio la revise.
+
+## Qué cambió, y por qué
+
+### 1 · Gmail — GMAIL DISCLOSURE = COMPLETE
+
+El bloqueo A3 de la auditoría. Verificado otra vez línea a línea:
+`app/api/leads/partners/route.ts:92` manda el aviso interno a
+`process.env.EMAIL_EQUIPO || EMAIL.direccion`, y **`EMAIL_EQUIPO` no existe en
+Production** (`vercel env ls`: cero ocurrencias). El destino real es
+`58expressapp@gmail.com`, con siete campos personales.
+
+La política decía que Gmail intervenía «sólo si tú decides escribirnos por
+correo». Ahora la tabla de proveedores lo declara como **el buzón del equipo**,
+enumera los siete campos y explica que el aviso del formulario de comercios es
+**automático**, sin que la persona escriba ningún correo.
+
+### 2 · Analítica — ANALYTICS URL SANITIZATION = PASS
+
+`components/site/Analitica.tsx` envuelve el componente con un `beforeSend` que
+recorta la dirección a **origen + ruta** antes de que salga del navegador.
+
+**Prueba adversaria en producción**, cargando
+
+```
+/?utm_source=prueba&email=ana%40ejemplo.com&token=SECRETO123&telefono=584125143242#cobertura
+```
+
+Cinco balizas capturadas (una vista y cuatro eventos). Las cinco:
+
+```
+o="https://mas58express.com/"   r=""   dp="/"
+```
+
+Ni `email=`, ni `token=`, ni `SECRETO123`, ni `#cobertura`, ni `utm_source`, ni
+el teléfono. **LIMPIO.**
+
+### 3 · El referente — medido, no supuesto
+
+`beforeSend` sólo toca la dirección, no el referente. Así que lo medí aparte:
+
+| Escenario | Qué lleva el campo `r` |
+|---|---|
+| Visita directa | `""` — vacío |
+| Navegación interna | el campo **ni se envía** |
+| **Llegando desde otro sitio** con `?campana=correo&uid=USUARIO999` en su URL | **`http://localhost:3210/`** — sólo el dominio |
+
+La ruta y la consulta del sitio de procedencia **se pierden**: lo hace
+`Referrer-Policy: strict-origin-when-cross-origin`, que ya estaba puesta. La
+política ahora lo enumera —antes lo omitía— y describe exactamente eso.
+
+### 4 · Retención — RETENTION TEXT VS CODE = MATCH
+
+Primero determiné qué hace el código, literalmente:
+
+```sql
+creado_en < ${corte("30 days")}     -- lista de espera, sólo estados sin confirmar
+creado_en < ${corte("12 months")}   -- contactos de comercio
+ultimo_en < ${corte("24 hours")}    -- registros contra el abuso
+```
+
+Y el barrido lo dispara `vercel.json` → `"0 4 * * *"`: **una vez al día**. El
+barrido oportunista que existe en el limitador sólo corre cuando alguien envía
+un formulario, así que **hoy el cron diario es el único**.
+
+Con eso, las tres discrepancias:
+
+| | Decía | Dice ahora | Por qué |
+|---|---|---|---|
+| **A** | «12 meses desde el último contacto, salvo que la relación continúe» | «Se borra pasados 12 meses desde que enviaste el formulario» | Se cuenta desde `creado_en`. **No existe ninguna columna de «último contacto»**, ni la excepción prometida |
+| **B** | «Como máximo 24 horas» | «Se borran una vez superadas las 24 horas desde el último intento» | Con un barrido diario, un registro puede vivir hasta casi 48 h. El texto ya no promete un máximo que no se garantiza |
+| **C** | «Hasta 30 días después del aviso de lanzamiento, o hasta que te des de baja» | «Mientras sigas en la lista. No tiene borrado automático» | **No hay código que lo cumpla**, y «aviso de lanzamiento» ni siquiera es un evento del sistema |
+
+Y una frase añadida que lo explica una sola vez para las cinco filas: los
+borrados los hace un proceso diario, así que un registro desaparece «en el primer
+pase posterior: en el peor caso, menos de veinticuatro horas más tarde».
+
+> **Ojo con C, porque es el cambio de más calado.** El texto pasa de prometer un
+> borrado a los 30 días del lanzamiento a decir que no hay borrado automático.
+> Eso es lo que el código hace hoy — pero es una promesa **menos** protectora que
+> la anterior, y merece la atención del abogado. La alternativa era escribir ese
+> borrado, que es una decisión de producto, no mía.
+
+### 5 · Una inconsistencia más, encontrada por el camino
+
+La política decía «Cada correo lleva un enlace para salir de la lista». El acuse
+de la baja (`correoBaja`) **no lo lleva** — y no debe llevarlo, porque a esas
+alturas ya has salido. Corregido.
+
+### 6 · Verificación final: las diez afirmaciones contra el código
+
+Contrastadas contra el HTML **publicado**, no contra el JSX:
+
+```
+  ✔ comercios: 12 meses desde el envío       DELETE … creado_en < now() - 12 months
+  ✔ abuso: superadas las 24 horas            DELETE … ultimo_en < now() - 24 hours
+  ✔ sin confirmar: 30 días desde el alta     DELETE … creado_en < now() - 30 days
+  ✔ confirmada: sin borrado automático       no existe ningún DELETE sobre 'confirmado'
+  ✔ los borrados son un proceso diario       vercel.json → "0 4 * * *"
+  ✔ Gmail recibe el aviso de comercios       route.ts → EMAIL_EQUIPO || EMAIL.direccion
+  ✔ el aviso lleva los siete campos          los siete que pasa a correoAvisoInterno
+  ✔ el acuse de baja no lleva enlace         correoBaja() no lo incluye
+  ✔ la dirección se recorta                  beforeSend → origin + pathname
+  ✔ no hay ningún formulario publicado       los dos interruptores en false
+```
+
+## Lo demás de la ronda
+
+### Imágenes — OLD GOOGLE IMAGES = REMOVED · HOMEPAGE IMAGES = NEW
+
+**Seis** ficheros fuera del despliegue, no tres: los tres `/zulia/*.jpg` y también
+los tres `/zonas/*.webp` que la portada seguía usando. Los seis responden **404**
+en producción; ninguno tenía referencias activas antes de borrarlo.
+
+La portada ahora usa **las mismas imágenes que `/nosotros`**. Antes enseñaba una
+iglesia neogótica blanca para El Moján y `/nosotros` una colonial amarilla: dos
+edificios distintos para el mismo pueblo. El tratamiento en blanco y negro de las
+tarjetas lo hace el CSS, no el fichero, así que **el diseño no cambia**.
+
+Y los textos alternativos dejan de hacer pasar una ilustración por documentación:
+
+```
+antes:  "Vista aérea de la iglesia de El Moján y su plaza, con el lago…"
+ahora:  "Representación visual de El Moján: vista aérea de una plaza con su
+         iglesia y el lago al fondo."
+```
+
+El pie lo dice una vez, en una frase: «Las imágenes son representaciones, no
+fotografías de esos lugares.»
+
+### Accesibilidad — NO-JS = PASS · SCREEN READER = PASS
+
+Dos cambios, los dos de mejora progresiva:
+
+1. **La lista plana pasa a ser el estado por defecto.** El desapilado estaba
+   encerrado en `@media (prefers-reduced-motion: reduce)`, que no se activa por
+   tener el JavaScript apagado. Ahora la escena fijada la enciende la clase
+   `escena-viva`, que pone GSAP sólo cuando de verdad va a animar.
+2. **`opacity` en vez de `autoAlpha`** en los cinco pasos. `autoAlpha` es opacity
+   **más visibility**, y `visibility: hidden` los sacaba del árbol de
+   accesibilidad. El resto de la escena —teléfono, motorista, pines— conserva
+   `autoAlpha`: es decorativa y está en contenedores `aria-hidden`.
+
+Medido en producción, con el árbol de accesibilidad pedido por CDP:
+
+| Escenario | Pasos | Apilados | `visibility:hidden` | En el árbol |
+|---|---|---|---|---|
+| **Sin JavaScript** | 5 | no | 0 | — |
+| **Con JavaScript** | 5 | sí *(es el diseño)* | **0** | **5/5** |
+| **Movimiento reducido** | 5 | no | 0 | **5/5** |
+
+### `/conductores`
+
+La descripción ya no dice «Inscripciones abiertas para el lanzamiento» —lo que se
+veía en Google y en la vista previa de WhatsApp mientras la página decía que no
+hay formulario—. Ahora: «Próximamente — conoce cómo va a funcionar.» **Sólo el
+metadata; la página no se tocó.**
+
+### Endpoints
+
+Un `GET` a `/api/waitlist` devolvía **405**, y un 405 sólo lo da algo que existe.
+Ahora las cuatro rutas responden lo mismo con los interruptores apagados, y
+recuperan el 405 correcto cuando se enciendan:
+
+```
+  POST /api/waitlist            → 404      GET  /api/waitlist            → 404
+  POST /api/leads/partners      → 404      GET  /api/leads/partners      → 404
+  POST /api/waitlist/confirmar  → 404      GET  /api/waitlist/confirmar  → 404
+  POST /api/waitlist/baja       → 404      GET  /api/waitlist/baja       → 404
+```
+
+### La página 404
+
+Título propio —«Esta página no existe · +58Express», ya no el de la portada—,
+**una sola directiva** `noindex` y sin la canónica heredada. Next emite su propio
+`noindex` y no se puede suprimir sin `experimental.globalNotFound`, que obligaría
+a rehacer ahí las fuentes y los estilos: no compensa por una etiqueta repetida.
+Lo que sí desapareció es la **contradicción** — antes convivían `noindex` e
+`index, follow`.
+
+### ESLINT = PASS
+
+De **3 errores y 1 aviso a 0 y 0**. Los dos de pureza estaban en los formularios,
+que es justo el código que empezará a ejecutarse al encenderlos: `Date.now()`
+salía del render y pasa a un efecto, que mide lo mismo —el momento en que la
+persona ve el formulario— sin mentirle a React.
+
+### §13 · OpenStreetMap — se queda, y por qué
+
+No se cambió el proveedor. Verificado lo que pediste:
+
+| | |
+|---|---|
+| Atribución visible | ✔ «Leaflet \| © OpenStreetMap» con enlace a `openstreetmap.org/copyright` |
+| HTTPS | ✔ 44 de 44 |
+| Cabecera `Referer` | ✔ 44 de 44, identificando `https://mas58express.com/` |
+| Prefetch masivo | ✔ **0 teselas** antes de llegar a la sección |
+| Caché | ✔ se respeta el `max-age=95526` que devuelve OSM; no se fuerza `no-cache` |
+
+> **Corrección al informe anterior.** Lo caractericé como «no son para uso
+> comercial en producción», y eso es demasiado absoluto. No hay una prohibición
+> general del uso comercial normal. Lo que sí es cierto es que el servicio es
+> **best-effort** y la fundación puede retirar el acceso. Queda como **riesgo
+> operativo futuro, no como bloqueo.**
+
+### §14 · Resend — qué significaba exactamente «no verificado»
+
+Había una contradicción aparente en el informe. Deshecha, punto por punto:
+
+| | Estado | Cómo lo sé |
+|---|---|---|
+| **A · Dominio verificado en Resend** | **UNKNOWN** | Requiere su API. La única clave a la que puedo llegar —la de `.env.local`— devuelve `API key is invalid`. La de Production es un **Secret** y no se puede leer, que es como debe ser |
+| **B · DKIM en el DNS** | **SÍ** | `resend._domainkey.mas58express.com` tiene clave pública. El subdominio `send.` **no** la tiene |
+| **C · `EMAIL_FROM` configurado** | **SÍ** | Existe en Production como `Config` |
+| **D · Entrega real a un buzón** | **NOT YET CERTIFIED** | Nunca ha salido un correo. No se envió ninguno |
+| **E · Dirección individual verificada** | **UNKNOWN** | Mismo motivo que A |
+
+El DNS, además, respalda el razonamiento que ya estaba escrito en el código:
+
+```
+  mas58express.com            TXT   v=spf1 -all
+  send.mas58express.com       TXT   v=spf1 include:amazonses.com ~all
+  send.mas58express.com       MX    10 feedback-smtp.eu-west-1.amazonses.com
+  _dmarc.mas58express.com     TXT   v=DMARC1; p=none; rua=mailto:58expressapp@gmail.com
+```
+
+El `-all` del apex **no estorba**: SPF se evalúa contra el remitente del sobre, y
+Resend usa `send.` para eso, que sí autoriza a SES. Y DMARC alinea por **DKIM**,
+que está en el apex, que es de donde sale el `From`.
+
+> **Corrección a un hallazgo mío.** Reporté que había «una `RESEND_API_KEY` real
+> en texto plano en el disco de desarrollo». **No lo es**: ese valor tiene 76
+> caracteres, lleva puntos y no empieza por `re_`, así que no es una clave de
+> Resend. Sigue siendo un valor bajo un nombre equivocado que conviene limpiar,
+> pero no la fuga que describí. `.env.local` está correctamente ignorado por git
+> y no está versionado.
+
+## QA de esta ronda
+
+| | |
+|---|---|
+| TypeScript | ✔ sin errores |
+| **ESLint** | ✔ **0 errores, 0 avisos** *(antes 3 + 1)* |
+| `next build` | ✔ compila |
+| Playwright | ✔ **185 pasadas · 0 fallidas** *(recuento con `grep`)* |
+| axe WCAG 2.1 AA en producción | ✔ 11 rutas × móvil y escritorio, **0 violaciones** |
+| Árbol de accesibilidad (CDP) | ✔ **5/5** pasos, con y sin movimiento |
+| Sin JavaScript | ✔ los 5 pasos desapilados y en orden |
+| Responsive | ✔ 77 combinaciones, **0 desbordamientos** |
+| Lighthouse producción | ✔ escritorio **100/100/100/100**; móvil 93-100, a11y/BP/SEO **100** |
+| Turnstile | ✔ 0 de 13 scripts, 0 peticiones a Cloudflare, CSP cerrada |
+| Interruptores | ✔ los dos en `false`, 8 endpoints en 404 |
+
+**Pruebas adversarias:** analítica con datos personales en la URL ✔ · acceso
+directo a las seis imágenes antiguas ✔ (404) · portada sin activos antiguos ✔ ·
+endpoints con los interruptores apagados ✔ · cero Turnstile ✔ · política contra
+código ✔ (10 de 10).
+
+## Bloqueos que siguen abiertos
+
+**A1 · La Política de Privacidad sigue pendiente del abogado.** Es el único que
+queda de los tres. Esta ronda no lo resuelve — la deja **factualmente correcta
+para que él la revise**. Nada en el sitio afirma que haya sido revisada o
+aprobada.
+
+**A2 · La entrega de Resend sigue sin certificar.** Bloquea la lista de espera.
+Cuesta un envío autorizado; el encargo lo prohibía.
+
+**A3 · Resuelto.** La política ya declara el flujo real de Gmail.
+
+### Y una cosa que esta ronda no tocó, a propósito
+
+Las **capturas de la app** siguen publicando un precio concreto («Moto · $3.08»,
+«Auto · 4 personas · $3.08»), una frase a medio escribir («Más de ___ personas
+conectando Venezuela cada día»), una cobertura nacional («a toda Venezuela») y un
+programa de niveles. Son ficheros de imagen, no texto: quedan fuera de una ronda
+cuyo encargo era alinear `/privacidad` con el código. **Siguen siendo el hallazgo
+P1 más visible del sitio.**
+
+---
+
+# Auditoría original — 14 de septiembre
 
 **Despliegue auditado:** `plus58express-rb8kfbha0` · `delivery58/plus58express-web`
 Rama `feat/public-marketing-site`, árbol limpio, commit `e7b44f6`.
