@@ -1,6 +1,6 @@
 import { WAITLIST_ENABLED } from "@/lib/flags";
 import { hayAlmacen, repositorioWeb } from "@/lib/datos";
-import { noExiste } from "@/lib/seguridad/peticion";
+import { metodoNoPermitido, noExiste } from "@/lib/seguridad/peticion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,4 +60,10 @@ export async function GET(peticion: Request): Promise<Response> {
     console.error("[confirmar] almacén:", (error as Error).message);
     return aGracias("error", url);
   }
+}
+
+/** Mismo criterio que en `/api/waitlist`: apagado, 404; encendido, 405. */
+export async function POST(): Promise<Response> {
+  if (!WAITLIST_ENABLED) return noExiste();
+  return metodoNoPermitido("GET");
 }
