@@ -88,3 +88,21 @@ export function json(datos: unknown, estado = 200): Response {
 export function noExiste(): Response {
   return json({ error: "NO_ENCONTRADO" }, 404);
 }
+
+/**
+ * Método equivocado sobre una ruta que sí existe.
+ *
+ * Sólo tiene sentido con el interruptor ENCENDIDO. Con él apagado se responde
+ * `noExiste()`, porque si no la ruta se delataría sola: un `POST` devolvía 404 y
+ * un `GET` al mismo sitio, 405 — y un 405 sólo lo da algo que está ahí.
+ */
+export function metodoNoPermitido(permitidos: string): Response {
+  return new Response(JSON.stringify({ error: "METODO_NO_PERMITIDO" }), {
+    status: 405,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      allow: permitidos,
+    },
+  });
+}

@@ -7,7 +7,14 @@ import { LIMITES, superaLimite } from "@/lib/seguridad/limites";
 import { huellaDeIp, ipDeLaPeticion } from "@/lib/seguridad/testigos";
 import { verificarTurnstile } from "@/lib/seguridad/turnstile";
 import { pareceRobot, validarLeadAliado } from "@/lib/seguridad/validacion";
-import { json, leerCuerpo, noExiste, origenValido, tipoDeContenidoValido } from "@/lib/seguridad/peticion";
+import {
+  json,
+  leerCuerpo,
+  metodoNoPermitido,
+  noExiste,
+  origenValido,
+  tipoDeContenidoValido,
+} from "@/lib/seguridad/peticion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,4 +115,10 @@ export async function POST(peticion: Request): Promise<Response> {
   }
 
   return json({ estado: "recibido" }, 201);
+}
+
+/** Mismo motivo que en `/api/waitlist`: con el interruptor apagado, 404 y no 405. */
+export async function GET(): Promise<Response> {
+  if (!PARTNER_LEADS_ENABLED) return noExiste();
+  return metodoNoPermitido("POST");
 }

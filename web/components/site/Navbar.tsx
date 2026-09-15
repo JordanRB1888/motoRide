@@ -45,6 +45,10 @@ export default function Navbar() {
     if (!open) return;
     const caja = panel.current;
     if (!caja) return;
+    /* Se copia el nodo AHORA, no en la limpieza. Para cuando la limpieza corra,
+       `boton.current` puede apuntar ya a otro elemento —o a nada— y el foco
+       acabaría en el sitio equivocado o en ninguno. */
+    const hamburguesa = boton.current;
 
     const enfocables = () =>
       Array.from(
@@ -78,7 +82,7 @@ export default function Navbar() {
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      boton.current?.focus();
+      hamburguesa?.focus();
     };
   }, [open]);
 

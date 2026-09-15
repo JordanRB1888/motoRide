@@ -266,9 +266,44 @@ main[tabindex="-1"]:focus-visible {
   outline: none;
 }
 
-/* La escena de la carrera solo existe como escena si hay movimiento. Sin el,
-   deja de ser un sticky de 4,4 pantallas con cinco titulares apilados en la
-   misma caja y pasa a ser una lista legible a su altura natural. */
+/* ------------------------------------------------------------------
+   LA ESCENA DE LA CARRERA — legible primero, escena después
+
+   Antes esto estaba al revés: los cinco pasos vivían apilados en la misma caja
+   (`absolute inset-x-0 top-0`) y sólo GSAP los separaba. El desapilado existía,
+   pero encerrado en `prefers-reduced-motion`, que NO se activa por tener el
+   JavaScript apagado. Medido sin JS: los cinco pasos con `top: 1677px`, uno
+   encima de otro, dentro de 2,6 pantallas de scroll.
+
+   Y no era sólo quien desactiva JS a propósito: también el navegador con ahorro
+   de datos que poda scripts, y cualquiera si uno de los chunks no llega por una
+   conexión mala.
+
+   Ahora el estado por defecto —sin JS, sin GSAP, sin nada— es una lista vertical
+   legible y en orden. La escena fijada la enciende `escena-viva`, una clase que
+   RideScene pone en <html> sólo cuando de verdad va a animar. Es el mismo patrón
+   de mejora progresiva que ya usa `.reveal-ready` aquí abajo.
+   ------------------------------------------------------------------ */
+html:not(.escena-viva) [data-ride-scene] {
+  height: auto !important;
+}
+html:not(.escena-viva) [data-ride-sticky] {
+  position: static;
+  height: auto;
+  padding-block: clamp(4rem, 12vw, 8rem);
+}
+html:not(.escena-viva) [data-ride-pasos] {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2.5rem, 6vw, 3.5rem);
+}
+html:not(.escena-viva) [data-ride-pasos] [data-step] {
+  position: static;
+}
+
+/* Red de seguridad: con movimiento reducido la escena no se enciende nunca,
+   aunque el JavaScript funcione perfectamente. */
 @media (prefers-reduced-motion: reduce) {
   [data-ride-scene] {
     height: auto !important;

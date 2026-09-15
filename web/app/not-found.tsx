@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Logo from "@/components/ui/Logo";
 import { ButtonLink } from "@/components/ui/Button";
@@ -13,9 +14,37 @@ import { ButtonLink } from "@/components/ui/Button";
  * de navegación. Quien cae aquí llega por un enlace roto o un error de tecleo y
  * lo único que necesita es una salida rápida.
  *
- * No exporta `metadata`: Next no la admite en `not-found` y hacerlo rompía la
- * hidratación (error 418 de React). El 404 ya impide por sí solo que se indexe.
+ * SOBRE LOS METADATOS
+ *
+ * Antes no exportaba ninguno, y el resultado era que esta página heredaba el
+ * título de la portada —«+58Express — Mototaxi, delivery y envíos en
+ * Maracaibo»— y su `canonical`, además de quedarse con DOS `<meta name="robots">`
+ * contradictorios en la misma cabecera: el `noindex` que pone Next para un 404 y
+ * el `index, follow` que hereda del layout.
+ *
+ * El estado 404 ya impide la indexación por sí solo, así que el daño era
+ * cosmético; pero un título de error que se llama como la portada confunde en la
+ * pestaña y en el historial, y dos directivas opuestas son justo el detalle que
+ * una auditoría externa señala.
+ *
+ * Se declara aquí lo justo: título propio y una sola directiva. `alternates` se
+ * deja vacío a propósito para no arrastrar la canónica de la portada.
  */
+export const metadata: Metadata = {
+  /* `absolute` y no una cadena suelta: el layout define
+     `title.template = "%s · +58Express"`, y sin esto el título salía duplicado
+     —«Esta página no existe · +58Express · +58Express»—. */
+  title: { absolute: "Esta página no existe · +58Express" },
+  description: "La dirección que buscas no está en mas58express.com.",
+  /* Sólo `index: false`, para que el valor coincida exactamente con el `noindex`
+     que Next emite por su cuenta en cualquier 404. No se puede suprimir el suyo
+     sin `experimental.globalNotFound`, que es experimental y obligaría a
+     rehacer aquí las fuentes, los estilos y el <html> entero: no compensa por
+     una etiqueta repetida. Lo que sí se ha quitado es la contradicción — antes
+     convivían `noindex` y el `index, follow` heredado del layout. */
+  robots: { index: false },
+  alternates: { canonical: null },
+};
 const SALIDAS = [
   { href: "/servicios", label: "Servicios" },
   { href: "/conductores", label: "Conductores" },

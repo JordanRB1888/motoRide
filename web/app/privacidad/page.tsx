@@ -154,8 +154,9 @@ export default function Page() {
             <SubLegal>Qué te enviamos, y qué no</SubLegal>
             <P>
               Sólo la confirmación, el aviso de lanzamiento y el acuse si te das de baja. Ni
-              boletines, ni promociones, ni mensajes de terceros. Cada correo lleva un enlace
-              para salir de la lista, y{" "}
+              boletines, ni promociones, ni mensajes de terceros. Todos los que te escribimos
+              estando en la lista llevan un enlace para salir de ella —el acuse de la baja no,
+              porque para entonces ya has salido—, y{" "}
               <strong className="font-bold text-paper">
                 ninguno lleva píxel de seguimiento ni enlaces que cuenten clics
               </strong>
@@ -232,10 +233,40 @@ export default function Page() {
             <P>
               No usa cookies y{" "}
               <strong className="font-bold text-paper">no recoge ningún dato personal</strong>.
-              Lo que se envía en cada medición es: la dirección de la página, la marca de tiempo,
-              la versión del propio script y, cuando pulsas un botón, el nombre del evento y la
-              ruta desde la que se pulsó. Ni tu correo, ni tu nombre, ni tu teléfono, ni tu
-              dirección IP, ni ningún identificador que permita seguirte entre visitas.
+              Esto es todo lo que viaja en cada medición:
+            </P>
+            <TablaLegal
+              resumen="Campos que se envían en cada medición de uso."
+              cabeceras={["Campo", "Qué contiene"]}
+              filas={[
+                [
+                  "Dirección de la página",
+                  "Sólo el dominio y la ruta. Lo que vaya después de «?» o de «#» se recorta antes de salir de tu navegador",
+                ],
+                ["Ruta", "La misma ruta, por separado"],
+                ["Marca de tiempo", "Cuándo ocurrió"],
+                ["Versión del script", "Qué versión de la herramienta lo midió"],
+                [
+                  "De dónde vienes",
+                  "Sólo en la primera página de la visita, y sólo el dominio del sitio del que llegas — nunca su ruta ni lo que llevara detrás de «?». En una visita directa va vacío",
+                ],
+                [
+                  "Evento",
+                  "Al pulsar un botón: su nombre (por ejemplo «social_tiktok») y una categoría como «footer» o «contacto»",
+                ],
+              ]}
+            />
+            <P>
+              Ni tu correo, ni tu nombre, ni tu teléfono, ni tu dirección IP, ni ningún
+              identificador que permita seguirte entre visitas.
+            </P>
+            <P>
+              Ese recorte de la dirección es deliberado. Si alguna vez llegaras a este sitio por
+              un enlace que llevase datos tuyos pegados detrás —algo que{" "}
+              <strong className="font-bold text-paper">ninguna dirección que genere esta web
+              hace</strong>, pero que podría poner un tercero—, esos datos{" "}
+              <strong className="font-bold text-paper">no se enviarían a la medición</strong>: se
+              descartan antes.
             </P>
           </SeccionLegal>
 
@@ -279,19 +310,35 @@ export default function Page() {
               filas={[
                 ["Vercel", "Alojar el sitio y ejecutar sus funciones", "Dirección IP y datos de la petición", "Estados Unidos"],
                 ["Supabase", "Base de datos de la lista de espera y los comercios", "Los datos de las secciones 3 y 4", "Estados Unidos"],
-                ["Resend", "Enviar los correos de confirmación, baja y acuse", "Tu dirección de correo y el contenido del mensaje", "Unión Europea"],
+                ["Resend", "Enviar los correos de confirmación, baja y acuse", "Tu dirección de correo y el contenido de esos correos", "Unión Europea"],
+                [
+                  "Google (Gmail)",
+                  "Es nuestro buzón: ahí recibimos los correos que nos escribes y, cuando el formulario de comercios esté activo, el aviso interno que genera",
+                  "Lo que escribas si nos escribes; y del formulario de comercios: nombre, negocio, teléfono, correo, municipio, tipo de comercio y mensaje",
+                  "Según la política de Google",
+                ],
                 ["Cloudflare", "Comprobar que no eres un robot (cuando los formularios se activen)", "Dirección IP y señales del navegador", "Red global"],
                 ["OpenStreetMap", "Las teselas del mapa de cobertura", "Dirección IP, al cargar el mapa", "Europa"],
                 ["Meta (WhatsApp)", "Sólo si tú decides abrir WhatsApp desde un botón", "Lo que tú escribas en esa conversación", "Según su propia política"],
-                ["Google (Gmail)", "Sólo si tú decides escribirnos por correo", "Lo que tú escribas en ese mensaje", "Según su propia política"],
               ]}
             />
             <P>
-              Las dos últimas filas no son proveedores nuestros: son aplicaciones tuyas. Si pulsas
-              un botón de WhatsApp o de correo, sales de este sitio y lo que ocurra a partir de
-              ahí se rige por las condiciones de esas empresas. El mensaje va escrito de
-              antemano, pero <strong className="font-bold text-paper">no se envía hasta que tú lo
-              envías</strong>.
+              Una precisión sobre <strong className="font-bold text-paper">Gmail</strong>, porque
+              antes esta política lo contaba mal: es la dirección de correo del equipo, y por eso
+              aparece en dos situaciones distintas. La primera es cuando tú nos escribes. La
+              segunda —
+              <strong className="font-bold text-paper">
+                cuando el formulario de comercios esté activo
+              </strong>
+              — es automática: al enviarlo, además de guardarse, se genera un aviso interno a ese
+              buzón con los datos que acabas de rellenar. Ocurre sin que tú tengas que escribir
+              ningún correo.
+            </P>
+            <P>
+              La última fila no es un proveedor nuestro: es una aplicación tuya. Si pulsas un
+              botón de WhatsApp, sales de este sitio y lo que ocurra a partir de ahí se rige por
+              las condiciones de esa empresa. El mensaje va escrito de antemano, pero{" "}
+              <strong className="font-bold text-paper">no se envía hasta que tú lo envías</strong>.
             </P>
           </SeccionLegal>
 
@@ -313,13 +360,36 @@ export default function Page() {
               resumen="Plazos de conservación de cada tipo de dato."
               cabeceras={["Dato", "Hasta cuándo"]}
               filas={[
-                ["Inscripción sin confirmar", "El enlace caduca a las 48 horas y el registro se elimina a los 30 días: nunca llegó a haber consentimiento"],
-                ["Inscripción confirmada", "Hasta 30 días después del aviso de lanzamiento, o hasta que te des de baja"],
-                ["Baja", "Se conserva únicamente la constancia de que pediste la baja, para no volver a escribirte por error"],
-                ["Contacto de comercio", "12 meses desde el último contacto, salvo que la relación continúe"],
-                ["Registros contra el abuso", "Como máximo 24 horas"],
+                [
+                  "Inscripción sin confirmar",
+                  "El enlace caduca a las 48 horas. El registro se borra pasados 30 días desde que se creó: nunca llegó a haber consentimiento",
+                ],
+                [
+                  "Inscripción confirmada",
+                  "Mientras sigas en la lista. No tiene borrado automático: sale cuando te das de baja o cuando nos lo pides",
+                ],
+                [
+                  "Baja",
+                  "Se conserva únicamente la constancia de que pediste la baja, para no volver a escribirte por error",
+                ],
+                [
+                  "Contacto de comercio",
+                  "Se borra pasados 12 meses desde que enviaste el formulario",
+                ],
+                [
+                  "Registros contra el abuso",
+                  "Se borran una vez superadas las 24 horas desde el último intento",
+                ],
               ]}
             />
+            <P>
+              Los borrados automáticos los hace{" "}
+              <strong className="font-bold text-paper">un proceso que se ejecuta una vez al
+              día</strong>. Eso significa que un registro no desaparece en el instante exacto en
+              que cumple su plazo, sino en el primer pase diario posterior: en el peor caso,
+              menos de veinticuatro horas más tarde. Lo decimos así porque es lo que ocurre, no
+              un máximo que no podríamos garantizar.
+            </P>
             <P>
               Cumplidos esos plazos los datos se eliminan. Si una norma nos obligara a conservar
               algo más tiempo, se conservaría sólo lo exigido y sólo durante ese plazo.

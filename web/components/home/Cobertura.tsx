@@ -42,8 +42,13 @@ export default function Cobertura() {
     const el = hueco.current;
     if (!el) return;
     if (typeof IntersectionObserver === "undefined") {
-      setMapaVivo(true);
-      return;
+      /* Red de seguridad para un navegador sin observador: se monta el mapa sin
+         esperar a nada. Va en una tarea aparte y no en el cuerpo del efecto
+         porque encender el estado ahí mismo encadena un render de más — es lo
+         que avisa `react-hooks/set-state-in-effect`. El resultado visible es el
+         mismo: el mapa aparece igual de inmediato. */
+      const t = setTimeout(() => setMapaVivo(true), 0);
+      return () => clearTimeout(t);
     }
     const io = new IntersectionObserver(
       (entradas) => {

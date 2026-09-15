@@ -62,8 +62,23 @@ export const EMPRESA = {
  * actualización» se convierte en decorado.
  */
 export const VIGENCIA_LEGAL = {
-  fecha: "13 de septiembre de 2026",
-  version: "1.0",
+  /* 1.1 — 15 de septiembre de 2026. Ronda FACTUAL, previa a la revisión
+     jurídica: no se tocó ninguna base legal, ni un derecho, ni el responsable,
+     ni el plazo de respuesta. Sólo se corrigieron tres cosas que el documento
+     contaba de forma distinta a como funciona el sitio:
+
+       · Gmail figuraba como algo que ocurría «sólo si tú decides escribirnos».
+         En realidad es el buzón del equipo, y el formulario de comercios le
+         manda un aviso con los datos del formulario en cuanto se active.
+       · La medición decía enviar «la dirección de la página» sin más. Ahora esa
+         dirección se recorta —fuera la consulta y el fragmento— y la lista de
+         campos incluye el referente, que antes no se mencionaba y sí viaja.
+       · Los tres plazos de conservación prometían cosas que el código no hace:
+         «12 meses desde el último contacto» cuando se cuenta desde el alta,
+         «como máximo 24 horas» cuando el barrido es diario, y un borrado de las
+         inscripciones confirmadas que no existe. */
+  fecha: "15 de septiembre de 2026",
+  version: "1.1",
 } as const;
 
 /**

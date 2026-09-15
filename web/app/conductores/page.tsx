@@ -6,8 +6,12 @@ import Reveal from "@/components/motion/Reveal";
 
 export const metadata: Metadata = metaPagina({
   titulo: "Conduce con +58Express en Maracaibo y Mara",
+  /* NO decir «inscripciones abiertas»: no las hay. Esta frase es lo que se lee
+     en el resultado de Google y en la vista previa de WhatsApp, y la propia
+     página dice justo debajo que todavía no existe formulario de postulación.
+     Era la única promesa del sitio que su propia página desmentía. */
   descripcion:
-    "Conduce en moto por Maracaibo y el Municipio Mara: eliges tus horas, decides qué viajes aceptas y cobras por la plataforma. Inscripciones abiertas para el lanzamiento.",
+    "Conduce en moto por Maracaibo y el Municipio Mara: eliges tus horas, decides qué viajes aceptas y cobras por la plataforma. Próximamente — conoce cómo va a funcionar.",
   ruta: "/conductores",
 });
 

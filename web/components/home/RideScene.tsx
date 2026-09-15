@@ -32,16 +32,23 @@ export default function RideScene() {
 
     /* Sin motion no hay escena: los cinco pasos dejan de estar superpuestos en
        la misma caja y se leen como una lista en flujo normal, con la seccion a
-       su altura natural. El cambio de maquetacion lo hace CSS (bloque
-       prefers-reduced-motion en globals.css); aqui solo se dejan visibles. */
+       su altura natural. El cambio de maquetacion lo hace CSS —ahora es el
+       estado POR DEFECTO, no un caso especial—; aqui solo se dejan visibles.
+       Sin `escena-viva`, el CSS deja la lista plana. */
     if (prefersReducedMotion()) {
       gsap.set(q("[data-route-line]"), { strokeDashoffset: 0 });
-      gsap.set(q("[data-step]"), { autoAlpha: 1, y: 0 });
+      gsap.set(q("[data-step]"), { opacity: 1, y: 0 });
       gsap.set(q("[data-phone-screen]"), { autoAlpha: 0 });
       gsap.set(q('[data-phone-screen="map"]'), { autoAlpha: 1 });
       gsap.set(q("[data-rider]"), { autoAlpha: 1 });
       return;
     }
+
+    /* A partir de aqui SI hay escena: se enciende la maquetacion fijada.
+       La clase va en <html> y se quita al desmontar, para que una navegacion
+       de cliente a otra pagina no se lleve el estado puesto. */
+    const raiz = document.documentElement;
+    raiz.classList.add("escena-viva");
 
     gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
 
@@ -49,7 +56,18 @@ export default function RideScene() {
       const line = q("[data-route-line]")[0] as unknown as SVGPathElement;
       const len = line.getTotalLength();
       gsap.set(line, { strokeDasharray: len, strokeDashoffset: len });
-      gsap.set(q("[data-step]"), { autoAlpha: 0, y: 26 });
+      /* `opacity` y NO `autoAlpha` en los pasos. `autoAlpha` es opacity MAS
+         visibility, y `visibility: hidden` saca el elemento del arbol de
+         accesibilidad: con el, un lector de pantalla recorria las 3.520 px de
+         esta seccion y oia el titulo y nada mas — los cinco H3 y sus parrafos no
+         estaban. Con `opacity` la animacion se ve exactamente igual y el
+         contenido sigue ahi para quien no lo ve. Dentro no hay nada pulsable,
+         asi que tampoco estorba al raton.
+
+         El resto de elementos de la escena —el telefono, el motorista, los
+         pines— si conservan `autoAlpha`: son decorativos y estan en contenedores
+         `aria-hidden`, asi que ocultarlos del todo es lo correcto. */
+      gsap.set(q("[data-step]"), { opacity: 0, y: 26 });
       gsap.set(q("[data-rider]"), { autoAlpha: 0 });
       gsap.set(q("[data-pin-end]"), { autoAlpha: 0, scale: 0 });
       gsap.set(q("[data-pulse]"), { autoAlpha: 0, scale: 0.2 });
@@ -68,12 +86,12 @@ export default function RideScene() {
       // superpuestos son ilegibles, por muy suave que sea el cruce.
       const show = (i: number, at: number) => {
         if (i > 0) {
-          tl.to(q(`[data-step="${i - 1}"]`), { autoAlpha: 0, y: -24, duration: 0.035, ease: EASE.in }, at - 0.055);
+          tl.to(q(`[data-step="${i - 1}"]`), { opacity: 0, y: -24, duration: 0.035, ease: EASE.in }, at - 0.055);
         }
         tl.fromTo(
           q(`[data-step="${i}"]`),
-          { autoAlpha: 0, y: 26 },
-          { autoAlpha: 1, y: 0, duration: 0.05, ease: EASE.out, immediateRender: false },
+          { opacity: 0, y: 26 },
+          { opacity: 1, y: 0, duration: 0.05, ease: EASE.out, immediateRender: false },
           at,
         );
       };
@@ -120,7 +138,13 @@ export default function RideScene() {
       tl.to(q("[data-phone-tilt]"), { rotateY: 0, rotateX: 0, scale: 1, duration: 0.14 }, 0.84);
     }, el);
 
-    return () => ctx.revert();
+    return () => {
+      ctx.revert();
+      /* La clase se va con la escena: si no, una navegacion de cliente a otra
+         pagina dejaria <html> marcado y el CSS de la lista plana desactivado
+         para siempre. */
+      raiz.classList.remove("escena-viva");
+    };
   }, []);
 
   return (

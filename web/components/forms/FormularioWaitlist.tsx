@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import Turnstile from "@/components/forms/Turnstile";
 import { WAITLIST_ENABLED } from "@/lib/flags";
@@ -38,7 +38,18 @@ export default function FormularioWaitlist({ origen }: { origen?: string }) {
   const [hecho, setHecho] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testigo, setTestigo] = useState("");
-  const abiertoEn = useRef(Date.now());
+  /* Cuándo apareció el formulario, para descartar los envíos instantáneos que
+     sólo hace un robot.
+
+     La marca se toma en un efecto y no en el render: `Date.now()` es impuro y
+     llamarlo mientras React renderiza devuelve un valor distinto en cada
+     repintado, aunque `useRef` sólo se quede con el primero. El efecto corre una
+     vez, tras montar, que es justo el momento en que la persona puede ver el
+     formulario — así que mide lo mismo y deja de mentirle a React. */
+  const abiertoEn = useRef(0);
+  useEffect(() => {
+    abiertoEn.current = Date.now();
+  }, []);
   const refEmail = useRef<HTMLInputElement>(null);
   const refConsent = useRef<HTMLInputElement>(null);
 

@@ -3,6 +3,19 @@ import Image from "next/image";
 /**
  * Las tres plazas por las que empieza +58Express.
  *
+ * QUÉ SON ESTAS IMÁGENES — importa para el texto alternativo
+ *
+ * Son **representaciones generadas**, no fotografías documentales de esos tres
+ * monumentos. Antes el `alt` decía «La plaza de Santa Cruz de Mara, con su
+ * estatua ecuestre…» y «Vista aérea de la iglesia de El Moján…», es decir,
+ * afirmaba ante un lector de pantalla —lo único que oye quien no ve la
+ * pantalla— que aquello era ese sitio exacto. No lo es, y además no coincidía
+ * con las fotos que la propia portada usaba para los mismos pueblos.
+ *
+ * Ahora cada `alt` empieza por «Representación visual de…» y el pie lo dice una
+ * vez, en una frase. No hace falta un aviso grande: basta con no hacer pasar una
+ * ilustración por documentación.
+ *
  * POR QUÉ TRES IMÁGENES Y NO UN MONTAJE
  *
  * Lo evidente sería pegar las tres fotos en un solo JPEG y colocarlo. Sería peor
@@ -25,7 +38,7 @@ const SITIOS = [
     src: "/zulia/santa-cruz-de-mara.webp",
     nombre: "Santa Cruz de Mara",
     nota: "La plaza, con su estatua y la iglesia al fondo.",
-    alt: "La plaza de Santa Cruz de Mara, con su estatua ecuestre sobre el pedestal y la iglesia al fondo entre palmeras.",
+    alt: "Representación visual de Santa Cruz de Mara: una plaza con estatua sobre pedestal y una iglesia al fondo entre palmeras.",
     /* La única de las tres con resolución de sobra: se pide con prioridad y a
        mayor tamaño porque es la que más se amplía en escritorio. */
     ancho: 1122,
@@ -36,7 +49,7 @@ const SITIOS = [
     src: "/zulia/el-mojan.webp",
     nombre: "El Moján",
     nota: "La iglesia y la plaza, con el lago detrás.",
-    alt: "Vista aérea de la iglesia de El Moján y su plaza, con el lago de Maracaibo al fondo.",
+    alt: "Representación visual de El Moján: vista aérea de una plaza con su iglesia y el lago al fondo.",
     ancho: 1122,
     alto: 1402,
   },
@@ -45,7 +58,7 @@ const SITIOS = [
     src: "/zulia/maracaibo.webp",
     nombre: "Maracaibo",
     nota: "El monumento a la Chinita y sus fuentes.",
-    alt: "La basílica de Maracaibo con el monumento a la Chinita y las fuentes de la plaza en primer plano.",
+    alt: "Representación visual de Maracaibo: una basílica, un monumento y las fuentes de la plaza en primer plano.",
     ancho: 1122,
     alto: 1402,
   },
@@ -95,7 +108,8 @@ export default function ZonasIniciales() {
       </ul>
       <figcaption className="mt-6 text-[15px] leading-relaxed text-paper-mute">
         Santa Cruz de Mara, El Moján y Maracaibo: las zonas iniciales previstas para el
-        lanzamiento en el estado Zulia.
+        lanzamiento en el estado Zulia. Las imágenes son representaciones, no fotografías
+        de esos lugares.
       </figcaption>
     </figure>
   );

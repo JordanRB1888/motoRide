@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import Turnstile from "@/components/forms/Turnstile";
 import { PARTNER_LEADS_ENABLED } from "@/lib/flags";
@@ -45,7 +45,13 @@ export default function FormularioAliados() {
   const [error, setError] = useState<string | null>(null);
   const [fallos, setFallos] = useState<Record<string, string>>({});
   const [testigo, setTestigo] = useState("");
-  const abiertoEn = useRef(Date.now());
+  /* En un efecto y no en el render: `Date.now()` es impuro y React lo prohíbe
+     durante el render. Tras montar mide lo mismo — el momento en que la persona
+     puede ver el formulario. El porqué largo está en `FormularioWaitlist`. */
+  const abiertoEn = useRef(0);
+  useEffect(() => {
+    abiertoEn.current = Date.now();
+  }, []);
   const form = useRef<HTMLFormElement>(null);
 
   if (!PARTNER_LEADS_ENABLED) return null;

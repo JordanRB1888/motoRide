@@ -11,7 +11,14 @@ import {
 } from "@/lib/seguridad/testigos";
 import { verificarTurnstile } from "@/lib/seguridad/turnstile";
 import { pareceRobot, validarWaitlist } from "@/lib/seguridad/validacion";
-import { json, leerCuerpo, noExiste, origenValido, tipoDeContenidoValido } from "@/lib/seguridad/peticion";
+import {
+  json,
+  leerCuerpo,
+  metodoNoPermitido,
+  noExiste,
+  origenValido,
+  tipoDeContenidoValido,
+} from "@/lib/seguridad/peticion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -137,4 +144,19 @@ export async function POST(peticion: Request): Promise<Response> {
    * que la enumeración es aceptable, el cambio es esta línea. */
   void alta.creado;
   return json({ estado: "pendiente" }, 201);
+}
+
+/**
+ * Un `GET` aquí nunca es legítimo, pero su respuesta importaba.
+ *
+ * Sin esta función, Next respondía 405 — y un 405 sólo lo da una ruta que
+ * existe. Con el interruptor apagado, el `POST` contestaba 404 y el `GET`
+ * delataba lo contrario. Ahora las dos puertas dicen lo mismo.
+ *
+ * Con el interruptor encendido sí vuelve el 405, que es lo correcto: entonces la
+ * ruta existe de verdad y sólo acepta `POST`.
+ */
+export async function GET(): Promise<Response> {
+  if (!WAITLIST_ENABLED) return noExiste();
+  return metodoNoPermitido("POST");
 }
