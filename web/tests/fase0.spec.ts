@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { WAITLIST_ENABLED } from "@/lib/flags";
 
 /**
  * Fase 0: las puertas reales.
@@ -92,11 +93,25 @@ test.describe("ninguna página termina en una pared", () => {
     await page.goto("/");
     await listo(page);
     await page.locator("#descargar").scrollIntoViewIfNeeded();
-    await page.waitForTimeout(500);
-    // Con WAITLIST_ENABLED en false no puede existir ni un campo: un formulario
-    // que no guarda nada engaña a quien lo rellena.
-    expect(await page.locator("#descargar input, #descargar form").count()).toBe(0);
-    await expect(page.locator("#descargar a[href*='wa.me']")).toHaveCount(1);
+    await page.waitForTimeout(600);
+    /* La regla no es «que no haya formulario»: es que no haya uno que mienta.
+       Apagado el interruptor no puede existir ni un campo —un formulario que no
+       guarda nada engaña a quien lo rellena—; encendido tiene que estar entero,
+       con su etiqueta y su casilla de consentimiento. */
+    if (!WAITLIST_ENABLED) {
+      expect(await page.locator("#descargar input, #descargar form").count()).toBe(0);
+    } else {
+      await expect(page.locator("#descargar form")).toHaveCount(1);
+      await expect(page.locator("#descargar input#wl-email")).toBeVisible();
+      await expect(page.locator("#descargar input#wl-consent")).toHaveCount(1);
+    }
+    /* Y una salida, la que toque: WhatsApp cuando no hay lista, el formulario
+       cuando la hay. Lo que esta prueba no admite es una sección que no lleve a
+       ninguna parte. */
+    const salidas =
+      (await page.locator("#descargar a[href*='wa.me']").count()) +
+      (await page.locator("#descargar form").count());
+    expect(salidas).toBeGreaterThan(0);
   });
 });
 

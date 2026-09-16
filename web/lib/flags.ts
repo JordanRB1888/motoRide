@@ -16,20 +16,46 @@
  */
 
 /**
- * Lista de espera del lanzamiento.
+ * Lista de espera del lanzamiento. **ENCENDIDA el 15 de septiembre de 2026.**
  *
- * Requisitos para encenderla, todos: política de privacidad publicada con
- * responsable identificado · almacén provisionado · claves de Turnstile ·
- * clave de Resend en el proyecto web.
+ * Los requisitos eran cinco, y no se encendió hasta cumplirlos todos:
+ *
+ *   1. política de privacidad publicada, con responsable identificado — v1.1,
+ *      revisada por Fernando Atencio;
+ *   2. almacén provisionado — Postgres de Supabase, con las tres tablas y el
+ *      índice único sobre el correo;
+ *   3. claves de Turnstile, las dos: la pública en el navegador y la secreta en
+ *      el servidor, que es la que decide;
+ *   4. clave de Resend en el proyecto web;
+ *   5. **y la que faltaba hasta el final: la prueba de que un correo sale de
+ *      producción y LLEGA a un buzón de verdad.** Se hizo el 15 de septiembre y
+ *      el propietario confirmó la recepción. Un doble consentimiento por correo
+ *      cuyo correo no llega no es un doble consentimiento: es una lista que
+ *      nadie puede confirmar y de la que nadie puede salir.
+ *
+ * Encenderlo aquí hace cuatro cosas a la vez, y conviene tenerlas presentes:
+ * pinta el formulario en `/#descargar`, abre las cuatro rutas de `/api/waitlist`
+ * y, a través de `next.config.ts`, abre la CSP a `challenges.cloudflare.com`
+ * —sólo a ese dominio, y sólo mientras algún formulario pueda pintarse—.
  */
-export const WAITLIST_ENABLED = false;
+export const WAITLIST_ENABLED = true;
 
 /**
- * Captación de comercios aliados.
+ * Captación de comercios aliados. **SIGUE APAGADA, y a propósito.**
  *
- * Mismos requisitos. Mientras esté apagada, `/aliados` sigue ofreciendo la
- * conversación por WhatsApp, que es una puerta real y no promete un alta
- * automática que no existe.
+ * Cumple los mismos cinco requisitos que la lista de espera —comparte almacén,
+ * Turnstile y Resend—, así que ya no está apagada por falta de nada: lo está
+ * porque el propietario decidió encender una superficie cada vez y mirar cómo se
+ * comporta antes de abrir la siguiente. Es una decisión, no un pendiente.
+ *
+ * Mientras esté apagada, `/aliados` sigue ofreciendo la conversación por
+ * WhatsApp, que es una puerta real y no promete un alta automática que no
+ * existe.
+ *
+ * Aviso para quien la encienda: este formulario **manda un aviso interno con los
+ * siete campos** al buzón del equipo (`EMAIL_EQUIPO`, y si no existe, la
+ * dirección de contacto). La política de privacidad ya lo declara; si eso
+ * cambiara, hay que cambiar el texto antes de tocar esta línea.
  */
 export const PARTNER_LEADS_ENABLED = false;
 

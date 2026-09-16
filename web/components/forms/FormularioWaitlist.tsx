@@ -167,11 +167,18 @@ export default function FormularioWaitlist({ origen }: { origen?: string }) {
           />
         </div>
 
-        <fieldset>
-          <legend className="text-[14px] font-bold text-paper">
+        {/* `<label for>` y no `<fieldset><legend>`.
+            Estaban en fieldset, y axe lo marcó como infracción CRÍTICA
+            (`select-name`): un `<legend>` nombra al GRUPO, no al control que hay
+            dentro. El lector de pantalla anunciaba «grupo, ¿qué te interesa?» y
+            después un desplegable **sin nombre**. Un fieldset con un solo campo
+            no agrupa nada; lo que hacía falta era una etiqueta de verdad. */}
+        <div>
+          <label htmlFor="wl-rol" className="block text-[14px] font-bold text-paper">
             ¿Qué te interesa? <span className="font-normal text-paper-mute">(opcional)</span>
-          </legend>
+          </label>
           <select
+            id="wl-rol"
             name="rol"
             defaultValue=""
             className="mt-2 h-12 w-full rounded-xl border border-white/15 bg-ink-900 px-4 text-[16px] text-paper outline-none focus-visible:border-signal"
@@ -183,13 +190,14 @@ export default function FormularioWaitlist({ origen }: { origen?: string }) {
               </option>
             ))}
           </select>
-        </fieldset>
+        </div>
 
-        <fieldset>
-          <legend className="text-[14px] font-bold text-paper">
+        <div>
+          <label htmlFor="wl-zona" className="block text-[14px] font-bold text-paper">
             ¿Dónde estás? <span className="font-normal text-paper-mute">(opcional)</span>
-          </legend>
+          </label>
           <select
+            id="wl-zona"
             name="zona"
             defaultValue=""
             className="mt-2 h-12 w-full rounded-xl border border-white/15 bg-ink-900 px-4 text-[16px] text-paper outline-none focus-visible:border-signal"
@@ -201,7 +209,7 @@ export default function FormularioWaitlist({ origen }: { origen?: string }) {
               </option>
             ))}
           </select>
-        </fieldset>
+        </div>
 
         {/* Trampa: ningún humano la ve ni la tabula, un programa la rellena.
             `aria-hidden` + `tabIndex={-1}` la dejan fuera del lector de pantalla

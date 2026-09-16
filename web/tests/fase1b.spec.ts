@@ -1,18 +1,33 @@
 import { test, expect } from "@playwright/test";
+import { PARTNER_LEADS_ENABLED, WAITLIST_ENABLED } from "@/lib/flags";
 
 /**
- * Fase 1-B: la infraestructura existe, y **no se ve**.
+ * Fase 1-B: cada superficie aparece cuando su interruptor lo dice, **y sólo
+ * entonces**.
  *
- * Estas pruebas vigilan justo lo contrario de lo normal: que algo NO aparezca.
- * Mientras la política de privacidad no exista, ningún formulario puede pedir un
- * dato, y la forma de garantizarlo es comprobarlo en cada despliegue, no
- * confiar en que nadie tocó un interruptor.
+ * Estas pruebas nacieron vigilando lo contrario de lo normal —que algo NO
+ * apareciera— mientras no hubiera política de privacidad. Ese requisito ya se
+ * cumplió y la lista de espera está encendida, así que ahora vigilan las dos
+ * mitades:
+ *
+ *   · lo que el interruptor apagado sigue tapando: el formulario de comercios,
+ *     sus rutas, y cualquier campo en una página que no debe pedir datos;
+ *   · lo que el interruptor encendido tiene que hacer bien: el formulario de la
+ *     lista de espera, sus cuatro rutas y el permiso de la CSP para Turnstile,
+ *     **exactamente donde hace falta y en ningún otro sitio**.
+ *
+ * Se leen los interruptores de verdad en vez de escribir el estado esperado a
+ * mano: así, el día que uno cambie, estas pruebas comprueban lo nuevo y no hay
+ * que acordarse de venir a editarlas.
  */
 
 const CAMPOS = "input:not([type=hidden]), textarea, select";
 
-test.describe("los interruptores mantienen los formularios fuera del público", () => {
-  for (const ruta of ["/", "/aliados", "/conductores", "/contacto"]) {
+/** Páginas que no tienen formulario propio pase lo que pase. */
+const SIN_FORMULARIO = ["/conductores", "/contacto", ...(PARTNER_LEADS_ENABLED ? [] : ["/aliados"])];
+
+test.describe("los interruptores gobiernan lo que se ve", () => {
+  for (const ruta of SIN_FORMULARIO) {
     test(`${ruta} no pide ni un dato`, async ({ page }) => {
       await page.goto(ruta);
       await page.waitForLoadState("networkidle").catch(() => {});
@@ -22,12 +37,36 @@ test.describe("los interruptores mantienen los formularios fuera del público", 
     });
   }
 
-  test("la zona de descarga sigue ofreciendo WhatsApp, no un campo", async ({ page }) => {
+  test("la zona de descarga hace lo que dice su interruptor", async ({ page }) => {
     await page.goto("/");
     await page.locator("#descargar").scrollIntoViewIfNeeded();
-    await page.waitForTimeout(500);
-    expect(await page.locator(`#descargar ${CAMPOS}`).count()).toBe(0);
-    await expect(page.locator('#descargar a[href*="wa.me"]')).toHaveCount(1);
+    await page.waitForTimeout(600);
+
+    if (!WAITLIST_ENABLED) {
+      expect(await page.locator(`#descargar ${CAMPOS}`).count()).toBe(0);
+    } else {
+      /* Encendida: el formulario existe de verdad, con su etiqueta y su
+         casilla de consentimiento. Un campo de correo sin consentimiento al
+         lado sería peor que no tener formulario. */
+      await expect(page.locator("#descargar form")).toHaveCount(1);
+      await expect(page.locator("#descargar input#wl-email")).toBeVisible();
+      await expect(page.locator("#descargar input#wl-consent")).toHaveCount(1);
+      await expect(page.getByLabel("Tu correo")).toBeVisible();
+      /* Los tres campos tienen nombre accesible. Los dos desplegables estuvieron
+         dentro de un `<fieldset><legend>`, que nombra al grupo y no al control:
+         axe lo marcó como infracción crítica. Esto vigila que no vuelva. */
+      await expect(page.getByLabel(/¿Qué te interesa\?/)).toBeVisible();
+      await expect(page.getByLabel(/¿Dónde estás\?/)).toBeVisible();
+    }
+
+    /* La sección tiene que ofrecer SIEMPRE una salida, pero no siempre la misma:
+       apagada es WhatsApp —la única puerta que había—, encendida es el propio
+       formulario, que es mejor puerta. Lo que no puede pasar es que no haya
+       ninguna. */
+    const salidas =
+      (await page.locator('#descargar a[href*="wa.me"]').count()) +
+      (await page.locator("#descargar form").count());
+    expect(salidas, "la zona de descarga se quedó sin salida").toBeGreaterThan(0);
   });
 
   test("/aliados sigue ofreciendo la conversación", async ({ page }) => {
@@ -37,39 +76,88 @@ test.describe("los interruptores mantienen los formularios fuera del público", 
   });
 });
 
-test.describe("las rutas de API no existen mientras el interruptor esté apagado", () => {
-  test("la lista de espera responde 404, no 503", async ({ request }) => {
+test.describe("las rutas de API dicen lo que su interruptor manda", () => {
+  test("la lista de espera existe o no, pero nunca se delata a medias", async ({ request }) => {
     const r = await request.post("/api/waitlist", {
       data: { email: "a@ejemplo.com", consentimiento: true },
       headers: { "content-type": "application/json" },
     });
-    // 404 y no 503: no es una caída temporal, es que no se ha publicado.
-    expect(r.status()).toBe(404);
+
+    if (!WAITLIST_ENABLED) {
+      // 404 y no 503: no es una caída temporal, es que no se ha publicado.
+      expect(r.status()).toBe(404);
+      return;
+    }
+
+    /* Encendida. Esta petición no trae `Origin` —la hace un cliente, no un
+       navegador—, así que la guarda contra la falsificación de petición la
+       rechaza antes de mirar nada más: 400. Lo que importa es que **no** sea
+       404 (existe) ni 200 (no se cuela sin Turnstile). */
+    expect(r.status()).toBe(400);
+    expect(await r.json()).toEqual({ error: "PETICION_NO_VALIDA" });
   });
 
-  test("confirmar y baja responden 404", async ({ request }) => {
-    expect((await request.get("/api/waitlist/confirmar?token=x")).status()).toBe(404);
-    expect((await request.get("/api/waitlist/baja?token=x")).status()).toBe(404);
+  test("un GET a la lista de espera nunca contradice al POST", async ({ request }) => {
+    /* El fallo que esto vigila es sutil: con el interruptor apagado, un 405 aquí
+       delataría que la ruta existe mientras el POST devuelve 404. Encendida, el
+       405 es lo correcto. */
+    const r = await request.get("/api/waitlist");
+    expect(r.status()).toBe(WAITLIST_ENABLED ? 405 : 404);
+    if (WAITLIST_ENABLED) expect(r.headers()["allow"]).toBe("POST");
+  });
+
+  test("confirmar y baja tratan un testigo falso sin enseñar nada", async ({ request }) => {
+    for (const [ruta, destino] of [
+      ["/api/waitlist/confirmar", "/gracias"],
+      ["/api/waitlist/baja", "/baja"],
+    ]) {
+      const r = await request.get(`${ruta}?token=inventado`, { maxRedirects: 0 });
+
+      if (!WAITLIST_ENABLED) {
+        expect(r.status(), ruta).toBe(404);
+        continue;
+      }
+
+      /* Encendida: un testigo falso NO es un error técnico. Se redirige a la
+         página de siempre con una sola palabra de estado — nunca el testigo,
+         nunca un correo, nunca un identificador. */
+      expect(r.status(), ruta).toBe(302);
+      const destinoReal = r.headers()["location"] ?? "";
+      expect(destinoReal, ruta).toContain(`${destino}?estado=invalido`);
+      expect(destinoReal, ruta).not.toContain("inventado");
+      expect(destinoReal, ruta).not.toMatch(/token=|@/);
+    }
   });
 
   test("los comercios responden 404", async ({ request }) => {
+    test.skip(PARTNER_LEADS_ENABLED, "el interruptor de comercios está encendido");
     const r = await request.post("/api/leads/partners", {
       data: { nombre: "Ana" },
       headers: { "content-type": "application/json" },
     });
     expect(r.status()).toBe(404);
+    expect((await request.get("/api/leads/partners")).status()).toBe(404);
   });
 
   test("ni siquiera filtran si un correo está en la lista", async ({ request }) => {
-    const uno = await request.post("/api/waitlist", {
-      data: { email: "existe@ejemplo.com", consentimiento: true },
-      headers: { "content-type": "application/json" },
-    });
-    const dos = await request.post("/api/waitlist", {
-      data: { email: "no-existe-jamas@ejemplo.com", consentimiento: true },
-      headers: { "content-type": "application/json" },
-    });
-    // Misma respuesta byte a byte para los dos.
+    /* La propiedad que se defiende: la respuesta no puede depender de si esa
+       dirección está apuntada o no.
+       Estas dos peticiones se quedan a propósito en la primera puerta —sin
+       `Origin` no pasan—, y eso es deliberado: con `Origin` sí entrarían, y cada
+       una gastaría un intento del limitador y escribiría una fila en la base de
+       verdad para no llegar más lejos, porque sin Turnstile no se toca el
+       almacén igualmente. Ensuciar producción para comprobar dos bytes no vale
+       la pena. El otro lado de la propiedad —el que sí toca el almacén, con una
+       dirección apuntada y otra que no— lo cubre `unidad.spec.ts` contra el
+       repositorio. */
+    const pedir = (email: string) =>
+      request.post("/api/waitlist", {
+        data: { email, consentimiento: true },
+        headers: { "content-type": "application/json" },
+      });
+
+    const uno = await pedir("existe@ejemplo.com");
+    const dos = await pedir("no-existe-jamas@ejemplo.com");
     expect(uno.status()).toBe(dos.status());
     expect(await uno.text()).toBe(await dos.text());
   });
@@ -127,40 +215,95 @@ test.describe("páginas de confirmación y de baja", () => {
 });
 
 test.describe("seguridad", () => {
-  test("la CSP no abre Turnstile mientras no haya formularios", async ({ request }) => {
-    const csp = (await request.get("/")).headers()["content-security-policy"];
+  test("la CSP abre a Turnstile lo justo, y nada más", async ({ request }) => {
+    const csp = (await request.get("/")).headers()["content-security-policy"] ?? "";
     expect(csp).toBeTruthy();
-    // Con los interruptores apagados, ese permiso no se concede a nadie.
-    expect(csp).not.toContain("challenges.cloudflare.com");
-    expect(csp).toContain("frame-src 'none'");
     expect(csp).not.toContain("*");
-  });
 
-  test("no se le pide NADA a Cloudflare mientras los formularios estén apagados", async ({
-    page,
-  }) => {
-    /* Las claves reales de Turnstile ya están configuradas en producción, así que
-       la Site Key viaja incrustada en un chunk —es pública por diseño, para eso
-       existe—. Lo que no puede pasar, y es lo que vigila esta prueba, es que el
-       navegador llegue a PEDIRLE algo a Cloudflare: ni el script del widget, ni
-       el desafío, ni un marco. Mientras el interruptor esté apagado, el
-       componente devuelve `null` y no se carga nada.
-       Comprobarlo con el navegador y no con un grep del HTML es la diferencia
-       entre «no está escrito» y «no se ejecuta». */
-    const aCloudflare: string[] = [];
-    page.on("request", (r) => {
-      if (r.url().includes("challenges.cloudflare.com")) aCloudflare.push(r.url());
-    });
+    const TURNSTILE = "https://challenges.cloudflare.com";
+    const directiva = (nombre: string) =>
+      csp.split(";").map((d) => d.trim()).find((d) => d.startsWith(`${nombre} `)) ?? "";
 
-    for (const ruta of ["/", "/aliados", "/conductores"]) {
-      await page.goto(ruta);
-      await page.waitForLoadState("networkidle").catch(() => {});
-      await page.waitForTimeout(600);
+    if (!WAITLIST_ENABLED && !PARTNER_LEADS_ENABLED) {
+      // Con los interruptores apagados, ese permiso no se concede a nadie.
+      expect(csp).not.toContain("challenges.cloudflare.com");
+      expect(csp).toContain("frame-src 'none'");
+      return;
     }
 
-    expect(aCloudflare, aCloudflare.join(" | ")).toHaveLength(0);
-    // Y ningún marco del desafío en el documento.
-    expect(await page.locator('iframe[src*="challenges.cloudflare.com"]').count()).toBe(0);
+    /* Turnstile necesita tres permisos y **sólo** tres: cargar su script, hablar
+       con Cloudflare y abrir su marco. Se comprueba directiva por directiva en
+       vez de buscar el dominio en la cadena entera: así, si algún día se colara
+       en `img-src` o en `default-src`, esto lo cazaría en lugar de dar por bueno
+       un «sí, está ahí». */
+    expect(directiva("script-src")).toContain(TURNSTILE);
+    expect(directiva("connect-src")).toContain(TURNSTILE);
+    expect(directiva("frame-src")).toContain(TURNSTILE);
+
+    for (const otra of ["default-src", "img-src", "font-src", "style-src", "form-action", "base-uri"]) {
+      expect(directiva(otra), `${otra} no debería nombrar a Cloudflare`).not.toContain(
+        "cloudflare",
+      );
+    }
+
+    // Y el dominio exacto, nunca un comodín de subdominios.
+    expect(csp).not.toContain("*.cloudflare.com");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("object-src 'none'");
+  });
+
+  test("a Cloudflare sólo se le pide algo donde hay formulario", async ({ page }) => {
+    /* Comprobarlo con el navegador y no con un grep del HTML es la diferencia
+       entre «no está escrito» y «no se ejecuta»: la Site Key viaja incrustada en
+       un chunk —es pública por diseño, para eso existe—, así que buscarla en el
+       texto no demostraría nada.
+       Lo que se vigila es dónde llega a PEDIRSE algo: ni el script del widget,
+       ni el desafío, ni un marco, en ninguna página que no tenga un formulario
+       que lo necesite. Un captcha en una página de lectura es telemetría de
+       terceros disfrazada de seguridad. */
+    const aCloudflare = new Map<string, string[]>();
+    let actual = "";
+    page.on("request", (r) => {
+      if (r.url().includes("challenges.cloudflare.com")) {
+        aCloudflare.set(actual, [...(aCloudflare.get(actual) ?? []), r.url()]);
+      }
+    });
+
+    /* `/` sólo pide a Cloudflare si la lista está encendida; las demás, nunca:
+       `/aliados` depende de su propio interruptor, y las otras dos no tienen
+       formulario en ningún caso. */
+    const SIN_CLOUDFLARE = ["/conductores", "/pasajeros", ...(PARTNER_LEADS_ENABLED ? [] : ["/aliados"])];
+
+    for (const ruta of [...SIN_CLOUDFLARE, "/"]) {
+      actual = ruta;
+      await page.goto(ruta);
+      await page.waitForLoadState("networkidle").catch(() => {});
+      /* El widget se carga con `lazyOnload`, así que hay que llegar hasta él y
+         darle tiempo: si no, un «no pidió nada» sería sólo «no le dio tiempo». */
+      if (ruta === "/") await page.locator("#descargar").scrollIntoViewIfNeeded();
+      await page.waitForTimeout(ruta === "/" ? 2500 : 700);
+    }
+
+    for (const ruta of SIN_CLOUDFLARE) {
+      expect(aCloudflare.get(ruta) ?? [], `${ruta} habló con Cloudflare`).toHaveLength(0);
+    }
+
+    if (!WAITLIST_ENABLED) {
+      expect(aCloudflare.get("/") ?? []).toHaveLength(0);
+      return;
+    }
+
+    /* La otra mitad —que el widget SÍ se cargue— sólo se puede comprobar donde
+       existe la Site Key, y ésa vive en el proyecto de Vercel, no en el disco.
+       En un build local el componente devuelve `null` por diseño, así que exigir
+       aquí el marco de Cloudflare daría un fallo que no dice nada de la web. */
+    test.skip(!process.env.SITIO, "la Site Key de Turnstile sólo existe en el despliegue");
+
+    expect(
+      aCloudflare.get("/") ?? [],
+      "la portada tiene el formulario y no cargó Turnstile",
+    ).not.toHaveLength(0);
+    await expect(page.locator('#descargar iframe[src*="challenges.cloudflare.com"]')).toHaveCount(1);
   });
 
   test("la ruta del cron no se puede disparar desde fuera", async ({ request }) => {
