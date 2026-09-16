@@ -101,24 +101,30 @@ export default function Page() {
             <P>
               Conviene empezar por lo que es cierto en la fecha de arriba:{" "}
               <strong className="font-bold text-paper">
-                este sitio todavía no tiene ningún formulario publicado
+                este sitio tiene publicado un solo formulario, el de la lista de espera
               </strong>
-              . No hay ni un campo donde escribir un correo, un nombre o un teléfono. Si navegas
-              por él, lo único que ocurre es que nuestro proveedor de alojamiento sirve las
-              páginas y se mide el uso de forma anónima.
+              , al final de la portada. Es el único lugar donde se te pide un dato, y el único
+              dato obligatorio es tu correo. La sección 3 dice qué se guarda, para qué y hasta
+              cuándo.
             </P>
             <P>
-              Las secciones 3 y 4 describen la lista de espera y el formulario de comercios, que
-              están construidos pero <strong className="font-bold text-paper">apagados</strong>.
-              Se publican aquí antes de encenderlos y no al revés: nadie debería entregar un dato
-              a cambio de leer después para qué se usó.
+              Si sólo navegas, no se te pide nada: nuestro proveedor de alojamiento sirve las
+              páginas y se mide el uso de forma anónima, como cuenta la sección 6. La
+              comprobación de que no eres un robot —sección 5— sólo entra en juego en la página
+              que lleva ese formulario, no en las demás.
+            </P>
+            <P>
+              El formulario de comercios que describe la sección 4 está construido pero{" "}
+              <strong className="font-bold text-paper">apagado</strong>. Se publica aquí antes de
+              encenderlo y no al revés: nadie debería entregar un dato a cambio de leer después
+              para qué se usó.
             </P>
           </SeccionLegal>
 
           <SeccionLegal id="espera" numero={3} titulo="Lista de espera">
             <P>
               Sirve para una sola cosa: avisarte cuando +58Express esté disponible en tu zona.
-              Cuando esta función se active, esto es lo que se guarda.
+              Está publicada, y esto es lo que se guarda.
             </P>
             <TablaLegal
               resumen="Datos que guarda la lista de espera, para qué sirve cada uno y si es obligatorio."
@@ -210,12 +216,13 @@ export default function Page() {
 
             <SubLegal>Comprobación de que no eres un robot</SubLegal>
             <P>
-              Cuando los formularios se activen, usarán{" "}
+              El formulario de la lista de espera usa{" "}
               <strong className="font-bold text-paper">Cloudflare Turnstile</strong>, que
-              comprueba si quien envía es una persona. A diferencia de otros sistemas parecidos,
-              no muestra imágenes que clasificar ni construye un perfil publicitario. Cloudflare
-              recibe tu dirección IP y señales técnicas de tu navegador para hacer esa
-              comprobación.
+              comprueba si quien envía es una persona; el de comercios lo usará también cuando se
+              active. A diferencia de otros sistemas parecidos, no muestra imágenes que clasificar
+              ni construye un perfil publicitario. Cloudflare recibe tu dirección IP y señales
+              técnicas de tu navegador para hacer esa comprobación, y sólo en las páginas que
+              llevan uno de esos formularios: en el resto del sitio no interviene.
             </P>
             <P>
               También hay un campo oculto que una persona nunca rellena y que los programas
@@ -317,7 +324,7 @@ export default function Page() {
                   "Lo que escribas si nos escribes; y del formulario de comercios: nombre, negocio, teléfono, correo, municipio, tipo de comercio y mensaje",
                   "Según la política de Google",
                 ],
-                ["Cloudflare", "Comprobar que no eres un robot (cuando los formularios se activen)", "Dirección IP y señales del navegador", "Red global"],
+                ["Cloudflare", "Comprobar que no eres un robot en el formulario de la lista de espera", "Dirección IP y señales del navegador", "Red global"],
                 ["OpenStreetMap", "Las teselas del mapa de cobertura", "Dirección IP, al cargar el mapa", "Europa"],
                 ["Meta (WhatsApp)", "Sólo si tú decides abrir WhatsApp desde un botón", "Lo que tú escribas en esa conversación", "Según su propia política"],
               ]}

@@ -62,7 +62,34 @@ export const EMPRESA = {
  * actualización» se convierte en decorado.
  */
 export const VIGENCIA_LEGAL = {
-  /* 1.1 — 15 de septiembre de 2026. Ronda FACTUAL, previa a la revisión
+  /* 1.2 — 16 de septiembre de 2026. La lista de espera se encendió, y el
+     documento seguía describiendo un sitio sin formularios. Cuatro frases
+     quedaron falsas el día que se publicó el formulario:
+
+       · §2 decía en negrita «este sitio todavía no tiene ningún formulario
+         publicado» y que los dos estaban «apagados». Uno lo está; el otro no.
+       · §3 hablaba de la lista de espera en futuro —«cuando esta función se
+         active»— cuando ya estaba publicada.
+       · §5 decía «cuando los formularios se activen, usarán Cloudflare
+         Turnstile». Lo usa ya el de la lista de espera.
+       · §9 declaraba que Cloudflare recibe la IP «cuando los formularios se
+         activen». La recibe hoy, de cada visitante que baja hasta el formulario.
+         Ésta era la peor de las cuatro: prometía en futuro una cesión que ya
+         está ocurriendo.
+
+     NO se tocó ninguna base legal, ni un derecho, ni el responsable, ni el
+     plazo de respuesta, ni la jurisdicción, ni un solo dato de los que se
+     recogen. Son correcciones de hecho sobre qué superficie está publicada.
+
+     La 1.1 es la versión que revisó Fernando Atencio. La 1.2 sólo se separa de
+     ella en esas cuatro frases, y conviene que él lo sepa aunque no cambie nada
+     de lo que dictaminó.
+
+     Y una deuda que conviene no maquillar: §18 promete que la política cambia
+     ANTES de que el sitio trate los datos de otra forma, no después. Esta vez
+     fue después — el formulario se encendió el día 15 y esto se corrigió el 16.
+
+     1.1 — 15 de septiembre de 2026. Ronda FACTUAL, previa a la revisión
      jurídica: no se tocó ninguna base legal, ni un derecho, ni el responsable,
      ni el plazo de respuesta. Sólo se corrigieron tres cosas que el documento
      contaba de forma distinta a como funciona el sitio:
@@ -77,8 +104,8 @@ export const VIGENCIA_LEGAL = {
          «12 meses desde el último contacto» cuando se cuenta desde el alta,
          «como máximo 24 horas» cuando el barrido es diario, y un borrado de las
          inscripciones confirmadas que no existe. */
-  fecha: "15 de septiembre de 2026",
-  version: "1.1",
+  fecha: "16 de septiembre de 2026",
+  version: "1.2",
 } as const;
 
 /**
