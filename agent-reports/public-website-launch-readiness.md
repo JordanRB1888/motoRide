@@ -1,13 +1,167 @@
 # Launch Readiness — mas58express.com
 
-Este documento tiene tres partes:
+Este documento tiene cuatro partes:
 
-1. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — el
-   estado de hoy. **Empieza por aquí.**
+0. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
+   — el estado de hoy, y **un bloqueo nuevo**. Empieza por aquí.
+1. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
+   se cerró el correo.
 2. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
    lo que se corrigió para dejar `/privacidad` lista para el abogado.
 3. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
    hallazgos que la motivaron.
+
+---
+
+# Encendido de la lista de espera — 15 de septiembre
+
+**Despliegue final:** `plus58express-hk3a8kjdp` · commits `2fe08db` (encendido) y
+`bb24b41` (vuelta atrás).
+
+Encargo: borrar el mecanismo de prueba de correo, encender la lista de espera y
+hacer el primer alta real de extremo a extremo. **Lo primero está hecho. Lo
+segundo se hizo y hubo que deshacerlo. Lo tercero no se pudo empezar.**
+
+## Estados
+
+| | |
+|---|---|
+| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · 1.1 · 15 de septiembre de 2026 |
+| **RESEND MAILBOX DELIVERY** | **CERTIFIED** — recepción confirmada por el propietario |
+| **RESEND SENDING FROM `mas58express.com`** | **VERIFIED BY REAL DELIVERY** |
+| **TEMPORARY EMAIL-TEST ROUTE** | **REMOVED** |
+| **WAITLIST** | **OFF — BLOQUEADA POR UNA SITE KEY DE TURNSTILE INVÁLIDA** |
+| **PARTNER LEADS** | **OFF** |
+| **WAITLIST E2E** | **NOT STARTED** — no se pudo empezar, y no por Turnstile pidiendo una interacción humana |
+
+Lo certificado es **la entrega**: un correo salió de producción y llegó al buzón.
+No se llama «certificado» a nada administrativo del dominio en Resend.
+
+## 1 · El bloqueo, y cómo se comprobó
+
+La lista se encendió y se desplegó. En producción, el widget de Turnstile
+contestó esto:
+
+```
+Uncaught TurnstileError: [Cloudflare Turnstile] Error: 400020.
+```
+
+`400020` es, en la documentación de Cloudflare, **«Invalid sitekey»**, y está
+marcado como **no reintentable**. El widget no llegó a crear su marco ni a
+producir un solo testigo: ni `callback`, ni `error-callback`, ni `timeout`.
+Silencio.
+
+**Consecuencia, que es lo que importa:** sin testigo, el servidor rechaza —bien
+rechazado— **todos** los envíos con `TURNSTILE_INVALIDO`. El formulario se veía
+en la portada y **nadie podía apuntarse**. Eso es peor que no tener formulario, y
+es literalmente lo que `lib/flags.ts` existe para impedir. Por eso volvió a
+`false` y se desplegó otra vez.
+
+### El control, para no acusar a la clave por sospecha
+
+En la **misma página**, el mismo navegador y la misma CSP, dos renderizados
+seguidos:
+
+| Site Key | Resultado |
+|---|---|
+| `1x00000000000000000000AA` — la clave de prueba de Cloudflare | **testigo de 21 caracteres, a la primera** |
+| `0x4AAAAAAEyyPBD-tmY79WlP` — la del sitio | **nada**: ni marco, ni testigo, ni error-callback |
+
+Luego no es el navegador, no es la CSP, no es el componente y no es la red. Y
+tampoco es un pegado a medias: el valor incrustado en el chunk se leyó con sus
+comillas y tiene **24 caracteres**, la forma correcta y completa. Esa clave no
+existe, está deshabilitada, o pertenece a otra cuenta.
+
+### El servidor, en cambio, está bien
+
+Una sonda con un testigo inventado devuelve **400 `TURNSTILE_INVALIDO`**, no 503
+`NO_DISPONIBLE` — que es lo que daría si faltara `TURNSTILE_SECRET_KEY`. O sea:
+el secreto está puesto y la llamada a Cloudflare ocurre de verdad.
+
+> Con precisión: eso demuestra que el secreto **existe y se usa**, no que sea el
+> del widget correcto. Cuando se arregle la Site Key hay que comprobar que la
+> secreta es la de **ese mismo** widget, porque un par descabalado da exactamente
+> el mismo síntoma desde fuera.
+
+## 2 · Lo que sí quedó hecho
+
+### El mecanismo de prueba, borrado entero
+
+| | |
+|---|---|
+| `app/api/cron/prueba-de-correo/route.ts` | **borrado** del repositorio |
+| `PRUEBA_CORREO_TOKEN` | **eliminada** de Production |
+| El testigo en disco | **borrado** |
+| El despliegue que la llevaba (`plus58express-es4rk480d`) | **eliminado** — llevaba la variable dentro y seguía siendo alcanzable por su propia URL |
+| `GET` y `POST` a `/api/cron/prueba-de-correo` | **404** |
+
+No queda ningún mecanismo capaz de reenviar aquel correo. `RESEND_API_KEY` y
+`EMAIL_FROM` no se tocaron.
+
+### Un fallo de accesibilidad que el encendido destapó
+
+Los dos desplegables del formulario —«¿Qué te interesa?» y «¿Dónde estás?»—
+estaban dentro de un `<fieldset><legend>`. axe lo marcó como infracción
+**crítica** (`select-name`): un `<legend>` nombra al **grupo**, no al control que
+hay dentro. Quien navega con lector de pantalla oía «grupo, ¿qué te interesa?» y
+después **un desplegable sin nombre**. Un fieldset con un solo campo no agrupa
+nada.
+
+Ahora son `<label for>`. Mismas clases, mismo aspecto.
+
+> **Por qué no se había visto nunca:** el formulario no se pintaba, así que axe no
+> tenía nada que mirar. Lo habría estrenado el público el día del encendido. Es
+> el argumento más claro que ha dado esta ronda a favor de encender las cosas en
+> producción y medirlas, en vez de darlas por buenas porque compilan.
+
+### Las pruebas dejaron de dar por hecho el estado apagado
+
+`fase0` y `fase1b` afirmaban «no hay formulario» y «la CSP no nombra a
+Cloudflare» como verdades fijas. Ahora **leen los interruptores** y comprueban
+las dos mitades. De paso, dos mejoras que no existían:
+
+- la CSP se comprueba **directiva por directiva** en vez de buscar el dominio en
+  la cadena entera: así, Cloudflare colándose en `img-src` o en `default-src` no
+  pasaría por bueno;
+- a Cloudflare **sólo** se le puede pedir algo en la página que tiene el
+  formulario. Un captcha en una página de lectura es telemetría de terceros
+  disfrazada de seguridad.
+
+## 3 · Qué tiene que hacer el propietario
+
+1. Entrar en el panel de Cloudflare → **Turnstile**.
+2. Mirar el widget de `mas58express.com`. Una de tres: no existe, está
+   deshabilitado, o su Site Key no es `0x4AAAAAAEyyPBD-tmY79WlP`.
+3. Crear o corregir el widget con el hostname **`mas58express.com`** (y
+   `www.mas58express.com` si se quiere, aunque redirige).
+4. Copiar **las dos** claves del **mismo** widget y ponerlas en Vercel →
+   Production: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` y `TURNSTILE_SECRET_KEY`.
+5. Avisar. Encender es una línea y un despliegue.
+
+## 4 · QA
+
+| | |
+|---|---|
+| TypeScript | ✔ **0 errores** |
+| ESLint | ✔ **0 errores, 0 avisos** |
+| `next build` | ✔ compila; 21 rutas |
+| Playwright local | ✔ **185 pasadas · 0 fallidas** · 3 saltadas |
+| axe WCAG 2.1 AA | ✔ 0 violaciones — **tras corregir `select-name`**, que con el formulario encendido daba 2 nodos críticos |
+| Producción, rutas | ✔ 8 endpoints en 404, los dos interruptores apagados |
+| Producción, CSP | ✔ vuelta a cerrar: `frame-src 'none'`, sin Cloudflare en ninguna directiva |
+| Producción, formularios | ✔ 0 en `/`, `/pasajeros`, `/aliados`, `/conductores`, `/contacto` |
+
+**Sin regresiones en:** diseño · SEO · Analytics · `/privacidad` · `/terminos` ·
+imágenes · rendimiento · scrollytelling · retención · Supabase · app móvil. El
+diff de la ronda toca cinco ficheros: el interruptor, el formulario (las dos
+etiquetas), dos ficheros de pruebas y la ruta borrada.
+
+> **Una advertencia sobre la suite contra producción.** Con la lista encendida,
+> `SITIO=… npx playwright test` dio 40 tiempos agotados en las pruebas que cargan
+> la portada. No era el sitio: el widget de Turnstile mantiene la red abierta y
+> `waitForLoadState("networkidle")` no llega a cumplirse nunca. Si algún día se
+> enciende de verdad, esas esperas hay que cambiarlas por una condición concreta
+> antes de fiarse del resultado.
 
 ---
 
@@ -25,7 +179,7 @@ apagados a propósito: falta que alguien mire el buzón.
 | **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** — revisor: Fernando Atencio · versión 1.1 · 15 de septiembre de 2026 |
 | **RESEND DOMAIN** | **VERIFIED** para envío — por comportamiento, no por consulta al registro. Ver el matiz abajo |
 | **RESEND API TEST** | **PASS** — HTTP 200, aceptado |
-| **RESEND MAILBOX DELIVERY** | **PENDING USER CONFIRMATION** |
+| **RESEND MAILBOX DELIVERY** | **CERTIFIED** *(confirmado el 15 de septiembre)* |
 | **WAITLIST** | **OFF** |
 | **PARTNER LEADS** | **OFF** |
 
@@ -182,6 +336,13 @@ imágenes · GSAP · Lenis · app móvil · `/privacidad` · `/terminos`. El dif
 
 ## 7 · Lo único que bloquea la lista de espera
 
+> **Resuelto el 15 de septiembre.** El propietario confirmó que el correo llegó
+> al buzón: remitente `+58Express <no-reply@mas58express.com>`, asunto «Prueba
+> técnica +58Express — Resend». **Resend queda certificado en entrega.**
+> El bloqueo que ocupó su lugar es otro y es nuevo: la Site Key de Turnstile.
+> Está arriba, en
+> **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**.
+
 > **Confirmar recepción real del email de prueba** en `58expressapp@gmail.com`
 > (asunto «Prueba técnica +58Express — Resend», id
 > `fa0143b8-e302-4a71-96dd-92f192e327b6`).
@@ -195,6 +356,10 @@ imágenes · GSAP · Lenis · app móvil · `/privacidad` · `/terminos`. El dif
 `PARTNER_LEADS_ENABLED` se queda en `false` de todas formas, por encargo.
 
 ## 8 · Deuda que deja esta ronda
+
+> **Saldada el 15 de septiembre.** La variable `PRUEBA_CORREO_TOKEN` se borró de
+> Production, la ruta se borró del repositorio y el despliegue que la llevaba
+> dentro se eliminó. `/api/cron/prueba-de-correo` responde 404.
 
 Dos cosas, y las dos se limpian en cuanto confirmes el buzón:
 
@@ -455,6 +620,12 @@ Había una contradicción aparente en el informe. Deshecha, punto por punto:
 | **D · Entrega real a un buzón** | **NOT YET CERTIFIED** | Nunca ha salido un correo. No se envió ninguno |
 | **E · Dirección individual verificada** | **UNKNOWN** | Mismo motivo que A |
 
+> **Esta tabla quedó atrás el mismo día.** A pasó a **VERIFIED por entrega real**
+> y D a **CERTIFIED**: salió un correo desde producción y llegó al buzón. Y la
+> premisa de la fila A era incorrecta —la clave inválida era la de `.env.local`,
+> no la de Production—. El estado vigente está en
+> [Certificación de Resend](#certificación-de-resend--15-de-septiembre).
+
 El DNS, además, respalda el razonamiento que ya estaba escrito en el código:
 
 ```
@@ -550,7 +721,7 @@ ningún correo, no se tocó la app móvil ni nada de conductores.
 | **Supabase Web** | **READY** |
 | **Retention** | **READY** |
 | **Turnstile** | **READY / NOT ACTIVE** |
-| **Resend** | **API TEST PASS · MAILBOX DELIVERY PENDING USER CONFIRMATION** *(15 sept)* |
+| **Resend** | **API TEST PASS · MAILBOX DELIVERY CERTIFIED** *(15 sept)* |
 | **Terms** | **LAWYER COMMENTS INCORPORATED** |
 | **Privacy** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · 1.1 · 15 sept 2026 |
 | **Images** | **NOT READY** — ver A3 y B1 |
@@ -611,10 +782,9 @@ recoger datos amparándose en un texto que todavía puede cambiar.
 
 ## A2 · La entrega real de Resend nunca se ha certificado
 
-> **Casi resuelto — 15 de septiembre.** Se hizo el envío autorizado desde
-> producción: Resend lo **aceptó** (HTTP 200, id
-> `fa0143b8-e302-4a71-96dd-92f192e327b6`). Falta la única mitad que una API no
-> puede dar: que alguien confirme que el correo está en el buzón.
+> **RESUELTO — 15 de septiembre.** Se hizo el envío autorizado desde producción,
+> Resend lo aceptó (HTTP 200, id `fa0143b8-e302-4a71-96dd-92f192e327b6`) y el
+> propietario **confirmó la recepción en el buzón**. Entrega certificada.
 
 **Bloquea WAITLIST, no PARTNER LEADS.**
 
@@ -1153,9 +1323,12 @@ Lo digo para que nadie lo dé por comprobado:
 > 1. ~~**La Política de Privacidad, pendiente de confirmación final del abogado** (A1)~~
 >    → **RESUELTO el 15 de septiembre:** revisión final completada y aprobada por
 >    Fernando Atencio, versión 1.1
-> 2. **La entrega de Resend** — el envío ya está hecho y aceptado (HTTP 200);
->    queda **confirmar la recepción real en el buzón**. Bloquea sólo la lista de
->    espera (A2)
+> 2. ~~**La entrega de Resend**~~ → **RESUELTO el 15 de septiembre:** el correo
+>    llegó al buzón y el propietario lo confirmó (A2)
+>
+>    **En su lugar aparece un bloqueo nuevo, y es el único que queda para la
+>    lista de espera: la Site Key de Turnstile es inválida** (`400020`). Ver
+>    [Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)
 > 3. **La tabla de proveedores de la política, que no declara que los datos de un
 >    comercio acaban en un buzón de Gmail** — bloquea sólo el formulario de
 >    comercios (A3)
@@ -1175,7 +1348,8 @@ entera se construyó sobre no hacer exactamente eso.
 **No se debe declarar la web «100 % lista para formularios» mientras A1 siga
 abierto.**
 
-> **15 de septiembre.** A1 y A3 están cerrados. El único requisito que queda
-> para encender la lista de espera es **confirmar que el correo de prueba llegó
-> a `58expressapp@gmail.com`**. `PARTNER_LEADS_ENABLED` se queda en `false` por
-> decisión del propietario, no por un bloqueo técnico.
+> **15 de septiembre.** A1, A2 y A3 están cerrados. El único requisito que
+> queda para encender la lista de espera es **arreglar la Site Key de Turnstile
+> en el panel de Cloudflare**: mientras sea inválida, el formulario se ve y nadie
+> puede apuntarse. `PARTNER_LEADS_ENABLED` se queda en `false` por decisión del
+> propietario, no por un bloqueo técnico.
