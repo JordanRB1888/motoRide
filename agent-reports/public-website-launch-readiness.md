@@ -1,15 +1,154 @@
 # Launch Readiness — mas58express.com
 
-Este documento tiene cuatro partes:
+Este documento tiene cinco partes:
 
-0. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
-   — el estado de hoy, y **un bloqueo nuevo**. Empieza por aquí.
-1. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
+0. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
+   — el estado de hoy. **Empieza por aquí.**
+1. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
+   — el intento fallido y el bloqueo de Turnstile, ya resuelto.
+2. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
    se cerró el correo.
-2. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
+3. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
    lo que se corrigió para dejar `/privacidad` lista para el abogado.
-3. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
+4. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
    hallazgos que la motivaron.
+
+---
+
+# Certificación E2E de la lista de espera — 16 de septiembre
+
+**Despliegue:** `plus58express-hrldyncd7` · commit `7e91fa3`. Esta ronda **no
+cambia una sola línea de código**: verifica.
+
+El propietario hizo el recorrido completo desde el navegador —web → Turnstile →
+API → Supabase → Resend → Gmail → enlace de confirmación → pantalla final— y
+pulsó el enlace él mismo. Queda verificado contra la base de datos real, en sólo
+lectura.
+
+## Estados
+
+| | |
+|---|---|
+| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · 1.1 · 15 de septiembre de 2026 |
+| **RESEND MAILBOX DELIVERY** | **CERTIFIED** |
+| **TURNSTILE** | **ACTIVE / VERIFIED** |
+| **WAITLIST** | **ACTIVE** |
+| **WAITLIST E2E** | **COMPLETE** |
+| **DOUBLE OPT-IN** | **COMPLETE** |
+| **PARTNER LEADS** | **OFF** |
+
+## 1 · La fila, leída de Supabase
+
+La lectura fue en sólo lectura **de verdad**: toda la consulta corrió dentro de
+`BEGIN TRANSACTION READ ONLY`, de modo que no es una promesa del guion sino una
+garantía del propio Postgres — un `UPDATE` ahí dentro habría fallado con error.
+No se insertó, ni modificó, ni borró nada.
+
+| | | |
+|---|---|---|
+| `id` | `f02904a6-5950-4f24-ae09-08666dd4d79b` | |
+| `estado` | **`confirmado`** | ✔ |
+| `creado_en` | `2026-09-16T04:02:20.853Z` | |
+| `confirmado_en` | `2026-09-16T04:02:55.968Z` | ✔ **35 segundos después** |
+| `actualizado_en` | igual que `confirmado_en` | ✔ coherente |
+| `baja_en` | vacío | ✔ |
+| `token_confirmacion` | **`NULL`** | ✔ **quemado al confirmar** |
+| `token_expira_en` | **`NULL`** | ✔ limpiado con él |
+| `token_baja` | presente, **43 caracteres** | ✔ 256 bits en base64url |
+| `ip_hash` | **32 caracteres**, `c33KZUdq…` | ✔ **no es una IP** |
+| `rol` / `zona` | `conductor` / `santa-cruz-de-mara` | ✔ del catálogo |
+| `origen` | `descarga` | ✔ la portada |
+
+**Filas en la tabla: 1.** Cero duplicados en toda la tabla. Cero filas en
+`contactos_aliados` —el formulario de comercios sigue apagado—. Ninguna columna
+inesperada: las catorce del esquema y nada más.
+
+Y una propiedad que conviene subrayar porque se diseñó a propósito: el limitador
+de envíos (`intentos_web`) se indexa por **el identificador de la fila**, no por
+la dirección. Comprobado en los datos reales: la clave es
+`envio:f02904a6-5950…`. El correo electrónico existe en **un solo sitio** de toda
+la base, que es el que se borra si alguien ejerce su derecho de supresión.
+
+### La anomalía: el alta no es del buzón del equipo
+
+El encargo pedía verificar la inscripción de `58expressapp@gmail.com`. **Esa
+dirección no tiene ninguna fila.** La única que existe es de **una cuenta
+personal de Gmail distinta** —el propietario se apuntó con la suya, no con la del
+equipo—.
+
+No invalida nada: el recorrido es el mismo y queda igual de certificado. Pero
+tiene una consecuencia real que conviene decidir, no dejar pasar:
+
+> **Es el dato personal de una persona concreta, en estado `confirmado`, y la
+> política publicada dice que una inscripción confirmada NO tiene borrado
+> automático.** Va a seguir ahí. Si esa dirección no debía quedarse en la lista,
+> la forma correcta de sacarla es **pulsar el enlace de baja del propio correo**
+> —que ejerce el mecanismo real y deja constancia—, no un `DELETE` a mano. No la
+> he tocado.
+
+## 2 · El flujo de confirmación
+
+El testigo real, consumido y quemado: la fila lo demuestra (`token_confirmacion`
+a `NULL`, `estado = confirmado`). **No se volvió a usar.**
+
+Los caminos que no deben confirmar nada, probados contra producción:
+
+| Testigo enviado | Respuesta |
+|---|---|
+| uno inventado | `302 → /gracias?estado=invalido` |
+| vacío | `302 → /gracias?estado=invalido` |
+| con espacios (`AAAA BBBB`) | `302 → /gracias?estado=invalido` |
+| con forma de inyección (`' OR 1=1--`) | `302 → /gracias?estado=invalido` |
+| baja con testigo inventado | `302 → /baja?estado=invalido` |
+
+Ninguno distingue «este testigo no existe» de «ya se usó», que es justo lo que se
+buscaba: distinguirlos le diría a un desconocido si esa dirección estuvo alguna
+vez en la lista.
+
+**El testigo caducado** no se probó contra producción porque exigiría fabricar
+una fila; lo cubre `postgres.spec.ts` **contra la base real** con fechas
+simuladas (`E-ter · un testigo caducado no confirma: caduca`, y `C-quater`, que
+comprueba el callejón sin salida contrario: tras caducar, volver a apuntarse
+entrega un enlace que sí funciona). Ambas pasan.
+
+**La pantalla final, `/gracias?estado=confirmado`:** cero apariciones de
+`token=`, `noindex` presente, y la única dirección de correo del HTML es la de
+contacto de la propia marca. Ni un dato de quien se apuntó, ni en la URL, ni en
+el fragmento, ni en el cuerpo.
+
+## 3 · Estado de producción
+
+```
+POST /api/waitlist            400   (guarda de origen: la ruta existe y exige navegador)
+GET  /api/waitlist            405   allow: POST
+GET  /api/waitlist/confirmar  302   activa
+GET  /api/waitlist/baja       302   activa
+POST /api/leads/partners      404
+GET  /api/leads/partners      404
+
+formulario en la portada      1 × #wl-email
+/aliados                      0 formularios
+CSP                           challenges.cloudflare.com en script-src, connect-src y frame-src
+```
+
+**Turnstile = ACTIVE / VERIFIED.** Y la prueba no es un widget que se pinta: es
+que **existe la fila**. Para llegar a `altaEnEspera` hay que pasar por
+`verificarTurnstile`, que pregunta a Cloudflare desde el servidor y no deja pasar
+nada que Cloudflare no valide. Esa fila sólo puede existir si el par de claves
+—pública y secreta, del mismo widget— funcionó de verdad. Es una prueba más
+fuerte que cualquiera que pudiera montar yo desde un navegador automatizado.
+
+## 4 · QA
+
+| | |
+|---|---|
+| TypeScript | ✔ **0 errores** |
+| ESLint | ✔ **0 errores, 0 avisos** |
+| Pruebas de la lista de espera | ✔ **89 pasadas · 0 fallidas** *(`unidad` + `postgres` contra Supabase + `fase1b`)* |
+| «La certificación no deja basura en la base» | ✔ pasa: las pruebas limpian lo suyo y la fila real quedó intacta |
+| Producción | ✔ rutas, formulario, CSP e interruptores, arriba |
+
+No se repitió Lighthouse: esta ronda no toca código.
 
 ---
 
@@ -33,6 +172,12 @@ segundo se hizo y hubo que deshacerlo. Lo tercero no se pudo empezar.**
 | **WAITLIST** | **OFF — BLOQUEADA POR UNA SITE KEY DE TURNSTILE INVÁLIDA** |
 | **PARTNER LEADS** | **OFF** |
 | **WAITLIST E2E** | **NOT STARTED** — no se pudo empezar, y no por Turnstile pidiendo una interacción humana |
+
+> **Superado el 16 de septiembre.** El par de claves era el problema —la Site Key
+> y la secreta no eran del mismo widget—; el propietario puso la secreta de
+> «+58Express Web» y el recorrido completo funcionó. **WAITLIST = ACTIVE ·
+> WAITLIST E2E = COMPLETE.** El estado vigente está en
+> [Certificación E2E](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre).
 
 Lo certificado es **la entrega**: un correo salió de producción y llegó al buzón.
 No se llama «certificado» a nada administrativo del dominio en Resend.
@@ -1326,9 +1471,9 @@ Lo digo para que nadie lo dé por comprobado:
 > 2. ~~**La entrega de Resend**~~ → **RESUELTO el 15 de septiembre:** el correo
 >    llegó al buzón y el propietario lo confirmó (A2)
 >
->    **En su lugar aparece un bloqueo nuevo, y es el único que queda para la
->    lista de espera: la Site Key de Turnstile es inválida** (`400020`). Ver
->    [Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)
+>    El bloqueo de Turnstile que apareció después quedó **resuelto el 16 de
+>    septiembre**, y el alta real está certificada de extremo a extremo. Ver
+>    [Certificación E2E](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)
 > 3. **La tabla de proveedores de la política, que no declara que los datos de un
 >    comercio acaban en un buzón de Gmail** — bloquea sólo el formulario de
 >    comercios (A3)
@@ -1348,8 +1493,8 @@ entera se construyó sobre no hacer exactamente eso.
 **No se debe declarar la web «100 % lista para formularios» mientras A1 siga
 abierto.**
 
-> **15 de septiembre.** A1, A2 y A3 están cerrados. El único requisito que
-> queda para encender la lista de espera es **arreglar la Site Key de Turnstile
-> en el panel de Cloudflare**: mientras sea inválida, el formulario se ve y nadie
-> puede apuntarse. `PARTNER_LEADS_ENABLED` se queda en `false` por decisión del
-> propietario, no por un bloqueo técnico.
+> **16 de septiembre.** A1, A2 y A3 están cerrados, y también el de Turnstile.
+> **La lista de espera está activa y su doble consentimiento certificado de
+> extremo a extremo** contra la base real. No queda ningún bloqueo para ella.
+> `PARTNER_LEADS_ENABLED` se queda en `false` por decisión del propietario, no
+> por un bloqueo técnico.
