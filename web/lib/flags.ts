@@ -16,29 +16,48 @@
  */
 
 /**
- * Lista de espera del lanzamiento. **ENCENDIDA el 15 de septiembre de 2026.**
+ * Lista de espera del lanzamiento.
  *
- * Los requisitos eran cinco, y no se encendió hasta cumplirlos todos:
+ * Los requisitos son cinco, y cuatro están cumplidos:
  *
- *   1. política de privacidad publicada, con responsable identificado — v1.1,
+ *   1. ✔ política de privacidad publicada, con responsable identificado — v1.1,
  *      revisada por Fernando Atencio;
- *   2. almacén provisionado — Postgres de Supabase, con las tres tablas y el
+ *   2. ✔ almacén provisionado — Postgres de Supabase, con las tres tablas y el
  *      índice único sobre el correo;
- *   3. claves de Turnstile, las dos: la pública en el navegador y la secreta en
- *      el servidor, que es la que decide;
- *   4. clave de Resend en el proyecto web;
- *   5. **y la que faltaba hasta el final: la prueba de que un correo sale de
- *      producción y LLEGA a un buzón de verdad.** Se hizo el 15 de septiembre y
- *      el propietario confirmó la recepción. Un doble consentimiento por correo
- *      cuyo correo no llega no es un doble consentimiento: es una lista que
- *      nadie puede confirmar y de la que nadie puede salir.
+ *   3. ✘ **claves de Turnstile.** La secreta está y funciona: el servidor llama
+ *      a Cloudflare y rechaza lo que Cloudflare rechaza. **La pública no vale.**
+ *   4. ✔ clave de Resend en el proyecto web;
+ *   5. ✔ prueba de que un correo sale de producción y LLEGA a un buzón de
+ *      verdad — hecha el 15 de septiembre, recepción confirmada por el
+ *      propietario. Un doble consentimiento cuyo correo no llega no es un doble
+ *      consentimiento: es una lista que nadie puede confirmar ni abandonar.
  *
- * Encenderlo aquí hace cuatro cosas a la vez, y conviene tenerlas presentes:
- * pinta el formulario en `/#descargar`, abre las cuatro rutas de `/api/waitlist`
- * y, a través de `next.config.ts`, abre la CSP a `challenges.cloudflare.com`
- * —sólo a ese dominio, y sólo mientras algún formulario pueda pintarse—.
+ * POR QUÉ ESTO VOLVIÓ A `false` EL 15 DE SEPTIEMBRE
+ *
+ * Se encendió, se desplegó, y en producción el widget de Turnstile contestó
+ * `TurnstileError 400020` —«Invalid sitekey», que Cloudflare marca como no
+ * reintentable— y no llegó a producir ni un testigo. Comprobado con un control
+ * en la misma página, el mismo navegador y la misma CSP: con la clave de prueba
+ * de Cloudflare (`1x00000000000000000000AA`) el widget devuelve testigo; con
+ * `NEXT_PUBLIC_TURNSTILE_SITE_KEY` no devuelve nada. El valor incrustado está
+ * completo y bien formado (24 caracteres), así que no es un pegado a medias: esa
+ * clave no existe, está deshabilitada, o es de otra cuenta.
+ *
+ * Sin testigo, el servidor rechaza —correctamente— **todos** los envíos con
+ * `TURNSTILE_INVALIDO`. Es decir: el formulario se veía, y nadie podía
+ * apuntarse. Eso es peor que no tenerlo, y es exactamente lo que este fichero
+ * existe para impedir.
+ *
+ * **Para encenderla otra vez:** arreglar la Site Key en el panel de Cloudflare
+ * —y comprobar que la secreta es la de ESE mismo widget—, y volver a poner
+ * `true` aquí. Nada más.
+ *
+ * Encenderlo hace tres cosas a la vez, y conviene tenerlas presentes: pinta el
+ * formulario en `/#descargar`, abre las cuatro rutas de `/api/waitlist` y, a
+ * través de `next.config.ts`, abre la CSP a `challenges.cloudflare.com` —sólo a
+ * ese dominio, y sólo mientras algún formulario pueda pintarse—.
  */
-export const WAITLIST_ENABLED = true;
+export const WAITLIST_ENABLED = false;
 
 /**
  * Captación de comercios aliados. **SIGUE APAGADA, y a propósito.**
