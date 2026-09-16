@@ -136,6 +136,30 @@ export const SERVICES: Service[] = [
  *
  * `map-select` y `login` venían con marco de iPhone: se recortó el marco para
  * que el componente 3D aporte el suyo y no quede un teléfono dentro de otro.
+ *
+ * SON UNA DEMOSTRACIÓN VISUAL DEL PRODUCTO, Y NO UN ESCAPARATE DE PRECIOS
+ *
+ * La regla del principio de este fichero —«aquí no entra ni una cifra que no se
+ * pueda respaldar»— vale igual dentro de una imagen: nadie distingue si una
+ * promesa está escrita en HTML o pintada en un píxel. El 16 de septiembre de
+ * 2026 se limpiaron por eso, una a una:
+ *
+ *   · una tarifa concreta en dólares, repetida tres veces, que se leería como el
+ *     precio vigente de un viaje;
+ *   · una categoría de auto para cuatro personas que el sitio no ofrece ni una
+ *     sola vez;
+ *   · una tasa de cambio en bolívares con dos decimales, que se lee como la de
+ *     hoy;
+ *   · una cifra de usuarios diarios —y encima a medio escribir, con el número
+ *     literalmente ausente de la frase—;
+ *   · una cobertura nacional, de todo el país, que no existe;
+ *   · un programa de niveles con «mejores beneficios» sin confirmar;
+ *   · los nombres de tres negocios reales sobre el mapa, sin ninguna relación
+ *     comercial con ellos;
+ *   · un nombre y una cara de una persona que no existe.
+ *
+ * Lo que se conserva es el diseño entero: mismas pantallas, misma composición,
+ * mismas fotos, misma tipografía. Sólo cambió lo que afirmaba de más.
  */
 export const PHONE_SCREENS = [
   {
@@ -146,7 +170,7 @@ export const PHONE_SCREENS = [
   {
     id: "map",
     src: "/app/map-select.webp",
-    alt: "Mapa con la ruta trazada y el precio del viaje antes de confirmar",
+    alt: "Mapa con la ruta trazada y la distancia del viaje antes de confirmar",
   },
   {
     id: "login",

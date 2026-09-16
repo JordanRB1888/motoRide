@@ -1,8 +1,7 @@
-import Image from "next/image";
 import InteractivePhone from "@/components/phone/InteractivePhone";
 import Reveal from "@/components/motion/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
-import { screensById, STORES } from "@/lib/content";
+import { screensById } from "@/lib/content";
 import { WAITLIST_ENABLED } from "@/lib/flags";
 import { FormularioWaitlistDiferido } from "@/components/forms/Diferidos";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
@@ -10,9 +9,10 @@ import BotonWhatsApp from "@/components/site/BotonWhatsApp";
 /**
  * Descarga.
  *
- * La aplicación todavía no está publicada. Los badges no son enlaces: son una
- * declaración de dónde estará. Inventar una URL de tienda seria enviar a la
- * gente a una página que no existe.
+ * La aplicación todavía no está publicada, y aquí no hay ningún enlace a una
+ * tienda: inventar una URL sería enviar a la gente a una página que no existe.
+ * Lo que hay es una declaración de dónde estará, escrita con nuestras palabras
+ * y no con las de Apple o Google — el porqué está más abajo, junto a la pieza.
  *
  * El formulario llega por `components/forms/Diferidos`, que lo mantiene en un
  * paquete aparte: con el interruptor apagado no se descarga nada de él. El
@@ -50,38 +50,40 @@ export default function Descarga() {
               Cuando la aplicación esté publicada, aparecerá aquí.
             </p>
 
+            {/* LOS DISTINTIVOS OFICIALES SE RETIRARON, Y NO POR ESTÉTICA.
+                El de Apple dice «Download on the App Store» y el de Google «GET
+                IT ON Google Play»: los dos afirman, con la voz de la tienda, que
+                la aplicación se puede descargar. No se puede — todavía no está
+                publicada—, y apagarlos al 55 % en escala de grises no desmiente
+                lo que la propia imagen dice. Se sustituyen por una pieza propia
+                que dice lo que hay.
+                Tampoco se redibujan sus logotipos: una marca ajena modificada
+                para fabricar un distintivo que ellos no han emitido sería peor
+                que el problema que arregla. Aquí sólo se nombra la plataforma. */}
             <div className="mt-10">
               <p className="text-[13px] font-bold uppercase tracking-[0.22em] text-paper-mute">
-                {STORES.label} en
+                Estará disponible en
               </p>
 
-              <div className="mt-4 flex flex-wrap items-center gap-4">
-                {/* Sin URL real no hay enlace: son marcas de destino, no botones */}
-                <span
-                  className="inline-flex opacity-55 grayscale"
-                  title="Disponible cuando la aplicación se publique"
-                >
-                  <Image
-                    src="/brand/badge-google.png"
-                    alt="Próximamente en Google Play"
-                    width={162}
-                    height={48}
-                    className="h-12 w-auto"
-                  />
-                </span>
-                <span
-                  className="inline-flex opacity-55 grayscale"
-                  title="Disponible cuando la aplicación se publique"
-                >
-                  <Image
-                    src="/brand/badge-apple.png"
-                    alt="Próximamente en App Store"
-                    width={162}
-                    height={48}
-                    className="h-12 w-auto"
-                  />
-                </span>
-              </div>
+              <ul className="mt-4 flex flex-wrap items-center gap-3">
+                {[
+                  { plataforma: "iOS", nota: "iPhone y iPad" },
+                  { plataforma: "Android", nota: "Teléfonos y tabletas" },
+                ].map(({ plataforma, nota }) => (
+                  <li
+                    key={plataforma}
+                    className="flex min-h-[56px] items-center gap-3 rounded-2xl border border-white/12 bg-white/[0.04] px-5 py-3"
+                  >
+                    <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-signal" />
+                    <span className="leading-tight">
+                      <span className="block text-[15px] font-bold text-paper">
+                        Próximamente en {plataforma}
+                      </span>
+                      <span className="block text-[13px] text-paper-mute">{nota}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             {/* Aquí irá la lista de espera. Mientras el interruptor esté apagado no
