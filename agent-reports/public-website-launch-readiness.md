@@ -1,12 +1,209 @@
 # Launch Readiness — mas58express.com
 
-Este documento tiene dos partes:
+Este documento tiene tres partes:
 
-1. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
-   lo que se corrigió para dejar `/privacidad` lista para el abogado. **Empieza
-   por aquí.**
-2. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
+1. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — el
+   estado de hoy. **Empieza por aquí.**
+2. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
+   lo que se corrigió para dejar `/privacidad` lista para el abogado.
+3. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
    hallazgos que la motivaron.
+
+---
+
+# Certificación de Resend — 15 de septiembre
+
+**Despliegue:** `plus58express-es4rk480d` · commit `957faf8`.
+Encargo: certificar el envío de correo en producción y, **sólo si todo pasa**,
+encender después la lista de espera. Al terminar, los dos interruptores siguen
+apagados a propósito: falta que alguien mire el buzón.
+
+## Los estados que pediste
+
+| | |
+|---|---|
+| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** — revisor: Fernando Atencio · versión 1.1 · 15 de septiembre de 2026 |
+| **RESEND DOMAIN** | **VERIFIED** para envío — por comportamiento, no por consulta al registro. Ver el matiz abajo |
+| **RESEND API TEST** | **PASS** — HTTP 200, aceptado |
+| **RESEND MAILBOX DELIVERY** | **PENDING USER CONFIRMATION** |
+| **WAITLIST** | **OFF** |
+| **PARTNER LEADS** | **OFF** |
+
+Sobre la primera fila, con cuidado: se registra que **la revisión jurídica final
+está hecha y que Fernando Atencio la aprobó**, según confirmación del
+propietario. **No se escribe «certificada» en ninguna parte**, porque no existe
+ningún documento que use esa palabra. Y no se ha tocado ni una línea del
+contenido jurídico de `/privacidad` ni de `/terminos`: esto es un cambio de
+estado en la documentación interna, no en el sitio.
+
+## 1 · Estado inicial, comprobado antes de tocar nada
+
+| | |
+|---|---|
+| `WAITLIST_ENABLED` | **`false`** (`lib/flags.ts`) |
+| `PARTNER_LEADS_ENABLED` | **`false`** (`lib/flags.ts`) |
+| `RESEND_API_KEY` | presente en Production, tipo **Secret** |
+| `EMAIL_FROM` | presente en Production, tipo **Config** |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | presente en Production, tipo **Config** |
+| `TURNSTILE_SECRET_KEY` | presente en Production, tipo **Secret** |
+
+Ningún valor secreto se leyó, se imprimió ni se convirtió a `Config`. El listado
+de Vercel muestra los Secret como `Hidden` y así se quedaron.
+
+## 2 · Las cinco cosas que se confunden con «Resend funciona»
+
+El encargo pedía distinguirlas, y hacen falta las cinco por separado porque
+ninguna implica las demás.
+
+| | Estado | Cómo lo sé |
+|---|---|---|
+| **A · Dominio verificado** | **VERIFIED para envío** | No pude leerlo del registro —ver abajo—, pero Resend **aceptó** un correo cuyo `From:` es `no-reply@mas58express.com`. Resend responde `403 · domain is not verified` cuando el dominio no lo está: aceptarlo es su forma de decir que sí |
+| **B · DKIM en el DNS** | **PRESENTE** | `resend._domainkey.mas58express.com` devuelve `p=MIGfMA0GCSqGSIb3…`. El subdominio `send.` sigue sin tenerlo, y así debe ser |
+| **C · `EMAIL_FROM` correcto** | **SÍ, exacto** | El propio servidor de producción devolvió el valor que resuelve en tiempo de ejecución: `+58Express <no-reply@mas58express.com>`. Es carácter por carácter el que pediste |
+| **D · Clave usable** | **SÍ** | Es el hallazgo nuevo. Ver abajo |
+| **E · Entrega real al buzón** | **PENDIENTE DE TI** | Un `200` de Resend es «admitido para entrega», no «entregado». Eso sólo lo dice Gmail |
+
+### El matiz de A, dicho sin adornos
+
+Pregunté a `GET https://api.resend.com/domains` desde producción, con la clave
+real. Contestó:
+
+```
+HTTP 401 — "This API key is restricted to only send emails"
+```
+
+Eso **no** es un fallo: es una clave de *sending access*, que es exactamente el
+permiso mínimo que debe tener una clave que vive en una web pública. El precio de
+esa buena decisión es que no puede consultar el registro de dominios. Así que el
+estado de A no sale de una consulta, sino de una conducta observada — y se dice
+así, en vez de fingir que lo leí.
+
+### D · Una corrección a lo que informé ayer
+
+Ayer escribí que la única clave a la que podía llegar devolvía `API key is
+invalid`, y de ahí quedó **A · UNKNOWN** y **D** sin respuesta. Eso era cierto
+**de la clave de `.env.local`**, que sigue siendo un valor equivocado bajo un
+nombre correcto. **No** era cierto de la de Production, que hasta hoy nadie había
+podido probar porque es un Secret.
+
+Ya está probada: **autentica, y tiene el permiso de envío.** El mensaje de error
+del párrafo anterior lo demuestra por sí solo — una clave inválida no provoca una
+respuesta que describa sus propias restricciones, provoca `API key is invalid`.
+
+> Queda una tarea de higiene, pequeña y real: `web/.env.local` tiene un valor que
+> no es una clave de Resend guardado bajo el nombre `RESEND_API_KEY`. No está
+> versionado y no afecta a producción, pero engaña a quien lo lea.
+
+## 3 · Cómo se hizo la prueba, y por qué así
+
+`RESEND_API_KEY` es un **Secret**, y Vercel no devuelve un Secret nunca: ni al
+panel, ni a `vercel env pull`, ni a `vercel env run`. Es lo que se quiso al
+guardarla así y no se ha deshecho para hacer una prueba. Pero deja una
+consecuencia incómoda: **la única máquina capaz de usar esa clave es el propio
+despliegue de producción.** De ahí que la prueba viva en una ruta y no en un
+guion local.
+
+Las dos alternativas se descartaron por razones concretas, no por gusto:
+
+- **encender la lista de espera «a ver si llega»** publicaría una superficie que
+  recoge datos personales antes de saber si el doble consentimiento funciona.
+  Primero se certifica el envío, después se enciende el formulario;
+- **pasar el Secret a `Config`** para poder leerlo lo habría expuesto en el panel
+  para siempre a cambio de una comodidad de cinco minutos. El encargo lo prohibía
+  y, aunque no lo prohibiera, era la peor de las opciones.
+
+La ruta es `POST /api/cron/prueba-de-correo`, y está construida para no poder
+hacer daño:
+
+| | |
+|---|---|
+| **Apagada por omisión** | No la guarda `CRON_SECRET` —que dispara borrados y no tiene por qué compartir llave con esto— sino `PRUEBA_CORREO_TOKEN`, una variable que **normalmente no existe**. Sin ella no hay ruta: **404** |
+| **No es un relé** | El destinatario está escrito dentro del fichero. La petición no aporta **ni una letra** del correo: ni destino, ni asunto, ni cuerpo. Aunque el testigo se filtrara, lo único que se puede provocar es un mensaje idéntico al buzón del propio equipo |
+| **404, no 401** | Un 401 confirmaría que la ruta existe. Comprobado: sin testigo → 404; con testigo equivocado → 404 |
+| **No la dispara ningún cron** | No está en `vercel.json`. Sólo se ejecuta a mano |
+| **No envía en compilación** | Es `force-dynamic`; `next build` la lista como `ƒ` y no ejecuta su cuerpo |
+| **Mismo camino que la lista de espera** | Usa `enviarCorreo()` de `lib/correo/enviar.ts`, el mismo remitente, las mismas cabeceras y la misma API que usará el formulario. Probar un camino distinto del que se va a publicar no prueba nada |
+
+El testigo se generó al azar, se escribió directamente en Vercel por la entrada
+estándar y **nunca pasó por la pantalla**. De la clave de Resend no se imprimió,
+ni se devolvió, ni se registró nada.
+
+## 4 · El envío
+
+Uno. El único.
+
+| | |
+|---|---|
+| **Momento** | `2026-09-16T00:45:23.163Z` — **20:45 del 15 de septiembre**, hora de Venezuela |
+| **De** | `+58Express <no-reply@mas58express.com>` |
+| **Para** | `58expressapp@gmail.com` |
+| **Asunto** | `Prueba técnica +58Express — Resend` |
+| **Respuesta de la API** | **HTTP 200** — aceptado |
+| **ID de Resend** | `fa0143b8-e302-4a71-96dd-92f192e327b6` |
+
+El cuerpo no lleva enlaces, ni imágenes, ni identificadores: no hay apertura que
+contar ni clic que rastrear, que es la misma regla que siguen las plantillas de
+verdad. El único dato personal que interviene es la dirección de destino, que es
+la del propio equipo.
+
+> **HTTP 200 no es «ha llegado».** Significa que Resend lo ha admitido para
+> entrega. Entre eso y la bandeja de entrada quedan SES, la reputación del
+> dominio —que es nueva— y el filtro de Gmail. La fila **E** sigue abierta hasta
+> que alguien mire, y por eso los formularios siguen apagados.
+
+## 5 · Los interruptores, después de todo esto
+
+Vueltos a comprobar **contra producción**, no contra el código:
+
+```
+/api/waitlist            POST 404   GET 404
+/api/waitlist/confirmar  GET  404   POST 404
+/api/waitlist/baja       GET  404   POST 404
+/api/leads/partners      POST 404   GET 404
+
+<form> publicados en /, /pasajeros, /aliados, /conductores, /contacto:  0
+```
+
+**WAITLIST = OFF. PARTNER LEADS = OFF.** Nada se ha encendido.
+
+## 6 · QA
+
+| | |
+|---|---|
+| TypeScript | ✔ **0 errores** |
+| ESLint | ✔ **0 errores, 0 avisos** |
+| `next build` | ✔ compila; 22 rutas; la nueva sale como `ƒ` (dinámica) |
+| Interruptores en producción | ✔ 8 endpoints en 404, 0 formularios |
+| Guarda de la ruta nueva | ✔ 404 sin testigo y con testigo equivocado |
+
+**Esta ronda no modifica:** diseño · SEO · Analytics · Supabase · retención ·
+imágenes · GSAP · Lenis · app móvil · `/privacidad` · `/terminos`. El diff es
+**un fichero nuevo** y nada más: `web/app/api/cron/prueba-de-correo/route.ts`.
+
+## 7 · Lo único que bloquea la lista de espera
+
+> **Confirmar recepción real del email de prueba** en `58expressapp@gmail.com`
+> (asunto «Prueba técnica +58Express — Resend», id
+> `fa0143b8-e302-4a71-96dd-92f192e327b6`).
+>
+> Si está en la bandeja: se enciende `WAITLIST_ENABLED`.
+> Si está en spam: llega, pero conviene arreglar la reputación antes —`p=none` en
+> DMARC ayuda poco— y eso es una decisión, no un arreglo automático.
+> Si no está en ninguno de los dos: el problema está entre Resend y Gmail, y el
+> `200` no sirve de nada.
+
+`PARTNER_LEADS_ENABLED` se queda en `false` de todas formas, por encargo.
+
+## 8 · Deuda que deja esta ronda
+
+Dos cosas, y las dos se limpian en cuanto confirmes el buzón:
+
+1. **`PRUEBA_CORREO_TOKEN` está viva en Production.** Hay que borrarla. Mientras
+   exista, quien la tuviera podría provocar un correo idéntico al buzón del
+   equipo — nada más, pero no hay razón para dejarla.
+2. **La ruta puede quedarse o irse.** Borrada la variable queda inerte (404 para
+   todo el mundo, incluido quien la conozca), así que no urge. Es útil el día que
+   se rote la clave. Tú decides.
 
 ---
 
@@ -35,6 +232,13 @@ ninguna opinión jurídica nueva.
 
 **`/privacidad` pasa de 1.0 a 1.1 (15 de septiembre de 2026).** No está aprobada
 por ningún abogado: está lista para que Fernando Atencio la revise.
+
+> **Superado ese mismo día.** Las tres últimas filas quedaron atrás en la ronda
+> siguiente: Fernando Atencio completó la revisión de la 1.1 y la aprobó, y la
+> clave de Resend resultó ser válida en cuanto pudo probarse desde producción.
+> El estado vigente está en
+> **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)**. Lo
+> de abajo se conserva porque era cierto cuando se escribió.
 
 ## Qué cambió, y por qué
 
@@ -299,8 +503,14 @@ queda de los tres. Esta ronda no lo resuelve — la deja **factualmente correcta
 para que él la revise**. Nada en el sitio afirma que haya sido revisada o
 aprobada.
 
+> **Cerrado ese mismo día.** Fernando Atencio completó la revisión de la 1.1 y la
+> aprobó.
+
 **A2 · La entrega de Resend sigue sin certificar.** Bloquea la lista de espera.
 Cuesta un envío autorizado; el encargo lo prohibía.
+
+> **Hecho el 15 de septiembre**, con autorización expresa: aceptado por Resend
+> con HTTP 200. Falta confirmar el buzón.
 
 **A3 · Resuelto.** La política ya declara el flujo real de Gmail.
 
@@ -340,9 +550,9 @@ ningún correo, no se tocó la app móvil ni nada de conductores.
 | **Supabase Web** | **READY** |
 | **Retention** | **READY** |
 | **Turnstile** | **READY / NOT ACTIVE** |
-| **Resend** | **READY / DELIVERY NOT YET CERTIFIED** |
+| **Resend** | **API TEST PASS · MAILBOX DELIVERY PENDING USER CONFIRMATION** *(15 sept)* |
 | **Terms** | **LAWYER COMMENTS INCORPORATED** |
-| **Privacy** | **PENDING FINAL LAWYER REVIEW** |
+| **Privacy** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · 1.1 · 15 sept 2026 |
 | **Images** | **NOT READY** — ver A3 y B1 |
 | **Performance** | **READY** |
 | **Accessibility** | **READY** |
@@ -380,6 +590,11 @@ Sólo tres. Los tres son de contenido o de proceso, **ninguno es técnico**.
 
 ## A1 · La Política de Privacidad sigue pendiente del abogado
 
+> **RESUELTO — 15 de septiembre.** Fernando Atencio completó la revisión final de
+> la versión **1.1** y la aprobó, según confirmación del propietario. Este
+> bloqueo deja de estar abierto. El texto de abajo describe la situación del 14
+> de septiembre y se conserva tal cual.
+
 Ya lo sabías, y es el bloqueo principal. `/privacidad` está publicada en versión
 **1.0 del 13 de septiembre** y **no ha pasado la revisión jurídica** que sí
 pasaron los Términos.
@@ -395,6 +610,11 @@ comercios se apoya en ese documento. Encender los interruptores es empezar a
 recoger datos amparándose en un texto que todavía puede cambiar.
 
 ## A2 · La entrega real de Resend nunca se ha certificado
+
+> **Casi resuelto — 15 de septiembre.** Se hizo el envío autorizado desde
+> producción: Resend lo **aceptó** (HTTP 200, id
+> `fa0143b8-e302-4a71-96dd-92f192e327b6`). Falta la única mitad que una API no
+> puede dar: que alguien confirme que el correo está en el buzón.
 
 **Bloquea WAITLIST, no PARTNER LEADS.**
 
@@ -806,6 +1026,11 @@ anterior sigue en pie y el DNS la respalda. Plantillas escritas.
 
 **Entrega real: NO CERTIFICADA.** Es el bloqueo A2. No envié ningún correo.
 
+> **Actualizado el 15 de septiembre.** Ya se envió el correo autorizado desde
+> producción. La clave **autentica** y es de *sending access*; Resend aceptó el
+> mensaje con HTTP 200. Falta confirmar el buzón. Ver
+> [Certificación de Resend](#certificación-de-resend--15-de-septiembre).
+
 ## 12 · Documentos legales
 
 **Términos — versión 1.1, 14 de septiembre.** Las seis observaciones de Fernando
@@ -818,6 +1043,11 @@ anclas intactas.
 **Privacidad — versión 1.0, 13 de septiembre.** Publicada. **Pendiente de
 confirmación final del abogado** (bloqueo A1). En ninguna parte se afirma que
 haya sido revisada o aprobada.
+
+> **Actualizado el 15 de septiembre.** El documento pasó a **versión 1.1 (15 de
+> septiembre de 2026)** y Fernando Atencio completó su revisión final y la
+> aprobó. El sitio sigue sin afirmarlo en ninguna parte: el estado vive en esta
+> documentación interna, no en la página.
 
 **Datos legales, verificados literalmente contra producción:**
 
@@ -920,8 +1150,12 @@ Lo digo para que nadie lo dé por comprobado:
 
 > **READY excepto por:**
 >
-> 1. **La Política de Privacidad, pendiente de confirmación final del abogado** (A1)
-> 2. **La entrega de Resend, nunca certificada** — bloquea sólo la lista de espera (A2)
+> 1. ~~**La Política de Privacidad, pendiente de confirmación final del abogado** (A1)~~
+>    → **RESUELTO el 15 de septiembre:** revisión final completada y aprobada por
+>    Fernando Atencio, versión 1.1
+> 2. **La entrega de Resend** — el envío ya está hecho y aceptado (HTTP 200);
+>    queda **confirmar la recepción real en el buzón**. Bloquea sólo la lista de
+>    espera (A2)
 > 3. **La tabla de proveedores de la política, que no declara que los datos de un
 >    comercio acaban en un buzón de Gmail** — bloquea sólo el formulario de
 >    comercios (A3)
@@ -940,3 +1174,8 @@ entera se construyó sobre no hacer exactamente eso.
 
 **No se debe declarar la web «100 % lista para formularios» mientras A1 siga
 abierto.**
+
+> **15 de septiembre.** A1 y A3 están cerrados. El único requisito que queda
+> para encender la lista de espera es **confirmar que el correo de prueba llegó
+> a `58expressapp@gmail.com`**. `PARTNER_LEADS_ENABLED` se queda en `false` por
+> decisión del propietario, no por un bloqueo técnico.

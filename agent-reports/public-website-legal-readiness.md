@@ -7,7 +7,12 @@
 **Automatic retention cleanup = IMPLEMENTADO / CERTIFICADO**
 **Legal review by lawyer = INCORPORATED**
 **Reviewer = Fernando Atencio**
-**Date = 14 de septiembre de 2026**
+**Date = 14 de septiembre de 2026**  *(alcance: `/terminos`)*
+
+**Privacy = FINAL LAWYER REVIEW COMPLETE**
+**Privacy reviewer = Fernando Atencio**
+**Privacy version = 1.1**
+**Privacy date = 15 de septiembre de 2026**
 **WAITLIST_ENABLED = false**
 **PARTNER_LEADS_ENABLED = false**
 
@@ -16,7 +21,7 @@
 | **Rama** | `feat/public-marketing-site` |
 | **Producción** | `plus58express-1nrka1fsa` → <https://mas58express.com/privacidad> y <https://mas58express.com/terminos> |
 | **Fecha** | 13 de septiembre de 2026 · revisión de términos el 14 |
-| **Versión de los documentos** | Privacidad **1.0** · Términos **1.1** |
+| **Versión de los documentos** | Privacidad **1.0** · Términos **1.1** *(privacidad pasó a **1.1** el 15 de septiembre)* |
 | **Alcance** | Sitio web público. **No** la aplicación móvil |
 
 > **Esto no es asesoramiento jurídico.** Es un trabajo de ingeniería hecho con
@@ -441,6 +446,13 @@ de septiembre de 2026.**
 Alcance: **`/terminos` únicamente.** La política de privacidad no formó parte de
 esta revisión y **no se modificó**. Los términos pasan a **versión 1.1**; la
 política se queda en la 1.0, que es lo honesto: cambió un documento, no los dos.
+
+> **15 de septiembre de 2026.** La política de privacidad **sí** pasó después
+> por su propia revisión: Fernando Atencio revisó la **versión 1.1** y la
+> aprobó, según confirmación del propietario. El texto jurídico no se modificó
+> con motivo de ese registro — sólo se actualizó el estado en esta
+> documentación interna. El sitio no afirma en ninguna parte haber sido
+> revisado o aprobado por un abogado.
 
 > Son **observaciones incorporadas**, no una certificación. El abogado revisó y
 > señaló; lo señalado se aplicó tal cual, sin reinterpretarlo y sin añadir
