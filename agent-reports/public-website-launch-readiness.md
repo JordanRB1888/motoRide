@@ -1,19 +1,125 @@
 # Launch Readiness — mas58express.com
 
-Este documento tiene seis partes:
+Este documento tiene siete partes:
 
-0. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
-   el estado de hoy, y el ciclo completo cerrado. **Empieza por aquí.**
-1. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
+0. **[Minimización de datos en la baja](#minimización-de-datos-en-la-baja--16-de-septiembre)**
+   — el estado de hoy. **Empieza por aquí.**
+1. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
+   el ciclo completo, cerrado.
+2. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
    — el alta y la confirmación.
-2. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
+3. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
    — el intento fallido y el bloqueo de Turnstile, ya resuelto.
-3. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
+4. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
    se cerró el correo.
-4. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
+5. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
    lo que se corrigió para dejar `/privacidad` lista para el abogado.
-5. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
+6. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
    hallazgos que la motivaron.
+
+---
+
+# Minimización de datos en la baja — 16 de septiembre
+
+**Despliegue:** `plus58express-mh6vkmbbf` · commit `10b0b60`.
+
+La ronda anterior dejó anotada una observación: la política promete que tras una
+baja *«se conserva únicamente la constancia de que pediste la baja, para no
+volver a escribirte por error»*, y la fila conservaba además `rol`, `zona`,
+`origen` e `ip_hash`. Ya no.
+
+| | |
+|---|---|
+| **UNSUBSCRIBE DATA MINIMIZATION** | **COMPLETE** |
+| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · 1.1 · 15 de septiembre de 2026 |
+| **RESEND MAILBOX DELIVERY** | **CERTIFIED** |
+| **TURNSTILE** | **VERIFIED** |
+| **WAITLIST** | **ACTIVE** |
+| **WAITLIST E2E** | **COMPLETE** |
+| **DOUBLE OPT-IN** | **COMPLETE** |
+| **UNSUBSCRIBE E2E** | **COMPLETE** |
+| **PARTNER LEADS** | **OFF** |
+
+Ni `/privacidad` ni `/terminos` se han tocado: el cambio es del código hacia el
+documento, no al revés.
+
+## Exactamente qué queda tras una baja
+
+| Campo | Después de la baja | Por qué |
+|---|---|---|
+| `email` | **se conserva** | Sin la dirección no se puede suprimir a nadie. Una lista de supresión que olvida a quién no debe escribir no sirve para nada |
+| `estado` (`baja`) | **se conserva** | Es la constancia |
+| `baja_en` | **se conserva** | Es la constancia |
+| `token_baja` | **se conserva** | Para responder «ya estabas fuera» a quien vuelva a pulsar el enlace, en vez de «este enlace no vale» |
+| `id`, `actualizado_en` | **se conservan** | Identidad de la fila y traza del cambio |
+| `token_confirmacion` | `NULL` | Ya lo estaba desde la confirmación. No se toca |
+| `token_expira_en` | `NULL` | Ídem |
+| **`rol`** | **`NULL`** | **Nuevo.** La finalidad declarada no necesita saber si era conductora |
+| **`zona`** | **`NULL`** | **Nuevo.** Ni de qué municipio |
+| **`origen`** | **`NULL`** | **Nuevo.** Ni por qué anuncio llegó |
+| **`ip_hash`** | **`NULL`** | **Nuevo.** Ni desde qué red |
+
+El borrado va **en la misma sentencia** que cambia el estado, no en un barrido
+posterior. Es deliberado: un borrado que ocurre «más tarde» es un borrado que un
+fallo del cron puede no ejecutar nunca, y la promesa es de este instante.
+
+Los dos almacenes cambian igual —Postgres y el de memoria—. Si no borraran lo
+mismo, las pruebas contra memoria dejarían de decir nada sobre el que se usa de
+verdad.
+
+## Las pruebas, contra la base real
+
+| | |
+|---|---|
+| `F-bis · la baja se lleva rol, zona, origen e ip_hash — y nada más` | Comprueba los cuatro **antes** —si no existieran, verlos a `NULL` después no probaría nada— y lo hace contra **las columnas**, no contra el registro que devuelve el mapeo: lo que promete la política es lo que queda guardado |
+| `F-ter · repetir la baja no revive nada ni mueve la fecha` | `baja_en` no se mueve, los cuatro siguen a `NULL`, y el testigo sigue encontrando la fila con estado `baja` — que es **exactamente** la condición por la que la ruta responde «ya estabas fuera» y se va sin mandar un segundo acuse |
+| `F-quater · la baja de una no toca a las demás` | Pendientes y confirmados conservan sus cuatro campos y su estado; el limitador **no se reinicia** —darse de baja no puede ser una forma de limpiarse el historial—; y el doble consentimiento de la vecina pendiente sigue confirmando con su enlace de siempre |
+| `la baja deja el estado correcto y se lleva lo que ya no hace falta` | El mismo contrato sobre el almacén de memoria |
+
+## Una prueba caprichosa que esto destapó
+
+`H-quinquies` suspendió durante la ronda, y **no por este cambio**. Sacaba el
+instante de `Date.now()`, y el cubo del minuto y el de la hora coinciden —los dos
+valen `hh:00:00`— **durante el primer minuto de cada hora**. Entonces las tres
+llamadas caen en la misma fila, la cuenta sale 1-2-3 en vez de 1-2-1, y la prueba
+falla. Una vez cada sesenta, siempre a la misma hora, y con toda la pinta de ser
+un fallo del código. Ahora el instante se ancla a la media hora, donde los dos
+cubos no pueden coincidir.
+
+## QA
+
+| | |
+|---|---|
+| TypeScript | ✔ **0 errores** |
+| ESLint | ✔ **0 errores, 0 avisos** |
+| `next build` | ✔ compila |
+| Playwright, suite completa | ✔ **187 pasadas · 0 fallidas** · 4 saltadas |
+| Producción | ✔ `POST /api/waitlist` 400 · `GET` 405 · baja 302 · partners **404** · portada con formulario · `/aliados` sin formularios · `/privacidad` y `/terminos` 200 |
+
+`WAITLIST_ENABLED = true` · `PARTNER_LEADS_ENABLED = false`. El cron no se tocó.
+
+## Lo que este cambio NO hace: no es retroactivo
+
+Comprobado en sólo lectura después de desplegar, y conviene que esté escrito:
+
+```
+   estado   baja
+   rol      conductor
+   zona     santa-cruz-de-mara
+   origen   descarga
+   ip_hash  presente (32 car.)
+```
+
+**La fila que ya estaba dada de baja conserva los cuatro campos.** El código
+nuevo sólo actúa sobre las bajas que ocurran a partir de ahora; a una fila que ya
+pasó por ahí no vuelve a mirarla nadie.
+
+Ponerla al día es un `UPDATE` de una línea sobre datos personales reales. **No lo
+he hecho** —el encargo prohibía expresamente modificar datos a mano, y con razón—
+pero queda señalado, porque es la única fila del sistema a la que la promesa del
+documento todavía no se le aplica del todo. Son dos las salidas razonables:
+ejecutarlo una vez de forma controlada, o dejarlo estar por ser un registro de
+prueba del propio equipo. Es una decisión del propietario, no mía.
 
 ---
 
@@ -164,6 +270,10 @@ mismo. Después de la baja siguen ahí:
 | `zona` (`santa-cruz-de-mara`) | **No** |
 | `origen` (`descarga`) | **No** |
 | `ip_hash` | **No** |
+
+> **RESUELTO el 16 de septiembre.** Los cuatro campos ya se ponen a `NULL` en el
+> mismo `UPDATE` que da de baja. Ver
+> [Minimización de datos en la baja](#minimización-de-datos-en-la-baja--16-de-septiembre).
 
 Los cuatro últimos son atributos de segmentación que la finalidad declarada no
 necesita. **No es un incumplimiento ni un bloqueo** —siguen siendo datos que la
