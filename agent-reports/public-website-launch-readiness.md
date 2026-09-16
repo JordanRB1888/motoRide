@@ -1,21 +1,125 @@
 # Launch Readiness — mas58express.com
 
-Este documento tiene siete partes:
+Este documento tiene ocho partes:
 
-0. **[Minimización de datos en la baja](#minimización-de-datos-en-la-baja--16-de-septiembre)**
-   — el estado de hoy. **Empieza por aquí.**
-1. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
+0. **[La política al día con el formulario encendido](#la-política-al-día-con-el-formulario-encendido--16-de-septiembre)**
+   — el estado de hoy, y `/privacidad` v1.2. **Empieza por aquí.**
+1. **[Minimización de datos en la baja](#minimización-de-datos-en-la-baja--16-de-septiembre)**
+   — qué se conserva tras una baja.
+2. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
    el ciclo completo, cerrado.
-2. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
+3. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
    — el alta y la confirmación.
-3. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
+4. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
    — el intento fallido y el bloqueo de Turnstile, ya resuelto.
-4. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
+5. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
    se cerró el correo.
-5. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
+6. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
    lo que se corrigió para dejar `/privacidad` lista para el abogado.
-6. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
+7. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
    hallazgos que la motivaron.
+
+---
+
+# La política al día con el formulario encendido — 16 de septiembre
+
+**Despliegue:** `plus58express-hrosrhmb2` · commit `8469c01`.
+**`/privacidad` pasa a la versión 1.2 (16 de septiembre de 2026).**
+
+Salió de una pregunta del propietario que parecía de otra cosa: *«el check de
+Cloudflare se marca solo, sin que yo pulse nada»*. Revisándolo apareció lo
+importante.
+
+## El hallazgo
+
+Encender la lista de espera dejó **cuatro frases falsas en un documento legal**.
+El texto describía un sitio sin formularios, y el sitio ya tenía uno.
+
+| Sección | Decía | La realidad |
+|---|---|---|
+| **§2** | «este sitio **todavía no tiene ningún formulario publicado**» —en negrita— y que los dos estaban «apagados» | Uno lo está; el otro lleva publicado desde el día 15 |
+| **§3** | «**Cuando esta función se active**, esto es lo que se guarda» | Ya está activa |
+| **§5** | «**Cuando los formularios se activen**, usarán Cloudflare Turnstile» | Lo usa ya el de la lista de espera |
+| **§9** | Cloudflare — «Comprobar que no eres un robot **(cuando los formularios se activen)**» | Cloudflare recibe la IP y las señales del navegador **hoy**, de cada visitante que baja hasta el formulario |
+
+La cuarta es la que más pesa, y por eso va subrayada: **prometía en futuro una
+cesión de datos que ya está ocurriendo**. Las otras tres describen mal el estado
+del sitio; ésa describe mal lo que le pasa a los datos de quien está leyendo.
+
+## Qué NO se tocó
+
+Ninguna base legal · ningún derecho · el responsable · el RIF · el domicilio · la
+jurisdicción · el plazo interno de 15 días hábiles · ningún dato de los que se
+recogen · `/terminos` (diff vacío, comprobado). Son **correcciones de hecho sobre
+qué superficie está publicada**, no de criterio jurídico.
+
+El formulario de comercios sigue apagado, y el texto lo sigue diciendo — ahora en
+su propio párrafo, para que apagar o encender uno no vuelva a arrastrar al otro.
+
+## Por qué sube a 1.2
+
+Porque lo exige el propio `lib/legal.ts`: *«al cambiar cualquiera de los dos
+textos hay que subir la versión y la fecha — si no, decir “última actualización”
+se convierte en decorado»*. Y porque separa lo que hay que separar:
+
+> **La 1.1 es la versión que revisó Fernando Atencio.** La 1.2 se aparta de ella
+> únicamente en esas cuatro frases. Conviene que él lo sepa, aunque nada de lo
+> que dictaminó haya cambiado.
+
+## Verificado de paso, porque encender el widget podía romperlo
+
+**§7 afirma en negrita que el sitio no usa cookies —«ni propias ni de terceros»—
+ni guarda nada en el navegador.** Medido con Turnstile cargado en la portada:
+
+```
+  document.cookie   (ninguna)
+  localStorage      []
+  sessionStorage    []
+  indexedDB         []
+```
+
+Se sostiene. Un matiz honesto: eso es la primera parte. Dentro del marco de
+Cloudflare no puedo mirar, y mi navegador automatizado no llega a completar el
+desafío, así que de la parte de terceros respondo con la documentación —el
+estándar no pone cookie salvo que se active *Pre-Clearance*, que no está
+activado— y no con una medición mía.
+
+## Sobre la pregunta que originó todo
+
+**El widget que se marca solo no es un fallo, y no hay forma de cambiarlo.**
+Turnstile tiene tres modos —*Managed*, *Non-Interactive* e *Invisible*— y
+**ninguno** ofrece un ajuste de «exige siempre un clic». Es deliberado: el
+producto existe para no hacerle trabajo a la gente.
+
+Que pase solo tampoco es que no compruebe nada. Desde un navegador automatizado,
+en esa misma página, el widget responde `600010` —detección de bot— y **no entrega
+ningún testigo**. Y el recuadro verde no autoriza nada por sí solo: un testigo
+inventado enviado al servidor devuelve `400 TURNSTILE_INVALIDO`, porque la ruta
+pregunta a Cloudflare en cada envío antes de tocar la base.
+
+Exigir un clic obligatorio significaría **abandonar Turnstile** por un captcha
+clásico de casilla: peor accesibilidad, menos inscripciones, más datos a un
+tercero y un cambio de proveedor que obligaría a reescribir §5 y §9 y a volver a
+pasar por el abogado. No se recomienda, y no se ha hecho.
+
+## Una deuda que no conviene maquillar
+
+**§18 promete que la política cambia ANTES de que el sitio trate los datos de otra
+forma, no después.** Esta vez fue después: el formulario se encendió el 15 y esto
+se corrigió el 16. Queda escrito en `lib/legal.ts` para que la próxima vez el
+orden sea el que el documento promete — el interruptor y el texto se mueven en el
+mismo despliegue.
+
+## QA
+
+| | |
+|---|---|
+| TypeScript · ESLint | ✔ **0 errores · 0/0** |
+| `next build` | ✔ compila |
+| Playwright, suite completa | ✔ **187 pasadas · 0 fallidas** |
+| axe WCAG 2.1 AA sobre `/privacidad` **en producción** | ✔ móvil y escritorio, **0 violaciones** |
+| Texto publicado | ✔ «Versión 1.2 · 16 de septiembre de 2026»; **cero** apariciones de las tres frases falsas; el formulario de comercios sigue declarado apagado |
+| Interruptores | ✔ `WAITLIST_ENABLED = true` · `PARTNER_LEADS_ENABLED = false` (partners en 404) |
 
 ---
 
@@ -31,7 +135,7 @@ volver a escribirte por error»*, y la fila conservaba además `rol`, `zona`,
 | | |
 |---|---|
 | **UNSUBSCRIBE DATA MINIMIZATION** | **COMPLETE** |
-| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · 1.1 · 15 de septiembre de 2026 |
+| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** sobre la **1.1** — Fernando Atencio · 15 de septiembre de 2026. Publicada hoy la **1.2**, que sólo corrige cuatro frases de hecho |
 | **RESEND MAILBOX DELIVERY** | **CERTIFIED** |
 | **TURNSTILE** | **VERIFIED** |
 | **WAITLIST** | **ACTIVE** |
