@@ -381,13 +381,33 @@ export function crearRepositorioPostgres(
     },
 
     async darDeBajaEnEspera(id) {
-      /* El testigo de baja **no** se borra: quien vuelva a pulsar el enlace tiene
-         que poder ver «ya estabas fuera» en vez de «este enlace no vale». */
+      /* LA BAJA NO SÓLO CAMBIA UN ESTADO: TAMBIÉN TIRA LO QUE YA NO HACE FALTA.
+       *
+       * La política publicada promete que, tras una baja, «se conserva únicamente
+       * la constancia de que pediste la baja, para no volver a escribirte por
+       * error». Esa finalidad necesita cuatro cosas y sólo cuatro: el correo
+       * —sin la dirección no se puede suprimir nada—, el estado, la fecha y el
+       * testigo de baja. `rol`, `zona`, `origen` e `ip_hash` son atributos de
+       * segmentación que sobrevivían a la baja sin que nada los justificara, así
+       * que se ponen a NULL aquí mismo, en el mismo acto atómico.
+       *
+       * Se hace en la sentencia y no en un barrido posterior a propósito: un
+       * borrado que ocurre «más tarde» es un borrado que un fallo del cron puede
+       * no ejecutar nunca, y la promesa es de este instante.
+       *
+       * El testigo de baja **no** se borra: quien vuelva a pulsar el enlace tiene
+       * que poder ver «ya estabas fuera» en vez de «este enlace no vale». Lo que
+       * impide repetir la acción es la guarda `estado <> 'baja'`, no destruir el
+       * testigo. */
       const filas = await consulta<FilaEspera>(
         `UPDATE ${TABLA_ESPERA}
             SET estado = 'baja',
                 baja_en = now(),
-                actualizado_en = now()
+                actualizado_en = now(),
+                rol = NULL,
+                zona = NULL,
+                origen = NULL,
+                ip_hash = NULL
           WHERE id = $1 AND estado <> 'baja'
           RETURNING ${COLUMNAS_ESPERA}`,
         [id],

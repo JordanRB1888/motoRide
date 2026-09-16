@@ -108,6 +108,14 @@ export function crearRepositorioEnMemoria(): RepositorioWeb {
       r.estado = "baja";
       r.bajaEn = new Date().toISOString();
       r.actualizadoEn = r.bajaEn;
+      /* Lo mismo que hace Postgres, y por la misma razón: tras la baja sólo se
+         conserva lo que hace falta para no volver a escribir a esa persona. Si
+         los dos almacenes no borraran lo mismo, las pruebas contra memoria
+         dejarían de decir nada sobre el que se usa de verdad. */
+      r.rol = null;
+      r.zona = null;
+      r.origen = null;
+      r.ipHash = null;
       return r;
     },
 

@@ -217,22 +217,39 @@ test.describe("almacén en memoria", () => {
     expect(porBaja?.id).toBe(registro.id);
   });
 
-  test("la baja deja el estado correcto", async () => {
+  test("la baja deja el estado correcto y se lleva lo que ya no hace falta", async () => {
     const repo = crearRepositorioEnMemoria();
     const baja = nuevoTestigo();
     const { registro } = await repo.altaEnEspera({
       email: "d@ejemplo.com",
-      rol: null,
-      zona: null,
-      origen: null,
-      ipHash: null,
+      rol: "conductor",
+      zona: "maracaibo",
+      origen: "descarga",
+      ipHash: "huella-ficticia",
       tokenConfirmacion: nuevoTestigo(),
       tokenExpiraEn: new Date(Date.now() + 10_000).toISOString(),
       tokenBaja: baja,
     });
+    // Los cuatro existen antes: si no, comprobar después que son null no diría nada.
+    expect(registro.rol).toBe("conductor");
+    expect(registro.ipHash).toBe("huella-ficticia");
+
     const tras = await repo.darDeBajaEnEspera(registro.id);
     expect(tras?.estado).toBe("baja");
     expect(tras?.bajaEn).toBeTruthy();
+
+    /* El mismo contrato que cumple Postgres, comprobado aquí también: si los dos
+       almacenes no borraran lo mismo, estas pruebas dejarían de decir nada sobre
+       el que se usa de verdad. */
+    expect(tras?.rol, "rol").toBeNull();
+    expect(tras?.zona, "zona").toBeNull();
+    expect(tras?.origen, "origen").toBeNull();
+    expect(tras?.ipHash, "ipHash").toBeNull();
+
+    // Y lo que la constancia necesita, intacto.
+    expect(tras?.email).toBe("d@ejemplo.com");
+    expect(tras?.tokenBaja).toBe(baja);
+    expect(await repo.buscarPorTokenBaja(baja)).not.toBeNull();
   });
 });
 

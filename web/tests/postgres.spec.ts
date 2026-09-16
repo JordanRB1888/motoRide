@@ -302,6 +302,156 @@ test.describe("adaptador Postgres contra Supabase", () => {
     expect(new Date(rows[0].baja_en).toISOString()).toBe(baja!.bajaEn);
   });
 
+  /**
+   * Los campos que sobreviven a una baja, uno por uno.
+   *
+   * No se comprueba contra el registro que devuelve el repositorio sino contra
+   * **las columnas de la base**: lo que promete la política es lo que queda
+   * guardado, no lo que un mapeo decida enseñar.
+   */
+  type FilaCruda = {
+    email: string | null;
+    estado: string;
+    baja_en: Date | null;
+    token_baja: string | null;
+    token_confirmacion: string | null;
+    token_expira_en: Date | null;
+    rol: string | null;
+    zona: string | null;
+    origen: string | null;
+    ip_hash: string | null;
+  };
+
+  const filaCruda = async (email: string): Promise<FilaCruda> => {
+    const { rows } = await poolWeb().query<FilaCruda>(
+      `SELECT email, estado, baja_en, token_baja, token_confirmacion, token_expira_en,
+              rol, zona, origen, ip_hash
+         FROM public.lista_de_espera WHERE email = $1`,
+      [email],
+    );
+    return rows[0];
+  };
+
+  test("F-bis · la baja se lleva rol, zona, origen e ip_hash — y nada más", async () => {
+    const email = correo("baja-minimiza");
+    const datos = altaDePrueba(email);
+    const alta = await repo().altaEnEspera(datos);
+    await repo().confirmarEnEspera(alta.registro.id);
+
+    /* 1 · Antes de la baja los cuatro campos están ahí. Sin esto, comprobar
+           después que son NULL no demostraría nada: podrían no haber existido
+           nunca. */
+    const antes = await filaCruda(email);
+    expect(antes.rol).toBe("pasajero");
+    expect(antes.zona).toBe("maracaibo");
+    expect(antes.origen).toBe("qa");
+    expect(antes.ip_hash).toBe("qa-huella-ficticia");
+    expect(antes.estado).toBe("confirmado");
+
+    await repo().darDeBajaEnEspera(alta.registro.id);
+    const despues = await filaCruda(email);
+
+    /* 2 · Los cuatro, fuera. La finalidad declarada —no volver a escribir a esa
+           persona— no necesita saber si era conductora ni de qué municipio. */
+    expect(despues.rol, "rol").toBeNull();
+    expect(despues.zona, "zona").toBeNull();
+    expect(despues.origen, "origen").toBeNull();
+    expect(despues.ip_hash, "ip_hash").toBeNull();
+
+    /* 3 · Y lo que la constancia SÍ necesita, intacto. El correo sobre todo: sin
+           la dirección no se puede suprimir a nadie, y una lista de supresión que
+           olvida a quién no debe escribir no sirve para nada. */
+    expect(despues.email, "email").toBe(email);
+    expect(despues.estado, "estado").toBe("baja");
+    expect(despues.baja_en, "baja_en").not.toBeNull();
+    expect(despues.token_baja, "token_baja").toBe(datos.tokenBaja);
+
+    // Y lo que ya estaba limpio desde la confirmación sigue limpio.
+    expect(despues.token_confirmacion).toBeNull();
+    expect(despues.token_expira_en).toBeNull();
+  });
+
+  test("F-ter · repetir la baja no revive nada ni mueve la fecha", async () => {
+    const email = correo("baja-repetida");
+    const datos = altaDePrueba(email);
+    const alta = await repo().altaEnEspera(datos);
+    await repo().darDeBajaEnEspera(alta.registro.id);
+    const primera = await filaCruda(email);
+
+    /* Ésta es exactamente la condición que mira la ruta antes de hacer nada: si
+       el testigo sigue encontrando la fila y su estado ya es «baja», responde
+       «ya estabas fuera» y SE VA — sin tocar la base y, por tanto, **sin mandar
+       un segundo acuse**. Lo que se certifica aquí es que esa condición se
+       cumple; el acuse lo manda la ruta, no el repositorio. */
+    const porTestigo = await repo().buscarPorTokenBaja(datos.tokenBaja);
+    expect(porTestigo).not.toBeNull();
+    expect(porTestigo!.estado).toBe("baja");
+
+    // Y si aun así se llamara, la guarda del UPDATE no deja pasar nada.
+    expect(await repo().darDeBajaEnEspera(alta.registro.id)).toBeNull();
+
+    const segunda = await filaCruda(email);
+    expect(new Date(segunda.baja_en!).toISOString()).toBe(
+      new Date(primera.baja_en!).toISOString(),
+    );
+    expect(segunda.rol).toBeNull();
+    expect(segunda.zona).toBeNull();
+    expect(segunda.origen).toBeNull();
+    expect(segunda.ip_hash).toBeNull();
+    expect(segunda.token_baja).toBe(datos.tokenBaja);
+  });
+
+  test("F-quater · la baja de una no toca a las demás", async () => {
+    const pendiente = correo("baja-vecina-pendiente");
+    const confirmada = correo("baja-vecina-confirmada");
+    const saliente = correo("baja-vecina-saliente");
+
+    const datosPendiente = altaDePrueba(pendiente);
+    await repo().altaEnEspera(datosPendiente);
+    const altaConfirmada = await repo().altaEnEspera(altaDePrueba(confirmada));
+    await repo().confirmarEnEspera(altaConfirmada.registro.id);
+    const altaSaliente = await repo().altaEnEspera(altaDePrueba(saliente));
+
+    /* El limitador se cuenta ANTES para poder demostrar que la baja no lo
+       reinicia: si lo reiniciara, darse de baja sería una forma de limpiarse el
+       historial y volver a empezar. */
+    const clave = `${PREFIJO}vecina`;
+    await superaLimite(repo(), clave, LIMITES.waitlistPorIp);
+    const { rows: antesLimite } = await poolWeb().query<{ n: number }>(
+      `SELECT n FROM public.intentos_web WHERE clave = $1`,
+      [clave],
+    );
+
+    await repo().darDeBajaEnEspera(altaSaliente.registro.id);
+
+    for (const [email, estado] of [
+      [pendiente, "pendiente"],
+      [confirmada, "confirmado"],
+    ] as const) {
+      const vecina = await filaCruda(email);
+      expect(vecina.estado, email).toBe(estado);
+      expect(vecina.rol, email).toBe("pasajero");
+      expect(vecina.zona, email).toBe("maracaibo");
+      expect(vecina.origen, email).toBe("qa");
+      expect(vecina.ip_hash, email).toBe("qa-huella-ficticia");
+      expect(vecina.baja_en, email).toBeNull();
+    }
+
+    const { rows: despuesLimite } = await poolWeb().query<{ n: number }>(
+      `SELECT n FROM public.intentos_web WHERE clave = $1`,
+      [clave],
+    );
+    expect(despuesLimite[0]?.n).toBe(antesLimite[0]?.n);
+
+    /* Y el doble consentimiento de la vecina pendiente sigue funcionando: su
+       enlace, emitido antes de la baja ajena, confirma igual. */
+    const porTestigo = await repo().buscarPorTokenConfirmacion(datosPendiente.tokenConfirmacion);
+    expect(porTestigo).not.toBeNull();
+    const confirmadaAhora = await repo().confirmarEnEspera(porTestigo!.id);
+    expect(confirmadaAhora!.estado).toBe("confirmado");
+    expect(confirmadaAhora!.rol).toBe("pasajero");
+  });
+
   test("G-bis · quien se dio de baja no puede ser reconfirmado con un enlace viejo", async () => {
     const email = correo("baja-y-confirma");
     const datos = altaDePrueba(email);
@@ -364,10 +514,22 @@ test.describe("adaptador Postgres contra Supabase", () => {
     const clave = `${PREFIJO}dos-ventanas-${Date.now()}`;
     const r = repo();
 
-    expect(await r.contarIntentos(clave, 60_000, dentroDelCubo(60_000))).toBe(1);
-    expect(await r.contarIntentos(clave, 60_000, dentroDelCubo(60_000))).toBe(2);
+    /* EL INSTANTE NO PUEDE SALIR DEL RELOJ TAL CUAL, y esto costó un fallo.
+       Con `Date.now()`, el cubo del minuto es «minuto en curso» y el de la hora
+       «hora en curso»; son distintos SALVO durante el primer minuto de cada
+       hora, cuando los dos valen «hh:00:00». Entonces las tres llamadas caen en
+       la misma fila, la cuenta sale 1-2-3 y la prueba suspende — una vez cada
+       sesenta, y siempre a la misma hora, que es la peor clase de prueba
+       caprichosa: la que parece un fallo del código.
+       Se ancla a la media hora, donde los dos cubos no pueden coincidir. */
+    const base = Math.floor(Date.now() / 3_600_000) * 3_600_000 + 1_800_000;
+    const enCubo = (ventanaMs: number) =>
+      Math.floor(base / ventanaMs) * ventanaMs + Math.floor(ventanaMs / 4);
+
+    expect(await r.contarIntentos(clave, 60_000, enCubo(60_000))).toBe(1);
+    expect(await r.contarIntentos(clave, 60_000, enCubo(60_000))).toBe(2);
     // Otra ventana, otro cubo, otra cuenta.
-    expect(await r.contarIntentos(clave, 3_600_000, dentroDelCubo(3_600_000))).toBe(1);
+    expect(await r.contarIntentos(clave, 3_600_000, enCubo(3_600_000))).toBe(1);
   });
 
   test("H-0 · una ráfaga SIMULTÁNEA no se salta el límite", async () => {
