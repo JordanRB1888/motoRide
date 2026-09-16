@@ -1,23 +1,153 @@
 # Launch Readiness — mas58express.com
 
-Este documento tiene ocho partes:
+Este documento tiene nueve partes:
 
-0. **[La política al día con el formulario encendido](#la-política-al-día-con-el-formulario-encendido--16-de-septiembre)**
-   — el estado de hoy, y `/privacidad` v1.2. **Empieza por aquí.**
-1. **[Minimización de datos en la baja](#minimización-de-datos-en-la-baja--16-de-septiembre)**
+0. **[Las capturas, sin promesas que el producto no sostiene](#las-capturas-sin-promesas-que-el-producto-no-sostiene--16-de-septiembre)**
+   — el estado de hoy. **Empieza por aquí.**
+1. **[La política al día con el formulario encendido](#la-política-al-día-con-el-formulario-encendido--16-de-septiembre)**
+   — `/privacidad` v1.2.
+2. **[Minimización de datos en la baja](#minimización-de-datos-en-la-baja--16-de-septiembre)**
    — qué se conserva tras una baja.
-2. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
+3. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
    el ciclo completo, cerrado.
-3. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
+4. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
    — el alta y la confirmación.
-4. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
+5. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
    — el intento fallido y el bloqueo de Turnstile, ya resuelto.
-5. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
+6. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
    se cerró el correo.
-6. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
+7. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
    lo que se corrigió para dejar `/privacidad` lista para el abogado.
-7. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
+8. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
    hallazgos que la motivaron.
+
+---
+
+# Las capturas, sin promesas que el producto no sostiene — 16 de septiembre
+
+**Despliegue:** `plus58express-4uytlv0ix` · commits `e574edc` y `96c81f1`.
+
+`lib/content.ts` abre con una regla del proyecto: *«aquí no entra ni una cifra
+que no se pueda respaldar»*. Se estaba aplicando al texto y no a las imágenes —y
+**nadie distingue si una promesa está escrita en HTML o pintada en un píxel**.
+
+## Estados
+
+| | |
+|---|---|
+| **PRIVACY 1.2** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · versión 1.2 · **FINAL** |
+| **WAITLIST E2E** | **COMPLETE** |
+| **DOUBLE OPT-IN** | **COMPLETE** |
+| **UNSUBSCRIBE E2E** | **COMPLETE** |
+| **COMMERCIAL SCREENSHOTS** | **CLEAN** — con una salvedad de criterio en §5 |
+| **STORE AVAILABILITY MESSAGING** | **CLEAN** |
+| **PARTNER LEADS** | **OFF** |
+
+## 1 · Qué seguía visible en producción, y qué se hizo con ello
+
+| | Dónde | Qué decía | Ahora |
+|---|---|---|---|
+| Tarifa concreta en dólares, **tres veces** | `map-select` | el precio de Moto, el de Auto y el total | **fuera**; el total pasa a mandar la distancia |
+| **Categoría de auto para 4 personas** | `map-select` | una opción de viaje en coche | **fuera la fila entera** — el sitio no ofrece viajes en auto ni una sola vez |
+| **Tres negocios reales** sobre el mapa | `map-select` | dos centros comerciales y una empresa, por su nombre | **fuera los nombres**; los alfileres se quedan como puntos de interés cualesquiera |
+| **Tasa de cambio** en bolívares, con dos decimales | `home` | se lee como la tasa de hoy | **fuera** |
+| **Cifra de usuarios diarios** | `home` | y encima a medio escribir: el número faltaba en la frase | **fuera**; ahora nombra las tres zonas reales |
+| **Cobertura nacional** | `home` | «a toda Venezuela» en la tarjeta de envíos | **«y con rastreo»** |
+| **Usuario y cara ficticios** | `home` | un nombre propio, una cara generada y una valoración «0.00» | **avatar neutro** y un saludo sin nombre |
+| **Programa de niveles** | `driver-onboarding` | «obtén mejores beneficios al subir tu nivel» | **fuera** |
+
+`login.webp` se auditó también: no afirma nada comercial y **no se tocó**.
+
+## 2 · Cómo se hizo, y por qué así
+
+**No se rediseñó nada.** Mismas pantallas, misma composición, mismas fotos, misma
+tipografía —Poppins, que es la de las propias maquetas—. Los parches van sobre el
+activo original, a resolución nativa, y sólo sobre la zona que afirma de más.
+
+Dos decisiones que se notan en el resultado:
+
+- **sobre el mapa no hay rectángulos de color, sino trozos del propio mapa**
+  clonados de unos píxeles más abajo. Un rectángulo plano sobre una textura con
+  calles se ve desde lejos; un trozo del mismo mapa, no;
+- **el precio de la fila de Moto también se clonó**, no se rellenó: esa tarjeta
+  lleva un resplandor interior y un color plano habría dejado un recuadro.
+
+El texto alternativo del mapa decía *«y el precio del viaje antes de confirmar»*.
+Ya no hay precio: dice la distancia.
+
+## 3 · Los distintivos de las tiendas
+
+El de Apple dice **«Download on the App Store»** y el de Google **«GET IT ON
+Google Play»**. Los dos afirman, con la voz de la tienda, que la aplicación se
+puede descargar. **No se puede**: no está publicada. Estaban al 55 % en escala de
+grises con un rótulo «Próximamente» encima, y eso no desmiente lo que la propia
+imagen dice.
+
+Se sustituyen por una pieza propia en el estilo del sitio: **«Próximamente en
+iOS»** y **«Próximamente en Android»**, bajo el rótulo «Estará disponible en».
+Los dos PNG quedan borrados del repositorio y sus URL responden **404**.
+
+> **No se redibujó ningún logotipo.** Una marca ajena modificada para fabricar un
+> distintivo que su dueño no ha emitido sería peor que el problema que arregla.
+> Aquí sólo se nombra la plataforma.
+
+## 4 · QA
+
+| | |
+|---|---|
+| TypeScript · ESLint | ✔ **0 errores · 0 avisos** |
+| `next build` | ✔ compila |
+| Playwright local | ✔ **187 pasadas · 0 fallidas** |
+| **Playwright contra producción** | ✔ **191 pasadas · 0 fallidas** |
+| axe WCAG 2.1 AA en producción | ✔ 11 rutas × móvil y escritorio, **0 violaciones** |
+| Desbordamiento / texto cortado | ✔ cubierto por las pruebas de anchura, 0 desbordamientos |
+| Activos servidos | ✔ el `sha256` de las tres capturas en producción coincide con el local |
+| Distintivos viejos | ✔ `/brand/badge-apple.png` y `badge-google.png` → **404** |
+
+**Búsqueda de las cadenas prohibidas en lo que se sirve** (`.next/server` y
+`.next/static`): `$3.08` ✔ 0 · `3,08` ✔ 0 · `Auto · 4 personas` ✔ 0 · la cifra de
+usuarios ✔ 0 · «a toda Venezuela» ✔ 0 · `794.99` ✔ 0 · `Tasa de cambio` ✔ 0 ·
+`Bs.` ✔ 0 · los tres negocios ✔ 0 · el nombre propio ✔ 0 · «subir tu nivel» ✔ 0 ·
+`badge-` ✔ 0.
+
+> Un falso positivo que conviene dejar anotado para la próxima: buscar `3.08` a
+> secas da 14 ficheros. Son **coordenadas de trazados SVG** (`… 2.79-1.35 3.94 …`),
+> no precios. Hay que buscarlo con el símbolo de moneda delante.
+
+### Y una prueba que llevaba días mintiendo
+
+Siete pruebas —entre ellas **axe sobre la portada, móvil y escritorio**— llevaban
+agotando el tiempo contra producción desde que se encendió la lista de espera. No
+era el sitio: **el widget de Turnstile mantiene la red ocupada y
+`waitForLoadState("networkidle")` no llega a cumplirse nunca.** El `.catch()` que
+llevaban no ayudaba, porque la espera no rechaza hasta el propio límite del test.
+
+Se le puso techo —4 segundos y seguimos—. Contra producción: **de 7 fallos a 0**.
+Es la primera vez que axe puede correr sobre la portada desde que hay formulario,
+que es justo la página que más ha cambiado. Sin este arreglo, el «QA en
+producción» de esta ronda habría sido papel mojado sobre la página principal.
+
+## 5 · Lo que sigue visible, y por qué no lo he tocado
+
+Aquí está la salvedad de la tabla de estados. **Ninguna de estas afirma un precio,
+una cifra ni una cobertura** —por eso el estado es CLEAN—, pero las tres tocan la
+misma frontera y son decisión del propietario, no mía:
+
+1. **La flota de coches.** La captura conserva un **coche amarillo con la marca
+   +58Express** en la tarjeta promocional, un **icono de coche** en «Viajes» y en
+   la barra inferior, y una **foto de interior de coche** en el banner de
+   Transporte Seguro. Retiré la fila «Auto» porque el sitio no ofrece viajes en
+   coche; por coherencia, esa imaginería apunta a lo mismo. **No la toqué porque
+   cambiarla es rediseñar**, y el encargo decía expresamente que no.
+2. **«Comercios · Tus tiendas favoritas»** sugiere una red de comercios ya
+   disponible. El catálogo del propio sitio incluye ese servicio, así que la
+   captura es coherente con la web — pero `PARTNER_LEADS_ENABLED` sigue en
+   `false` y todavía no hay ningún comercio dado de alta.
+3. **Seis servicios en la pantalla de inicio** (viajes, comida, comercios,
+   envíos, mercado, compra y vende). Coinciden uno a uno con el catálogo
+   publicado en `/servicios`, así que no contradicen al sitio. Si al lanzamiento
+   sólo salen algunos, habrá que revisar **las dos cosas a la vez**, no sólo la
+   imagen.
 
 ---
 
@@ -135,7 +265,7 @@ volver a escribirte por error»*, y la fila conservaba además `rol`, `zona`,
 | | |
 |---|---|
 | **UNSUBSCRIBE DATA MINIMIZATION** | **COMPLETE** |
-| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** sobre la **1.1** — Fernando Atencio · 15 de septiembre de 2026. Publicada hoy la **1.2**, que sólo corrige cuatro frases de hecho |
+| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · versión **1.2** · **FINAL**. *(Revisó la 1.1 el 15 de septiembre y confirmó la 1.2 el 16.)* |
 | **RESEND MAILBOX DELIVERY** | **CERTIFIED** |
 | **TURNSTILE** | **VERIFIED** |
 | **WAITLIST** | **ACTIVE** |
@@ -1249,7 +1379,7 @@ ningún correo, no se tocó la app móvil ni nada de conductores.
 | **Turnstile** | **READY / NOT ACTIVE** |
 | **Resend** | **API TEST PASS · MAILBOX DELIVERY CERTIFIED** *(15 sept)* |
 | **Terms** | **LAWYER COMMENTS INCORPORATED** |
-| **Privacy** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · 1.1 · 15 sept 2026 |
+| **Privacy** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · **1.2** · FINAL |
 | **Images** | **NOT READY** — ver A3 y B1 |
 | **Performance** | **READY** |
 | **Accessibility** | **READY** |

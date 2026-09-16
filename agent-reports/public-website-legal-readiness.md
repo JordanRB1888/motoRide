@@ -11,9 +11,10 @@
 
 **Privacy = FINAL LAWYER REVIEW COMPLETE**
 **Privacy reviewer = Fernando Atencio**
-**Privacy version = 1.1**
-**Privacy date = 15 de septiembre de 2026**
-**WAITLIST_ENABLED = false**
+**Privacy version = 1.2**
+**Privacy date = 16 de septiembre de 2026**
+**Privacy status = FINAL**
+**WAITLIST_ENABLED = true**  *(16 de septiembre; ciclo alta → confirmación → baja certificado)*
 **PARTNER_LEADS_ENABLED = false**
 
 | | |
