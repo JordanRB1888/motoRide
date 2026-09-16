@@ -1,17 +1,179 @@
 # Launch Readiness — mas58express.com
 
-Este documento tiene cinco partes:
+Este documento tiene seis partes:
 
-0. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
-   — el estado de hoy. **Empieza por aquí.**
-1. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
+0. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
+   el estado de hoy, y el ciclo completo cerrado. **Empieza por aquí.**
+1. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
+   — el alta y la confirmación.
+2. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
    — el intento fallido y el bloqueo de Turnstile, ya resuelto.
-2. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
+3. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
    se cerró el correo.
-3. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
+4. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
    lo que se corrigió para dejar `/privacidad` lista para el abogado.
-4. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
+5. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
    hallazgos que la motivaron.
+
+---
+
+# Certificación de la baja — 16 de septiembre
+
+**Despliegue:** `plus58express-hrldyncd7` · commit `7e91fa3`. Esta ronda **no
+cambia código**: verifica.
+
+El propietario pulsó el enlace de baja de su propio correo y vio «Listo, no te
+escribimos más». Con esto el ciclo queda cerrado de punta a punta:
+
+```
+  formulario → Turnstile → API → Supabase → Resend → Gmail
+      → enlace de confirmación → estado confirmado
+      → enlace de baja → estado baja
+```
+
+## Estados
+
+| | |
+|---|---|
+| **PRIVACY** | **FINAL LAWYER REVIEW COMPLETE** — Fernando Atencio · 1.1 · 15 de septiembre de 2026 |
+| **RESEND MAILBOX DELIVERY** | **CERTIFIED** |
+| **TURNSTILE** | **VERIFIED** |
+| **WAITLIST** | **ACTIVE** |
+| **WAITLIST E2E** | **COMPLETE** |
+| **DOUBLE OPT-IN** | **COMPLETE** |
+| **UNSUBSCRIBE E2E** | **COMPLETE** |
+| **PARTNER LEADS** | **OFF** |
+
+## 1 · La fila, después de la baja
+
+Leída dentro de `BEGIN TRANSACTION READ ONLY`: la garantía de que esto no toca
+nada la da Postgres, no la buena fe del guion.
+
+| | | |
+|---|---|---|
+| `estado` | **`baja`** | ✔ |
+| `creado_en` | `04:02:20.853Z` | |
+| `confirmado_en` | `04:02:55.968Z` | ✔ +35 s |
+| `baja_en` | **`04:46:43.006Z`** | ✔ +2.627 s tras confirmar |
+| `actualizado_en` | igual que `baja_en` | ✔ |
+| `token_confirmacion` | **`NULL`** | ✔ sigue quemado |
+| `token_expira_en` | **`NULL`** | ✔ sigue limpio |
+| `token_baja` | **conservado**, 43 caracteres | ✔ **a propósito — ver §2** |
+| `ip_hash` | 32 caracteres | ✔ no es una IP |
+
+**Una fila en la tabla, en estado `baja`.** Cero duplicados. Cero en
+`contactos_aliados`. Las catorce columnas del esquema y ninguna más.
+
+## 2 · El testigo de baja no se quema, y está bien que no se queme
+
+Es la diferencia de diseño más fácil de confundir con un fallo, así que conviene
+dejarla escrita. El testigo de **confirmación** se pone a `NULL` al usarse; el de
+**baja** se conserva.
+
+No es un descuido: quien vuelve a pulsar el enlace de baja —porque lo tiene en el
+correo, porque duda de si funcionó, porque su cliente de correo pre-visita los
+enlaces— tiene que leer **«ya estabas fuera»** y no «este enlace no vale».
+Decirle a alguien que su enlace de baja está roto es la forma más rápida de que
+marque el siguiente mensaje como spam.
+
+Lo que impide que se repita la acción es la guarda en el `UPDATE`
+(`WHERE id = $1 AND estado <> 'baja'`), no la destrucción del testigo: la segunda
+pulsación no encuentra nada que actualizar, **no cambia `baja_en`** y **no
+dispara un segundo acuse por correo**. Cubierto contra la base real por
+`postgres.spec.ts`:
+
+- `F+G · la baja funciona y repetirla no rompe nada` — comprueba que la fecha de
+  baja no se mueve;
+- `G-bis · quien se dio de baja no puede ser reconfirmado con un enlace viejo`;
+- `C-quinquies · a quien confirmó o se dio de baja no se le toca el estado`.
+
+**Casos negativos contra producción**, sólo con testigos falsos —el real no se
+reutilizó—:
+
+| Testigo enviado | Respuesta |
+|---|---|
+| uno inventado | `302 → /baja?estado=invalido` |
+| vacío | `302 → /baja?estado=invalido` |
+| con espacios | `302 → /baja?estado=invalido` |
+| con forma de inyección (`' OR 1=1--`) | `302 → /baja?estado=invalido` |
+| uno aleatorio **bien formado**, de 43 caracteres | `302 → /baja?estado=invalido` |
+
+Ninguno distingue «no existe» de «ya se usó», que es justo lo que se busca.
+
+## 3 · La respuesta pública
+
+`/baja` con sus cuatro estados, todos **200**:
+
+| | |
+|---|---|
+| `?estado=baja` | «Listo, no te escribimos más» |
+| `?estado=ya_baja` | «Ya estabas fuera» |
+| `?estado=invalido` | «Ese enlace no vale» |
+| `?estado=error` | «No hemos podido» |
+
+Medido en el navegador, en una pestaña limpia:
+
+- URL final `https://mas58express.com/baja?estado=baja` — **la consulta es sólo
+  esa palabra**; sin testigo, sin correo, sin identificador;
+- fragmento (`#`) **vacío**;
+- `robots` = **`noindex, nofollow`**; canónica sin parámetros;
+- cero apariciones de `token=`, cero del `uuid` de la fila, y la única dirección
+  de correo del HTML es la de contacto de la propia marca;
+- **cero mensajes de consola.** Ni un error, ni un aviso;
+- ni Turnstile ni formularios: esta página no los necesita y no los carga.
+
+## 4 · Estado general
+
+```
+POST /api/waitlist            400   (guarda de origen: existe y exige navegador)
+GET  /api/waitlist            405   allow: POST
+GET  /api/waitlist/confirmar  302   activa
+GET  /api/waitlist/baja       302   activa
+POST /api/leads/partners      404
+GET  /api/leads/partners      404
+POST /api/cron/prueba-de-correo 404 (sigue borrada)
+
+portada    1 × #wl-email · contenedor de Turnstile · script de Cloudflare · 0 errores de consola
+/aliados   0 formularios
+```
+
+`WAITLIST_ENABLED = true` · `PARTNER_LEADS_ENABLED = false`.
+
+**QA:** TypeScript **0 errores** · ESLint **0/0** · **89 pruebas pasadas, 0
+fallidas** (`unidad` + `postgres` contra Supabase + `fase1b`), incluida «la
+certificación no deja basura en la base».
+
+## 5 · Una observación sobre la minimización de datos
+
+El código y la política coinciden en lo importante, y lo comprobé: la purga
+diaria sólo borra `estado IN ('pendiente','caducado','rebotado')`, así que una
+fila en `baja` **sobrevive** — que es lo que dice el documento: *«Se conserva
+únicamente la constancia de que pediste la baja, para no volver a escribirte por
+error»*. Correcto, y además necesario: una lista de supresión que olvida a quién
+no debe escribir no sirve de nada.
+
+Pero «únicamente la constancia» y lo que queda en la fila no son exactamente lo
+mismo. Después de la baja siguen ahí:
+
+| Se conserva | ¿Lo exige la constancia de la baja? |
+|---|---|
+| `email` | **Sí** — sin la dirección no se puede suprimir nada |
+| `estado`, `baja_en` | **Sí** — son la constancia |
+| `token_baja` | **Sí** — para poder responder «ya estabas fuera» |
+| `rol` (`conductor`) | **No** |
+| `zona` (`santa-cruz-de-mara`) | **No** |
+| `origen` (`descarga`) | **No** |
+| `ip_hash` | **No** |
+
+Los cuatro últimos son atributos de segmentación que la finalidad declarada no
+necesita. **No es un incumplimiento ni un bloqueo** —siguen siendo datos que la
+persona entregó, y la política los declara en la sección 3—, pero un
+`darDeBajaEnEspera` que además pusiera `rol`, `zona`, `origen` e `ip_hash` a
+`NULL` dejaría la fila siendo literalmente lo que el documento promete.
+
+Es un cambio de cuatro palabras en una sentencia SQL. **No lo he hecho**: esta
+ronda era de verificación y tocar el borrado de datos personales no es algo que
+deba decidir yo. Queda anotado para que lo decidas.
 
 ---
 
@@ -36,6 +198,11 @@ lectura.
 | **WAITLIST E2E** | **COMPLETE** |
 | **DOUBLE OPT-IN** | **COMPLETE** |
 | **PARTNER LEADS** | **OFF** |
+
+> **Ampliado ese mismo día.** Faltaba el último tramo: la baja. Se certificó
+> después — **UNSUBSCRIBE E2E = COMPLETE**. La fila que aquí se describe en
+> estado `confirmado` está hoy en estado `baja`; su lectura actual está en
+> [Certificación de la baja](#certificación-de-la-baja--16-de-septiembre).
 
 ## 1 · La fila, leída de Supabase
 
@@ -1494,7 +1661,7 @@ entera se construyó sobre no hacer exactamente eso.
 abierto.**
 
 > **16 de septiembre.** A1, A2 y A3 están cerrados, y también el de Turnstile.
-> **La lista de espera está activa y su doble consentimiento certificado de
-> extremo a extremo** contra la base real. No queda ningún bloqueo para ella.
+> **La lista de espera está activa, y su ciclo completo —alta, confirmación y
+> baja— certificado contra la base real.** No queda ningún bloqueo para ella.
 > `PARTNER_LEADS_ENABLED` se queda en `false` por decisión del propietario, no
 > por un bloqueo técnico.
