@@ -35,7 +35,7 @@ const RUTAS = [
 
 /** Espera a que la hidratación haya montado los efectos del cliente. */
 async function listo(page: Page) {
-  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
   await page.waitForTimeout(400);
 }
 

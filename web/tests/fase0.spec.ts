@@ -14,7 +14,7 @@ const NUMERO = "584125143242";
 const CORREO = "58expressapp@gmail.com";
 
 async function listo(page: Page) {
-  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
   await page.waitForTimeout(400);
 }
 

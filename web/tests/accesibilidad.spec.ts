@@ -44,7 +44,7 @@ for (const ruta of RUTAS) {
     test(`axe AA — ${ruta} (${v.nombre})`, async ({ page }) => {
       await page.setViewportSize({ width: v.width, height: v.height });
       await page.goto(ruta);
-      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
       await recorrer(page);
 
       const { violations } = await new AxeBuilder({ page })
@@ -64,7 +64,7 @@ for (const ruta of RUTAS) {
 test("el menú móvil abierto también pasa axe", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
   await page.getByRole("button", { name: "Abrir menú" }).click();
   // Los enlaces entran escalonados: el último acaba su fundido a los ~675 ms, y
   // analizar a mitad del fundido mide el contraste de un texto translúcido.
