@@ -46,6 +46,7 @@ import { ProveedorDeDisponibilidad } from '../realtime/Disponibilidad';
 import { ProveedorDeUbicacionEnVivo } from '../realtime/UbicacionEnVivo';
 import { ProveedorDeNotificaciones } from '../realtime/Notificaciones';
 import { ProveedorDeTema } from '../theme/ThemeContext';
+import { TemaDeNavegacion } from '../theme/TemaDeNavegacion';
 import { colores, espaciado, radios, tipografia } from '../theme/tokens';
 import { Pantalla } from '../components/Pantalla';
 import LaboratorioVisual from './preview';
@@ -227,12 +228,19 @@ function DisposicionRaiz() {
               sesion confirmada, que es el primer momento en que un aviso puede
               tener sentido. Y si se deniega, no vuelve a preguntar. */}
           <ProveedorDeNotificaciones>
+          {/* EL TEMA DE LA NAVEGACIÓN, que no es el de los componentes.
+              Sin esto React Navigation usa su `DefaultTheme` claro y pinta el
+              contenedor nativo de cada pantalla de `rgb(242, 242, 242)`: el
+              fogonazo gris que se veía en mitad de cada transición. El porqué
+              completo, con la medición sobre vídeo real, está en
+              `theme/TemaDeNavegacion`. */}
+          <TemaDeNavegacion>
           <Stack
             screenOptions={{
               headerShown: false,
-              // Sin color aquí: lo pone `Pantalla`, que sí lee el tema. Un
-              // color fijo en el Stack se vería un instante al navegar, con el
-              // tono del tema contrario.
+              // Sin color escrito a mano aquí: lo pone el tema de navegación de
+              // arriba, que lee el esquema igual que `Pantalla`. Un color fijo
+              // se vería un instante al navegar con el tono del contrario.
               contentStyle: undefined,
               // Transición nativa: la que espera cada plataforma, sin imitarla.
               // Es la de ENTRAR EN PROFUNDIDAD —abrir un viaje, los ajustes, lo
@@ -268,6 +276,7 @@ function DisposicionRaiz() {
                 del Stack. `conductor-saldo` sí sigue arriba porque para el
                 conductor su cartera SÍ es una pestaña. */}
           </Stack>
+          </TemaDeNavegacion>
           </ProveedorDeNotificaciones>
           </ProveedorDeUbicacionEnVivo>
           </ProveedorDeUbicacion>
