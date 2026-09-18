@@ -1,25 +1,72 @@
 # Launch Readiness — mas58express.com
 
-Este documento tiene nueve partes:
+Este documento tiene diez partes:
 
-0. **[Las capturas, sin promesas que el producto no sostiene](#las-capturas-sin-promesas-que-el-producto-no-sostiene--16-de-septiembre)**
-   — el estado de hoy. **Empieza por aquí.**
-1. **[La política al día con el formulario encendido](#la-política-al-día-con-el-formulario-encendido--16-de-septiembre)**
+0. **[El número de atención pasa al de la empresa](#el-número-de-atención-pasa-al-de-la-empresa--17-de-septiembre)**
+   — lo último. **Empieza por aquí.**
+1. **[Las capturas, sin promesas que el producto no sostiene](#las-capturas-sin-promesas-que-el-producto-no-sostiene--16-de-septiembre)**
+   — contenido comercial de las pantallas.
+2. **[La política al día con el formulario encendido](#la-política-al-día-con-el-formulario-encendido--16-de-septiembre)**
    — `/privacidad` v1.2.
-2. **[Minimización de datos en la baja](#minimización-de-datos-en-la-baja--16-de-septiembre)**
+3. **[Minimización de datos en la baja](#minimización-de-datos-en-la-baja--16-de-septiembre)**
    — qué se conserva tras una baja.
-3. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
+4. **[Certificación de la baja](#certificación-de-la-baja--16-de-septiembre)** —
    el ciclo completo, cerrado.
-4. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
+5. **[Certificación E2E de la lista de espera](#certificación-e2e-de-la-lista-de-espera--16-de-septiembre)**
    — el alta y la confirmación.
-5. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
+6. **[Encendido de la lista de espera](#encendido-de-la-lista-de-espera--15-de-septiembre)**
    — el intento fallido y el bloqueo de Turnstile, ya resuelto.
-6. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
+7. **[Certificación de Resend](#certificación-de-resend--15-de-septiembre)** — cómo
    se cerró el correo.
-7. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
+8. **[Ronda factual del 15 de septiembre](#ronda-factual--15-de-septiembre)** —
    lo que se corrigió para dejar `/privacidad` lista para el abogado.
-8. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
+9. **[La auditoría original](#resumen-ejecutivo)** — se conserva íntegra, con los
    hallazgos que la motivaron.
+
+---
+
+# El número de atención pasa al de la empresa — 17 de septiembre
+
+**Despliegue:** `plus58express-9jnp6stl4` · commit `2e84bc6`.
+
+| | |
+|---|---|
+| **Antes** | `+58 412-514-3242` *(confirmado el 13 de septiembre)* |
+| **Ahora** | **`+58 422-058-0558`** — el número de la empresa, confirmado por el propietario el 17 |
+
+Un solo sitio que tocar, que era justamente el objetivo de `lib/contact.ts`: de
+ahí salen el pie de las diez páginas, los cuatro botones por intención, el
+`telephone` del JSON-LD y el pie de los correos de la lista de espera.
+
+**Verificado en producción, ruta por ruta:** cero apariciones del número viejo en
+las once páginas; el nuevo, presente en todas. `"telephone":"+584220580558"` en
+el JSON-LD y `https://wa.me/584220580558` en los enlaces del pie.
+
+**No sube la versión de `/privacidad`**: el número no está en su texto legal ni
+en el de `/terminos` — sale del pie, que es común a todas las páginas. El
+documento no cambió.
+
+### Las pruebas dejan de copiar el dato
+
+`fase0.spec.ts` llevaba el número escrito a mano, y este cambio obligó a acordarse
+de venir a editarlo — el descuido exacto que `lib/contact.ts` existe para impedir.
+Ahora lo lee de la fuente, y se añade una comprobación de forma que antes no
+existía: E.164 sin signos ni espacios, `58` + diez dígitos, y que el número que se
+le enseña a una persona sea el mismo que el del enlace de `wa.me`.
+
+> **Lo único que queda por confirmar, y no lo puede hacer el código:** que
+> `0422-058-0558` esté **dado de alta en WhatsApp**. `wa.me` devuelve 200 para
+> cualquier número —es un muro, no una comprobación—, así que ni una prueba ni yo
+> podemos distinguir un número registrado de uno que no lo está. Y WhatsApp es
+> hoy la puerta principal del sitio: si ese número no tiene cuenta, los botones
+> de las diez páginas llevan a una conversación imposible.
+
+**QA:** TypeScript 0 · ESLint 0/0 · build ✔ · Playwright **188/0 local** y
+**192/0 contra producción**.
+
+> Los informes anteriores conservan el número viejo a propósito: son el registro
+> de lo que era cierto cuando se escribieron, y reescribirlos convertiría un
+> histórico en una invención.
 
 ---
 
