@@ -137,7 +137,23 @@ export default function PasoDeDocumentos() {
     const lectura = await leerMiPostulacion();
     setCargando(false);
     if (!lectura.ok) { if (!alPerderLaSesion(lectura.motivo)) setAviso(MENSAJES[lectura.motivo]); return; }
-    if (lectura.solicitud === null) { router.replace('/postulacion'); return; }
+    if (lectura.solicitud === null) {
+      /* EL SERVIDOR MANDA, Y HAY QUE BORRAR LO QUE RECORDÁBAMOS.
+       *
+       * Sin esta línea, aquí nacía un ping-pong que se ve en el dispositivo
+       * como un deslizamiento lateral con un fogonazo, repetido: esta pantalla
+       * decide con el BACKEND —que dice que no hay expediente— y `/postulacion`
+       * decide con el CONTEXTO, que todavía guardaba el de antes. Uno manda
+       * aquí, el otro devuelve, y vuelta a empezar. Dos fuentes de verdad
+       * reenviándose la una a la otra.
+       *
+       * Si el servidor responde que no existe, nuestra copia está equivocada:
+       * se tira. Entonces `/postulacion` ya no tiene a dónde devolver y se
+       * queda donde debe, que es el primer paso del formulario. */
+      fijarSolicitud(null);
+      router.replace('/postulacion');
+      return;
+    }
     // Una lectura buena deja sin sentido el aviso anterior. Sin esto, el error
     // de una operación que ya se arregló seguía en pantalla, contradiciendo a
     // las tarjetas que ya estaban en verde.
