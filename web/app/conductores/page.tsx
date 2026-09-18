@@ -1,0 +1,77 @@
+import type { Metadata } from "next";
+import { metaPagina } from "@/lib/seo";
+import PageShell, { Bloque } from "@/components/site/PageShell";
+import PuertaCTA from "@/components/site/PuertaCTA";
+import Reveal from "@/components/motion/Reveal";
+
+export const metadata: Metadata = metaPagina({
+  titulo: "Conduce con +58Express en Maracaibo y Mara",
+  /* NO decir «inscripciones abiertas»: no las hay. Esta frase es lo que se lee
+     en el resultado de Google y en la vista previa de WhatsApp, y la propia
+     página dice justo debajo que todavía no existe formulario de postulación.
+     Era la única promesa del sitio que su propia página desmentía. */
+  descripcion:
+    "Conduce en moto por Maracaibo y el Municipio Mara: eliges tus horas, decides qué viajes aceptas y cobras por la plataforma. Próximamente — conoce cómo va a funcionar.",
+  ruta: "/conductores",
+});
+
+export default function Page() {
+  const PUNTOS: [string, string][] = [
+    ["Tus horas", "Te conectas cuando quieres. Nadie te asigna un turno."],
+    ["Tú eliges el viaje", "Ves la solicitud y decides si la tomas."],
+    ["Ganancias a la vista", "Lo que llevas hecho y lo que has cobrado, siempre a mano."],
+    ["Cobro por la plataforma", "Las liquidaciones pasan por +58Express."],
+    ["Navegación integrada", "La ruta hacia el pasajero y hacia el destino."],
+    ["Verificación real", "Subes tus documentos y un administrador los aprueba."],
+  ];
+
+  const PASOS: [string, string][] = [
+    ["Te registras", "Creas tu cuenta de conductor en la aplicación."],
+    ["Subes tus documentos", "Los que acrediten que puedes conducir y que la moto es tuya."],
+    ["Un administrador revisa", "Cuando quedan aprobados, puedes conectarte y trabajar."],
+  ];
+
+  return (
+    <PageShell
+      titulo={<>Tú decides <span className="text-signal">cuándo trabajas</span></>}
+      entradilla="Recibes las solicitudes que están cerca, aceptas las que quieras y llevas tus ganancias y tu historial en la misma aplicación."
+    >
+      <Bloque>
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-3">
+          {PUNTOS.map(([t, d], i) => (
+            <Reveal key={t} delay={i * 0.05}>
+              <h2 className="display text-[1.6rem] text-paper">{t}</h2>
+              <p className="mt-3 text-[15px] leading-relaxed text-paper-dim">{d}</p>
+            </Reveal>
+          ))}
+        </div>
+      </Bloque>
+
+      <Bloque className="bg-ink-950">
+        <Reveal>
+          <h2 className="display text-[clamp(2rem,5vw,3.2rem)] text-paper">Cómo se entra</h2>
+        </Reveal>
+        <ol className="mt-8 grid gap-8 sm:grid-cols-3">
+          {PASOS.map(([t, d], i) => (
+            <Reveal key={t} delay={i * 0.06} as="li">
+              <span className="tabular text-[13px] font-bold tracking-[0.22em] text-signal">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <h3 className="display mt-2 text-[1.5rem] text-paper">{t}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-paper-dim">{d}</p>
+            </Reveal>
+          ))}
+        </ol>
+        <div className="mt-14">
+          <PuertaCTA
+            titulo={<>Empieza por <span className="text-signal">una conversación</span></>}
+            cuerpo="Todavía no hay formulario de postulación en la web. Mientras llega, escríbenos y el equipo te dice qué documentación necesitas y cómo sigue el proceso — sin esperar a que la aplicación se publique."
+            intencion="conductor"
+            rotulo="Hablar con el equipo"
+            nota="Te responde una persona, no un robot."
+          />
+        </div>
+      </Bloque>
+    </PageShell>
+  );
+}

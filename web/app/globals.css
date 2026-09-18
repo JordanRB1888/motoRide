@@ -1,0 +1,385 @@
+@import "tailwindcss";
+
+@theme {
+  /* ---- Superficies: grafito profundo, no negro plano ---- */
+  --color-ink-950: #08080a;
+  --color-ink-900: #0b0b0c;
+  --color-ink-850: #0f0f12;
+  --color-ink-800: #121214;
+  --color-ink-700: #17171b;
+  --color-ink-600: #1e1e24;
+  --color-ink-500: #2a2a32;
+
+  /* ---- Señal: el amarillo nunca es fondo, es dirección ---- */
+  --color-signal: #fcb000;
+  --color-signal-bright: #ffc633;
+  --color-signal-deep: #c98700;
+
+  /* ---- Texto: blanco cálido, grises tintados del grafito ---- */
+  --color-paper: #f7f6f3;
+  --color-paper-dim: #b9b7b1;
+  --color-paper-mute: #8d8b87;
+
+  --font-display: var(--font-display-brand);
+  --font-sans: var(--font-body-brand);
+
+  /* ---- Ritmo ---- */
+  --radius-card: 18px;
+  --radius-pill: 999px;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+:root {
+  color-scheme: dark;
+  --shell-x: clamp(20px, 5vw, 72px);
+}
+
+* {
+  min-width: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-ink-900);
+  color: var(--color-paper);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+/* ============================================================
+   Superficies del navegador — también son diseño
+   ============================================================ */
+::selection {
+  background: var(--color-signal);
+  color: var(--color-ink-900);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink-950);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-500);
+  border-radius: 99px;
+  border: 3px solid var(--color-ink-950);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a45;
+}
+* {
+  scrollbar-color: var(--color-ink-500) var(--color-ink-950);
+}
+
+input,
+textarea {
+  caret-color: var(--color-signal);
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: color-mix(in srgb, var(--color-signal) 24%, transparent);
+}
+
+/* Cifras alineadas en datos y precios */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ============================================================
+   Tipografía de titulares — condensada, muy apretada
+   ============================================================ */
+
+/* ------------------------------------------------------------------
+   RESERVA DE LOS TITULARES, MIENTRAS BIG SHOULDERS VIAJA
+
+   EL PROBLEMA
+
+   Hasta que llegaba el .woff2, los titulares se pintaban con Arial y ocupaban
+   un 27,8% más de ancho, así que se partían en dos líneas donde Big Shoulders
+   cabe en una. Al llegar la fuente, el titular colapsaba de 158 px a 79 px y la
+   página entera saltaba 79 px hacia arriba. El defecto no era de una página:
+   96 de 1224 medidas (11 rutas × 8 anchos) cambiaban de número de líneas, y
+   siete rutas desplazaban de forma medible en escritorio.
+
+   POR QUÉ FALLABA LA RESERVA DE `next/font` — el motivo importa
+
+   Es tentador decir que `size-adjust: 88.59%` «sólo corrige la altura». Es
+   falso, y conviene dejarlo escrito: ese descriptor es EXACTAMENTE un cociente
+   de anchos de avance. `next/font` lo calcula así (se puede leer en
+   node_modules/next/dist/compiled/@next/font/dist/local/get-fallback-metrics-from-font-file.js):
+
+       size-adjust = ancho medio de la fuente ÷ ancho medio de Arial
+
+   El problema es la cadena sobre la que saca esa media:
+
+       'aaabcdeeeefghiijklmnnoopqrrssttuvwxyz      '
+
+   **Minúsculas.** Y `.display` lleva `text-transform: uppercase`. En caja baja
+   la corrección es casi perfecta —la reserva quedaba a un 0,3% de Big
+   Shoulders—; en caja alta, que es lo único que este sitio pinta en titulares,
+   Big Shoulders es mucho más estrecha respecto a Arial y el 88,59% se queda a
+   un 27,8% de más. La reserva estaba bien calculada para un texto que esta web
+   no escribe nunca.
+
+   LAS FAMILIAS, medidas COMO EL SITIO PINTA
+
+   En mayúsculas, con `letter-spacing: -0.018em` y el `size-adjust` aplicado de
+   verdad, sobre los 72 titulares reales. Mediana del ancho contra Big Shoulders
+   y cuántos caen dentro del ±2%:
+
+       Impact            94%   →  0,997   (41/72)   Windows, macOS, iOS
+       Roboto Condensed  85%   →  0,997   (52/72)   Android
+       Roboto            75%   →  1,000   (55/72)   Android, ChromeOS
+       Arial             70%   →  1,001   (44/72)   el resto
+       Arial          88,59%   →  1,278   ( 0/72)   ← la que había
+
+   Cada familia lleva SU valor. Una sola cara con varias familias dentro sería
+   un promedio que no le sirve bien a ninguna: Roboto Condensed al 94% pintaría
+   un 10% de más.
+
+   ARIAL NARROW, que fue la recomendación de la auditoría anterior, se descartó
+   midiendo: no está instalada en Windows de serie —viene con Office—, no hay
+   ARIALN.TTF ni entrada en el registro de esta máquina, y una cara cuyo único
+   `local()` no existe no casa: el titular pierde la reserva entera y con ella
+   los ajustes. Por eso empeoraba.
+   ------------------------------------------------------------------ */
+
+/* LAS MÉTRICAS VERTICALES SE RECALCULAN, NO SE COPIAN
+
+   `next/font` emitía `ascent-override: 111.25%` y `descent-override: 24.21%`,
+   y copiarlas tal cual dejaba la caja en línea del titular 6 px más alta y 3 px
+   más arriba que con la fuente real: un desplazamiento pequeño pero contable.
+
+   La razón: `size-adjust` escala TAMBIÉN estos dos valores —lo dice la
+   especificación CSS Fonts 5 y lo da por hecho el propio `next/font`, que
+   divide por el `size-adjust` al calcularlos—. Los 111,25% estaban calibrados
+   para multiplicarse por 0,8859; con otro `size-adjust` hay que rehacerlos.
+
+       suma efectiva de Big Shoulders = (111,25 + 24,21) × 0,8859 = 120,00%
+
+   Esa suma se reparte en la misma proporción sobre cada `size-adjust` nuevo.
+   Comprobado en el navegador: la caja del <span> del titular queda en
+   y=176 h=99, exactamente donde la deja la fuente real. */
+
+/* 1 · Condensada de Windows, macOS e iOS. */
+@font-face {
+  font-family: "Titulares reserva 1";
+  src: local("Impact");
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 94%;
+  ascent-override: 104.85%; /* = 120,00 / 0,94 × (111,25 / 135,46) */
+  descent-override: 22.82%;
+  line-gap-override: 0%;
+}
+
+/* 2 · Condensada de Android. */
+@font-face {
+  font-family: "Titulares reserva 2";
+  src: local("Roboto Condensed");
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 85%;
+  ascent-override: 115.95%;
+  descent-override: 25.23%;
+  line-gap-override: 0%;
+}
+
+/* 3 · La de serie de Android y ChromeOS, si no hubiera la condensada. */
+@font-face {
+  font-family: "Titulares reserva 3";
+  src: local("Roboto");
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 75%;
+  ascent-override: 131.41%;
+  descent-override: 28.6%;
+  line-gap-override: 0%;
+}
+
+/* 4 · Todo lo demás. Arial y las que comparten sus métricas por diseño. */
+@font-face {
+  font-family: "Titulares reserva 4";
+  src: local("Arial"), local("Helvetica"), local("Liberation Sans"), local("Noto Sans");
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 70%;
+  ascent-override: 140.79%;
+  descent-override: 30.64%;
+  line-gap-override: 0%;
+}
+
+.display {
+  font-family:
+    var(--font-display), "Titulares reserva 1", "Titulares reserva 2", "Titulares reserva 3",
+    "Titulares reserva 4", system-ui, sans-serif;
+  font-weight: 700;
+  line-height: 0.88;
+  letter-spacing: -0.018em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.prose-measure {
+  max-width: 68ch;
+  text-wrap: pretty;
+}
+
+/* ============================================================
+   Movimiento — un solo temperamento en todo el sitio
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* El destino del salto de contenido recibe el foco por JS (SmoothScroll
+   cancela el ancla nativo). No es un control operable con teclado, asi que no
+   lleva indicador: la confirmacion del salto es que el siguiente tabulador cae
+   ya dentro del contenido. */
+main[tabindex="-1"]:focus,
+main[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
+/* ------------------------------------------------------------------
+   LA ESCENA DE LA CARRERA — legible primero, escena después
+
+   Antes esto estaba al revés: los cinco pasos vivían apilados en la misma caja
+   (`absolute inset-x-0 top-0`) y sólo GSAP los separaba. El desapilado existía,
+   pero encerrado en `prefers-reduced-motion`, que NO se activa por tener el
+   JavaScript apagado. Medido sin JS: los cinco pasos con `top: 1677px`, uno
+   encima de otro, dentro de 2,6 pantallas de scroll.
+
+   Y no era sólo quien desactiva JS a propósito: también el navegador con ahorro
+   de datos que poda scripts, y cualquiera si uno de los chunks no llega por una
+   conexión mala.
+
+   Ahora el estado por defecto —sin JS, sin GSAP, sin nada— es una lista vertical
+   legible y en orden. La escena fijada la enciende `escena-viva`, una clase que
+   RideScene pone en <html> sólo cuando de verdad va a animar. Es el mismo patrón
+   de mejora progresiva que ya usa `.reveal-ready` aquí abajo.
+   ------------------------------------------------------------------ */
+html:not(.escena-viva) [data-ride-scene] {
+  height: auto !important;
+}
+html:not(.escena-viva) [data-ride-sticky] {
+  position: static;
+  height: auto;
+  padding-block: clamp(4rem, 12vw, 8rem);
+}
+html:not(.escena-viva) [data-ride-pasos] {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2.5rem, 6vw, 3.5rem);
+}
+html:not(.escena-viva) [data-ride-pasos] [data-step] {
+  position: static;
+}
+
+/* Red de seguridad: con movimiento reducido la escena no se enciende nunca,
+   aunque el JavaScript funcione perfectamente. */
+@media (prefers-reduced-motion: reduce) {
+  [data-ride-scene] {
+    height: auto !important;
+  }
+  [data-ride-sticky] {
+    position: static;
+    height: auto;
+    padding-block: clamp(4rem, 12vw, 8rem);
+  }
+  [data-ride-pasos] {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.5rem, 6vw, 3.5rem);
+  }
+  [data-ride-pasos] [data-step] {
+    position: static;
+  }
+}
+
+/* Estado inicial de los elementos que el scroll revela.
+   Sin JS o con reduced-motion, quedan visibles: el contenido nunca depende del motion. */
+.reveal-ready [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-ready [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ============================================================
+   Mapa — Leaflet vestido con el tema del sitio
+   ============================================================ */
+.leaflet-container {
+  background: var(--color-ink-850);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  outline: none;
+}
+
+/* La atribución viene blanca sobre blanco y es obligatoria: se mantiene
+   legible, atenuada y fuera del paso. */
+.leaflet-control-attribution {
+  background: rgba(8, 8, 10, 0.78) !important;
+  color: var(--color-paper-mute) !important;
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  border-radius: 999px 0 0 0;
+  backdrop-filter: blur(6px);
+}
+.leaflet-control-attribution a {
+  color: var(--color-paper-dim) !important;
+}
+.leaflet-control-attribution a:hover {
+  color: var(--color-signal) !important;
+}
+
+.mz-tip {
+  background: rgba(11, 11, 12, 0.94) !important;
+  color: var(--color-paper) !important;
+  border: 1px solid rgba(252, 176, 0, 0.42) !important;
+  border-radius: 999px !important;
+  padding: 5px 13px !important;
+  font-size: 13px !important;
+  font-weight: 700;
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.85) !important;
+}
+.mz-tip::before {
+  border-top-color: rgba(252, 176, 0, 0.42) !important;
+}
+
+/* Las teselas de OpenStreetMap vienen claras. Se llevan al grafito del sitio
+   con un filtro: gris, invertido y asentado. El amarillo de los pines queda
+   fuera del filtro, así que sigue siendo el único color de la escena. */
+.mz-oscuro {
+  filter: grayscale(1) invert(1) brightness(0.86) contrast(1.12);
+}
