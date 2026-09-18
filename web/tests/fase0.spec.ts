@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { WAITLIST_ENABLED } from "@/lib/flags";
+import { EMAIL, WHATSAPP } from "@/lib/contact";
 
 /**
  * Fase 0: las puertas reales.
@@ -10,8 +11,27 @@ import { WAITLIST_ENABLED } from "@/lib/flags";
  * a cerrarse en una versión futura.
  */
 
-const NUMERO = "584125143242";
-const CORREO = "58expressapp@gmail.com";
+/* Se leen de la fuente única, no se copian.
+   Estuvieron escritos a mano aquí, y el día que la empresa cambió de número
+   hubo que acordarse de venir a editarlos: exactamente el descuido que
+   `lib/contact.ts` existe para impedir. Que la prueba siga al dato no la
+   debilita —lo que vigila es que el pie use el número configurado, no cuál es—,
+   y de la forma del valor se encarga la comprobación de abajo. */
+const NUMERO = WHATSAPP.e164;
+const CORREO = EMAIL.direccion;
+
+test("los canales configurados tienen la forma que exige cada uno", () => {
+  /* `wa.me` sólo admite E.164 sin «+», sin espacios y sin guiones: un número
+     con cualquiera de las tres cosas da un enlace que abre WhatsApp y no
+     encuentra a nadie. Venezuela es 58 + diez dígitos. */
+  expect(NUMERO, "el número de wa.me lleva algo que no es un dígito").toMatch(/^\d+$/);
+  expect(NUMERO, "no parece un número venezolano en E.164").toMatch(/^58\d{10}$/);
+  // Y lo que se le enseña a una persona tiene que ser el mismo número.
+  expect(WHATSAPP.visible.replace(/\D/g, ""), "el número visible no coincide con el de wa.me").toBe(
+    NUMERO,
+  );
+  expect(CORREO).toMatch(/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i);
+});
 
 async function listo(page: Page) {
   await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
