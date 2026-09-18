@@ -13,6 +13,15 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start", "--prefix", "web", "--", "--port", "3210"],
       "port": 3210
+    },
+    {
+      "name": "metro",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd /d C:\\p58b\\mobile && set \"CI=1\" && npx expo start --port 8081"
+      ],
+      "port": 8081
     }
   ]
 }
