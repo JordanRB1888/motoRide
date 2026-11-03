@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { WAITLIST_ENABLED } from "@/lib/flags";
 import { EMAIL, WHATSAPP } from "@/lib/contact";
+import { STORES } from "@/lib/content";
 
 /**
  * Fase 0: las puertas reales.
@@ -114,6 +115,13 @@ test.describe("ninguna página termina en una pared", () => {
     await listo(page);
     await page.locator("#descargar").scrollIntoViewIfNeeded();
     await page.waitForTimeout(600);
+    /* Con la app publicada, la salida es la tienda: el distintivo de Google
+       Play enlaza a la ficha real, y no queda formulario de espera. */
+    if (STORES.available) {
+      await expect(page.locator(`#descargar a[href="${STORES.google}"]`)).toHaveCount(1);
+      expect(await page.locator("#descargar form").count()).toBe(0);
+      return;
+    }
     /* La regla no es «que no haya formulario»: es que no haya uno que mienta.
        Apagado el interruptor no puede existir ni un campo —un formulario que no
        guarda nada engaña a quien lo rellena—; encendido tiene que estar entero,

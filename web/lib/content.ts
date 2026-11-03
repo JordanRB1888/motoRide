@@ -256,12 +256,14 @@ export const PAYMENTS = [
 ];
 
 /**
- * La app todavía no está publicada. Mientras no exista una URL real de tienda,
- * el botón no lleva a ninguna parte y lo dice.
+ * Dónde se descarga la app. Publicada en Google Play (noviembre de 2026); en
+ * App Store está en camino: mientras `apple` sea null su distintivo se ve,
+ * pero no enlaza a ninguna parte (una URL inventada mandaría a una página que
+ * no existe). Cuando Apple la publique, basta con poner aquí su URL.
  */
 export const STORES = {
-  available: false,
-  google: null as string | null,
+  available: true,
+  google: "https://play.google.com/store/apps/details?id=com.plus58express.app" as string | null,
   apple: null as string | null,
-  label: "Próximamente",
+  label: "Descargar",
 };

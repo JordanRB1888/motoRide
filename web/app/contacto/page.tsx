@@ -49,7 +49,7 @@ const PUERTAS: {
     intencion: "general",
     titulo: "Quiero pedir un viaje",
     cuerpo:
-      "La aplicación todavía no está publicada. Escríbenos y te contamos cuándo llega a tu zona y cómo va a funcionar.",
+      "La aplicación ya está en Google Play para Android, y muy pronto en App Store. Escríbenos si tienes dudas sobre cómo pedir tu primer viaje.",
     rotulo: "Preguntar por la app",
     acento: false,
   },

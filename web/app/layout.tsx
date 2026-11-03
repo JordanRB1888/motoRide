@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     template: "%s · +58Express",
   },
   description:
-    "Movilidad y servicios bajo demanda en el Zulia: mototaxi, viajes, delivery y envíos en Maracaibo y el Municipio Mara. Próximamente — conoce cómo va a funcionar.",
+    "Movilidad y servicios bajo demanda en el Zulia: mototaxi, viajes, delivery y envíos en Maracaibo y el Municipio Mara. Descarga la app en Google Play.",
   applicationName: "+58Express",
   authors: [{ name: "+58Express" }],
   keywords: [
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
     siteName: "+58Express",
     title: "+58Express — Mototaxi, delivery y envíos en Maracaibo",
     description:
-      "Movilidad y servicios bajo demanda en Maracaibo y el Municipio Mara. Próximamente en tu zona.",
+      "Movilidad y servicios bajo demanda en Maracaibo y el Municipio Mara. Descárgala en Google Play.",
     images: [
       {
         url: "/brand/og.jpg",
@@ -84,7 +84,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "+58Express — Mototaxi, delivery y envíos en Maracaibo",
     description:
-      "Movilidad y servicios bajo demanda en Maracaibo y el Municipio Mara. Próximamente en tu zona.",
+      "Movilidad y servicios bajo demanda en Maracaibo y el Municipio Mara. Descárgala en Google Play.",
     images: ["/brand/og.jpg"],
   },
   icons: {

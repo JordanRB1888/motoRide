@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PARTNER_LEADS_ENABLED, WAITLIST_ENABLED } from "@/lib/flags";
+import { STORES } from "@/lib/content";
 
 /**
  * Fase 1-B: cada superficie aparece cuando su interruptor lo dice, **y sólo
@@ -41,6 +42,13 @@ test.describe("los interruptores gobiernan lo que se ve", () => {
     await page.goto("/");
     await page.locator("#descargar").scrollIntoViewIfNeeded();
     await page.waitForTimeout(600);
+    /* Con la app publicada, la salida es la tienda: el distintivo de Google
+       Play enlaza a la ficha real, y no queda formulario de espera. */
+    if (STORES.available) {
+      await expect(page.locator(`#descargar a[href="${STORES.google}"]`)).toHaveCount(1);
+      expect(await page.locator("#descargar form").count()).toBe(0);
+      return;
+    }
 
     if (!WAITLIST_ENABLED) {
       expect(await page.locator(`#descargar ${CAMPOS}`).count()).toBe(0);

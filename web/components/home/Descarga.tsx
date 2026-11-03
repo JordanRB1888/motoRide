@@ -1,7 +1,8 @@
+import Image from "next/image";
 import InteractivePhone from "@/components/phone/InteractivePhone";
 import Reveal from "@/components/motion/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
-import { screensById } from "@/lib/content";
+import { screensById, STORES } from "@/lib/content";
 import { WAITLIST_ENABLED } from "@/lib/flags";
 import { FormularioWaitlistDiferido } from "@/components/forms/Diferidos";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
@@ -9,10 +10,11 @@ import BotonWhatsApp from "@/components/site/BotonWhatsApp";
 /**
  * Descarga.
  *
- * La aplicación todavía no está publicada, y aquí no hay ningún enlace a una
- * tienda: inventar una URL sería enviar a la gente a una página que no existe.
- * Lo que hay es una declaración de dónde estará, escrita con nuestras palabras
- * y no con las de Apple o Google — el porqué está más abajo, junto a la pieza.
+ * La aplicación está publicada en Google Play: su distintivo oficial enlaza a
+ * la ficha. El de App Store se ve también, pero mientras Apple no la publique
+ * (`STORES.apple` es null) no enlaza a ninguna parte: una URL inventada
+ * mandaría a una página que no existe. Basta con poner su URL en
+ * `lib/content.ts` para que se active.
  *
  * El formulario llega por `components/forms/Diferidos`, que lo mantiene en un
  * paquete aparte: con el interruptor apagado no se descarga nada de él. El
@@ -46,43 +48,50 @@ export default function Descarga() {
               <span className="text-signal">a unos toques</span>
             </h2>
             <p className="prose-measure mt-6 text-[17px] leading-relaxed text-paper-dim">
-              +58Express está por llegar a Santa Cruz de Mara, El Moján y Maracaibo.
-              Cuando la aplicación esté publicada, aparecerá aquí.
+              Descarga +58Express y muévete por Santa Cruz de Mara, El Moján y
+              Maracaibo.
             </p>
 
-            {/* LOS DISTINTIVOS OFICIALES SE RETIRARON, Y NO POR ESTÉTICA.
-                El de Apple dice «Download on the App Store» y el de Google «GET
-                IT ON Google Play»: los dos afirman, con la voz de la tienda, que
-                la aplicación se puede descargar. No se puede — todavía no está
-                publicada—, y apagarlos al 55 % en escala de grises no desmiente
-                lo que la propia imagen dice. Se sustituyen por una pieza propia
-                que dice lo que hay.
-                Tampoco se redibujan sus logotipos: una marca ajena modificada
-                para fabricar un distintivo que ellos no han emitido sería peor
-                que el problema que arregla. Aquí sólo se nombra la plataforma. */}
+            {/* LOS DISTINTIVOS OFICIALES, SIN REDIBUJAR.
+                Se usan tal cual los dan Google y Apple: una marca ajena
+                modificada sería peor que no ponerla. */}
             <div className="mt-10">
               <p className="text-[13px] font-bold uppercase tracking-[0.22em] text-paper-mute">
-                Estará disponible en
+                Descárgala gratis
               </p>
 
-              <ul className="mt-4 flex flex-wrap items-center gap-3">
+              <ul className="mt-4 flex flex-wrap items-center gap-4">
                 {[
-                  { plataforma: "iOS", nota: "iPhone y iPad" },
-                  { plataforma: "Android", nota: "Teléfonos y tabletas" },
-                ].map(({ plataforma, nota }) => (
-                  <li
-                    key={plataforma}
-                    className="flex min-h-[56px] items-center gap-3 rounded-2xl border border-white/12 bg-white/[0.04] px-5 py-3"
-                  >
-                    <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-signal" />
-                    <span className="leading-tight">
-                      <span className="block text-[15px] font-bold text-paper">
-                        Próximamente en {plataforma}
-                      </span>
-                      <span className="block text-[13px] text-paper-mute">{nota}</span>
-                    </span>
-                  </li>
-                ))}
+                  { tienda: "Google Play", imagen: "/brand/badge-google.png", url: STORES.google },
+                  { tienda: "App Store", imagen: "/brand/badge-apple.png", url: STORES.apple },
+                ].map(({ tienda, imagen, url }) => {
+                  const distintivo = (
+                    <Image
+                      src={imagen}
+                      alt={url ? `Descargar +58Express en ${tienda}` : `+58Express en ${tienda}`}
+                      width={810}
+                      height={239}
+                      sizes="190px"
+                      className="h-14 w-auto"
+                    />
+                  );
+                  return (
+                    <li key={tienda}>
+                      {url ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-[10px] transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-signal"
+                        >
+                          {distintivo}
+                        </a>
+                      ) : (
+                        distintivo
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 
@@ -91,7 +100,9 @@ export default function Descarga() {
                 confirmar por correo, ni declarar en una política de privacidad qué
                 hace con el dato, engañaría a quien lo rellena. Se dice lo que hay y
                 se ofrece la puerta que sí existe. */}
-            {WAITLIST_ENABLED ? (
+            {/* Con la app publicada ya no hay nada que esperar: la lista de
+                espera se queda guardada para el próximo lanzamiento. */}
+            {STORES.available ? null : WAITLIST_ENABLED ? (
               <div className="mt-10">
                 <FormularioWaitlistDiferido origen="descarga" />
               </div>

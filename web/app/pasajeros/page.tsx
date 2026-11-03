@@ -7,7 +7,7 @@ import { ButtonLink } from "@/components/ui/Button";
 export const metadata: Metadata = metaPagina({
   titulo: "Pedir moto en Maracaibo y Mara",
   descripcion:
-    "Pide tu moto en Maracaibo y el Municipio Mara: precio antes de confirmar, seguimiento en el mapa y pagos locales. Próximamente en tu teléfono.",
+    "Pide tu moto en Maracaibo y el Municipio Mara: precio antes de confirmar, seguimiento en el mapa y pagos locales. Descárgala en Google Play.",
   ruta: "/pasajeros",
 });
 
@@ -40,15 +40,15 @@ export default function Page() {
       <Bloque className="bg-ink-950">
         <Reveal>
           <h2 className="display text-[clamp(2rem,5vw,3.2rem)] text-paper">
-            Muy pronto en tu teléfono
+            Ya en tu teléfono
           </h2>
           <p className="prose-measure mt-4 text-[17px] leading-relaxed text-paper-dim">
-            La aplicación todavía no está publicada en las tiendas. Cuando lo esté, el
-            enlace aparecerá aquí.
+            Descarga +58Express en Google Play para Android. Para iPhone llegará muy
+            pronto a App Store.
           </p>
           <div className="mt-8">
             <ButtonLink href="/#descargar" size="lg">
-              Ver más
+              Descargar
             </ButtonLink>
           </div>
         </Reveal>

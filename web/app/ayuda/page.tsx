@@ -13,7 +13,7 @@ export const metadata: Metadata = metaPagina({
 
 export default function Page() {
   const FAQ: [string, string][] = [
-    ["¿Ya puedo descargar la aplicación?", "Todavía no. No está publicada en Google Play ni en App Store. Cuando lo esté, el enlace aparecerá en esta web."],
+    ["¿Ya puedo descargar la aplicación?", "Sí, en Android: está en Google Play. Para iPhone llegará muy pronto a App Store. Tienes los enlaces en la sección «Descargar» de esta web."],
     ["¿Dónde funciona +58Express?", "El trabajo está enfocado en Santa Cruz de Mara, El Moján y Maracaibo, en el estado Zulia."],
     ["¿Sé cuánto cuesta antes de pedir?", "Sí. La aplicación estima el viaje antes de que confirmes."],
     ["¿Cómo puedo pagar?", "Con wallet de +58Express, Pago Móvil, Zelle, Zinli o efectivo."],
