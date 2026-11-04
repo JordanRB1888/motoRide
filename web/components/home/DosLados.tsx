@@ -162,7 +162,7 @@ export default function DosLados() {
               entradilla="Te postulas desde la app y, cuando te aprueban, empiezas a conducir."
               puntos={CONDUCTOR}
               pantalla="conductor-aprobado"
-              ancho={266}
+              ancho={305}
               acento
               href="/conductores"
               enlace="Todo para quien conduce"

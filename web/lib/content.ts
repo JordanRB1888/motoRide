@@ -200,7 +200,7 @@ export const PIEZAS = [
     id: "conductor-aprobado",
     src: "/campana/conductor-aprobado.webp",
     width: 760,
-    height: 1453,
+    height: 1264,
     alt: "Inicio del conductor con la solicitud aprobada y el botón para entrar como conductor.",
   },
 ] as const satisfies readonly {

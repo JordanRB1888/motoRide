@@ -94,7 +94,7 @@ const PiezaCampana = forwardRef<HTMLDivElement, Props>(function PiezaCampana(
                 src={pieza.src}
                 alt={pieza.alt}
                 fill
-                quality={90}
+                quality={92}
                 sizes={`${Math.round(width * 1.25)}px`}
                 className="object-cover object-center"
                 priority={priority && pieza.id === visible}
