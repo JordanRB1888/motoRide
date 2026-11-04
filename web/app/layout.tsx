@@ -76,7 +76,7 @@ export const metadata: Metadata = {
         url: "/brand/og.jpg",
         width: 1200,
         height: 630,
-        alt: "+58Express — Muévete. Pide. Recibe.",
+        alt: "+58Express — Movilidad y delivery en un solo lugar",
       },
     ],
   },

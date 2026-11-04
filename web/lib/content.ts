@@ -165,12 +165,12 @@ export const PHONE_SCREENS = [
   {
     id: "home",
     src: "/app/home.webp",
-    alt: "Inicio de +58Express con los servicios disponibles",
+    alt: "Inicio de +58Express: ¿qué necesitas hoy?, con viajes y los demás servicios",
   },
   {
     id: "map",
     src: "/app/map-select.webp",
-    alt: "Mapa con la ruta trazada y la distancia del viaje antes de confirmar",
+    alt: "Ruta trazada con la distancia y el tiempo estimado antes de pagar",
   },
   {
     id: "login",

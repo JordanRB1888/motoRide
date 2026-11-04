@@ -8,6 +8,7 @@ import DosLados from "@/components/home/DosLados";
 import Cobertura from "@/components/home/Cobertura";
 import Seguridad from "@/components/home/Seguridad";
 import Descarga from "@/components/home/Descarga";
+import PromoPrimerViaje from "@/components/home/PromoPrimerViaje";
 
 export default function Home() {
   return (
@@ -16,6 +17,7 @@ export default function Home() {
       <Navbar />
       <main id="contenido" tabIndex={-1}>
         <Hero />
+        <PromoPrimerViaje />
         <RideScene />
         <Servicios />
         <DosLados />

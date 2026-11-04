@@ -2,16 +2,15 @@ import type { Metadata } from "next";
 import { metaPagina } from "@/lib/seo";
 import PageShell, { Bloque } from "@/components/site/PageShell";
 import PuertaCTA from "@/components/site/PuertaCTA";
+import Image from "next/image";
 import Reveal from "@/components/motion/Reveal";
 
 export const metadata: Metadata = metaPagina({
   titulo: "Conduce con +58Express en Maracaibo y Mara",
-  /* NO decir «inscripciones abiertas»: no las hay. Esta frase es lo que se lee
-     en el resultado de Google y en la vista previa de WhatsApp, y la propia
-     página dice justo debajo que todavía no existe formulario de postulación.
-     Era la única promesa del sitio que su propia página desmentía. */
+  /* La postulación se hace en la aplicación, ya publicada en Google Play: un
+     administrador revisa los documentos antes de aprobar. */
   descripcion:
-    "Conduce en moto por Maracaibo y el Municipio Mara: eliges tus horas, decides qué viajes aceptas y cobras por la plataforma. Próximamente — conoce cómo va a funcionar.",
+    "Conduce en moto por Maracaibo y el Municipio Mara: eliges tus horas, decides qué viajes aceptas y cobras por la plataforma. Postúlate desde la app.",
   ruta: "/conductores",
 });
 
@@ -48,10 +47,12 @@ export default function Page() {
       </Bloque>
 
       <Bloque className="bg-ink-950">
+        <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div>
         <Reveal>
           <h2 className="display text-[clamp(2rem,5vw,3.2rem)] text-paper">Cómo se entra</h2>
         </Reveal>
-        <ol className="mt-8 grid gap-8 sm:grid-cols-3">
+        <ol className="mt-8 grid gap-8">
           {PASOS.map(([t, d], i) => (
             <Reveal key={t} delay={i * 0.06} as="li">
               <span className="tabular text-[13px] font-bold tracking-[0.22em] text-signal">
@@ -62,10 +63,22 @@ export default function Page() {
             </Reveal>
           ))}
         </ol>
+        </div>
+        <Reveal delay={0.1} className="mx-auto w-full max-w-[400px]">
+          <Image
+            src="/photo/postulacion.webp"
+            alt="La postulación en la app de +58Express: en revisión y aprobada"
+            width={900}
+            height={1423}
+            sizes="(min-width: 1024px) 400px, 90vw"
+            className="h-auto w-full rounded-[var(--radius-card)]"
+          />
+        </Reveal>
+        </div>
         <div className="mt-14">
           <PuertaCTA
             titulo={<>Empieza por <span className="text-signal">una conversación</span></>}
-            cuerpo="Todavía no hay formulario de postulación en la web. Mientras llega, escríbenos y el equipo te dice qué documentación necesitas y cómo sigue el proceso — sin esperar a que la aplicación se publique."
+            cuerpo="La postulación se hace desde la aplicación: descárgala en Google Play, crea tu cuenta de conductor y sube tus documentos. Si tienes dudas sobre qué necesitas, escríbenos."
             intencion="conductor"
             rotulo="Hablar con el equipo"
             nota="Te responde una persona, no un robot."
