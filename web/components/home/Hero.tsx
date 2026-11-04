@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 import { useEffect, useRef } from "react";
-import InteractivePhone from "@/components/phone/InteractivePhone";
+import PiezaCampana from "@/components/phone/PiezaCampana";
 import { ButtonLink } from "@/components/ui/Button";
-import { screensById, STORES } from "@/lib/content";
+import { piezas, STORES } from "@/lib/content";
 import { prefersReducedMotion } from "@/lib/motion";
 
 export default function Hero() {
@@ -156,12 +156,7 @@ export default function Hero() {
             </svg>
 
             <div className="origin-center scale-[0.74] sm:scale-[0.84] lg:scale-[0.82] xl:scale-[0.92]">
-              <InteractivePhone
-                screens={screensById("map")}
-                initialScreen="map"
-                width={320}
-                priority
-              />
+              <PiezaCampana piezas={piezas("conductores")} width={320} priority />
             </div>
 
             {/* La moto entra por delante: es el plano más cercano */}

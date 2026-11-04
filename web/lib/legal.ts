@@ -34,7 +34,7 @@ export const EMPRESA = {
   responsable: "+58 EXPRESS, C.A.",
 
   /** A donde se escriben las solicitudes sobre datos personales. */
-  correoPrivacidad: "58expressapp@gmail.com",
+  correoPrivacidad: "soporte@58express.io",
 
   jurisdiccion: "Maracaibo, Estado Zulia, República Bolivariana de Venezuela",
 

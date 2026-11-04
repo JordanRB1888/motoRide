@@ -325,14 +325,14 @@ test.describe("redes sociales", () => {
     /* El rótulo de marca es «+58Express». Los identificadores internos no
        aportan nada a quien lee y envejecen mal.
 
-       Ojo con la comprobación: el correo público es `58expressapp@gmail.com`, así
-       que buscar la cadena suelta «58expressapp» daría un falso positivo sobre
-       una dirección que SÍ debe verse. Lo que no puede aparecer es el usuario en
-       forma de arroba, ni el identificador numérico de Facebook. */
+       Ojo con la comprobación: el correo público es `soporte@58express.io`, así
+       que una arroba seguida de «58express» no basta: dentro de una dirección
+       SÍ debe verse. Lo que no puede aparecer es el usuario suelto en forma de
+       arroba, ni el identificador numérico de Facebook. */
     await page.goto("/contacto");
     const texto = await page.locator("body").innerText();
     expect(texto).not.toContain("58express7");
-    expect(texto).not.toMatch(/@58express(app)?\b/);
+    expect(texto).not.toMatch(/(^|[^\w.])@58express(app)?\b/);
     expect(texto).not.toContain("61594407713816");
   });
 });
@@ -468,7 +468,7 @@ test.describe("datos estructurados", () => {
   });
 });
 
-test("el WhatsApp del pie también se mide", async ({ page, context }) => {
+test("el botón flotante de WhatsApp también se mide", async ({ page, context }) => {
   /* Deuda que venía de tres rondas: el botón de las llamadas a la acción medía y
      el enlace del pie no, porque era un <a> suelto. Se veía igual, así que nadie
      lo notaba — y el embudo perdía justo las conversaciones que empiezan desde
@@ -477,8 +477,8 @@ test("el WhatsApp del pie también se mide", async ({ page, context }) => {
     r.fulfill({ status: 200, contentType: "text/html", body: "ok" }),
   );
   await page.goto("/");
-  const enlace = page.locator('footer a[href*="wa.me"]').first();
-  await enlace.scrollIntoViewIfNeeded();
+  // Desde el 03/11/2026 WhatsApp ya no está en el pie: es el botón flotante.
+  const enlace = page.locator('a.fixed[href*="wa.me"]');
   const [emergente] = await Promise.all([page.waitForEvent("popup"), enlace.click()]);
   await emergente.close();
 
@@ -491,6 +491,6 @@ test("el WhatsApp del pie también se mide", async ({ page, context }) => {
         .find((e) => e.name === "whatsapp_general") ?? null
     );
   });
-  expect(evento, "el WhatsApp del pie no registró whatsapp_general").toBeTruthy();
+  expect(evento, "el botón flotante no registró whatsapp_general").toBeTruthy();
   expect(evento!.data).toEqual({ origen: "/" });
 });

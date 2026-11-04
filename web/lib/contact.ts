@@ -34,14 +34,12 @@ export const WHATSAPP = {
 } as const;
 
 /**
- * Correo público. Es una dirección de Gmail a propósito: el dominio todavía no
- * tiene MX, así que publicar `hola@mas58express.com` sería publicar un buzón
- * que no existe y perder cada mensaje. El plan para el correo propio está en
- * `agent-reports/public-website-phase-0.md`.
+ * Correo público de soporte, confirmado por el dueño el 03/11/2026. Sustituye
+ * al Gmail que se usaba mientras el dominio no tenía buzón.
  */
 export const EMAIL = {
   activo: true,
-  direccion: "58expressapp@gmail.com",
+  direccion: "soporte@58express.io",
 } as const;
 
 /**

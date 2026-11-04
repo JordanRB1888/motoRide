@@ -64,8 +64,8 @@ export type Service = {
   id: ServiceId;
   name: string;
   line: string;
-  /** Pantalla del teléfono que se enciende al enfocar este servicio. */
-  screen: string;
+  /** Pieza que se enciende al enfocar este servicio. */
+  screen: PiezaId;
 };
 
 export const SERVICES: Service[] = [
@@ -73,69 +73,66 @@ export const SERVICES: Service[] = [
     id: "mototaxi",
     name: "Mototaxi",
     line: "La forma más rápida de cruzar la ciudad.",
-    screen: "home",
+    screen: "viaje",
   },
   {
     id: "viajes",
     name: "Viajes",
     line: "Sales de casa sabiendo cuánto cuesta.",
-    screen: "home",
+    screen: "viaje",
   },
   {
     id: "delivery",
     name: "Delivery",
     line: "Lo que necesitas, hasta tu puerta.",
-    screen: "home",
+    screen: "delivery",
   },
   {
     id: "comida",
     name: "Comida",
     line: "Del local de siempre, sin salir.",
-    screen: "home",
+    screen: "delivery",
   },
   {
     id: "mercado",
     name: "Mercado",
     line: "La compra de la semana, resuelta.",
-    screen: "home",
+    screen: "delivery",
   },
   {
     id: "envios",
     name: "Envíos",
     line: "Manda algo al otro lado de la ciudad.",
-    screen: "home",
+    screen: "delivery",
   },
   {
     id: "encomiendas",
     name: "Encomiendas",
     line: "Paquetes que llegan cuando dices.",
-    screen: "home",
+    screen: "delivery",
   },
   {
     id: "comercios",
     name: "Comercios",
     line: "Tu negocio, dentro de la app.",
-    screen: "home",
+    screen: "delivery",
   },
   {
     id: "compraventa",
     name: "Compra y venta",
     line: "Publica, vende y coordina la entrega.",
-    screen: "home",
+    screen: "bienvenida",
   },
   {
     id: "seguro",
     name: "Transporte seguro",
     line: "Conductor identificado y viaje registrado.",
-    screen: "driver",
+    screen: "conductores",
   },
 ];
 
 /**
- * Pantallas reales de la aplicación, ya terminadas.
- *
- * `map-select` y `login` venían con marco de iPhone: se recortó el marco para
- * que el componente 3D aporte el suyo y no quede un teléfono dentro de otro.
+ * Imágenes del producto que enseña la portada.
  *
  * SON UNA DEMOSTRACIÓN VISUAL DEL PRODUCTO, Y NO UN ESCAPARATE DE PRECIOS
  *
@@ -159,36 +156,66 @@ export const SERVICES: Service[] = [
  *   · un nombre y una cara de una persona que no existe.
  *
  * Lo que se conserva es el diseño entero: mismas pantallas, misma composición,
- * mismas fotos, misma tipografía. Sólo cambió lo que afirmaba de más.
+ * mismas fotos, misma tipografía. Sólo cambió lo que afirmaba de más. La misma
+ * regla vale para las piezas de campaña de abajo.
  */
-export const PHONE_SCREENS = [
-  {
-    id: "home",
-    src: "/app/home.webp",
-    alt: "Inicio de +58Express: ¿qué necesitas hoy?, con viajes y los demás servicios",
-  },
-  {
-    id: "map",
-    src: "/app/map-select.webp",
-    alt: "Ruta trazada con la distancia y el tiempo estimado antes de pagar",
-  },
-  {
-    id: "login",
-    src: "/app/login.webp",
-    alt: "Pantalla de acceso a +58Express",
-  },
-  {
-    id: "driver",
-    src: "/app/driver-onboarding.webp",
-    alt: "Los conductores eligen sus horas de actividad",
-  },
-];
+export type PiezaId = "viaje" | "delivery" | "bienvenida" | "conductores" | "conductor-aprobado";
 
-/** Devuelve solo las pantallas pedidas: cada teléfono carga lo que muestra. */
-export function screensById(...ids: string[]) {
+/**
+ * Piezas de campaña (noviembre de 2026): sustituyen a las capturas sueltas, que
+ * dentro del teléfono dibujado se veían pequeñas y borrosas. Cada una ya trae
+ * sus propios teléfonos con pantallas reales; `conductor-aprobado` es el
+ * teléfono de la derecha de la pieza de postulación, recortado.
+ */
+export const PIEZAS = [
+  {
+    id: "viaje",
+    src: "/campana/viaje.webp",
+    width: 1080,
+    height: 1611,
+    alt: "Así funciona un viaje en +58Express: mototaxi y taxi. Pide, sigue a tu conductor y llega a tu destino desde una sola app.",
+  },
+  {
+    id: "delivery",
+    src: "/campana/delivery.webp",
+    width: 1080,
+    height: 1595,
+    alt: "Así funciona Delivery en +58Express: pide, sigue tu pedido y recíbelo en tu puerta.",
+  },
+  {
+    id: "bienvenida",
+    src: "/campana/bienvenida.webp",
+    width: 1080,
+    height: 1704,
+    alt: "El acceso de +58Express cambia con tu ciudad y tu hora: Mara de día y Maracaibo de noche.",
+  },
+  {
+    id: "conductores",
+    src: "/campana/conductores.webp",
+    width: 1080,
+    height: 1708,
+    alt: "Conduce con +58Express: te registras, te postulas y, cuando tu solicitud está aprobada, empiezas a conducir.",
+  },
+  {
+    id: "conductor-aprobado",
+    src: "/campana/conductor-aprobado.webp",
+    width: 760,
+    height: 1453,
+    alt: "Inicio del conductor con la solicitud aprobada y el botón para entrar como conductor.",
+  },
+] as const satisfies readonly {
+  id: PiezaId;
+  src: string;
+  width: number;
+  height: number;
+  alt: string;
+}[];
+
+/** Devuelve solo las piezas pedidas: cada tarjeta carga lo que muestra. */
+export function piezas(...ids: PiezaId[]) {
   return ids
-    .map((id) => PHONE_SCREENS.find((s) => s.id === id))
-    .filter((s): s is (typeof PHONE_SCREENS)[number] => Boolean(s));
+    .map((id) => PIEZAS.find((s) => s.id === id))
+    .filter((s): s is (typeof PIEZAS)[number] => Boolean(s));
 }
 
 /**
@@ -250,8 +277,6 @@ export const SAFETY = [
 export const PAYMENTS = [
   "Wallet +58express",
   "Pago Móvil",
-  "Zelle",
-  "Zinli",
   "Efectivo",
 ];
 

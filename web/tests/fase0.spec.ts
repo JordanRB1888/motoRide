@@ -40,13 +40,16 @@ async function listo(page: Page) {
 }
 
 test.describe("canales de contacto", () => {
-  test("el pie ofrece WhatsApp y correo en las diez rutas", async ({ page }) => {
+  /* WhatsApp dejó el pie el 03/11/2026: ahora es un botón flotante, fijo abajo
+     a la derecha, en todas las páginas. */
+  test("WhatsApp flota en todas las rutas y el correo sigue en el pie", async ({ page }) => {
     for (const ruta of ["/", "/servicios", "/conductores", "/aliados", "/ayuda", "/contacto"]) {
       await page.goto(ruta);
       await listo(page);
-      const wa = page.locator(`footer a[href*="wa.me/${NUMERO}"]`);
+      const wa = page.locator(`a.fixed[href*="wa.me/${NUMERO}"]`);
       const mail = page.locator(`footer a[href^="mailto:${CORREO}"]`);
-      await expect(wa, `falta WhatsApp en el pie de ${ruta}`).toHaveCount(1);
+      await expect(wa, `falta el botón flotante de WhatsApp en ${ruta}`).toHaveCount(1);
+      await expect(wa).toBeVisible();
       await expect(mail, `falta el correo en el pie de ${ruta}`).toHaveCount(1);
     }
   });

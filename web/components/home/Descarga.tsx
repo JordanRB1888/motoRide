@@ -1,8 +1,8 @@
 import Image from "next/image";
-import InteractivePhone from "@/components/phone/InteractivePhone";
+import PiezaCampana from "@/components/phone/PiezaCampana";
 import Reveal from "@/components/motion/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
-import { screensById, STORES } from "@/lib/content";
+import { piezas, STORES } from "@/lib/content";
 import { WAITLIST_ENABLED } from "@/lib/flags";
 import { FormularioWaitlistDiferido } from "@/components/forms/Diferidos";
 import BotonWhatsApp from "@/components/site/BotonWhatsApp";
@@ -134,13 +134,7 @@ export default function Descarga() {
           </Reveal>
 
           <Reveal delay={0.12} className="flex justify-center lg:justify-end">
-            <div className="scale-[0.8] sm:scale-90 lg:scale-100">
-              <InteractivePhone
-                screens={screensById("home")}
-                initialScreen="home"
-                width={300}
-              />
-            </div>
+            <PiezaCampana piezas={piezas("bienvenida")} width={320} />
           </Reveal>
         </div>
       </div>

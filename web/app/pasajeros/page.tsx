@@ -16,7 +16,7 @@ export default function Page() {
     ["Precio antes de pedir", "La aplicación estima el viaje con la distancia y el tiempo. Confirmas sabiendo la cifra."],
     ["Seguimiento en vivo", "La posición del conductor se actualiza durante todo el trayecto."],
     ["Chat dentro del viaje", "Le escribes si hace falta indicarle algo. Los adjuntos son privados."],
-    ["Pagos locales", "Wallet de +58Express, Pago Móvil, Zelle, Zinli o efectivo."],
+    ["Pagos locales", "Wallet de +58Express, Pago Móvil o efectivo."],
     ["Viajes programados", "Dejas pedido el viaje y un conductor lo toma."],
     ["Historial completo", "Cada carrera queda registrada con su recorrido y su estado."],
   ];

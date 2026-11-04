@@ -16,7 +16,7 @@ export default function Page() {
     ["¿Ya puedo descargar la aplicación?", "Sí, en Android: está en Google Play. Para iPhone llegará muy pronto a App Store. Tienes los enlaces en la sección «Descargar» de esta web."],
     ["¿Dónde funciona +58Express?", "El trabajo está enfocado en Santa Cruz de Mara, El Moján y Maracaibo, en el estado Zulia."],
     ["¿Sé cuánto cuesta antes de pedir?", "Sí. La aplicación estima el viaje antes de que confirmes."],
-    ["¿Cómo puedo pagar?", "Con wallet de +58Express, Pago Móvil, Zelle, Zinli o efectivo."],
+    ["¿Cómo puedo pagar?", "Con wallet de +58Express, Pago Móvil o efectivo."],
     ["¿Cómo me hago conductor?", "Te registras como conductor, subes tu documentación y un administrador la revisa antes de que puedas conectarte."],
     ["¿Puedo escribirle al conductor?", "Sí, desde la propia aplicación mientras dura el viaje."],
   ];

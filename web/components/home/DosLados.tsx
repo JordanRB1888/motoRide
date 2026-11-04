@@ -1,13 +1,13 @@
 import Link from "next/link";
-import InteractivePhone from "@/components/phone/InteractivePhone";
+import PiezaCampana from "@/components/phone/PiezaCampana";
 import Reveal from "@/components/motion/Reveal";
-import { screensById } from "@/lib/content";
+import { piezas, type PiezaId } from "@/lib/content";
 
 const PASAJERO = [
   "Ves el precio antes de confirmar el viaje.",
   "Sigues al conductor en el mapa, en vivo.",
   "Le escribes desde la app si hace falta.",
-  "Pagas con wallet, Pago Móvil, Zelle, Zinli o efectivo.",
+  "Pagas con wallet, Pago Móvil o efectivo.",
   "Puedes dejar un viaje programado.",
 ];
 
@@ -31,7 +31,7 @@ function Lado({
   titulo: string;
   entradilla: string;
   puntos: string[];
-  pantalla: string;
+  pantalla: PiezaId;
   acento: boolean;
   href: string;
   enlace: string;
@@ -53,9 +53,7 @@ function Lado({
       </div>
 
       <div className="flex justify-center py-2">
-        <div className="scale-[0.82] sm:scale-90">
-          <InteractivePhone screens={screensById(pantalla)} initialScreen={pantalla} width={288} />
-        </div>
+        <PiezaCampana piezas={piezas(pantalla)} width={300} />
       </div>
 
       <ul className="flex flex-col gap-3.5">
@@ -148,7 +146,7 @@ export default function DosLados() {
               titulo="Para quien pide"
               entradilla="Sales de casa sabiendo cuánto cuesta y por dónde viene."
               puntos={PASAJERO}
-              pantalla="map"
+              pantalla="viaje"
               acento={false}
               href="/pasajeros"
               enlace="Todo para quien pide"
@@ -160,7 +158,7 @@ export default function DosLados() {
               titulo="Para quien conduce"
               entradilla="Tú eliges cuándo trabajas y qué viajes tomas."
               puntos={CONDUCTOR}
-              pantalla="driver"
+              pantalla="conductor-aprobado"
               acento
               href="/conductores"
               enlace="Todo para quien conduce"

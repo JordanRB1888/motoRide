@@ -4,8 +4,8 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { MotionPathPlugin } from "gsap/MotionPathPlugin";
-import InteractivePhone from "@/components/phone/InteractivePhone";
-import { screensById, HOW_IT_WORKS } from "@/lib/content";
+import PiezaCampana from "@/components/phone/PiezaCampana";
+import { piezas, HOW_IT_WORKS } from "@/lib/content";
 import { EASE, prefersReducedMotion } from "@/lib/motion";
 
 /** Trazado de la carrera. Serpentea como una calle, no como un arco decorativo. */
@@ -39,7 +39,7 @@ export default function RideScene() {
       gsap.set(q("[data-route-line]"), { strokeDashoffset: 0 });
       gsap.set(q("[data-step]"), { opacity: 1, y: 0 });
       gsap.set(q("[data-phone-screen]"), { autoAlpha: 0 });
-      gsap.set(q('[data-phone-screen="map"]'), { autoAlpha: 1 });
+      gsap.set(q('[data-phone-screen="viaje"]'), { autoAlpha: 1 });
       gsap.set(q("[data-rider]"), { autoAlpha: 1 });
       return;
     }
@@ -109,12 +109,12 @@ export default function RideScene() {
 
       /* 2 · SEARCHING — el pulso sale a buscar */
       show(1, 0.22);
-      screen("map", 0.22);
+      screen("viaje", 0.22);
       tl.fromTo(q("[data-pulse]"), { scale: 0.2, autoAlpha: 0.85 }, { scale: 1, autoAlpha: 0, duration: 0.16 }, 0.22);
 
       /* 3 · DRIVER_ASSIGNED — alguien la toma */
       show(2, 0.4);
-      screen("driver", 0.4);
+      screen("conductor-aprobado", 0.4);
       tl.to(q("[data-pin-end]"), { autoAlpha: 1, scale: 1, duration: 0.06, ease: EASE.settle }, 0.42);
       tl.to(q("[data-rider]"), { autoAlpha: 1, duration: 0.05 }, 0.44);
 
@@ -134,7 +134,7 @@ export default function RideScene() {
 
       /* 5 · COMPLETED — llegó */
       show(4, 0.84);
-      screen("home", 0.84);
+      screen("bienvenida", 0.84);
       tl.to(q("[data-phone-tilt]"), { rotateY: 0, rotateX: 0, scale: 1, duration: 0.14 }, 0.84);
     }, el);
 
@@ -256,7 +256,7 @@ export default function RideScene() {
 
           <div className="hidden justify-end lg:flex">
             <div className="scale-[0.84] xl:scale-95">
-              <InteractivePhone screens={screensById("map", "driver", "home")} initialScreen="map" width={310} />
+              <PiezaCampana piezas={piezas("viaje", "conductor-aprobado", "bienvenida")} inicial="viaje" width={340} />
             </div>
           </div>
         </div>

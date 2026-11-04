@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import Analitica from "@/components/site/Analitica";
+import WhatsAppFlotante from "@/components/site/WhatsAppFlotante";
 import { ANALYTICS_ENABLED } from "@/lib/flags";
 import { organizacionJsonLd } from "@/lib/jsonld";
 import "./globals.css";
@@ -131,6 +132,7 @@ export default function RootLayout({
           Saltar al contenido
         </a>
         {children}
+        <WhatsAppFlotante />
         {/* Analítica sin cookies y sin datos personales. Se sirve desde el
             propio dominio, así que la CSP no necesita abrirse a ningún origen
             externo — que fue la razón por la que se eligió frente a las
