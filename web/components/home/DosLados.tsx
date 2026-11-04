@@ -3,20 +3,20 @@ import PiezaCampana from "@/components/phone/PiezaCampana";
 import Reveal from "@/components/motion/Reveal";
 import { piezas, type PiezaId } from "@/lib/content";
 
+/* Cada lista cuenta lo que enseña su imagen: la pieza «Así funciona un viaje»
+   para quien pide, y el inicio con la solicitud aprobada para quien conduce. */
 const PASAJERO = [
-  "Ves el precio antes de confirmar el viaje.",
-  "Sigues al conductor en el mapa, en vivo.",
-  "Le escribes desde la app si hace falta.",
+  "Eliges mototaxi o taxi, según el viaje.",
+  "Ves el precio antes de confirmar.",
+  "Sigues a tu conductor en el mapa, en vivo.",
   "Pagas con wallet, Pago Móvil o efectivo.",
-  "Puedes dejar un viaje programado.",
 ];
 
 const CONDUCTOR = [
-  "Recibes las solicitudes que están cerca de ti.",
-  "Decides cuáles aceptas y cuándo trabajas.",
-  "Tus ganancias y tu historial, siempre a mano.",
-  "Cobras a través de la plataforma.",
-  "Trabajas verificado: tus documentos están aprobados.",
+  "Te registras y subes tus documentos desde la app.",
+  "El equipo revisa tu postulación y te avisa.",
+  "Con la solicitud aprobada, entras como conductor.",
+  "Recibes viajes cercanos y decides cuáles tomas.",
 ];
 
 function Lado({
@@ -24,6 +24,7 @@ function Lado({
   entradilla,
   puntos,
   pantalla,
+  ancho,
   acento,
   href,
   enlace,
@@ -32,6 +33,7 @@ function Lado({
   entradilla: string;
   puntos: string[];
   pantalla: PiezaId;
+  ancho: number;
   acento: boolean;
   href: string;
   enlace: string;
@@ -53,7 +55,7 @@ function Lado({
       </div>
 
       <div className="flex justify-center py-2">
-        <PiezaCampana piezas={piezas(pantalla)} width={300} />
+        <PiezaCampana piezas={piezas(pantalla)} width={ancho} />
       </div>
 
       <ul className="flex flex-col gap-3.5">
@@ -144,9 +146,10 @@ export default function DosLados() {
           <Reveal>
             <Lado
               titulo="Para quien pide"
-              entradilla="Sales de casa sabiendo cuánto cuesta y por dónde viene."
+              entradilla="Mototaxi o taxi: pides, sigues a tu conductor y llegas, todo desde la app."
               puntos={PASAJERO}
               pantalla="viaje"
+              ancho={340}
               acento={false}
               href="/pasajeros"
               enlace="Todo para quien pide"
@@ -156,9 +159,10 @@ export default function DosLados() {
           <Reveal delay={0.12}>
             <Lado
               titulo="Para quien conduce"
-              entradilla="Tú eliges cuándo trabajas y qué viajes tomas."
+              entradilla="Te postulas desde la app y, cuando te aprueban, empiezas a conducir."
               puntos={CONDUCTOR}
               pantalla="conductor-aprobado"
+              ancho={266}
               acento
               href="/conductores"
               enlace="Todo para quien conduce"
