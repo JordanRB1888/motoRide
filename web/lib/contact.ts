@@ -13,24 +13,24 @@
 /**
  * Número de atención, confirmado por el dueño.
  *
- * 17/09/2026 — pasa a ser **el número de la empresa**, `0422-058-0558`. Hasta
- * entonces era el `0412-514-3242` que se confirmó el 13/09.
+ * 24/11/2026 — pasa a ser el `0412-784-4848`, a pedido del dueño. Antes fueron
+ * el `0422-058-0558` (desde el 17/09) y el `0412-514-3242` (desde el 13/09).
  *
  * Se escribe una sola vez y en E.164 porque es lo que exige `wa.me`. Todo lo
- * demás sale de aquí: el pie de las diez páginas, los cuatro botones por
+ * demás sale de aquí: el botón flotante de todas las páginas, los botones por
  * intención, el `telephone` del JSON-LD y el pie de los correos. Tener el número
  * escrito en cada sitio habría garantizado que el día de un cambio como éste
  * alguno se quedara viejo — y el que se quedaría viejo sería justamente el que
  * alguien pulse.
  */
-const WHATSAPP_E164 = "584220580558";
+const WHATSAPP_E164 = "584127844848";
 
 export const WHATSAPP = {
   activo: true,
   /** Formato que exige wa.me: código de país, sin «+», sin espacios ni guiones. */
   e164: WHATSAPP_E164,
   /** Cómo se le enseña a una persona. */
-  visible: "+58 422-058-0558",
+  visible: "+58 412-784-4848",
 } as const;
 
 /**
